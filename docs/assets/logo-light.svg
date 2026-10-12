@@ -1,11 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="112" viewBox="0 0 480 112" role="img" aria-label="bizdays-toolkit">
   <title>bizdays-toolkit</title>
+  <!-- アイコン: ライトテーマ向けの配色（README の <picture> で切り替える）
+       文字と留め具: 両テーマ共通の中間色。OS と GitHub のテーマの設定が食い違って反対の背景に表示されても読める
+       （白・#0d1117・#22272e に対してコントラスト比 3:1 以上） -->
   <g transform="translate(8 8) scale(1.5)">
     <rect x="6" y="12" width="52" height="44" rx="8" fill="#ccebe7" stroke="#0f766e" stroke-width="3"/>
     <path d="M6 20a8 8 0 0 1 8-8h36a8 8 0 0 1 8 8v6H6z" fill="#0f766e"/>
-    <rect x="18" y="6" width="5" height="12" rx="2.5" fill="#1f2328"/>
-    <rect x="41" y="6" width="5" height="12" rx="2.5" fill="#1f2328"/>
-    <rect x="14" y="32" width="9" height="8" rx="2" fill="#0f766e"/><rect x="28" y="32" width="9" height="8" rx="2" fill="#0f766e"/><rect x="42.75" y="32.75" width="7.5" height="6.5" rx="1.5" fill="none" stroke="#59636e" stroke-width="1.5"/><rect x="14" y="44" width="9" height="8" rx="2" fill="#0f766e"/><rect x="28" y="44" width="9" height="8" rx="2" fill="#e5534b"/><rect x="42" y="44" width="9" height="8" rx="2" fill="#0f766e"/>
+    <rect x="18" y="6" width="5" height="12" rx="2.5" fill="#768390"/>
+    <rect x="41" y="6" width="5" height="12" rx="2.5" fill="#768390"/>
+    <rect x="14" y="32" width="9" height="8" rx="2" fill="#0f766e"/><rect x="28" y="32" width="9" height="8" rx="2" fill="#0f766e"/><rect x="42.75" y="32.75" width="7.5" height="6.5" rx="1.5" fill="none" stroke="#768390" stroke-width="1.5"/><rect x="14" y="44" width="9" height="8" rx="2" fill="#0f766e"/><rect x="28" y="44" width="9" height="8" rx="2" fill="#e5534b"/><rect x="42" y="44" width="9" height="8" rx="2" fill="#0f766e"/>
   </g>
-  <text x="116" y="70" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="42" fill="#1f2328"><tspan font-weight="700">bizdays</tspan><tspan font-weight="400" fill="#59636e">-toolkit</tspan></text>
+  <text x="116" y="70" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="42" fill="#0d9488"><tspan font-weight="700">bizdays</tspan><tspan font-weight="400" fill="#768390">-toolkit</tspan></text>
 </svg>
