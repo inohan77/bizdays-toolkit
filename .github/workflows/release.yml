@@ -7,9 +7,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write # GitHub Release の作成
       id-token: write # npm Trusted Publishing（provenance）
@@ -17,31 +22,33 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: 24
+          node-version: "24.21.0"
           registry-url: https://registry.npmjs.org
-      - run: npm install -g pnpm@12.10.1
-      - run: pnpm install --frozen-lockfile
 
-      - name: Verify that the tag matches package.json
+      - name: Verify the release
         run: |
           version="$(node -p "require('./package.json').version")"
+          name="$(node -p "require('./package.json').name")"
           if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${version}" >&2
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}" >&2
             exit 1
           fi
-
-      - name: Verify that no placeholders remain
-        run: |
           if grep -n "OWNER" package.json CHANGELOG.md; then
-            echo "Replace OWNER with the GitHub account name before releasing" >&2
+            echo "::error::Replace OWNER with the GitHub account name before releasing" >&2
+            exit 1
+          fi
+          if [ -n "$(npm view "${name}@${version}" version 2>/dev/null)" ]; then
+            echo "::error::${name}@${version} is already published on npm" >&2
             exit 1
           fi
 
       - run: pnpm check
 
       - name: Publish to npm
+        # staged publishing に移行する場合は npm publish を npm stage publish に変え、
+        # npm の Trusted Publisher の設定で「Allow npm publish」のチェックを外す
         run: |
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then dist_tag=next; else dist_tag=latest; fi
           npm publish --provenance --access public --tag "${dist_tag}" --ignore-scripts
@@ -50,8 +57,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/release-notes.ts "${GITHUB_REF_NAME#v}" > release-notes.md
+          node scripts/release-notes.ts "${GITHUB_REF_NAME#v}" > "${RUNNER_TEMP}/release-notes.md"
           prerelease=""
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then prerelease="--prerelease"; fi
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
-            --notes-file release-notes.md --verify-tag ${prerelease}
+            --notes-file "${RUNNER_TEMP}/release-notes.md" --verify-tag ${prerelease}

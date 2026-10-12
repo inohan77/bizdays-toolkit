@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-12
+
+ライブラリのコードと祝日データに変更はありません。
+
+### Changed
+
+- README の先頭にロゴとバッジ（npm の版・CI・ライセンス・Node.js の対応版・依存ゼロ・型定義同梱）を追加
+- CI・リリースのワークフローで Node.js・npm・pnpm・ランナーの版を固定（Node.js 22.23.3 / 24.21.0、npm 12.2.0、pnpm 12.11.2、ubuntu-24.04）。セットアップは共通のアクション（`.github/actions/setup-toolchain`）にまとめた
+- リリースのワークフローで、同じ版がすでに npm にある場合は公開前に止めるようにした
+- 開発用の依存（devDependencies）を版の完全一致で固定
+
 ## [0.1.0] - 2026-10-11
 
 ### Added
@@ -19,5 +30,6 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/inohan77/bizdays-toolkit/releases/tag/v0.1.0

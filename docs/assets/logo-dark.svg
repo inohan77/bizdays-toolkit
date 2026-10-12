@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="112" viewBox="0 0 480 112" role="img" aria-label="bizdays-toolkit">
+  <title>bizdays-toolkit</title>
+  <g transform="translate(8 8) scale(1.5)">
+    <rect x="6" y="12" width="52" height="44" rx="8" fill="#134e4a" stroke="#2dd4bf" stroke-width="3"/>
+    <path d="M6 20a8 8 0 0 1 8-8h36a8 8 0 0 1 8 8v6H6z" fill="#2dd4bf"/>
+    <rect x="18" y="6" width="5" height="12" rx="2.5" fill="#e6edf3"/>
+    <rect x="41" y="6" width="5" height="12" rx="2.5" fill="#e6edf3"/>
+    <rect x="14" y="32" width="9" height="8" rx="2" fill="#2dd4bf"/><rect x="28" y="32" width="9" height="8" rx="2" fill="#2dd4bf"/><rect x="42.75" y="32.75" width="7.5" height="6.5" rx="1.5" fill="none" stroke="#9198a1" stroke-width="1.5"/><rect x="14" y="44" width="9" height="8" rx="2" fill="#2dd4bf"/><rect x="28" y="44" width="9" height="8" rx="2" fill="#f47067"/><rect x="42" y="44" width="9" height="8" rx="2" fill="#2dd4bf"/>
+  </g>
+  <text x="116" y="70" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="42" fill="#e6edf3"><tspan font-weight="700">bizdays</tspan><tspan font-weight="400" fill="#9198a1">-toolkit</tspan></text>
+</svg>

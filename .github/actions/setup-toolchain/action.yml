@@ -1,0 +1,40 @@
+name: Set up toolchain
+description: Node.js・npm・pnpm を固定した版で用意し、依存をインストールする
+
+# npm と pnpm の版はここだけで管理する（手元の開発環境と同じ版にそろえる）。
+# 更新するときは、熟成ゲート（公開から 48 時間）を過ぎた版を指定すること。
+
+inputs:
+  node-version:
+    description: Node.js の版（完全な版番号）
+    required: true
+  registry-url:
+    description: npm のレジストリ（公開するジョブのみ指定）
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Install npm and pnpm
+      shell: bash
+      env:
+        NPM_VERSION: "12.2.0"
+        PNPM_VERSION: "12.11.2"
+      run: |
+        npm install -g "npm@${NPM_VERSION}"
+        npm install -g --allow-scripts=pnpm "pnpm@${PNPM_VERSION}"
+        echo "node $(node -v) / npm $(npm -v) / pnpm $(pnpm -v)"
+        if [ "$(npm -v)" != "${NPM_VERSION}" ] || [ "$(pnpm -v)" != "${PNPM_VERSION}" ]; then
+          echo "::error::npm or pnpm version does not match the pinned version" >&2
+          exit 1
+        fi
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

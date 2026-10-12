@@ -38,6 +38,15 @@
 4. 春分・秋分の日が近似式と食い違っていた場合は、`rules.ts` に例外を追加する
 5. CHANGELOG の **Data** に記載して、マイナー版として公開する
 
+## 開発環境の版
+
+Node.js・npm・pnpm は、手元の開発環境と CI で同じ版を使います。CI の版は次の 2 か所で管理しています。
+
+- `.github/actions/setup-toolchain/action.yml`: npm と pnpm の版
+- `.github/workflows/ci.yml`・`release.yml`: Node.js の版とランナー（`ubuntu-24.04`）
+
+npm 12 の動作要件は Node.js `^22.22.2 || ^24.15.0` です。版を上げるときは、公開から 48 時間を過ぎた版を指定し、手元の環境もそろえてください。開発用の依存（devDependencies）は版の完全一致で指定し、更新時は `pnpm install` で `pnpm-lock.yaml` も更新してコミットします。
+
 ## 公開の手順
 
 公開は GitHub Actions（`.github/workflows/release.yml`）が行います。手元の端末から `npm publish` はしません（provenance を付けるため）。
@@ -46,6 +55,6 @@
 2. `CHANGELOG.md` の `[Unreleased]` を新しい版の節に移す（`pnpm check` は、現在の版の節がないと失敗します）
 3. `pnpm check` が通ることを確かめてコミットする
 4. `v<version>` のタグを付けてプッシュする（例: `git tag v0.1.0 && git push origin v0.1.0`）
-5. ワークフローが、タグと `package.json` の版の一致を確かめ、`pnpm check` のあと npm に公開し、CHANGELOG の節を本文にした GitHub Release を作ります
+5. ワークフローが、タグと `package.json` の版の一致と、同じ版が npm にまだないことを確かめ、`pnpm check` のあと npm に公開し、CHANGELOG の節を本文にした GitHub Release を作ります
 
 npm への認証は Trusted Publishing（OIDC）を使い、npm のアクセストークンは GitHub に保存しません。Trusted Publishing は、npm のパッケージ設定でこのリポジトリとワークフロー（`release.yml`）を登録して有効にします。まだ npm に存在しないパッケージの初回公開の扱いは変わることがあるため、公開前に npm の最新のドキュメントで確認してください。
