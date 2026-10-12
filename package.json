@@ -1,6 +1,6 @@
 {
   "name": "bizdays-toolkit",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Holidays and business-day calendar with time zone support. Japanese holidays verified against the Cabinet Office data. / 祝日と営業日のカレンダー（タイムゾーン対応・日本の祝日は内閣府データで全日照合）",
   "keywords": [
     "bizdays",

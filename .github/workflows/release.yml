@@ -46,14 +46,30 @@ jobs:
 
       - run: pnpm check
 
-      - name: Publish to npm
-        # staged publishing に移行する場合は npm publish を npm stage publish に変え、
-        # npm の Trusted Publisher の設定で「Allow npm publish」のチェックを外す
+      - name: Stage on npm
+        # staged publishing: ステージした版は、メンテナーが npmjs.com（または npm stage approve）で
+        # 2FA 付きで承認するまで利用者に届かない。Trusted Publisher の設定では npm publish を許可しない
         run: |
+          set -o pipefail # tee につないでも npm の失敗でステップを止める
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then dist_tag=next; else dist_tag=latest; fi
-          npm publish --provenance --access public --tag "${dist_tag}" --ignore-scripts
+          npm stage publish --provenance --access public --tag "${dist_tag}" --ignore-scripts \
+            2>&1 | tee "${RUNNER_TEMP}/stage.log"
+          name="$(node -p "require('./package.json').name")"
+          {
+            echo "## ${name}@${GITHUB_REF_NAME#v} をステージしました（dist-tag: ${dist_tag}）"
+            echo
+            echo "まだ利用者には届いていません。次の手順で承認してください。"
+            echo
+            echo "1. https://www.npmjs.com/package/${name} の Staged Packages タブで中身を確認し、Approve する（2FA）"
+            echo "2. GitHub Release の下書きを公開する: \`gh release edit ${GITHUB_REF_NAME} --draft=false\`"
+            echo
+            echo '```'
+            cat "${RUNNER_TEMP}/stage.log"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (draft)
+        # npm で承認するまでは下書きにしておき、承認後に公開する
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -61,4 +77,4 @@ jobs:
           prerelease=""
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then prerelease="--prerelease"; fi
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" \
-            --notes-file "${RUNNER_TEMP}/release-notes.md" --verify-tag ${prerelease}
+            --notes-file "${RUNNER_TEMP}/release-notes.md" --verify-tag --draft ${prerelease}

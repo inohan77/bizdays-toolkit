@@ -49,12 +49,24 @@ npm 12 の動作要件は Node.js `^22.22.2 || ^24.15.0` です。版を上げ�
 
 ## 公開の手順
 
-公開は GitHub Actions（`.github/workflows/release.yml`）が行います。手元の端末から `npm publish` はしません（provenance を付けるため）。
+公開は staged publishing で行います。GitHub Actions（`.github/workflows/release.yml`）は版を npm に**ステージ**するだけで、メンテナーが 2FA 付きで**承認**するまで利用者には届きません。GitHub のアカウントやワークフローが乗っ取られても、承認なしに公開されることはありません。手元の端末から `npm publish` はしません（provenance を付けるため）。
 
 1. `package.json` の `version` を更新する
 2. `CHANGELOG.md` の `[Unreleased]` を新しい版の節に移す（`pnpm check` は、現在の版の節がないと失敗します）
-3. `pnpm check` が通ることを確かめてコミットする
-4. `v<version>` のタグを付けてプッシュする（例: `git tag v0.1.0 && git push origin v0.1.0`）
-5. ワークフローが、タグと `package.json` の版の一致と、同じ版が npm にまだないことを確かめ、`pnpm check` のあと npm に公開し、CHANGELOG の節を本文にした GitHub Release を作ります
+3. `pnpm check` が通ることを確かめてコミットし、main をプッシュして CI の合格を確認する
+4. `v<version>` のタグを付けてプッシュする（例: `git tag v0.1.2 && git push origin v0.1.2`）
+5. ワークフローが、タグと `package.json` の版の一致と、同じ版が npm にまだないことを確かめ、`pnpm check` のあと npm にステージし、CHANGELOG の節を本文にした GitHub Release を**下書き**で作ります。ワークフローの実行結果の Summary に、承認の手順が表示されます
+6. npm のパッケージページの **Staged Packages** タブで、ステージされた版の中身（ファイル一覧・provenance）を確認し、**Approve** する（2FA を求められます）。CLI では `npm stage list bizdays-toolkit` で stage ID を調べ、`npm stage approve <stage-id>` でも承認できます
+7. `npm view bizdays-toolkit dist-tags` で新しい版になったことを確かめてから、GitHub Release の下書きを公開する（`gh release edit v<version> --draft=false`）
 
-npm への認証は Trusted Publishing（OIDC）を使い、npm のアクセストークンは GitHub に保存しません。Trusted Publishing は、npm のパッケージ設定でこのリポジトリとワークフロー（`release.yml`）を登録して有効にします。まだ npm に存在しないパッケージの初回公開の扱いは変わることがあるため、公開前に npm の最新のドキュメントで確認してください。
+ステージした内容に問題があった場合は、承認せずに Staged Packages タブ（または `npm stage reject <stage-id>`）で却下し、修正した新しい版で出し直します。ステージした版の番号は公開済みの版と同じ扱いになり、同じ番号でステージし直すには先に却下が必要です。
+
+### npm 側の設定
+
+- **Trusted Publishing**: npm のパッケージ設定でこのリポジトリとワークフロー（`release.yml`）を登録しています。npm のアクセストークンは GitHub に保存しません。許可する操作は `npm stage publish` だけにし、「Allow npm publish」と「Allow npm dist-tag」は無効にします
+- **Publishing access**: 「Require two-factor authentication and disallow tokens」にします
+- staged publishing には npm CLI 11.15.0 以上が必要です。CI では `.github/actions/setup-toolchain` で固定した npm（12.2.0）を使います
+
+### 利用者に届く時刻
+
+ステージした版は、承認するまでインストールできません。熟成期間（公開から一定時間待ってから取り込む運用）を設けている利用者にとって、npm 上の公開時刻（`npm view bizdays-toolkit time`）がステージした時刻と承認した時刻のどちらになるかは、最初の staged publishing（0.1.2）で確認して、ここに追記します。

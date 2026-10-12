@@ -4,8 +4,13 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-12
+
+ライブラリのコードと祝日データに変更はありません。
+
 ### Changed
 
+- npm への公開を staged publishing に変更した。GitHub Actions は版をステージするだけで、メンテナーが npmjs.com で 2FA 付きで承認するまで利用者には届かない。npm の Trusted Publisher の設定でも直接公開（npm publish）を許可しないようにした。GitHub Release は下書きで作成し、承認後に公開する
 - README のロゴの配色を変更した。文字（「bizdays」の緑と「-toolkit」の灰色）とカレンダーの留め具は、ライト・ダークどちらの背景でも読める両テーマ共通の中間色にし、アイコンの配色だけを `<picture>` でテーマに合わせて切り替える。`<picture>` の切り替えは GitHub のテーマ設定ではなく OS の設定に従うため、両者が食い違うと反対の背景にロゴが表示されて読みにくかった
 
 ## [0.1.1] - 2026-10-12
@@ -34,6 +39,7 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/inohan77/bizdays-toolkit/releases/tag/v0.1.0
