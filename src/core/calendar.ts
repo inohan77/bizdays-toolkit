@@ -8,25 +8,21 @@
  *   4. 祝日            … holidayPolicy に従う（closed: 休業 / open: 営業 / ignore: 判定に使わない）
  *   5. closedWeekdays … 定休日の曜日
  *   6. それ以外は営業日
+ *
+ * 内部では、営業日かどうか（真偽値）を返すスケジュール（createSchedule）として作っている。
  */
 
+import { addDays, fromDayNumber, toDayNumber, type DateString, type Weekday } from "./date.ts";
+import { parseTimeOfDay, toCivil, type DateInput } from "./input.ts";
 import {
-  addDays,
-  fromDayNumber,
-  parseDate,
-  toDayNumber,
-  weekdayOf,
-  type DateString,
-  type Weekday,
-} from "./date.ts";
-import {
-  instantToCivil,
-  parseTimeOfDay,
-  toCivil,
-  validateTimeZone,
-  type DateInput,
-} from "./input.ts";
-import type { Holiday, HolidayProvider } from "./types.ts";
+  createSchedule,
+  parseMonthDay,
+  type DateRangeValue,
+  type DateValue,
+  type HolidayLookup,
+  type HolidaySourceOptions,
+} from "./schedule.ts";
+import type { Holiday } from "./types.ts";
 
 /** 祝日の扱い */
 export type HolidayPolicy = "closed" | "open" | "ignore";
@@ -48,14 +44,7 @@ export interface DateRange {
   readonly name?: string;
 }
 
-export interface CalendarOptions<Kind extends string = string> {
-  /** 祝日の提供元（例: jp）。複数渡すと和集合になる */
-  readonly holidays?: HolidayProvider<Kind> | readonly HolidayProvider<Kind>[];
-  /**
-   * 日時の入力（Date・オフセット付き文字列など）を暦日に変換するタイムゾーン。
-   * 省略時は祝日の提供元のタイムゾーン、提供元もなければ "UTC"
-   */
-  readonly timeZone?: string;
+export interface CalendarOptions<Kind extends string = string> extends HolidaySourceOptions<Kind> {
   /** 定休日の曜日（0 = 日曜日） */
   readonly closedWeekdays?: readonly Weekday[];
   /** 毎年の休業日 */
@@ -66,8 +55,6 @@ export interface CalendarOptions<Kind extends string = string> {
   readonly openDates?: readonly (SpecificDate | DateRange)[];
   /** 祝日の扱い（既定: "closed"） */
   readonly holidayPolicy?: HolidayPolicy;
-  /** 祝日の提供元の対応年を外れた日付の扱い（既定: "throw"） */
-  readonly outOfRange?: "throw" | "ignore";
   /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら Error */
   readonly maxSearchDays?: number;
 }
@@ -102,26 +89,7 @@ export interface BusinessDayOptions {
   readonly cutoff?: string;
 }
 
-export interface Calendar<Kind extends string = string> {
-  /** 日時の入力を暦日に変換するタイムゾーン */
-  readonly timeZone: string;
-  /** 祝日の提供元 */
-  readonly providers: readonly HolidayProvider<Kind>[];
-
-  /** 入力をカレンダーのタイムゾーンでの暦日に変換する */
-  dateOf(input: DateInput): DateString;
-  /** 今日の日付（カレンダーのタイムゾーン） */
-  today(now?: Date): DateString;
-
-  /** 祝日か */
-  isHoliday(input: DateInput): boolean;
-  /** 祝日なら祝日を返す */
-  getHoliday(input: DateInput): Holiday<Kind> | undefined;
-  /** その年の祝日 */
-  holidaysInYear(year: number): readonly Holiday<Kind>[];
-  /** 期間内の祝日（両端を含む） */
-  holidaysBetween(from: DateInput, to: DateInput): readonly Holiday<Kind>[];
-
+export interface Calendar<Kind extends string = string> extends HolidayLookup<Kind> {
   /** 1 日分の判定結果（営業日か・理由・祝日） */
   dayInfo(input: DateInput): DayInfo<Kind>;
   /** 営業日か */
@@ -145,189 +113,96 @@ export interface Calendar<Kind extends string = string> {
   listBusinessDays(from: DateInput, to: DateInput): readonly DateString[];
 }
 
-const MONTH_DAY_RE = /^(\d{2})-(\d{2})$/;
-const MAX_DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
-
-function parseMonthDay(value: string): string {
-  const m = MONTH_DAY_RE.exec(value);
-  const month = Number(m?.[1]);
-  const day = Number(m?.[2]);
-  if (!m || month < 1 || month > 12 || day < 1 || day > MAX_DAYS_IN_MONTH[month - 1]!) {
-    throw new RangeError(`Invalid month-day: ${JSON.stringify(value)} (expected MM-DD)`);
-  }
-  return value;
-}
-
-interface DayRule {
-  readonly from: number;
-  readonly to: number;
-  readonly name: string | undefined;
-}
-
-function compileDates(
+function toDateValues(
   entries: readonly (SpecificDate | DateRange)[] | undefined,
-  label: string,
-): DayRule[] {
+  value: boolean,
+): (DateValue<boolean> | DateRangeValue<boolean>)[] {
   return (entries ?? []).map((e) => {
-    if (typeof e === "string") {
-      const n = toDayNumber(e);
-      return { from: n, to: n, name: undefined };
-    }
-    if ("date" in e) {
-      const n = toDayNumber(e.date);
-      return { from: n, to: n, name: e.name };
-    }
-    const from = toDayNumber(e.from);
-    const to = toDayNumber(e.to);
-    if (from > to)
-      throw new RangeError(`${label}: "from" must not be after "to" (${e.from} > ${e.to})`);
-    return { from, to, name: e.name };
+    if (typeof e === "string") return { date: e, value };
+    if ("date" in e) return e.name === undefined ? { date: e.date, value } : { ...e, value };
+    return e.name === undefined ? { from: e.from, to: e.to, value } : { ...e, value };
   });
-}
-
-interface AnnualRule {
-  readonly from: string;
-  readonly to: string;
-  readonly name: string | undefined;
-}
-
-function compileAnnual(entries: readonly (AnnualDate | AnnualRange)[] | undefined): AnnualRule[] {
-  return (entries ?? []).map((e) => {
-    if (typeof e === "string") {
-      const md = parseMonthDay(e);
-      return { from: md, to: md, name: undefined };
-    }
-    if ("date" in e) {
-      const md = parseMonthDay(e.date);
-      return { from: md, to: md, name: e.name };
-    }
-    return { from: parseMonthDay(e.from), to: parseMonthDay(e.to), name: e.name };
-  });
-}
-
-function matchAnnual(rule: AnnualRule, monthDay: string): boolean {
-  return rule.from <= rule.to
-    ? monthDay >= rule.from && monthDay <= rule.to
-    : monthDay >= rule.from || monthDay <= rule.to;
 }
 
 /** 祝日と休業日の規則から営業日カレンダーを作る */
 export function createCalendar<Kind extends string = string>(
   options: CalendarOptions<Kind> = {},
 ): Calendar<Kind> {
-  const providers: readonly HolidayProvider<Kind>[] = Object.freeze(
-    options.holidays === undefined
-      ? []
-      : Array.isArray(options.holidays)
-        ? [...(options.holidays as readonly HolidayProvider<Kind>[])]
-        : [options.holidays as HolidayProvider<Kind>],
-  );
-
-  let timeZone: string;
-  if (options.timeZone !== undefined) {
-    timeZone = validateTimeZone(options.timeZone);
-  } else {
-    const zones = [...new Set(providers.map((p) => validateTimeZone(p.timeZone)))];
-    if (zones.length > 1) {
-      throw new RangeError(
-        `Holiday providers use different time zones (${zones.join(", ")}); specify options.timeZone`,
-      );
-    }
-    timeZone = zones[0] ?? "UTC";
-  }
-
   const closedWeekdays = new Set<number>();
   for (const w of options.closedWeekdays ?? []) {
     if (!Number.isInteger(w) || w < 0 || w > 6) throw new RangeError(`Invalid weekday: ${w}`);
     closedWeekdays.add(w);
   }
-  const closedAnnual = compileAnnual(options.closedAnnual);
-  const closedDates = compileDates(options.closedDates, "closedDates");
-  const openDates = compileDates(options.openDates, "openDates");
   const holidayPolicy: HolidayPolicy = options.holidayPolicy ?? "closed";
   if (!["closed", "open", "ignore"].includes(holidayPolicy)) {
     throw new RangeError(`Invalid holidayPolicy: ${String(holidayPolicy)}`);
   }
-  const outOfRange = options.outOfRange ?? "throw";
   const maxSearchDays = options.maxSearchDays ?? 3660;
   if (!Number.isInteger(maxSearchDays) || maxSearchDays < 1) {
     throw new RangeError(`Invalid maxSearchDays: ${maxSearchDays}`);
   }
 
-  const yearCache = new Map<number, Map<DateString, Holiday<Kind>>>();
-
-  function providerYears(provider: HolidayProvider<Kind>, year: number): readonly Holiday<Kind>[] {
-    const { from, to } = provider.supportedYears;
-    if (year < from || year > to) {
-      if (outOfRange === "ignore") return [];
-      throw new RangeError(
-        `Holidays for ${provider.id} are supported for ${from}-${to}; requested ${year}`,
-      );
-    }
-    return provider.holidaysInYear(year);
-  }
-
-  function holidayMap(year: number): Map<DateString, Holiday<Kind>> {
-    let map = yearCache.get(year);
-    if (!map) {
-      map = new Map();
-      for (const provider of providers) {
-        for (const h of providerYears(provider, year)) {
-          // 同じ日に複数の提供元の祝日がある場合は、先に渡した提供元を優先する
-          if (!map.has(h.date)) map.set(h.date, h);
-        }
-      }
-      yearCache.set(year, map);
-    }
-    return map;
-  }
-
-  const dateOf = (input: DateInput): DateString => toCivil(input, timeZone).date;
-
-  function holidayOn(date: DateString): Holiday<Kind> | undefined {
-    if (providers.length === 0) return undefined;
-    return holidayMap(parseDate(date).year).get(date);
-  }
-
-  function findRule(rules: readonly DayRule[], dayNumber: number): DayRule | undefined {
-    return rules.find((r) => dayNumber >= r.from && dayNumber <= r.to);
-  }
+  const weekly = [0, 1, 2, 3, 4, 5, 6].map((w) => !closedWeekdays.has(w)) as [
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+    boolean,
+  ];
+  const sourceOptions: HolidaySourceOptions<Kind> = {
+    ...(options.holidays !== undefined && { holidays: options.holidays }),
+    ...(options.timeZone !== undefined && { timeZone: options.timeZone }),
+    ...(options.outOfRange !== undefined && { outOfRange: options.outOfRange }),
+  };
+  const schedule = createSchedule<boolean, Kind>({
+    ...sourceOptions,
+    weekly,
+    holiday: holidayPolicy === "ignore" ? "weekday" : { value: holidayPolicy === "open" },
+    annual: (options.closedAnnual ?? []).map((e) => {
+      if (typeof e === "string") return { date: parseMonthDay(e), value: false };
+      if ("date" in e)
+        return e.name === undefined ? { date: e.date, value: false } : { ...e, value: false };
+      return e.name === undefined
+        ? { from: e.from, to: e.to, value: false }
+        : { ...e, value: false };
+    }),
+    // 臨時営業日を先に並べて、臨時休業日より優先する
+    dates: [...toDateValues(options.openDates, true), ...toDateValues(options.closedDates, false)],
+  });
 
   function info(date: DateString): DayInfo<Kind> {
-    const dayNumber = toDayNumber(date);
-    const weekday = weekdayOf(date);
-    const holiday = holidayOn(date);
-    const make = (
-      businessDay: boolean,
-      reason: DayReason,
-      name: string | undefined,
-    ): DayInfo<Kind> => {
-      const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
-        date,
-        weekday,
-        businessDay,
-        reason,
-      };
-      if (name !== undefined) result.name = name;
-      if (holiday !== undefined) result.holiday = holiday;
-      return Object.freeze(result);
-    };
-
-    const open = findRule(openDates, dayNumber);
-    if (open) return make(true, "open-date", open.name);
-    const closed = findRule(closedDates, dayNumber);
-    if (closed) return make(false, "closed-date", closed.name);
-    const monthDay = date.slice(5);
-    const annual = closedAnnual.find((r) => matchAnnual(r, monthDay));
-    if (annual) return make(false, "closed-annual", annual.name);
-    if (holiday && holidayPolicy !== "ignore") {
-      return make(holidayPolicy === "open", "holiday", holiday.name);
+    const day = schedule.dayInfo(date);
+    let reason: DayReason;
+    switch (day.reason) {
+      case "date":
+        reason = day.value ? "open-date" : "closed-date";
+        break;
+      case "annual":
+        reason = "closed-annual";
+        break;
+      case "holiday":
+        reason = "holiday";
+        break;
+      case "weekday":
+        reason = day.value ? "regular" : "closed-weekday";
+        break;
     }
-    if (closedWeekdays.has(weekday)) return make(false, "closed-weekday", undefined);
-    return make(true, "regular", undefined);
+    const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
+      date: day.date,
+      weekday: day.weekday,
+      businessDay: day.value,
+      reason,
+    };
+    // 曜日で決まった日には名前を付けない（祝日名は holiday で分かる）
+    if (day.name !== undefined && day.reason !== "weekday") result.name = day.name;
+    if (day.holiday !== undefined) result.holiday = day.holiday;
+    return Object.freeze(result);
   }
 
-  const isOpen = (date: DateString): boolean => info(date).businessDay;
+  const isOpen = (date: DateString): boolean => schedule.valueOn(date);
+  const dateOf = schedule.dateOf;
 
   function search(start: DateString, step: 1 | -1): DateString {
     let n = toDayNumber(start);
@@ -338,13 +213,6 @@ export function createCalendar<Kind extends string = string>(
     throw new Error(`No business day found within ${maxSearchDays} days from ${start}`);
   }
 
-  function ordered(from: DateInput, to: DateInput): [DateString, DateString] {
-    const a = dateOf(from);
-    const b = dateOf(to);
-    if (a > b) throw new RangeError(`"from" must not be after "to" (${a} > ${b})`);
-    return [a, b];
-  }
-
   function countOpen(from: number, toExclusive: number): number {
     let count = 0;
     for (let n = from; n < toExclusive; n++) if (isOpen(fromDayNumber(n))) count++;
@@ -352,36 +220,22 @@ export function createCalendar<Kind extends string = string>(
   }
 
   const calendar: Calendar<Kind> = {
-    timeZone,
-    providers,
+    timeZone: schedule.timeZone,
+    providers: schedule.providers,
     dateOf,
-    today: (now = new Date()) => instantToCivil(now.getTime(), timeZone).date,
-
-    isHoliday: (input) => holidayOn(dateOf(input)) !== undefined,
-    getHoliday: (input) => holidayOn(dateOf(input)),
-    holidaysInYear(year) {
-      if (!Number.isInteger(year)) throw new RangeError(`Invalid year: ${year}`);
-      return Object.freeze(
-        [...holidayMap(year).values()].sort((a, b) =>
-          a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
-        ),
-      );
-    },
-    holidaysBetween(from, to) {
-      const [a, b] = ordered(from, to);
-      const result: Holiday<Kind>[] = [];
-      for (let y = parseDate(a).year; y <= parseDate(b).year; y++) {
-        for (const h of calendar.holidaysInYear(y)) if (h.date >= a && h.date <= b) result.push(h);
-      }
-      return Object.freeze(result);
-    },
+    civilOf: schedule.civilOf,
+    today: schedule.today,
+    isHoliday: schedule.isHoliday,
+    getHoliday: schedule.getHoliday,
+    holidaysInYear: schedule.holidaysInYear,
+    holidaysBetween: schedule.holidaysBetween,
 
     dayInfo: (input) => info(dateOf(input)),
     isBusinessDay: (input) => isOpen(dateOf(input)),
     nextBusinessDay: (input) => search(addDays(dateOf(input), 1), 1),
     previousBusinessDay: (input) => search(addDays(dateOf(input), -1), -1),
     businessDayOnOrAfter(input, opts = {}) {
-      const civil = toCivil(input, timeZone);
+      const civil = toCivil(input, schedule.timeZone);
       let start = civil.date;
       if (opts.cutoff !== undefined) {
         const cutoff = parseTimeOfDay(opts.cutoff);
@@ -406,7 +260,9 @@ export function createCalendar<Kind extends string = string>(
       return a <= b ? countOpen(a, b) : -countOpen(b, a);
     },
     listBusinessDays(from, to) {
-      const [a, b] = ordered(from, to);
+      const a = dateOf(from);
+      const b = dateOf(to);
+      if (a > b) throw new RangeError(`"from" must not be after "to" (${a} > ${b})`);
       const result: DateString[] = [];
       for (let n = toDayNumber(a); n <= toDayNumber(b); n++) {
         const date = fromDayNumber(n);

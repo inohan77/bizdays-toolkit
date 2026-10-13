@@ -156,6 +156,19 @@ export function toDateString(input: DateInput, timeZone: string): DateString {
   return toCivil(input, validateTimeZone(timeZone)).date;
 }
 
+/** 入力を、タイムゾーンでの暦日と時刻（"HH:mm"。暦日だけの入力では null）に変換する */
+export function toDateTimeParts(
+  input: DateInput,
+  timeZone: string,
+): { readonly date: DateString; readonly time: string | null } {
+  const civil = toCivil(input, validateTimeZone(timeZone));
+  const time =
+    civil.minutes === null
+      ? null
+      : `${String(Math.floor(civil.minutes / 60)).padStart(2, "0")}:${String(civil.minutes % 60).padStart(2, "0")}`;
+  return Object.freeze({ date: civil.date, time });
+}
+
 /** "HH:mm" を 0 時からの経過分に変換する（00:00〜23:59） */
 export function parseTimeOfDay(value: string): number {
   const m = /^(\d{2}):(\d{2})$/.exec(value);

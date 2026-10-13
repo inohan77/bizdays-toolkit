@@ -77,6 +77,14 @@ export function toJapanDate(input: DateInput): DateString {
   return calendar().dateOf(input);
 }
 
+/** 日本時間での暦日と時刻（"HH:mm"。暦日だけの入力では null） */
+export function toJapanDateTime(input: DateInput): {
+  readonly date: DateString;
+  readonly time: string | null;
+} {
+  return calendar().civilOf(input);
+}
+
 /** 反映済みの官報の年月 */
 export const dataVersion: string = DATA_VERSION;
 /** 春分・秋分の日が官報で確定している最後の年 */

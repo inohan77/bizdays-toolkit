@@ -17,9 +17,10 @@
 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダーです。
 
 - **日本の祝日を内閣府のデータで全日照合**: 1955 年〜官報公表済みの年まで、内閣府「国民の祝日」CSV のすべての日付と一致することをテストで確かめています（振替休日・国民の休日・皇室行事による休日・五輪特措法による移動を含む）
+- **日ごとの値（営業時間など）**: 「火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業」のように、曜日・祝日・特定日で変わる値を同じ規則で引けます
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 3KB（日本の祝日込みで約 5KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
+- **軽量・依存ゼロ**: minify + gzip で約 4KB（日本の祝日込みで約 5.5KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。現在は日本のみ同梱しています
 
 [English](#english)
@@ -86,6 +87,43 @@ shipping.dayInfo("2027-01-01");
 4. 祝日（`holidayPolicy` に従う。`"open"` は定休日の曜日より優先して営業日にする）
 5. `closedWeekdays`（定休日の曜日）
 6. それ以外は営業日
+
+### 日ごとの値（営業時間など）
+
+`createSchedule` は、曜日・祝日・特定日の規則から、日ごとに任意の値を返します。値の型は自由なので、営業時間のほか、受付枠や配送料の区分などにも使えます。
+
+```ts
+import { createSchedule } from "bizdays-toolkit";
+import { jp } from "bizdays-toolkit/jp";
+
+type Hours = { open: string; close: string } | null; // null は休業
+const weekday = { open: "10:00", close: "21:00" };
+const sunday = { open: "10:00", close: "19:00" };
+
+const storeHours = createSchedule<Hours>({
+  holidays: jp,
+  weekly: [sunday, weekday, null, weekday, weekday, weekday, weekday], // [日, 月, …, 土]。火曜定休
+  holiday: { sameAs: 0 }, // 祝日は日曜の値（"weekday": 曜日どおり / { value: … }: 指定の値）
+  annual: [{ date: "01-01", value: null, name: "元日休業" }], // 毎年の月日（期間も可）
+  dates: [{ date: "2026-12-31", value: { open: "10:00", close: "17:00" }, name: "大晦日" }],
+});
+
+storeHours.valueOn("2026-11-03"); // { open: "10:00", close: "19:00" }（文化の日は日曜の営業時間）
+storeHours.dayInfo("2027-01-01");
+// { date: "2027-01-01", weekday: 5, value: null, reason: "annual", name: "元日休業", holiday: {…} }
+```
+
+値は `dates`（個別の日付・期間）→ `annual`（毎年の月日・期間）→ 祝日 → `weekly`（曜日）の順に決まります。同じ種類の規則が重なる場合は、配列で先に書いたものが優先です。
+
+「今、営業時間内か」のような時刻の範囲の判定は、業種ごとの決まり（深夜をまたぐ営業、休憩時間など）があるためライブラリでは行いません。`civilOf` でタイムゾーンでの暦日と時刻を取り出せば、アプリ側で簡単に書けます。
+
+```ts
+const { date, time } = storeHours.civilOf(new Date()); // { date: "2026-10-14", time: "16:30" }（日本時間）
+const hours = storeHours.valueOn(date);
+const isOpen = hours !== null && time !== null && hours.open <= time && time < hours.close;
+```
+
+`civilOf` は営業日カレンダーにもあり、`bizdays-toolkit/jp` の `toJapanDateTime`、ルートの `toDateTimeParts(input, timeZone)` でも同じ変換ができます。
 
 ### 日付・日時の入力
 
@@ -155,9 +193,10 @@ MIT
 A business-day calendar that combines public holidays with company or store closures.
 
 - **Japanese holidays verified day by day** against the Cabinet Office CSV, from 1955 through the latest year officially announced (substitute holidays, citizens' holidays, imperial ceremonies, and the Olympic moves included)
+- **Day-by-day schedules**: `createSchedule` returns any value per day (e.g. store hours) from weekly values, a holiday rule (`"weekday"`, `{ sameAs: 0 }`, or `{ value }`), annual dates and specific dates
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed/open dates, holiday policy, `addBusinessDays`, cut-off times, and more
 - **Time-zone safe**: instants (`Date`, ISO strings with offsets, Temporal) are converted to a civil date in the calendar's time zone before evaluation
-- **Lightweight, zero dependencies**: about 3 KB min+gzip (about 5 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
+- **Lightweight, zero dependencies**: about 4 KB min+gzip (about 5.5 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
 - **Extensible** through the `HolidayProvider` interface (only Japan is bundled for now)
 
 ```ts
