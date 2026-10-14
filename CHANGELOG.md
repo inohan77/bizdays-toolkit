@@ -4,6 +4,35 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-15
+
+1.0.0 に向けて、将来の機能追加で利用者のコードが壊れにくい作りにしました。機能の追加はありません。
+
+### Added
+
+- 例外に `code` を付けた（`invalid-date`・`invalid-range`・`no-business-day` など）。例外は従来どおり `RangeError`・`TypeError`・`Error` のインスタンス。`isBizdaysError()` で判定できる
+- `KnownDayReason`・`KnownScheduleReason`・`KnownJapaneseHolidayKind`・`KnownErrorCode`: 既知の値だけの閉じた型（網羅を型で確かめたい場合に使う）
+- 祝日の提供元（`HolidayProvider`）の形式を作る時点で、返したデータを年ごとに初めて使うときに検証する（誤りは `invalid-provider`・`invalid-provider-data`）
+
+### Changed
+
+- `DayReason`・`ScheduleReason`・`JapaneseHolidayKind` を「開いた型」にした（将来の版で値が増えても、利用者のコードがコンパイルエラーにならない）。値を列挙して分岐しているコードは「その他」の分岐が必要になる
+- 設定の誤りのメッセージに、設定の中の位置（例: `closedDates[1].date`）を入れた
+- 設定は作る時点で複製するようにした（作ったあとに元の配列を書き換えても、結果が変わらない）
+- 提供元が返した祝日は、契約の項目だけを持つ変更できないオブジェクトにして返す
+- 別の実行環境（iframe・`vm`）で作られた `Date` も受け付けるようにした
+
+### Removed
+
+- `vernalEquinoxDay`・`autumnalEquinoxDay`（`bizdays-toolkit/jp`）: 祝日の計算の内部の手段のため非公開にした
+- `nthWeekdayOfMonth`: 内部の関数のため非公開にした
+
+### 開発
+
+- 品質の確認を追加: タイムゾーン（`TZ`）を変えたテスト、性質のテスト、型のテスト、サイズの上限（`size-limits.json`）、公開 API のスナップショット（`etc/api.md`）
+- 互換性の約束と安定度の表示（`@public`・`@beta`）を RELEASING.md に、設計上の決定を `docs/decisions.md` に記載
+- `SECURITY.md` を追加（脆弱性の非公開の報告先）
+
 ## [0.2.0] - 2026-10-14
 
 ### Added
@@ -50,7 +79,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.0...v0.1.1

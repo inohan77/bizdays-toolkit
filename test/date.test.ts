@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addDays, diffDays, isValidDate, nthWeekdayOfMonth, weekdayOf } from "../src/index.ts";
+import { addDays, diffDays, isValidDate, weekdayOf } from "../src/index.ts";
+// 第 n 曜日は公開しない内部の関数なので、モジュールから直接読み込んで確かめる
+import { nthWeekdayOfMonth } from "../src/core/date.ts";
 
 test("日付の加減算と差", () => {
   assert.equal(addDays("2026-12-31", 1), "2027-01-01");

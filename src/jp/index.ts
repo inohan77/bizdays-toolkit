@@ -23,15 +23,20 @@ import {
   type JapaneseHolidayKind,
 } from "./rules.ts";
 
-export type { JapaneseHolidayKind } from "./rules.ts";
-export { autumnalEquinoxDay, vernalEquinoxDay } from "./rules.ts";
+export type { JapaneseHolidayKind, KnownJapaneseHolidayKind } from "./rules.ts";
 
-/** 日本の祝日 */
+/**
+ * 日本の祝日。
+ * @public
+ */
 export type JapaneseHoliday = Holiday<JapaneseHolidayKind>;
 
 const cache = new Map<number, readonly JapaneseHoliday[]>();
 
-/** 日本の祝日の提供元（createCalendar の holidays に渡す） */
+/**
+ * 日本の祝日の提供元（createCalendar・createSchedule の holidays に渡す）。
+ * @public
+ */
 export const jp: HolidayProvider<JapaneseHolidayKind> = Object.freeze({
   id: "JP",
   timeZone: "Asia/Tokyo",
@@ -52,32 +57,50 @@ let defaultCalendar: Calendar<JapaneseHolidayKind> | undefined;
 const calendar = (): Calendar<JapaneseHolidayKind> =>
   (defaultCalendar ??= createCalendar({ holidays: jp }));
 
-/** 祝日か（Date などの瞬間は日本時間で判定する） */
+/**
+ * 祝日か（Date などの瞬間は日本時間で判定する）。
+ * @public
+ */
 export function isHoliday(input: DateInput): boolean {
   return calendar().isHoliday(input);
 }
 
-/** 祝日なら祝日を返す */
+/**
+ * 祝日なら祝日を返す。
+ * @public
+ */
 export function getHoliday(input: DateInput): JapaneseHoliday | undefined {
   return calendar().getHoliday(input);
 }
 
-/** その年の祝日 */
+/**
+ * その年の祝日。
+ * @public
+ */
 export function holidaysInYear(year: number): readonly JapaneseHoliday[] {
   return calendar().holidaysInYear(year);
 }
 
-/** 期間内の祝日（両端を含む） */
+/**
+ * 期間内の祝日（両端を含む）。
+ * @public
+ */
 export function holidaysBetween(from: DateInput, to: DateInput): readonly JapaneseHoliday[] {
   return calendar().holidaysBetween(from, to);
 }
 
-/** 日本時間での暦日 */
+/**
+ * 日本時間での暦日。
+ * @public
+ */
 export function toJapanDate(input: DateInput): DateString {
   return calendar().dateOf(input);
 }
 
-/** 日本時間での暦日と時刻（"HH:mm"。暦日だけの入力では null） */
+/**
+ * 日本時間での暦日と時刻（"HH:mm"。暦日だけの入力では null）。
+ * @public
+ */
 export function toJapanDateTime(input: DateInput): {
   readonly date: DateString;
   readonly time: string | null;
@@ -85,7 +108,13 @@ export function toJapanDateTime(input: DateInput): {
   return calendar().civilOf(input);
 }
 
-/** 反映済みの官報の年月 */
+/**
+ * 反映済みの官報の年月。
+ * @public
+ */
 export const dataVersion: string = DATA_VERSION;
-/** 春分・秋分の日が官報で確定している最後の年 */
+/**
+ * 春分・秋分の日が官報で確定している最後の年。
+ * @public
+ */
 export const confirmedThrough: number = CONFIRMED_THROUGH;

@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  autumnalEquinoxDay,
-  getHoliday,
-  holidaysBetween,
-  holidaysInYear,
-  isHoliday,
-  jp,
-  vernalEquinoxDay,
-} from "../src/jp/index.ts";
+import { getHoliday, holidaysBetween, holidaysInYear, isHoliday, jp } from "../src/jp/index.ts";
+// 近似式は公開しない内部の関数なので、モジュールから直接読み込んで確かめる
+import { autumnalEquinoxDay, vernalEquinoxDay } from "../src/jp/rules.ts";
 
 const pick = (date: string) => {
   const h = getHoliday(date);

@@ -93,7 +93,7 @@ test("瞬間は祝日の提供元のタイムゾーンで暦日にする", () =>
 test("不正な設定", () => {
   assert.throws(
     () => createSchedule<number>({ weekly: [0, 0, 0] as unknown as [0, 0, 0, 0, 0, 0, 0] }),
-    /weekly must have 7 values/,
+    { code: "invalid-option" },
   );
   assert.throws(
     () => createSchedule<number>({ weekly: [0, 0, 0, 0, 0, 0, 0], holiday: { sameAs: 7 as 0 } }),

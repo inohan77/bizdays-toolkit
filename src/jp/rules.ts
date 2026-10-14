@@ -16,10 +16,14 @@ import {
   weekdayOf,
   type DateString,
 } from "../core/date.ts";
+import { rangeError } from "../core/errors.ts";
 import type { Holiday } from "../core/types.ts";
 
-/** 日本の祝日・休日の種別 */
-export type JapaneseHolidayKind =
+/**
+ * 日本の祝日・休日の種別（既知の値）。
+ * @public
+ */
+export type KnownJapaneseHolidayKind =
   /** 国民の祝日 */
   | "national"
   /** 振替休日 */
@@ -29,11 +33,18 @@ export type JapaneseHolidayKind =
   /** 皇室行事などによる特例の休日 */
   | "special";
 
-/** 対応年 */
+/**
+ * 日本の祝日・休日の種別。将来の版で値が増えることがあるので、分岐では「その他」も扱うこと。
+ * すべての値を網羅したことを型で確かめたい場合は KnownJapaneseHolidayKind を使う。
+ * @public
+ */
+export type JapaneseHolidayKind = KnownJapaneseHolidayKind | (string & {});
+
+/** @internal 対応年 */
 export const SUPPORTED_YEARS = Object.freeze({ from: 1955, to: 2099 });
-/** 春分・秋分の日が官報で確定している最後の年 */
+/** @internal 春分・秋分の日が官報で確定している最後の年 */
 export const CONFIRMED_THROUGH = 2027;
-/** 反映済みの官報の年月（2027 年の春分・秋分の日の公表） */
+/** @internal 反映済みの官報の年月（2027 年の春分・秋分の日の公表） */
 export const DATA_VERSION = "2026-02";
 
 const SUBSTITUTE_START = "1973-04-12";
@@ -44,7 +55,7 @@ interface Entry {
   readonly date: DateString;
   readonly name: string;
   readonly nameEn: string;
-  readonly kind: JapaneseHolidayKind;
+  readonly kind: KnownJapaneseHolidayKind;
   /** 春分・秋分の日、またはそれに由来する休日 */
   readonly equinox: boolean;
 }
@@ -70,7 +81,7 @@ const SPECIAL_DAYS: readonly Omit<Entry, "kind" | "equinox">[] = [
 // 近似式の int() は 0 方向への切り捨て。1979 年以前は (year - 1983) / 4 が負になるため
 // Math.floor ではなく Math.trunc を使う（floor だと 1 日ずれる年がある）
 
-/** 春分日（3 月の日） */
+/** @internal 春分日（3 月の日） */
 export function vernalEquinoxDay(year: number): number {
   if (year <= 1979) {
     return Math.floor(20.8357 + 0.242194 * (year - 1980) - Math.trunc((year - 1983) / 4));
@@ -78,7 +89,7 @@ export function vernalEquinoxDay(year: number): number {
   return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
 }
 
-/** 秋分日（9 月の日） */
+/** @internal 秋分日（9 月の日） */
 export function autumnalEquinoxDay(year: number): number {
   if (year <= 1979) {
     return Math.floor(23.2588 + 0.242194 * (year - 1980) - Math.trunc((year - 1983) / 4));
@@ -140,10 +151,11 @@ function baseHolidays(y: number): Entry[] {
   return list.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-/** その年の祝日・休日（日付順） */
+/** @internal その年の祝日・休日（日付順） */
 export function computeJapaneseHolidays(year: number): Holiday<JapaneseHolidayKind>[] {
   if (!Number.isInteger(year) || year < SUPPORTED_YEARS.from || year > SUPPORTED_YEARS.to) {
-    throw new RangeError(
+    throw rangeError(
+      "out-of-range",
       `Japanese holidays are supported for ${SUPPORTED_YEARS.from}-${SUPPORTED_YEARS.to}; requested ${year}`,
     );
   }

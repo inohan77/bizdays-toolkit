@@ -10,8 +10,12 @@
  */
 
 import { formatDate, parseDate, type DateString } from "./date.ts";
+import { rangeError, typeError } from "./errors.ts";
 
-/** Temporal のオブジェクトとして受け付ける最小限の形 */
+/**
+ * Temporal.PlainDate / PlainDateTime として受け付ける最小限の形。
+ * @public
+ */
 export interface TemporalDateLike {
   readonly year: number;
   readonly month: number;
@@ -21,15 +25,21 @@ export interface TemporalDateLike {
   readonly calendarId?: string;
 }
 
-/** Temporal.Instant / ZonedDateTime として受け付ける最小限の形 */
+/**
+ * Temporal.Instant / ZonedDateTime として受け付ける最小限の形。
+ * @public
+ */
 export interface TemporalInstantLike {
   readonly epochMilliseconds: number;
 }
 
-/** 日付・日時として受け付ける入力 */
+/**
+ * 日付・日時として受け付ける入力。
+ * @public
+ */
 export type DateInput = string | Date | TemporalDateLike | TemporalInstantLike;
 
-/** 暦日と、分かる場合は 0 時からの経過分 */
+/** @internal 暦日と、分かる場合は 0 時からの経過分 */
 export interface CivilDateTime {
   readonly date: DateString;
   /** 0 時からの経過分。暦日だけの入力では null */
@@ -58,22 +68,25 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
-/** IANA タイムゾーン名として使えるか確かめ、正規化した名前を返す（不正なら RangeError） */
+/** @internal IANA タイムゾーン名として使えるか確かめ、正規化した名前を返す（不正なら RangeError） */
 export function validateTimeZone(timeZone: string): string {
+  if (typeof timeZone !== "string" || timeZone === "") {
+    throw rangeError("invalid-time-zone", `Invalid time zone: ${JSON.stringify(timeZone)}`);
+  }
   try {
     return formatterFor(timeZone).resolvedOptions().timeZone;
   } catch {
-    throw new RangeError(`Invalid time zone: ${JSON.stringify(timeZone)}`);
+    throw rangeError("invalid-time-zone", `Invalid time zone: ${JSON.stringify(timeZone)}`);
   }
 }
 
-/** 瞬間（エポックミリ秒）を、タイムゾーンでの暦日と時刻に変換する */
+/** @internal 瞬間（エポックミリ秒）を、タイムゾーンでの暦日と時刻に変換する */
 export function instantToCivil(epochMilliseconds: number, timeZone: string): CivilDateTime {
-  if (!Number.isFinite(epochMilliseconds)) throw new RangeError("Invalid instant");
+  if (!Number.isFinite(epochMilliseconds)) throw rangeError("invalid-time", "Invalid instant");
   const parts = formatterFor(timeZone).formatToParts(new Date(epochMilliseconds));
   const get = (type: Intl.DateTimeFormatPartTypes): number => {
     const p = parts.find((x) => x.type === type);
-    if (!p) throw new RangeError(`Cannot resolve ${type} in ${timeZone}`);
+    if (!p) throw rangeError("invalid-time-zone", `Cannot resolve ${type} in ${timeZone}`);
     return Number(p.value);
   };
   return {
@@ -91,7 +104,7 @@ function wallTime(hour: number, minute: number): number {
     minute < 0 ||
     minute > 59
   ) {
-    throw new RangeError(`Invalid time: ${hour}:${minute}`);
+    throw rangeError("invalid-time", `Invalid time: ${hour}:${minute}`);
   }
   return hour * 60 + minute;
 }
@@ -103,20 +116,25 @@ function parseString(value: string, timeZone: string): CivilDateTime {
   }
   const m = DATETIME_RE.exec(value);
   if (!m) {
-    throw new RangeError(
+    throw rangeError(
+      /^\d{4}-\d{2}-\d{2}[T ]/i.test(value) ? "invalid-time" : "invalid-date",
       `Invalid date/time string: ${JSON.stringify(value)} (expected YYYY-MM-DD or ISO 8601 date-time)`,
     );
   }
   const date = m[1]!;
   parseDate(date);
   const minutes = wallTime(Number(m[2]), Number(m[3]));
-  if (m[4] !== undefined && Number(m[4]) > 59) throw new RangeError(`Invalid time: ${value}`);
+  if (m[4] !== undefined && Number(m[4]) > 59) {
+    throw rangeError("invalid-time", `Invalid time: ${value}`);
+  }
   const offset = m[5];
   if (offset === undefined) return { date, minutes };
   // オフセット付きは瞬間として扱う
   const normalized = value.replace(" ", "T").replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
   const ms = Date.parse(normalized);
-  if (Number.isNaN(ms)) throw new RangeError(`Invalid date/time string: ${JSON.stringify(value)}`);
+  if (Number.isNaN(ms)) {
+    throw rangeError("invalid-time", `Invalid date/time string: ${JSON.stringify(value)}`);
+  }
   return instantToCivil(ms, timeZone);
 }
 
@@ -129,15 +147,26 @@ function isDateLike(value: object): value is TemporalDateLike {
   return typeof v.year === "number" && typeof v.month === "number" && typeof v.day === "number";
 }
 
-/** 入力をタイムゾーンでの暦日と時刻に変換する */
+/**
+ * Date か（iframe や vm など、別の実行環境で作られた Date も含む）。
+ * instanceof は実行環境ごとに Date が別物になるため使わない
+ */
+function isDate(value: unknown): value is Date {
+  return Object.prototype.toString.call(value) === "[object Date]";
+}
+
+/** @internal 入力をタイムゾーンでの暦日と時刻に変換する */
 export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
   if (typeof input === "string") return parseString(input, timeZone);
-  if (input instanceof Date) return instantToCivil(input.getTime(), timeZone);
+  if (isDate(input)) return instantToCivil(Date.prototype.getTime.call(input), timeZone);
   if (typeof input === "object" && input !== null) {
     if (isInstantLike(input)) return instantToCivil(input.epochMilliseconds, timeZone);
     if (isDateLike(input)) {
       if (input.calendarId !== undefined && input.calendarId !== "iso8601") {
-        throw new RangeError(`Unsupported calendar: ${input.calendarId} (only iso8601)`);
+        throw rangeError(
+          "invalid-input",
+          `Unsupported calendar: ${input.calendarId} (only iso8601)`,
+        );
       }
       const date = formatDate(input.year, input.month, input.day);
       if (typeof input.hour === "number") {
@@ -146,17 +175,24 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
       return { date, minutes: null };
     }
   }
-  throw new TypeError(
+  throw typeError(
+    "invalid-input",
     "Unsupported date input: expected a YYYY-MM-DD string, an ISO 8601 date-time string, a Date, or a Temporal object",
   );
 }
 
-/** 入力を、タイムゾーンでの暦日 "YYYY-MM-DD" に変換する */
+/**
+ * 入力を、タイムゾーンでの暦日 "YYYY-MM-DD" に変換する。
+ * @public
+ */
 export function toDateString(input: DateInput, timeZone: string): DateString {
   return toCivil(input, validateTimeZone(timeZone)).date;
 }
 
-/** 入力を、タイムゾーンでの暦日と時刻（"HH:mm"。暦日だけの入力では null）に変換する */
+/**
+ * 入力を、タイムゾーンでの暦日と時刻（"HH:mm"。暦日だけの入力では null）に変換する。
+ * @public
+ */
 export function toDateTimeParts(
   input: DateInput,
   timeZone: string,
@@ -169,9 +205,14 @@ export function toDateTimeParts(
   return Object.freeze({ date: civil.date, time });
 }
 
-/** "HH:mm" を 0 時からの経過分に変換する（00:00〜23:59） */
+/** @internal "HH:mm" を 0 時からの経過分に変換する（00:00〜23:59） */
 export function parseTimeOfDay(value: string): number {
   const m = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!m) throw new RangeError(`Invalid time of day: ${JSON.stringify(value)} (expected HH:mm)`);
+  if (!m) {
+    throw rangeError(
+      "invalid-time",
+      `Invalid time of day: ${JSON.stringify(value)} (expected HH:mm)`,
+    );
+  }
   return wallTime(Number(m[1]), Number(m[2]));
 }

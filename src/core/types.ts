@@ -1,6 +1,9 @@
 import type { DateString } from "./date.ts";
 
-/** 祝日・休日 1 日分 */
+/**
+ * 祝日・休日 1 日分。
+ * @public
+ */
 export interface Holiday<Kind extends string = string> {
   /** 暦日 "YYYY-MM-DD" */
   readonly date: DateString;
@@ -20,7 +23,12 @@ export interface Holiday<Kind extends string = string> {
 /**
  * 祝日の提供元（国・地域ごとのルール）。
  *
- * 他の国・地域の祝日はこのインターフェースを実装して createCalendar に渡す。
+ * 他の国・地域の祝日はこのインターフェースを実装して createCalendar・createSchedule に渡す。
+ * holidaysInYear が返すデータは、年ごとに初めて使うときに検証され、誤りがあれば
+ * code: "invalid-provider-data" の例外になる。
+ *
+ * 互換性の約束: このインターフェースに項目を足すときは、メジャー版以外では省略可能な項目に限る。
+ * @public
  */
 export interface HolidayProvider<Kind extends string = string> {
   /** ISO 3166-1 alpha-2（国）または ISO 3166-2（地域）のコード。例: "JP", "US-CA" */
@@ -33,6 +41,6 @@ export interface HolidayProvider<Kind extends string = string> {
   readonly dataVersion: string;
   /** この年までは公式に確定している（それより後は confirmed: false を含みうる） */
   readonly confirmedThrough?: number;
-  /** その年の祝日・休日を日付順に返す */
+  /** その年の祝日・休日（同じ日付は 1 件まで。順序は問わない） */
   holidaysInYear(year: number): readonly Holiday<Kind>[];
 }

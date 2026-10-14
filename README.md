@@ -20,7 +20,7 @@
 - **日ごとの値（営業時間など）**: 「火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業」のように、曜日・祝日・特定日で変わる値を同じ規則で引けます
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 4KB（日本の祝日込みで約 5.5KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
+- **軽量・依存ゼロ**: minify + gzip で約 5.5KB（日本の祝日込みで約 7KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。現在は日本のみ同梱しています
 
 [English](#english)
@@ -169,6 +169,24 @@ const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] })
 
 祝日の提供元の対応年（日本は 1955〜2099 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRange: "ignore"` を指定してください。
 
+### エラー
+
+設定や入力の誤りは、従来どおり `RangeError`・`TypeError` などの例外になり、`code` を持ちます。メッセージの文言は変わることがあるので、判定には `code` を使ってください。
+
+```ts
+import { createCalendar, isBizdaysError } from "bizdays-toolkit";
+
+try {
+  createCalendar({ closedDates: ["2026-12-32"] });
+} catch (error) {
+  if (isBizdaysError(error) && error.code === "invalid-date") {
+    // 日付の誤り（メッセージには設定の中の位置 "closedDates[0].date" が入る）
+  }
+}
+```
+
+主なコード: `invalid-date`・`invalid-month-day`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-option`・`out-of-range`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
+
 ## バージョン番号とデータの更新
 
 [Semantic Versioning](https://semver.org/lang/ja/) に従います。詳しくは [RELEASING.md](./RELEASING.md) を参照してください。
@@ -177,6 +195,7 @@ const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] })
 - 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.1.0"`）
 - 反映済みのデータは `dataVersion`（日本は反映済みの官報の年月）と `confirmedThrough` で確認できます
 - 1.0.0 までは、マイナー版で破壊的変更を行うことがあります
+- 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](./RELEASING.md) の「互換性の約束」）
 
 ## 出典
 
@@ -196,7 +215,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **Day-by-day schedules**: `createSchedule` returns any value per day (e.g. store hours) from weekly values, a holiday rule (`"weekday"`, `{ sameAs: 0 }`, or `{ value }`), annual dates and specific dates
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed/open dates, holiday policy, `addBusinessDays`, cut-off times, and more
 - **Time-zone safe**: instants (`Date`, ISO strings with offsets, Temporal) are converted to a civil date in the calendar's time zone before evaluation
-- **Lightweight, zero dependencies**: about 4 KB min+gzip (about 5.5 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
+- **Lightweight, zero dependencies**: about 5.5 KB min+gzip (about 7 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
 - **Extensible** through the `HolidayProvider` interface (only Japan is bundled for now)
 
 ```ts

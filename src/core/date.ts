@@ -5,10 +5,18 @@
  * 変換して計算する。Date オブジェクトのローカル時刻は使わない。
  */
 
-/** 暦日を表す "YYYY-MM-DD" 文字列 */
+import { rangeError } from "./errors.ts";
+
+/**
+ * 暦日を表す "YYYY-MM-DD" 文字列。
+ * @public
+ */
 export type DateString = string;
 
-/** 曜日（0 = 日曜日 … 6 = 土曜日。Date#getDay と同じ） */
+/**
+ * 曜日（0 = 日曜日 … 6 = 土曜日。Date#getDay と同じ）。
+ * @public
+ */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -19,18 +27,24 @@ const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
 export function parseDate(value: string): { year: number; month: number; day: number } {
   const m = DATE_RE.exec(value);
   if (!m) {
-    throw new RangeError(`Invalid date string: ${JSON.stringify(value)} (expected YYYY-MM-DD)`);
+    throw rangeError(
+      "invalid-date",
+      `Invalid date string: ${JSON.stringify(value)} (expected YYYY-MM-DD)`,
+    );
   }
   const year = Number(m[1]);
   const month = Number(m[2]);
   const day = Number(m[3]);
   if (year < 1000 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
-    throw new RangeError(`Invalid date: ${value}`);
+    throw rangeError("invalid-date", `Invalid date: ${value}`);
   }
   return { year, month, day };
 }
 
-/** "YYYY-MM-DD" として正しい暦日か */
+/**
+ * "YYYY-MM-DD" として正しい暦日か。
+ * @public
+ */
 export function isValidDate(value: unknown): value is DateString {
   if (typeof value !== "string") return false;
   try {
@@ -44,7 +58,7 @@ export function isValidDate(value: unknown): value is DateString {
 /** 年月日から "YYYY-MM-DD" を作る（範囲外なら RangeError） */
 export function formatDate(year: number, month: number, day: number): DateString {
   if (!Number.isInteger(year) || year < 1000 || year > 9999) {
-    throw new RangeError(`Year out of range (1000-9999): ${year}`);
+    throw rangeError("out-of-range", `Year out of range (1000-9999): ${year}`);
   }
   const s = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   parseDate(s);
@@ -60,7 +74,7 @@ export function isLeapYear(year: number): boolean {
 export function daysInMonth(year: number, month: number): number {
   if (month === 2) return isLeapYear(year) ? 29 : 28;
   const days = MONTH_DAYS[month - 1];
-  if (days === undefined) throw new RangeError(`Invalid month: ${month}`);
+  if (days === undefined) throw rangeError("invalid-date", `Invalid month: ${month}`);
   return days;
 }
 
@@ -76,18 +90,29 @@ export function fromDayNumber(dayNumber: number): DateString {
   return formatDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
 }
 
-/** n 日後（負なら前）の日付 */
+/**
+ * n 日後（負なら前）の日付。
+ * @public
+ */
 export function addDays(date: DateString, days: number): DateString {
-  if (!Number.isInteger(days)) throw new RangeError(`days must be an integer: ${days}`);
+  if (!Number.isInteger(days)) {
+    throw rangeError("invalid-argument", `days must be an integer: ${days}`);
+  }
   return fromDayNumber(toDayNumber(date) + days);
 }
 
-/** from から to までの日数（to が後なら正） */
+/**
+ * from から to までの日数（to が後なら正）。
+ * @public
+ */
 export function diffDays(from: DateString, to: DateString): number {
   return toDayNumber(to) - toDayNumber(from);
 }
 
-/** 曜日（0 = 日曜日） */
+/**
+ * 曜日（0 = 日曜日）。
+ * @public
+ */
 export function weekdayOf(date: DateString): Weekday {
   // 1970-01-01 は木曜日（4）
   return ((((toDayNumber(date) + 4) % 7) + 7) % 7) as Weekday;

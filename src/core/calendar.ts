@@ -13,37 +13,60 @@
  */
 
 import { addDays, fromDayNumber, toDayNumber, type DateString, type Weekday } from "./date.ts";
+import { checkUnknownKeys, IssueCollector, plainError, rangeError } from "./errors.ts";
 import { parseTimeOfDay, toCivil, type DateInput } from "./input.ts";
 import {
-  createSchedule,
-  parseMonthDay,
-  type DateRangeValue,
-  type DateValue,
+  buildSchedule,
+  compileAnnualRules,
+  compileDateRules,
+  compileHolidaySource,
+  isWeekday,
+  type CompiledSchedule,
+  type KnownScheduleReason,
   type HolidayLookup,
   type HolidaySourceOptions,
 } from "./schedule.ts";
 import type { Holiday } from "./types.ts";
 
-/** 祝日の扱い */
+/**
+ * 祝日の扱い。
+ * @public
+ */
 export type HolidayPolicy = "closed" | "open" | "ignore";
 
-/** 毎年の月日 "MM-DD"（名前付きも可） */
+/**
+ * 毎年の月日 "MM-DD"（名前付きも可）。
+ * @public
+ */
 export type AnnualDate = string | { readonly date: string; readonly name?: string };
-/** 毎年の月日の期間（from > to なら年をまたぐ。例: 12-31 〜 01-03） */
+/**
+ * 毎年の月日の期間（from > to なら年をまたぐ。例: 12-31 〜 01-03）。
+ * @public
+ */
 export interface AnnualRange {
   readonly from: string;
   readonly to: string;
   readonly name?: string;
 }
-/** 個別の日付 "YYYY-MM-DD"（名前付きも可） */
+/**
+ * 個別の日付 "YYYY-MM-DD"（名前付きも可）。
+ * @public
+ */
 export type SpecificDate = DateString | { readonly date: DateString; readonly name?: string };
-/** 個別の日付の期間（両端を含む） */
+/**
+ * 個別の日付の期間（両端を含む）。
+ * @public
+ */
 export interface DateRange {
   readonly from: DateString;
   readonly to: DateString;
   readonly name?: string;
 }
 
+/**
+ * 営業日カレンダーの設定。
+ * @public
+ */
 export interface CalendarOptions<Kind extends string = string> extends HolidaySourceOptions<Kind> {
   /** 定休日の曜日（0 = 日曜日） */
   readonly closedWeekdays?: readonly Weekday[];
@@ -59,8 +82,11 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
   readonly maxSearchDays?: number;
 }
 
-/** 営業・休業を決めた規則 */
-export type DayReason =
+/**
+ * 営業・休業を決めた規則（既知の値）。
+ * @public
+ */
+export type KnownDayReason =
   | "open-date"
   | "closed-date"
   | "closed-annual"
@@ -68,7 +94,17 @@ export type DayReason =
   | "closed-weekday"
   | "regular";
 
-/** 1 日分の判定結果 */
+/**
+ * 営業・休業を決めた規則。将来の版で値が増えることがあるので、分岐では「その他」も扱うこと。
+ * すべての値を網羅したことを型で確かめたい場合は KnownDayReason を使う。
+ * @public
+ */
+export type DayReason = KnownDayReason | (string & {});
+
+/**
+ * 1 日分の判定結果。
+ * @public
+ */
 export interface DayInfo<Kind extends string = string> {
   readonly date: DateString;
   readonly weekday: Weekday;
@@ -81,6 +117,10 @@ export interface DayInfo<Kind extends string = string> {
   readonly holiday?: Holiday<Kind>;
 }
 
+/**
+ * 営業日を探すときのオプション。
+ * @public
+ */
 export interface BusinessDayOptions {
   /**
    * 締め時刻 "HH:mm"（カレンダーのタイムゾーン）。
@@ -89,6 +129,10 @@ export interface BusinessDayOptions {
   readonly cutoff?: string;
 }
 
+/**
+ * 営業日カレンダー。
+ * @public
+ */
 export interface Calendar<Kind extends string = string> extends HolidayLookup<Kind> {
   /** 1 日分の判定結果（営業日か・理由・祝日） */
   dayInfo(input: DateInput): DayInfo<Kind>;
@@ -113,69 +157,108 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
   listBusinessDays(from: DateInput, to: DateInput): readonly DateString[];
 }
 
-function toDateValues(
-  entries: readonly (SpecificDate | DateRange)[] | undefined,
-  value: boolean,
-): (DateValue<boolean> | DateRangeValue<boolean>)[] {
-  return (entries ?? []).map((e) => {
-    if (typeof e === "string") return { date: e, value };
-    if ("date" in e) return e.name === undefined ? { date: e.date, value } : { ...e, value };
-    return e.name === undefined ? { from: e.from, to: e.to, value } : { ...e, value };
-  });
+const CALENDAR_OPTION_KEYS = [
+  "holidays",
+  "timeZone",
+  "outOfRange",
+  "closedWeekdays",
+  "closedAnnual",
+  "closedDates",
+  "openDates",
+  "holidayPolicy",
+  "maxSearchDays",
+];
+
+interface CompiledCalendar<Kind extends string> {
+  readonly schedule: CompiledSchedule<boolean, Kind>;
+  readonly maxSearchDays: number;
 }
 
-/** 祝日と休業日の規則から営業日カレンダーを作る */
+/** @internal 営業日カレンダーの設定を検証して取り込む（誤りは c に集める） */
+export function compileCalendarOptions<Kind extends string>(
+  c: IssueCollector,
+  options: unknown,
+): CompiledCalendar<Kind> | undefined {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    c.error("invalid-option", "", "options must be an object");
+    return undefined;
+  }
+  const o = options as Record<string, unknown>;
+  checkUnknownKeys(c, "", o, CALENDAR_OPTION_KEYS);
+  const source = compileHolidaySource<Kind>(c, o);
+
+  const closedWeekdays = new Set<number>();
+  const rawWeekdays = o["closedWeekdays"];
+  if (rawWeekdays !== undefined) {
+    if (!Array.isArray(rawWeekdays)) {
+      c.error("invalid-option", "closedWeekdays", "must be an array");
+    } else {
+      rawWeekdays.forEach((w: unknown, i) => {
+        if (isWeekday(w)) closedWeekdays.add(w);
+        else
+          c.error(
+            "invalid-weekday",
+            `closedWeekdays[${i}]`,
+            "must be an integer from 0 (Sunday) to 6 (Saturday)",
+          );
+      });
+    }
+  }
+
+  const holidayPolicy = o["holidayPolicy"] ?? "closed";
+  if (holidayPolicy !== "closed" && holidayPolicy !== "open" && holidayPolicy !== "ignore") {
+    c.error("invalid-option", "holidayPolicy", 'must be "closed", "open" or "ignore"');
+  }
+  const maxSearchDays = o["maxSearchDays"] ?? 3660;
+  if (!Number.isInteger(maxSearchDays) || (maxSearchDays as number) < 1) {
+    c.error("invalid-option", "maxSearchDays", "must be a positive integer");
+  }
+
+  const annual = compileAnnualRules<boolean>(
+    c,
+    "closedAnnual",
+    o["closedAnnual"],
+    () => false,
+    true,
+  );
+  const open = compileDateRules<boolean>(c, "openDates", o["openDates"], () => true, true);
+  const closed = compileDateRules<boolean>(c, "closedDates", o["closedDates"], () => false, true);
+
+  return {
+    schedule: {
+      source,
+      weekly: Object.freeze([0, 1, 2, 3, 4, 5, 6].map((w) => !closedWeekdays.has(w))),
+      holiday: holidayPolicy === "ignore" ? "weekday" : { value: holidayPolicy === "open" },
+      annual,
+      // 臨時営業日を先に並べて、臨時休業日より優先する
+      dates: [...open, ...closed],
+    },
+    maxSearchDays: Number.isInteger(maxSearchDays) ? (maxSearchDays as number) : 3660,
+  };
+}
+
+/**
+ * 祝日と休業日の規則から営業日カレンダーを作る。
+ *
+ * 設定は作る時点で取り込まれるので、あとから元の配列を書き換えても結果は変わらない。
+ * 設定の誤りは code 付きの RangeError になる。
+ * @public
+ */
 export function createCalendar<Kind extends string = string>(
   options: CalendarOptions<Kind> = {},
 ): Calendar<Kind> {
-  const closedWeekdays = new Set<number>();
-  for (const w of options.closedWeekdays ?? []) {
-    if (!Number.isInteger(w) || w < 0 || w > 6) throw new RangeError(`Invalid weekday: ${w}`);
-    closedWeekdays.add(w);
-  }
-  const holidayPolicy: HolidayPolicy = options.holidayPolicy ?? "closed";
-  if (!["closed", "open", "ignore"].includes(holidayPolicy)) {
-    throw new RangeError(`Invalid holidayPolicy: ${String(holidayPolicy)}`);
-  }
-  const maxSearchDays = options.maxSearchDays ?? 3660;
-  if (!Number.isInteger(maxSearchDays) || maxSearchDays < 1) {
-    throw new RangeError(`Invalid maxSearchDays: ${maxSearchDays}`);
-  }
-
-  const weekly = [0, 1, 2, 3, 4, 5, 6].map((w) => !closedWeekdays.has(w)) as [
-    boolean,
-    boolean,
-    boolean,
-    boolean,
-    boolean,
-    boolean,
-    boolean,
-  ];
-  const sourceOptions: HolidaySourceOptions<Kind> = {
-    ...(options.holidays !== undefined && { holidays: options.holidays }),
-    ...(options.timeZone !== undefined && { timeZone: options.timeZone }),
-    ...(options.outOfRange !== undefined && { outOfRange: options.outOfRange }),
-  };
-  const schedule = createSchedule<boolean, Kind>({
-    ...sourceOptions,
-    weekly,
-    holiday: holidayPolicy === "ignore" ? "weekday" : { value: holidayPolicy === "open" },
-    annual: (options.closedAnnual ?? []).map((e) => {
-      if (typeof e === "string") return { date: parseMonthDay(e), value: false };
-      if ("date" in e)
-        return e.name === undefined ? { date: e.date, value: false } : { ...e, value: false };
-      return e.name === undefined
-        ? { from: e.from, to: e.to, value: false }
-        : { ...e, value: false };
-    }),
-    // 臨時営業日を先に並べて、臨時休業日より優先する
-    dates: [...toDateValues(options.openDates, true), ...toDateValues(options.closedDates, false)],
-  });
+  const c = new IssueCollector();
+  const compiled = compileCalendarOptions<Kind>(c, options);
+  c.throwFirstError();
+  const { maxSearchDays } = compiled!;
+  const schedule = buildSchedule(compiled!.schedule);
 
   function info(date: DateString): DayInfo<Kind> {
     const day = schedule.dayInfo(date);
-    let reason: DayReason;
-    switch (day.reason) {
+    let reason: KnownDayReason;
+    // 内部では閉じた型（KnownScheduleReason）で分岐し、値が増えたときの対応漏れを型で検出する
+    const known = day.reason as KnownScheduleReason;
+    switch (known) {
       case "date":
         reason = day.value ? "open-date" : "closed-date";
         break;
@@ -188,6 +271,10 @@ export function createCalendar<Kind extends string = string>(
       case "weekday":
         reason = day.value ? "regular" : "closed-weekday";
         break;
+      default: {
+        const unreachable: never = known;
+        throw plainError("invalid-option", `Unexpected schedule reason: ${String(unreachable)}`);
+      }
     }
     const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
       date: day.date,
@@ -210,7 +297,10 @@ export function createCalendar<Kind extends string = string>(
       const date = fromDayNumber(n);
       if (isOpen(date)) return date;
     }
-    throw new Error(`No business day found within ${maxSearchDays} days from ${start}`);
+    throw plainError(
+      "no-business-day",
+      `No business day found within ${maxSearchDays} days from ${start}`,
+    );
   }
 
   function countOpen(from: number, toExclusive: number): number {
@@ -245,7 +335,7 @@ export function createCalendar<Kind extends string = string>(
     },
     businessDayOnOrBefore: (input) => search(dateOf(input), -1),
     addBusinessDays(input, n) {
-      if (!Number.isInteger(n)) throw new RangeError(`n must be an integer: ${n}`);
+      if (!Number.isInteger(n)) throw rangeError("invalid-argument", `n must be an integer: ${n}`);
       let date = dateOf(input);
       if (n === 0) return search(date, 1);
       const step = n > 0 ? 1 : -1;
@@ -262,7 +352,7 @@ export function createCalendar<Kind extends string = string>(
     listBusinessDays(from, to) {
       const a = dateOf(from);
       const b = dateOf(to);
-      if (a > b) throw new RangeError(`"from" must not be after "to" (${a} > ${b})`);
+      if (a > b) throw rangeError("invalid-range", `"from" must not be after "to" (${a} > ${b})`);
       const result: DateString[] = [];
       for (let n = toDayNumber(a); n <= toDayNumber(b); n++) {
         const date = fromDayNumber(n);
