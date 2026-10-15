@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 開発
+
+- `size-limits.json` の値を上げるときの理由は、コミットメッセージではなく CHANGELOG の「開発」に書く取り決めにした。`pnpm check`（`scripts/check-size.ts`）が前の版のタグの `size-limits.json` と比べ、値が上がっているのに記載がなければ失敗する（0.6.0 で理由をコミットメッセージに書き漏らしたため）
+
 ## [0.6.0] - 2026-10-16
 
 ### Added
