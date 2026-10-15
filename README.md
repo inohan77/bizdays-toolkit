@@ -17,10 +17,11 @@
 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダーです。
 
 - **日本の祝日を内閣府のデータで全日照合**: 1955 年〜官報公表済みの年まで、内閣府「国民の祝日」CSV のすべての日付と一致することをテストで確かめています（振替休日・国民の休日・皇室行事による休日・五輪特措法による移動を含む）
+- **繰り返しの規則**: 「第 3 水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」のような規則を、祝日に当たったときの扱い（祝日に従う・祝日でも当てはめる・翌日に振り替える）とあわせて指定できます
 - **日ごとの値（営業時間など）**: 「火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業」のように、曜日・祝日・特定日で変わる値を同じ規則で引けます
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 5.5KB（日本の祝日込みで約 7KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
+- **軽量・依存ゼロ**: minify + gzip で約 6.5KB（日本の祝日込みで約 7.5KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。現在は日本のみ同梱しています
 
 [English](#english)
@@ -84,9 +85,96 @@ shipping.dayInfo("2027-01-01");
 1. `openDates`（臨時営業日）
 2. `closedDates`（臨時休業日）
 3. `closedAnnual`（毎年の休業日）
-4. 祝日（`holidayPolicy` に従う。`"open"` は定休日の曜日より優先して営業日にする）
-5. `closedWeekdays`（定休日の曜日）
-6. それ以外は営業日
+4. `openRecurring`・`closedRecurring` のうち `onHolidayRule: "over-holiday"` の規則（祝日でも当てはめる）
+5. 祝日（`holidayPolicy` に従う。`"open"` は定休日の曜日より優先して営業日にする）
+6. `openRecurring`・`closedRecurring`（既定の `"under-holiday"` と、`"after-holiday"` の振替先）
+7. `closedWeekdays`（定休日の曜日）
+8. それ以外は営業日
+
+この順番は固定です。繰り返しの規則と祝日の関係だけは、規則ごとに `onHolidayRule` で選べます（次の節）。
+
+### 繰り返しの規則（毎週・毎月の第 n 曜日・毎月の日）
+
+「第 3 水曜定休」「第 2・第 4 土曜休業」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」のような繰り返しの休業日・営業日は、`closedRecurring`・`openRecurring` で指定します。
+
+```ts
+const museum = createCalendar({
+  holidays: jp,
+  holidayPolicy: "open", // 祝日は開館
+  closedRecurring: [
+    { weekday: 1, name: "月曜休館", onHolidayRule: "after-holiday" }, // 祝日の場合は翌平日に休館
+    { weekday: 3, nth: 3, months: [2, 8], name: "2 月・8 月の第 3 水曜は臨時休館" },
+    { day: -1, name: "月末棚卸", onHolidayRule: "over-holiday" }, // 祝日でも休館
+  ],
+});
+
+museum.isBusinessDay("2026-10-12"); // true（スポーツの日の月曜は開館）
+museum.dayInfo("2026-10-13");
+// { date: "2026-10-13", weekday: 2, businessDay: false, reason: "closed-recurring",
+//   name: "月曜休館", shiftedFrom: "2026-10-12" }
+```
+
+| 書き方                   | 意味                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `{ weekday: 1 }`         | 毎週月曜日                                                                      |
+| `{ weekday: 3, nth: 3 }` | 第 3 水曜日。`nth` は 1〜5 と -1（最終）。`[2, 4]` のように配列で複数指定できる |
+| `{ day: 20 }`            | 毎月 20 日。`day` は 1〜31 と -1（末日）。配列で複数指定できる                  |
+| `months: [8, 12]`        | どの書き方にも付けられる、月の絞り込み                                          |
+
+- **第 n 何曜日**は「その月で n 回目のその曜日」です（1〜7 日が第 1）。カレンダーの第 n 週の行にある曜日ではありません
+- **その月にない日**（`nth: 5` がない月、`day: 31` がない月）は当てはまりません。末日は `day: -1` で指定します
+- 繰り返しの規則どうしは配列で先に書いたものが優先で、`openRecurring` は `closedRecurring` より優先です
+
+**祝日に当たったときの扱い**（`onHolidayRule`）は、規則ごとに選べます。
+
+| 値                        | 意味                                                     | 店舗の告知での書き方                  |
+| ------------------------- | -------------------------------------------------------- | ------------------------------------- |
+| `"under-holiday"`（既定） | 祝日の下。祝日の扱い（`holidayPolicy`）に従う            | 「第 3 水曜定休（祝日の場合は営業）」 |
+| `"over-holiday"`          | 祝日の上。祝日でも当てはめる                             | 「第 3 水曜定休（祝日も休み）」       |
+| `"after-holiday"`         | 祝日の後。祝日には当てはめず、祝日でない翌日に振り替える | 「月曜休館（祝日の場合は翌平日）」    |
+
+- `"under-holiday"` の規則は、`holidayPolicy: "ignore"`（祝日を判定に使わない）なら祝日にも当てはまります
+- `"after-holiday"` の振替先は「その日以降で最初の祝日でない日」です。祝日が続く場合（GW など）は連休が明けた日になります。振替先の日に臨時営業日・臨時休業日・毎年の休業日があれば、そちらが優先です。振替で決まった日の `dayInfo()` には、振替の元の日付 `shiftedFrom` が付きます
+- 振替の判断に使う「祝日」は、祝日の提供元（`jp` など）の祝日だけです（毎年の休業日などは含みません）
+
+スケジュールでは、同じ書き方の規則に `value` を付けて `recurring` に指定します。
+
+```ts
+const hours = createSchedule<Hours>({
+  holidays: jp,
+  weekly: [sunday, weekday, weekday, weekday, weekday, weekday, weekday],
+  recurring: [
+    { weekday: 1, value: null, name: "月曜休業", onHolidayRule: "after-holiday" },
+    { day: -1, value: { open: "10:00", close: "17:00" }, name: "月末は短縮営業" },
+  ],
+});
+```
+
+### よくある設定の例
+
+**国民の休日（祝日に挟まれた日）を営業日として扱う**：祝日の提供元を包んで、種別で除外します。
+
+```ts
+import { jp } from "bizdays-toolkit/jp";
+
+const jpWithoutCitizensHoliday = {
+  ...jp,
+  holidaysInYear: (year: number) => jp.holidaysInYear(year).filter((h) => h.kind !== "citizens"),
+};
+const calendar = createCalendar({ holidays: jpWithoutCitizensHoliday, closedWeekdays: [0, 6] });
+```
+
+**共通の設定から店舗ごとのカレンダーを作る**：設定は普通のオブジェクトなので、展開して足します。
+
+```ts
+const base = {
+  holidays: jp,
+  closedWeekdays: [0],
+  closedAnnual: [{ from: "12-31", to: "01-03" }],
+} as const;
+const shibuya = createCalendar({ ...base, openDates: ["2026-12-27"] });
+const yokohama = createCalendar({ ...base, closedRecurring: [{ weekday: 3, nth: 3 }] });
+```
 
 ### 日ごとの値（営業時間など）
 
@@ -113,7 +201,7 @@ storeHours.dayInfo("2027-01-01");
 // { date: "2027-01-01", weekday: 5, value: null, reason: "annual", name: "元日休業", holiday: {…} }
 ```
 
-値は `dates`（個別の日付・期間）→ `annual`（毎年の月日・期間）→ 祝日 → `weekly`（曜日）の順に決まります。同じ種類の規則が重なる場合は、配列で先に書いたものが優先です。
+値は `dates`（個別の日付・期間）→ `annual`（毎年の月日・期間）→ `recurring`（`"over-holiday"`）→ 祝日 → `recurring`（既定・振替先）→ `weekly`（曜日）の順に決まります。同じ種類の規則が重なる場合は、配列で先に書いたものが優先です。
 
 「今、営業時間内か」のような時刻の範囲の判定は、業種ごとの決まり（深夜をまたぐ営業、休憩時間など）があるためライブラリでは行いません。`civilOf` でタイムゾーンでの暦日と時刻を取り出せば、アプリ側で簡単に書けます。
 
@@ -213,9 +301,10 @@ A business-day calendar that combines public holidays with company or store clos
 
 - **Japanese holidays verified day by day** against the Cabinet Office CSV, from 1955 through the latest year officially announced (substitute holidays, citizens' holidays, imperial ceremonies, and the Olympic moves included)
 - **Day-by-day schedules**: `createSchedule` returns any value per day (e.g. store hours) from weekly values, a holiday rule (`"weekday"`, `{ sameAs: 0 }`, or `{ value }`), annual dates and specific dates
+- **Recurring rules**: weekly, nth-weekday-of-month (`{ weekday: 3, nth: 3 }`) and day-of-month (`{ day: -1 }`) rules, with per-rule holiday handling (`onHolidayRule`: `"under-holiday"`, `"over-holiday"`, or `"after-holiday"` to move the rule to the next non-holiday, e.g. "closed on Mondays; if Monday is a holiday, closed on the next weekday")
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed/open dates, holiday policy, `addBusinessDays`, cut-off times, and more
 - **Time-zone safe**: instants (`Date`, ISO strings with offsets, Temporal) are converted to a civil date in the calendar's time zone before evaluation
-- **Lightweight, zero dependencies**: about 5.5 KB min+gzip (about 7 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
+- **Lightweight, zero dependencies**: about 6.5 KB min+gzip (about 7.5 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
 - **Extensible** through the `HolidayProvider` interface (only Japan is bundled for now)
 
 ```ts

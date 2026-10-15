@@ -13,6 +13,8 @@ import {
   createCalendar,
   createSchedule,
   type Calendar,
+  type Month,
+  type RecurringRule,
   type Weekday,
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
@@ -157,5 +159,88 @@ property("瞬間の入力は、カレンダーのタイムゾーンで暦日に�
   // 日本時間の壁時計の日時と、それを +09:00 の瞬間にしたものは同じ暦日・時刻になる
   const context = `wall=${wall}`;
   assert.deepEqual(calendar.civilOf(new Date(`${wall}:00+09:00`)), calendar.civilOf(wall), context);
+  return context;
+});
+
+// ------------------------------------------------------------
+// 繰り返しの規則と振替（0.4.0）
+// ------------------------------------------------------------
+
+const ON_HOLIDAY = ["under-holiday", "over-holiday", "after-holiday"] as const;
+
+/** 乱数で繰り返しの規則を作る */
+function randomRecurring(g: Gen): RecurringRule[] {
+  return Array.from({ length: g.int(1, 3) }, (): RecurringRule => {
+    const onHolidayRule = g.pick(ON_HOLIDAY);
+    const months = g.int(0, 3) === 0 ? { months: [g.int(1, 12) as Month] } : {};
+    if (g.int(0, 1) === 0) {
+      const nth = g.int(0, 2) === 0 ? {} : { nth: g.pick([1, 2, 3, 4, 5, -1] as const) };
+      return { weekday: g.int(0, 6) as Weekday, ...nth, ...months, onHolidayRule };
+    }
+    return { day: g.pick([1, 10, 15, 20, 28, 31, -1] as const), ...months, onHolidayRule };
+  });
+}
+
+property("振替先は振替元より後の祝日でない日で、その間はすべて祝日", (g) => {
+  const rules = randomRecurring(g).map((r) => ({ ...r, onHolidayRule: "after-holiday" as const }));
+  const calendar = createCalendar({
+    holidays: jp,
+    holidayPolicy: g.pick(["open", "closed"] as const),
+    closedRecurring: rules,
+  });
+  const day = g.date();
+  const info = calendar.dayInfo(day);
+  const context = `rules=${JSON.stringify(rules)} day=${day}`;
+  if (info.shiftedFrom !== undefined) {
+    assert.ok(info.shiftedFrom < day, context);
+    assert.equal(calendar.isHoliday(day), false, context);
+    for (let d = info.shiftedFrom; d < day; d = addDays(d, 1))
+      assert.ok(calendar.isHoliday(d), `${context} ${d}`);
+  }
+  if (calendar.isHoliday(day))
+    assert.notEqual(info.reason, "closed-recurring", `${context}: 祝日には当てはめない`);
+  return context;
+});
+
+property("繰り返しの規則があっても、営業日の移動と数え上げの性質は保たれる", (g) => {
+  const calendar = createCalendar({
+    holidays: jp,
+    holidayPolicy: g.pick(["open", "closed", "ignore"] as const),
+    closedRecurring: randomRecurring(g),
+    openRecurring: g.int(0, 2) === 0 ? randomRecurring(g) : [],
+  });
+  const start = calendar.businessDayOnOrAfter(g.date());
+  const n = g.int(1, 30);
+  const forward = calendar.addBusinessDays(start, n);
+  const context = `start=${start} n=${n}`;
+  assert.ok(calendar.isBusinessDay(forward), context);
+  assert.equal(calendar.addBusinessDays(forward, -n), start, context);
+  assert.equal(calendar.businessDaysBetween(start, forward), n, context);
+  return context;
+});
+
+property("繰り返しの規則でも、営業日カレンダーと真偽値のスケジュールは一致する", (g) => {
+  const open = g.int(0, 1) ? randomRecurring(g) : [];
+  const closed = randomRecurring(g);
+  const holidayOpen = g.int(0, 1) === 1;
+  const calendar = createCalendar({
+    holidays: jp,
+    holidayPolicy: holidayOpen ? "open" : "closed",
+    openRecurring: open,
+    closedRecurring: closed,
+  });
+  const schedule = createSchedule({
+    holidays: jp,
+    weekly: [true, true, true, true, true, true, true],
+    holiday: { value: holidayOpen },
+    recurring: [
+      ...open.map((r) => ({ ...r, value: true })),
+      ...closed.map((r) => ({ ...r, value: false })),
+    ],
+  });
+  const day = g.date();
+  const context = `open=${JSON.stringify(open)} closed=${JSON.stringify(closed)} holidayOpen=${holidayOpen} day=${day}`;
+  assert.equal(calendar.isBusinessDay(day), schedule.valueOn(day), context);
+  assert.equal(calendar.dayInfo(day).shiftedFrom, schedule.dayInfo(day).shiftedFrom, context);
   return context;
 });

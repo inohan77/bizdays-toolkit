@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-16
+
+### Added
+
+- 繰り返しの規則: 毎週（`{ weekday }`）・毎月の第 n 曜日（`{ weekday, nth }`。`nth` は 1〜5 と -1（最終））・毎月の日（`{ day }`。`day` は 1〜31 と -1（末日））。どれにも月の絞り込み（`months`）を付けられる。営業日カレンダーの `closedRecurring`・`openRecurring`、スケジュールの `recurring`
+- 祝日に当たったときの扱いを規則ごとに選ぶ `onHolidayRule`: `"under-holiday"`（祝日の扱いに従う。既定）・`"over-holiday"`（祝日でも当てはめる）・`"after-holiday"`（祝日でない翌日に振り替える。「月曜休館（祝日の場合は翌平日）」など）
+- `dayInfo()` の `shiftedFrom`: 振替で決まった日の、振替の元の日付
+- 判定の理由に `"recurring"`（スケジュール）・`"open-recurring"`・`"closed-recurring"`（営業日カレンダー）を追加
+- 型: `RecurringRule`・`RecurringValue`・`RecurringPattern`・`WeekdayPattern`・`DayOfMonthPattern`・`OnHolidayRule`・`Nth`・`DayOfMonth`・`Month`・`HolidayValueRule`
+
+### Deprecated
+
+- `HolidayRule` 型: `HolidayValueRule` に改名した（繰り返しの規則の `onHolidayRule` と紛れないため）。旧名は同じ型の別名として残し、次以降のマイナー版で削除する
+
+### 開発
+
+- 性能の計測（`pnpm bench`、依存なし）を追加
+- README に繰り返しの規則の節と、よくある設定の例（国民の休日を営業日として扱う、共通の設定から店舗ごとのカレンダーを作る）を追加。`docs/decisions.md` に 12〜14 番目（判定の順番を固定する理由、「第 n 何曜日」の定義、振替先の定義）を追加
+
 ## [0.3.1] - 2026-10-15
 
 ライブラリのコード・公開する API・祝日データに変更はありません。開発の検査を強めた版です。
@@ -90,7 +109,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.2...v0.2.0

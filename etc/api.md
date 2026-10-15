@@ -83,6 +83,8 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
     readonly closedAnnual?: readonly (AnnualDate | AnnualRange)[];
     readonly closedDates?: readonly (SpecificDate | DateRange)[];
     readonly openDates?: readonly (SpecificDate | DateRange)[];
+    readonly closedRecurring?: readonly RecurringRule[];
+    readonly openRecurring?: readonly RecurringRule[];
     readonly holidayPolicy?: HolidayPolicy;
     readonly maxSearchDays?: number;
 }
@@ -162,6 +164,24 @@ export interface DayInfo<Kind extends string = string> {
     readonly reason: DayReason;
     readonly name?: string;
     readonly holiday?: Holiday<Kind>;
+    readonly shiftedFrom?: DateString;
+}
+```
+
+### DayOfMonth (@public)
+
+```ts
+export type DayOfMonth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | -1;
+```
+
+### DayOfMonthPattern (@public)
+
+```ts
+export interface DayOfMonthPattern {
+    readonly day: DayOfMonth | readonly DayOfMonth[];
+    readonly months?: readonly Month[];
+    readonly weekday?: never;
+    readonly nth?: never;
 }
 ```
 
@@ -236,11 +256,7 @@ export interface HolidayProvider<Kind extends string = string> {
 ### HolidayRule (@public)
 
 ```ts
-export type HolidayRule<T> = "weekday" | {
-    readonly sameAs: Weekday;
-} | {
-    readonly value: T;
-};
+export type HolidayRule<T> = HolidayValueRule<T>;
 ```
 
 ### HolidaySourceOptions (@public)
@@ -251,6 +267,16 @@ export interface HolidaySourceOptions<Kind extends string = string> {
     readonly timeZone?: string;
     readonly outOfRange?: "throw" | "ignore";
 }
+```
+
+### HolidayValueRule (@public)
+
+```ts
+export type HolidayValueRule<T> = "weekday" | {
+    readonly sameAs: Weekday;
+} | {
+    readonly value: T;
+};
 ```
 
 ### isBizdaysError (@public)
@@ -270,7 +296,7 @@ export declare function isValidDate(value: unknown): value is DateString;
 ### KnownDayReason (@public)
 
 ```ts
-export type KnownDayReason = "open-date" | "closed-date" | "closed-annual" | "holiday" | "closed-weekday" | "regular";
+export type KnownDayReason = "open-date" | "closed-date" | "closed-annual" | "open-recurring" | "closed-recurring" | "holiday" | "closed-weekday" | "regular";
 ```
 
 ### KnownErrorCode (@public)
@@ -282,7 +308,48 @@ export type KnownErrorCode = "invalid-date" | "invalid-month-day" | "invalid-tim
 ### KnownScheduleReason (@public)
 
 ```ts
-export type KnownScheduleReason = "date" | "annual" | "holiday" | "weekday";
+export type KnownScheduleReason = "date" | "annual" | "recurring" | "holiday" | "weekday";
+```
+
+### Month (@public)
+
+```ts
+export type Month = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+```
+
+### Nth (@public)
+
+```ts
+export type Nth = 1 | 2 | 3 | 4 | 5 | -1;
+```
+
+### OnHolidayRule (@public)
+
+```ts
+export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
+```
+
+### RecurringPattern (@public)
+
+```ts
+export type RecurringPattern = WeekdayPattern | DayOfMonthPattern;
+```
+
+### RecurringRule (@public)
+
+```ts
+export type RecurringRule = RecurringPattern & {
+    readonly name?: string;
+    readonly onHolidayRule?: OnHolidayRule;
+};
+```
+
+### RecurringValue (@public)
+
+```ts
+export type RecurringValue<T> = RecurringRule & {
+    readonly value: T;
+};
 ```
 
 ### Schedule (@public)
@@ -304,6 +371,7 @@ export interface ScheduleDay<T, Kind extends string = string> {
     readonly reason: ScheduleReason;
     readonly name?: string;
     readonly holiday?: Holiday<Kind>;
+    readonly shiftedFrom?: DateString;
 }
 ```
 
@@ -320,7 +388,8 @@ export interface ScheduleOptions<T, Kind extends string = string> extends Holida
         T,
         T
     ];
-    readonly holiday?: HolidayRule<T>;
+    readonly holiday?: HolidayValueRule<T>;
+    readonly recurring?: readonly RecurringValue<T>[];
     readonly annual?: readonly (AnnualValue<T> | AnnualRangeValue<T>)[];
     readonly dates?: readonly (DateValue<T> | DateRangeValue<T>)[];
 }
@@ -387,6 +456,17 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 ```ts
 export declare function weekdayOf(date: DateString): Weekday;
+```
+
+### WeekdayPattern (@public)
+
+```ts
+export interface WeekdayPattern {
+    readonly weekday: Weekday;
+    readonly nth?: Nth | readonly Nth[];
+    readonly months?: readonly Month[];
+    readonly day?: never;
+}
 ```
 
 ## bizdays-toolkit/jp

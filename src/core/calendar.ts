@@ -5,9 +5,14 @@
  *   1. openDates      … 臨時営業日（個別の日付・期間）
  *   2. closedDates    … 臨時休業日（個別の日付・期間）
  *   3. closedAnnual   … 毎年の休業日（月日・月日の期間。年をまたぐ期間も可）
- *   4. 祝日            … holidayPolicy に従う（closed: 休業 / open: 営業 / ignore: 判定に使わない）
- *   5. closedWeekdays … 定休日の曜日
- *   6. それ以外は営業日
+ *   4. openRecurring・closedRecurring（onHolidayRule: "over-holiday"）… 祝日でも当てはめる繰り返しの規則
+ *   5. 祝日            … holidayPolicy に従う（closed: 休業 / open: 営業 / ignore: 判定に使わない）
+ *   6. openRecurring・closedRecurring（"under-holiday"・"after-holiday" の振替先）… 繰り返しの規則
+ *   7. closedWeekdays … 定休日の曜日
+ *   8. それ以外は営業日
+ *
+ * 繰り返しの規則は openRecurring が closedRecurring より優先。"after-holiday" の規則は、
+ * 祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）
  *
  * 内部では、営業日かどうか（真偽値）を返すスケジュール（createSchedule）として作っている。
  */
@@ -20,9 +25,12 @@ import {
   compileAnnualRules,
   compileDateRules,
   compileHolidaySource,
+  compileRecurringRules,
   isWeekday,
+  RECURRING_RULE_KEYS,
   type CompiledSchedule,
   type KnownScheduleReason,
+  type RecurringRule,
   type HolidayLookup,
   type HolidaySourceOptions,
 } from "./schedule.ts";
@@ -76,6 +84,13 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
   readonly closedDates?: readonly (SpecificDate | DateRange)[];
   /** 臨時営業日（ほかのすべての規則より優先） */
   readonly openDates?: readonly (SpecificDate | DateRange)[];
+  /**
+   * 繰り返しの休業日（毎週・毎月の第 n 曜日・毎月の日）。
+   * 祝日に当たったときの扱いは規則ごとに onHolidayRule で指定する（既定: "under-holiday"）
+   */
+  readonly closedRecurring?: readonly RecurringRule[];
+  /** 繰り返しの営業日。closedRecurring と同じ日に当たる場合はこちらが優先 */
+  readonly openRecurring?: readonly RecurringRule[];
   /** 祝日の扱い（既定: "closed"） */
   readonly holidayPolicy?: HolidayPolicy;
   /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら Error */
@@ -90,6 +105,8 @@ export type KnownDayReason =
   | "open-date"
   | "closed-date"
   | "closed-annual"
+  | "open-recurring"
+  | "closed-recurring"
   | "holiday"
   | "closed-weekday"
   | "regular";
@@ -115,6 +132,8 @@ export interface DayInfo<Kind extends string = string> {
   readonly name?: string;
   /** その日が祝日なら祝日（holidayPolicy に関係なく付く） */
   readonly holiday?: Holiday<Kind>;
+  /** 祝日から振り替えられた繰り返しの規則で決まった場合、振替の元の日付（onHolidayRule: "after-holiday"） */
+  readonly shiftedFrom?: DateString;
 }
 
 /**
@@ -165,6 +184,8 @@ const CALENDAR_OPTION_KEYS = [
   "closedAnnual",
   "closedDates",
   "openDates",
+  "closedRecurring",
+  "openRecurring",
   "holidayPolicy",
   "maxSearchDays",
 ];
@@ -223,6 +244,20 @@ export function compileCalendarOptions<Kind extends string>(
   );
   const open = compileDateRules<boolean>(c, "openDates", o["openDates"], () => true, true);
   const closed = compileDateRules<boolean>(c, "closedDates", o["closedDates"], () => false, true);
+  const openRecurring = compileRecurringRules<boolean>(
+    c,
+    "openRecurring",
+    o["openRecurring"],
+    () => true,
+    RECURRING_RULE_KEYS,
+  );
+  const closedRecurring = compileRecurringRules<boolean>(
+    c,
+    "closedRecurring",
+    o["closedRecurring"],
+    () => false,
+    RECURRING_RULE_KEYS,
+  );
 
   return {
     schedule: {
@@ -232,6 +267,8 @@ export function compileCalendarOptions<Kind extends string>(
       annual,
       // 臨時営業日を先に並べて、臨時休業日より優先する
       dates: [...open, ...closed],
+      // 繰り返しの営業日を先に並べて、繰り返しの休業日より優先する
+      recurring: [...openRecurring, ...closedRecurring],
     },
     maxSearchDays: Number.isInteger(maxSearchDays) ? (maxSearchDays as number) : 3660,
   };
@@ -265,6 +302,9 @@ export function createCalendar<Kind extends string = string>(
       case "annual":
         reason = "closed-annual";
         break;
+      case "recurring":
+        reason = day.value ? "open-recurring" : "closed-recurring";
+        break;
       case "holiday":
         reason = "holiday";
         break;
@@ -285,6 +325,7 @@ export function createCalendar<Kind extends string = string>(
     // 曜日で決まった日には名前を付けない（祝日名は holiday で分かる）
     if (day.name !== undefined && day.reason !== "weekday") result.name = day.name;
     if (day.holiday !== undefined) result.holiday = day.holiday;
+    if (day.shiftedFrom !== undefined) result.shiftedFrom = day.shiftedFrom;
     return Object.freeze(result);
   }
 
