@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-15
+
+ライブラリのコード・公開する API・祝日データに変更はありません。開発の検査を強めた版です。
+
+### 開発
+
+- lint に oxlint（1.88.0）を導入し、`pnpm check` と CI で実行するようにした（`.oxlintrc.json`）
+- 型チェックを強めた（`noUnusedLocals`・`noUnusedParameters`・`noImplicitReturns`・`exactOptionalPropertyTypes`）
+- oxfmt を 0.73.0 に更新
+- 改行コードを LF に統一した（`.gitattributes`）
+
 ## [0.3.0] - 2026-10-15
 
 1.0.0 に向けて、将来の機能追加で利用者のコードが壊れにくい作りにしました。機能の追加はありません。
@@ -79,7 +90,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.1.1...v0.1.2

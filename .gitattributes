@@ -1,0 +1,3 @@
+# 改行コードを LF に統一する（Windows で作業しても、リポジトリ・CI・公開物で同じ内容になるように）
+* text=auto eol=lf
+*.png binary

@@ -1,6 +1,6 @@
 {
   "name": "bizdays-toolkit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Holidays, business-day calendar and day-by-day schedules (e.g. store hours) with time zone support. Japanese holidays verified against the Cabinet Office data. / 祝日と営業日のカレンダー（タイムゾーン対応・日本の祝日は内閣府データで全日照合）",
   "keywords": [
     "bizdays",
@@ -45,11 +45,12 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings src scripts test",
     "test": "node --test \"test/**/*.test.ts\"",
     "test:tz": "node scripts/test-tz.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "pnpm typecheck && pnpm test && pnpm test:tz && pnpm build && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/api-report.ts",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm test:tz && pnpm build && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/api-report.ts",
     "verify:cao": "node scripts/verify-cao.ts",
     "prepublishOnly": "pnpm check",
     "release-notes": "node scripts/release-notes.ts",
@@ -57,7 +58,8 @@
   },
   "devDependencies": {
     "@types/node": "24.19.2",
-    "oxfmt": "0.72.0",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
     "typescript": "6.0.3"
   },
   "engines": {
