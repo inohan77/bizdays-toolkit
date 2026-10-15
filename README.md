@@ -20,9 +20,10 @@
 - **繰り返しの規則**: 「第 3 水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」のような規則を、祝日に当たったときの扱い（祝日に従う・祝日でも当てはめる・翌日に振り替える）とあわせて指定できます
 - **日ごとの値（営業時間など）**: 「火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業」のように、曜日・祝日・特定日で変わる値を同じ規則で引けます
 - **設定の診断**: `bizdays-toolkit/diagnose` の `diagnoseCalendar`・`diagnoseSchedule` が、決して使われない規則・取り除いても結果が変わらない規則・キーの打ち間違い・営業日が 1 日もない設定などを、例外を投げずに一覧で返します。テストに 1 行足せば、設定の変更で規則が死んでいないかを確かめられます
+- **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 6.5KB（日本の祝日込みで約 7.5KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
+- **軽量・依存ゼロ**: minify + gzip で約 7KB（日本の祝日込みで約 8.3KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。現在は日本のみ同梱しています
 
 [English](#english)
@@ -177,6 +178,56 @@ const shibuya = createCalendar({ ...base, openDates: ["2026-12-27"] });
 const yokohama = createCalendar({ ...base, closedRecurring: [{ weekday: 3, nth: 3 }] });
 ```
 
+### 月の期日と日付の調整
+
+休業日に当たった日付を、指定した方法で営業日に調整します。月の第 n 営業日や、「毎月 n 日（休業日なら翌営業日）」のような期日も求められます。
+
+```ts
+import { closingMonth, createCalendar, monthOf } from "bizdays-toolkit";
+import { jp } from "bizdays-toolkit/jp";
+
+const calendar = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedAnnual: [{ from: "12-31", to: "01-03", name: "年末年始" }],
+});
+
+calendar.adjust("2026-10-31", { convention: "following" }); // "2026-11-02"（10/31 は土曜日）
+calendar.adjust("2026-10-31", { convention: "modified-following" }); // "2026-10-30"（月が変わるので前へ）
+
+calendar.firstBusinessDayOfMonth("2027-01"); // "2027-01-04"
+calendar.lastBusinessDayOfMonth("2026-12"); // "2026-12-30"
+calendar.nthBusinessDayOfMonth("2026-10", 5); // "2026-10-07"（-1 は最終、-2 は最後から 2 番目）
+
+// 毎月 10 日払い（休業日なら翌営業日）
+calendar.dueDate("2026-10", { day: 10, convention: "following" }); // "2026-10-13"（12 日はスポーツの日）
+
+// 20 日締め・翌月末払い（休業日なら前営業日）
+const billing = closingMonth("2026-10-21", 20); // "2026-11"（10/21〜11/20 が 11 月分）
+calendar.dueDate(monthOf(billing, 1), { day: -1, convention: "preceding" }); // "2026-12-30"
+```
+
+**調整の方法**（`convention`、必須）
+
+| 方法                   | 休業日のとき                           |
+| ---------------------- | -------------------------------------- |
+| `"following"`          | 翌営業日                               |
+| `"preceding"`          | 前営業日                               |
+| `"modified-following"` | 翌営業日。ただし月が変わるなら前営業日 |
+| `"modified-preceding"` | 前営業日。ただし月が変わるなら翌営業日 |
+
+- 営業日ならどの方法でもその日のままです
+- 月が変わるかは、**調整する前の日付の月**と比べます。`dueDate` では、末日に読み替えた後の日付の月です（例: 2 月の 31 日払いは 2 月末日を基準にし、`"modified-following"` なら 2 月の中で調整します）
+- `modified-…` で、同じ月に反対向きの営業日もない（その月が全部休業日）ときは、月が変わっても元の向きに調整します
+- 「最も近い営業日」（nearest）はありません。前後が同じ距離のときの決め方が業種ごとに違うためです
+
+**月の計算**（ルートの関数。営業日は考えません）
+
+- `monthOf(dateOrMonth, offset?)`: 日付または月 `"YYYY-MM"` の、`offset` か月後（負なら前）の月
+- `closingMonth(date, closingDay)`: 締め日（1〜31、`-1` は末日）で区切ったときに日付が属する月。締め日の翌日から次の締め日までを、次の締め日の月とします。締め日がその月にない日（31 日締めの 2 月など）は末日締めです
+
+`dueDate` の `day` も、その月にない日（2 月 30 日など）は末日に読み替えます。繰り返しの規則（`{ day: 31 }`）はその月にない日に当てはまらないので、扱いが異なります。期日は「その月のどこか」に必ず決まる必要があるためです。
+
 ### 日ごとの値（営業時間など）
 
 `createSchedule` は、曜日・祝日・特定日の規則から、日ごとに任意の値を返します。値の型は自由なので、営業時間のほか、受付枠や配送料の区分などにも使えます。
@@ -274,7 +325,7 @@ try {
 }
 ```
 
-主なコード: `invalid-date`・`invalid-month-day`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-option`・`out-of-range`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
+主なコード: `invalid-date`・`invalid-month`・`invalid-month-day`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-option`・`out-of-range`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
 
 ### 設定の診断
 
@@ -362,9 +413,10 @@ A business-day calendar that combines public holidays with company or store clos
 - **Day-by-day schedules**: `createSchedule` returns any value per day (e.g. store hours) from weekly values, a holiday rule (`"weekday"`, `{ sameAs: 0 }`, or `{ value }`), annual dates and specific dates
 - **Recurring rules**: weekly, nth-weekday-of-month (`{ weekday: 3, nth: 3 }`) and day-of-month (`{ day: -1 }`) rules, with per-rule holiday handling (`onHolidayRule`: `"under-holiday"`, `"over-holiday"`, or `"after-holiday"` to move the rule to the next non-holiday, e.g. "closed on Mondays; if Monday is a holiday, closed on the next weekday")
 - **Option diagnostics**: `diagnoseCalendar` / `diagnoseSchedule` from `bizdays-toolkit/diagnose` return a list of problems without throwing: rules that can never apply (`shadowed`, `never-matches`), rules whose removal changes nothing (`redundant`), typos in option keys with a suggestion (`unknown-option`), dates outside the holiday provider's years (`out-of-range`), and calendars with no business day. Use `code` to branch; `message` is for humans
+- **Month-based due dates**: `adjust` with `following` / `preceding` / `modified-following` / `modified-preceding`, the nth / first / last business day of a month, `dueDate(month, { day, convention })`, and the calendar helpers `closingMonth` and `monthOf`
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed/open dates, holiday policy, `addBusinessDays`, cut-off times, and more
 - **Time-zone safe**: instants (`Date`, ISO strings with offsets, Temporal) are converted to a civil date in the calendar's time zone before evaluation
-- **Lightweight, zero dependencies**: about 6.5 KB min+gzip (about 7.5 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
+- **Lightweight, zero dependencies**: about 7 KB min+gzip (about 8.3 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
 - **Extensible** through the `HolidayProvider` interface (only Japan is bundled for now)
 
 ```ts

@@ -11,6 +11,14 @@
 export declare function addDays(date: DateString, days: number): DateString;
 ```
 
+### AdjustOptions (@public)
+
+```ts
+export interface AdjustOptions {
+    readonly convention: BusinessDayConvention;
+}
+```
+
 ### AnnualDate (@public)
 
 ```ts
@@ -51,6 +59,12 @@ export interface AnnualValue<T> {
 }
 ```
 
+### BusinessDayConvention (@public)
+
+```ts
+export type BusinessDayConvention = "following" | "preceding" | "modified-following" | "modified-preceding";
+```
+
 ### BusinessDayOptions (@public)
 
 ```ts
@@ -72,6 +86,11 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
     addBusinessDays(input: DateInput, n: number): DateString;
     businessDaysBetween(from: DateInput, to: DateInput): number;
     listBusinessDays(from: DateInput, to: DateInput): readonly DateString[];
+    adjust(input: DateInput, options: AdjustOptions): DateString;
+    nthBusinessDayOfMonth(month: MonthString, n: number): DateString;
+    firstBusinessDayOfMonth(month: MonthString): DateString;
+    lastBusinessDayOfMonth(month: MonthString): DateString;
+    dueDate(month: MonthString, options: DueDateOptions): DateString;
 }
 ```
 
@@ -97,6 +116,12 @@ export interface CivilDateTimeParts {
     readonly date: DateString;
     readonly time: string | null;
 }
+```
+
+### closingMonth (@public)
+
+```ts
+export declare function closingMonth(date: DateString, closingDay: number): MonthString;
 ```
 
 ### createCalendar (@public)
@@ -195,6 +220,15 @@ export type DayReason = KnownDayReason | (string & {});
 
 ```ts
 export declare function diffDays(from: DateString, to: DateString): number;
+```
+
+### DueDateOptions (@public)
+
+```ts
+export interface DueDateOptions {
+    readonly day: DayOfMonth;
+    readonly convention: BusinessDayConvention;
+}
 ```
 
 ### ErrorCode (@public)
@@ -296,7 +330,7 @@ export type KnownDayReason = "open-date" | "closed-date" | "closed-annual" | "op
 ### KnownErrorCode (@public)
 
 ```ts
-export type KnownErrorCode = "invalid-date" | "invalid-month-day" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "invalid-provider" | "invalid-provider-data" | "no-business-day";
+export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-month-day" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "invalid-provider" | "invalid-provider-data" | "no-business-day";
 ```
 
 ### KnownScheduleReason (@public)
@@ -309,6 +343,18 @@ export type KnownScheduleReason = "date" | "annual" | "recurring" | "holiday" | 
 
 ```ts
 export type Month = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+```
+
+### monthOf (@public)
+
+```ts
+export declare function monthOf(input: DateString | MonthString, offset?: number): MonthString;
+```
+
+### MonthString (@public)
+
+```ts
+export type MonthString = string;
 ```
 
 ### Nth (@public)

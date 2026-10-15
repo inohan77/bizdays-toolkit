@@ -9,6 +9,8 @@ import {
   createCalendar,
   createSchedule,
   isBizdaysError,
+  monthOf,
+  type BusinessDayConvention,
   type HolidayValueRule,
   type DayReason,
   type ErrorCode,
@@ -162,3 +164,17 @@ for (const d of diagnostics) {
 }
 // @ts-expect-error -- 診断の結果は変更できない
 diagnostics.push(diagnostics[0]!);
+
+// --- 月の計算と日付の調整（0.6.0） ---
+const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+const adjusted: string = office.adjust("2026-10-31", { convention: "modified-following" });
+void adjusted;
+office.dueDate(monthOf("2026-10-16", 1), { day: -1, convention: "preceding" });
+// @ts-expect-error -- convention は必須（既定値を持たない）
+office.adjust("2026-10-31", {});
+// @ts-expect-error -- "nearest" は採用していない
+office.adjust("2026-10-31", { convention: "nearest" });
+// @ts-expect-error -- 期日の日は 1〜31 と -1
+office.dueDate("2026-10", { day: 0, convention: "following" });
+const convention: BusinessDayConvention = "preceding";
+void convention;

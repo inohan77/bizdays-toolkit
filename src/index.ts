@@ -10,14 +10,17 @@
 
 export {
   createCalendar,
+  type AdjustOptions,
   type AnnualDate,
   type AnnualRange,
+  type BusinessDayConvention,
   type BusinessDayOptions,
   type Calendar,
   type CalendarOptions,
   type DateRange,
   type DayInfo,
   type DayReason,
+  type DueDateOptions,
   type HolidayPolicy,
   type KnownDayReason,
   type SpecificDate,
@@ -55,6 +58,7 @@ export {
   type DateString,
   type Weekday,
 } from "./core/date.ts";
+export { closingMonth, monthOf, type MonthString } from "./core/month.ts";
 export { isBizdaysError, type ErrorCode, type KnownErrorCode } from "./core/errors.ts";
 export {
   toDateString,

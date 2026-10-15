@@ -43,13 +43,19 @@ jobs:
             echo "::error::${name}@${version} is already published on npm" >&2
             exit 1
           fi
-          changelog_date="$(grep -m1 -E "^## \[${version}\] - " CHANGELOG.md | sed -E 's/^## \[[^]]+\] - ([0-9]{4}-[0-9]{2}-[0-9]{2}).*/\1/')"
+          heading="$(grep -m1 -E "^## \[${version}\]" CHANGELOG.md || true)"
+          changelog_date="$(printf '%s' "${heading}" | sed -nE 's/^## \[[^]]+\] - ([0-9]{4}-[0-9]{2}-[0-9]{2})$/\1/p')"
           commit_date="$(TZ=Asia/Tokyo git log -1 --format=%cd --date=format-local:%Y-%m-%d)"
           today="$(TZ=Asia/Tokyo date +%F)"
+          if [ -z "${changelog_date}" ]; then
+            # 見出しがない、または日付が YYYY-MM-DD のまま（タグの前に当日の日付にする）
+            echo "::error::CHANGELOG heading for ${version} has no date: ${heading:-(no heading)}; expected ## [${version}] - ${today} (Asia/Tokyo)" >&2
+            exit 1
+          fi
           # 未来の日付と、タグを付けたコミットより前の日付（前の版の日付の書き換え忘れ）を止める。
           # 範囲で確かめるので、失敗したワークフローを翌日以降に再実行しても止まらない
-          if [ -z "${changelog_date}" ] || [[ "${changelog_date}" > "${today}" ]] || [[ "${changelog_date}" < "${commit_date}" ]]; then
-            echo "::error::CHANGELOG date for ${version} is ${changelog_date:-missing}; expected ${commit_date}..${today} (Asia/Tokyo)" >&2
+          if [[ "${changelog_date}" > "${today}" ]] || [[ "${changelog_date}" < "${commit_date}" ]]; then
+            echo "::error::CHANGELOG date for ${version} is ${changelog_date}; expected ${commit_date}..${today} (Asia/Tokyo)" >&2
             exit 1
           fi
 

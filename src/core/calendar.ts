@@ -17,9 +17,18 @@
  * 内部では、営業日かどうか（真偽値）を返すスケジュール（createSchedule）として作っている。
  */
 
-import { addDays, fromDayNumber, toDayNumber, type DateString, type Weekday } from "./date.ts";
+import {
+  addDays,
+  daysInMonth,
+  formatDate,
+  fromDayNumber,
+  toDayNumber,
+  type DateString,
+  type Weekday,
+} from "./date.ts";
 import { checkUnknownKeys, IssueCollector, plainError, rangeError } from "./errors.ts";
 import { parseTimeOfDay, toCivil, type DateInput } from "./input.ts";
+import { dayOfMonth, isDayOfMonthValue, parseMonth, type MonthString } from "./month.ts";
 import {
   buildSchedule,
   compileAnnualRules,
@@ -29,6 +38,7 @@ import {
   isWeekday,
   RECURRING_RULE_KEYS,
   type CompiledSchedule,
+  type DayOfMonth,
   type KnownScheduleReason,
   type RecurringRule,
   type HolidayLookup,
@@ -149,6 +159,42 @@ export interface BusinessDayOptions {
 }
 
 /**
+ * 休業日に当たった日付の調整の方法（営業日の慣行）。
+ * - "following": 翌営業日
+ * - "preceding": 前営業日
+ * - "modified-following": 翌営業日。ただし月が変わるなら前営業日
+ * - "modified-preceding": 前営業日。ただし月が変わるなら翌営業日
+ *
+ * 月が変わるかは、調整する前の日付の月と比べる。
+ * @public
+ */
+export type BusinessDayConvention =
+  | "following"
+  | "preceding"
+  | "modified-following"
+  | "modified-preceding";
+
+/**
+ * 日付の調整のオプション。
+ * @public
+ */
+export interface AdjustOptions {
+  /** 調整の方法 */
+  readonly convention: BusinessDayConvention;
+}
+
+/**
+ * 月の期日のオプション。
+ * @public
+ */
+export interface DueDateOptions {
+  /** 期日の日（1〜31、-1 は末日）。その月にない日（2 月 30 日など）は末日に読み替える */
+  readonly day: DayOfMonth;
+  /** 期日が休業日のときの調整の方法 */
+  readonly convention: BusinessDayConvention;
+}
+
+/**
  * 営業日カレンダー。
  * @public
  */
@@ -174,6 +220,25 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
   businessDaysBetween(from: DateInput, to: DateInput): number;
   /** 期間内の営業日（両端を含む） */
   listBusinessDays(from: DateInput, to: DateInput): readonly DateString[];
+  /**
+   * 営業日ならその日、休業日なら convention に従って調整した営業日。
+   * 月が変わるか（modified-…）は、調整する前の日付の月と比べる
+   */
+  adjust(input: DateInput, options: AdjustOptions): DateString;
+  /**
+   * 月 "YYYY-MM" の第 n 営業日。n が負なら月末から数える（-1 は最終営業日）。
+   * その月の営業日が足りなければ code: "no-business-day" の Error
+   */
+  nthBusinessDayOfMonth(month: MonthString, n: number): DateString;
+  /** 月 "YYYY-MM" の最初の営業日（nthBusinessDayOfMonth(month, 1)） */
+  firstBusinessDayOfMonth(month: MonthString): DateString;
+  /** 月 "YYYY-MM" の最後の営業日（nthBusinessDayOfMonth(month, -1)） */
+  lastBusinessDayOfMonth(month: MonthString): DateString;
+  /**
+   * 月 "YYYY-MM" の day 日を期日とし、休業日なら convention で調整した日。
+   * その月にない日は末日に読み替えてから調整する（例: 2 月の 30 日払いは 2 月末日）
+   */
+  dueDate(month: MonthString, options: DueDateOptions): DateString;
 }
 
 const CALENDAR_OPTION_KEYS = [
@@ -350,6 +415,79 @@ export function createCalendar<Kind extends string = string>(
     return count;
   }
 
+  const CONVENTIONS: readonly BusinessDayConvention[] = [
+    "following",
+    "preceding",
+    "modified-following",
+    "modified-preceding",
+  ];
+  function adjustDate(date: DateString, options: AdjustOptions | undefined): DateString {
+    const convention = (options as { convention?: unknown } | undefined)?.convention;
+    if (!CONVENTIONS.includes(convention as BusinessDayConvention)) {
+      throw rangeError(
+        "invalid-argument",
+        `convention must be one of ${CONVENTIONS.map((v) => `"${v}"`).join(", ")}`,
+      );
+    }
+    if (isOpen(date)) return date;
+    const month = date.slice(0, 7);
+    switch (convention as BusinessDayConvention) {
+      case "following":
+        return search(date, 1);
+      case "preceding":
+        return search(date, -1);
+      case "modified-following": {
+        const next = search(date, 1);
+        if (next.startsWith(month)) return next;
+        // 同じ月に前営業日がなければ、月が変わっても翌営業日にする
+        const previous = searchWithin(date, -1, month);
+        return previous ?? next;
+      }
+      case "modified-preceding": {
+        const previous = search(date, -1);
+        if (previous.startsWith(month)) return previous;
+        const next = searchWithin(date, 1, month);
+        return next ?? previous;
+      }
+      default:
+        throw rangeError("invalid-argument", `Unknown convention: ${String(convention)}`);
+    }
+  }
+
+  /** 同じ月の中だけで営業日を探す（なければ undefined） */
+  function searchWithin(start: DateString, step: 1 | -1, month: string): DateString | undefined {
+    for (let date = start; date.startsWith(month); date = addDays(date, step)) {
+      if (isOpen(date)) return date;
+    }
+    return undefined;
+  }
+
+  /** 月の営業日（月初から順） */
+  function businessDaysOfMonth(month: MonthString): DateString[] {
+    const { year, month: m } = parseMonth(month);
+    const result: DateString[] = [];
+    for (let d = 1; d <= daysInMonth(year, m); d++) {
+      const date = formatDate(year, m, d);
+      if (isOpen(date)) result.push(date);
+    }
+    return result;
+  }
+
+  function nthOfMonth(month: MonthString, n: number): DateString {
+    if (!Number.isInteger(n) || n === 0) {
+      throw rangeError("invalid-argument", `n must be a non-zero integer: ${n}`);
+    }
+    const days = businessDaysOfMonth(month);
+    const found = n > 0 ? days[n - 1] : days[days.length + n];
+    if (found === undefined) {
+      throw plainError(
+        "no-business-day",
+        `${month} has ${days.length} business day(s); requested ${n > 0 ? "" : "last "}#${Math.abs(n)}`,
+      );
+    }
+    return found;
+  }
+
   const calendar: Calendar<Kind> = {
     timeZone: schedule.timeZone,
     providers: schedule.providers,
@@ -400,6 +538,20 @@ export function createCalendar<Kind extends string = string>(
         if (isOpen(date)) result.push(date);
       }
       return Object.freeze(result);
+    },
+    adjust: (input, options) => adjustDate(dateOf(input), options),
+    nthBusinessDayOfMonth: nthOfMonth,
+    firstBusinessDayOfMonth: (month) => nthOfMonth(month, 1),
+    lastBusinessDayOfMonth: (month) => nthOfMonth(month, -1),
+    dueDate(month, options) {
+      const day = (options as { day?: unknown } | undefined)?.day;
+      if (!isDayOfMonthValue(day)) {
+        throw rangeError(
+          "invalid-argument",
+          `day must be an integer from 1 to 31, or -1 (last day): ${String(day)}`,
+        );
+      }
+      return adjustDate(dayOfMonth(parseMonth(month), day), options);
     },
   };
   return Object.freeze(calendar);

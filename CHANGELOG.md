@@ -4,9 +4,24 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-16
+
+### Added
+
+- 日付の調整 `adjust(input, { convention })`（営業日カレンダー）: 休業日を `"following"`（翌営業日）・`"preceding"`（前営業日）・`"modified-following"`（翌営業日。月が変わるなら前営業日）・`"modified-preceding"`（前営業日。月が変わるなら翌営業日）で調整する。月が変わるかは調整する前の日付の月と比べる
+- 月の営業日（営業日カレンダー）: `nthBusinessDayOfMonth(month, n)`（負なら月末から数える。-1 は最終営業日）・`firstBusinessDayOfMonth(month)`・`lastBusinessDayOfMonth(month)`
+- 月の期日 `dueDate(month, { day, convention })`（営業日カレンダー）: その月の `day` 日（-1 は末日。その月にない日は末日に読み替える）を `convention` で調整する
+- 月の計算（ルート）: `monthOf(dateOrMonth, offset?)`（n か月後の月 `"YYYY-MM"`）・`closingMonth(date, closingDay)`（締め日で区切ったときの月）
+- 例外のコード `invalid-month`（月 `"YYYY-MM"` の誤り）
+- 型: `BusinessDayConvention`・`AdjustOptions`・`DueDateOptions`・`MonthString`
+
 ### 開発
 
 - `pnpm check`（`scripts/check-package.ts`）で、CHANGELOG の版の節の並び・日付と、末尾のリンク定義が節とそろっていることを確かめるようにした（0.5.0 でリンク定義の更新漏れがあったため）
+- リリースのワークフローで、CHANGELOG の日付が `YYYY-MM-DD` のまま・見出しがないときの表示を分かりやすくした（止まる条件は変わらない）
+- 月の計算と日付の調整の性質のテストを追加
+- サイズの上限を上げた（`.` 16500・`./jp` 19500・`./diagnose` 22000。月の計算の追加。minify + gzip ではルートが約 7.2KB、日本の祝日込みで約 8.3KB）
+- `docs/decisions.md` に 16 番目（日付の調整と月の期日の設計）を追加
 
 ## [0.5.0] - 2026-10-16
 
@@ -133,7 +148,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.0...v0.3.1

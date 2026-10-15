@@ -13,6 +13,8 @@
 export type KnownErrorCode =
   /** 日付 "YYYY-MM-DD" の形式・値の誤り */
   | "invalid-date"
+  /** 月 "YYYY-MM" の形式・値の誤り */
+  | "invalid-month"
   /** 毎年の月日 "MM-DD" の形式・値の誤り */
   | "invalid-month-day"
   /** 時刻・日時の形式・値の誤り */

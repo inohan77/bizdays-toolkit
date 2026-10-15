@@ -10,7 +10,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   addDays,
+  closingMonth,
   createCalendar,
+  monthOf,
   createSchedule,
   type Calendar,
   type Month,
@@ -242,5 +244,105 @@ property("繰り返しの規則でも、営業日カレンダーと真偽値の�
   const context = `open=${JSON.stringify(open)} closed=${JSON.stringify(closed)} holidayOpen=${holidayOpen} day=${day}`;
   assert.equal(calendar.isBusinessDay(day), schedule.valueOn(day), context);
   assert.equal(calendar.dayInfo(day).shiftedFrom, schedule.dayInfo(day).shiftedFrom, context);
+  return context;
+});
+
+// ------------------------------------------------------------
+// 月の計算と日付の調整（0.6.0）
+// ------------------------------------------------------------
+
+const CONVENTIONS = ["following", "preceding", "modified-following", "modified-preceding"] as const;
+
+property("adjust の結果は営業日で、方法ごとの定義どおり。もう一度調整しても変わらない", (g) => {
+  const { calendar, describe } = randomCalendar(g);
+  const day = g.date();
+  const month = day.slice(0, 7);
+  const following = calendar.businessDayOnOrAfter(day);
+  const preceding = calendar.businessDayOnOrBefore(day);
+  const context = `${describe} day=${day}`;
+  for (const convention of CONVENTIONS) {
+    const result = calendar.adjust(day, { convention });
+    const c = `${context} ${convention}=${result}`;
+    assert.ok(calendar.isBusinessDay(result), c);
+    assert.equal(calendar.adjust(result, { convention }), result, c);
+    if (convention === "following") assert.equal(result, following, c);
+    if (convention === "preceding") assert.equal(result, preceding, c);
+    if (convention === "modified-following") {
+      // 翌営業日が同じ月ならそれ、違えば同じ月の前営業日、それもなければ翌営業日
+      const expected = following.startsWith(month)
+        ? following
+        : preceding.startsWith(month)
+          ? preceding
+          : following;
+      assert.equal(result, expected, c);
+    }
+    if (convention === "modified-preceding") {
+      const expected = preceding.startsWith(month)
+        ? preceding
+        : following.startsWith(month)
+          ? following
+          : preceding;
+      assert.equal(result, expected, c);
+    }
+  }
+  return context;
+});
+
+property("月の第 n 営業日は、その月の営業日の一覧の n 番目（負なら後ろから）", (g) => {
+  const { calendar, describe } = randomCalendar(g);
+  const month = g.date().slice(0, 7);
+  const last = addDays(monthOf(month, 1) + "-01", -1);
+  const days = calendar.listBusinessDays(`${month}-01`, last);
+  const context = `${describe} month=${month} days=${days.length}`;
+  if (days.length === 0) {
+    assert.throws(() => calendar.firstBusinessDayOfMonth(month), { code: "no-business-day" });
+    return context;
+  }
+  const n = g.int(1, days.length);
+  assert.equal(calendar.nthBusinessDayOfMonth(month, n), days[n - 1], context);
+  assert.equal(calendar.nthBusinessDayOfMonth(month, -n), days[days.length - n], context);
+  assert.equal(calendar.firstBusinessDayOfMonth(month), days[0], context);
+  assert.equal(calendar.lastBusinessDayOfMonth(month), days[days.length - 1], context);
+  assert.throws(() => calendar.nthBusinessDayOfMonth(month, days.length + 1), {
+    code: "no-business-day",
+  });
+  return context;
+});
+
+property("dueDate は、末日に読み替えた日付を adjust したもの", (g) => {
+  const { calendar, describe } = randomCalendar(g);
+  const month = g.date().slice(0, 7);
+  const day = g.pick([1, 10, 15, 20, 25, 28, 29, 30, 31, -1] as const);
+  const convention = g.pick(CONVENTIONS);
+  const lastDay = Number(addDays(monthOf(month, 1) + "-01", -1).slice(8));
+  const date = `${month}-${String(day === -1 || day > lastDay ? lastDay : day).padStart(2, "0")}`;
+  const context = `${describe} month=${month} day=${day} ${convention}`;
+  assert.equal(
+    calendar.dueDate(month, { day, convention }),
+    calendar.adjust(date, { convention }),
+    context,
+  );
+  return context;
+});
+
+property("closingMonth は、日付が進むと同じか後の月になり、締め日の範囲に収まる", (g) => {
+  const date = g.date();
+  const closingDay = g.pick([1, 5, 10, 15, 20, 25, 28, 29, 30, 31, -1] as const);
+  const next = addDays(date, 1);
+  const month = closingMonth(date, closingDay);
+  const context = `date=${date} closingDay=${closingDay} month=${month}`;
+  assert.ok(closingMonth(next, closingDay) >= month, context);
+  // 締め日（その月にない日は末日）を、結果の月と前の月で求めると、date はその間に入る
+  const closingOf = (m: string) => {
+    const last = Number(addDays(monthOf(m, 1) + "-01", -1).slice(8));
+    const d = closingDay === -1 || closingDay > last ? last : closingDay;
+    return `${m}-${String(d).padStart(2, "0")}`;
+  };
+  assert.ok(date <= closingOf(month), context);
+  assert.ok(date > closingOf(monthOf(month, -1)), context);
+  // monthOf は足し算になる
+  const a = g.int(-30, 30);
+  const b = g.int(-30, 30);
+  assert.equal(monthOf(monthOf(date, a), b), monthOf(date, a + b), `${context} a=${a} b=${b}`);
   return context;
 });
