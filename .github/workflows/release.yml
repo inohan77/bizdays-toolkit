@@ -44,9 +44,12 @@ jobs:
             exit 1
           fi
           changelog_date="$(grep -m1 -E "^## \[${version}\] - " CHANGELOG.md | sed -E 's/^## \[[^]]+\] - ([0-9]{4}-[0-9]{2}-[0-9]{2}).*/\1/')"
+          commit_date="$(TZ=Asia/Tokyo git log -1 --format=%cd --date=format-local:%Y-%m-%d)"
           today="$(TZ=Asia/Tokyo date +%F)"
-          if [ "${changelog_date}" != "${today}" ]; then
-            echo "::error::CHANGELOG date for ${version} is ${changelog_date:-missing}; expected ${today} (Asia/Tokyo)" >&2
+          # 未来の日付と、タグを付けたコミットより前の日付（前の版の日付の書き換え忘れ）を止める。
+          # 範囲で確かめるので、失敗したワークフローを翌日以降に再実行しても止まらない
+          if [ -z "${changelog_date}" ] || [[ "${changelog_date}" > "${today}" ]] || [[ "${changelog_date}" < "${commit_date}" ]]; then
+            echo "::error::CHANGELOG date for ${version} is ${changelog_date:-missing}; expected ${commit_date}..${today} (Asia/Tokyo)" >&2
             exit 1
           fi
 
