@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-16
+
+### Added
+
+- 祝日（`Holiday`）に、ほかの言語の名称 `names`（省略可能。キーは BCP 47 の言語タグの正規の形。例: `{ "zh-Hant": "…", ko: "…" }`）を追加した。利用者が実装した提供元が付けた `names` を、提供元のデータの検証で確かめ（誤りは `invalid-provider-data`）、複製・凍結して返す。同梱の日本の祝日は `names` を持たない（公式の出典がある日本語・英語の名称だけを同梱する）
+
 ### 開発
 
 - `size-limits.json` の値を上げるときの理由は、コミットメッセージではなく CHANGELOG の「開発」に書く取り決めにした。`pnpm check`（`scripts/check-size.ts`）が前の版のタグの `size-limits.json` と比べ、値が上がっているのに記載がなければ失敗する（0.6.0 で理由をコミットメッセージに書き漏らしたため）。CI とリリースのワークフローは履歴とタグを取得して（`fetch-depth: 0`）この確認を行い、リリースのワークフローではタグを付けたコミットを 1 つ前の版のタグと比べる
@@ -152,7 +158,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.3.1...v0.4.0

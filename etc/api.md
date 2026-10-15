@@ -244,6 +244,7 @@ export interface Holiday<Kind extends string = string> {
     readonly date: DateString;
     readonly name: string;
     readonly nameEn: string;
+    readonly names?: Readonly<Record<string, string>>;
     readonly kind: Kind;
     readonly confirmed: boolean;
 }

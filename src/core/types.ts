@@ -11,6 +11,11 @@ export interface Holiday<Kind extends string = string> {
   readonly name: string;
   /** 英語の名称 */
   readonly nameEn: string;
+  /**
+   * ほかの言語の名称（省略可能）。キーは BCP 47 の言語タグの正規の形（例: "zh-Hant", "ko"）。
+   * 同梱の提供元（日本）は持たない。利用者が実装した提供元が付けた場合に、検証して複製・凍結して返す
+   */
+  readonly names?: Readonly<Record<string, string>>;
   /** 種別（国ごとに定義。日本は JapaneseHolidayKind） */
   readonly kind: Kind;
   /**
@@ -25,7 +30,8 @@ export interface Holiday<Kind extends string = string> {
  *
  * 他の国・地域の祝日はこのインターフェースを実装して createCalendar・createSchedule に渡す。
  * holidaysInYear が返すデータは、年ごとに初めて使うときに検証され、誤りがあれば
- * code: "invalid-provider-data" の例外になる。
+ * code: "invalid-provider-data" の例外になる。返した祝日は、契約の項目（date・name・nameEn・names・
+ * kind・confirmed）だけを持つ変更できないオブジェクトに複製される。
  *
  * 互換性の約束: このインターフェースに項目を足すときは、メジャー版以外では省略可能な項目に限る。
  * @public

@@ -23,7 +23,7 @@
 - **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 7KB（日本の祝日込みで約 8.3KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
+- **軽量・依存ゼロ**: minify + gzip で約 7.4KB（日本の祝日込みで約 8.5KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。現在は日本のみ同梱しています
 
 [English](#english)
@@ -305,6 +305,23 @@ const myCountry: HolidayProvider = {
 const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] });
 ```
 
+祝日には、ほかの言語の名称を `names` で付けられます。キーは BCP 47 の言語タグの正規の形（`"zh-Hant"`・`"ko"` など）です。同梱の日本の祝日は `names` を持ちません（公式の出典がある日本語・英語だけを同梱しています）。必要な場合は、提供元を包んで付けます。
+
+```ts
+import { jp } from "bizdays-toolkit/jp";
+
+const zhHant: Record<string, string> = { "2026-01-01": "元日" /* … 利用者が用意した訳 */ };
+const jpWithNames = {
+  ...jp,
+  holidaysInYear: (year: number) =>
+    jp.holidaysInYear(year).map((h) => {
+      const name = zhHant[h.date];
+      return name === undefined ? h : { ...h, names: { "zh-Hant": name } };
+    }),
+};
+createCalendar({ holidays: jpWithNames }).getHoliday("2026-01-01")?.names; // { "zh-Hant": "元日" }
+```
+
 ### 対応年の外
 
 祝日の提供元の対応年（日本は 1955〜2099 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRange: "ignore"` を指定してください。
@@ -416,8 +433,8 @@ A business-day calendar that combines public holidays with company or store clos
 - **Month-based due dates**: `adjust` with `following` / `preceding` / `modified-following` / `modified-preceding`, the nth / first / last business day of a month, `dueDate(month, { day, convention })`, and the calendar helpers `closingMonth` and `monthOf`
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed/open dates, holiday policy, `addBusinessDays`, cut-off times, and more
 - **Time-zone safe**: instants (`Date`, ISO strings with offsets, Temporal) are converted to a civil date in the calendar's time zone before evaluation
-- **Lightweight, zero dependencies**: about 7 KB min+gzip (about 8.3 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
-- **Extensible** through the `HolidayProvider` interface (only Japan is bundled for now)
+- **Lightweight, zero dependencies**: about 7.4 KB min+gzip (about 8.5 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`
+- **Extensible** through the `HolidayProvider` interface (only Japan is bundled for now). Holidays can carry names in other languages via the optional `names` field (keys are canonical BCP 47 language tags); the bundled Japanese data includes only the officially sourced Japanese and English names
 
 ```ts
 import { createCalendar } from "bizdays-toolkit";

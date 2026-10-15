@@ -11,6 +11,7 @@ import {
   isBizdaysError,
   monthOf,
   type BusinessDayConvention,
+  type HolidayProvider,
   type HolidayValueRule,
   type DayReason,
   type ErrorCode,
@@ -178,3 +179,20 @@ office.adjust("2026-10-31", { convention: "nearest" });
 office.dueDate("2026-10", { day: 0, convention: "following" });
 const convention: BusinessDayConvention = "preceding";
 void convention;
+
+// --- 祝日のほかの言語の名称（0.7.0） ---
+const holidayNames: Readonly<Record<string, string>> | undefined = createCalendar({
+  holidays: jp,
+}).getHoliday("2026-11-23")?.names;
+void holidayNames;
+// 提供元は names を省略できる（既存の提供元はそのまま型が通る）
+const withoutNames: HolidayProvider = {
+  id: "XX",
+  timeZone: "UTC",
+  supportedYears: { from: 2000, to: 2100 },
+  dataVersion: "1",
+  holidaysInYear: (year) => [
+    { date: `${year}-12-25`, name: "n", nameEn: "n", kind: "k", confirmed: true },
+  ],
+};
+void withoutNames;

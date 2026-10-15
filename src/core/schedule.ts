@@ -795,8 +795,44 @@ function loadProviderYear<Kind extends string>(
     if (typeof confirmed !== "boolean") {
       throw providerDataError(provider, year, `item ${i} (${date}) must have boolean confirmed`);
     }
-    return Object.freeze({ date, name, nameEn, kind: kind as Kind, confirmed });
+    const holiday: { -readonly [K in keyof Holiday<Kind>]: Holiday<Kind>[K] } = {
+      date,
+      name,
+      nameEn,
+      kind: kind as Kind,
+      confirmed,
+    };
+    if (h["names"] !== undefined) {
+      const problem = checkNames(h["names"]);
+      if (problem) throw providerDataError(provider, year, `item ${i} (${date}) names: ${problem}`);
+      holiday.names = Object.freeze(Object.fromEntries(Object.entries(h["names"] as object)));
+    }
+    return Object.freeze(holiday);
   });
+}
+
+/** 祝日のほかの言語の名称を検証する（誤りがあれば理由を返す） */
+function checkNames(names: unknown): string | undefined {
+  // 普通のオブジェクト（別の実行環境で作られたものも可）。継承した項目を持つものは受け付けない
+  const proto: unknown = isObject(names) ? Object.getPrototypeOf(names) : undefined;
+  if (!isObject(names) || (proto !== null && Object.getPrototypeOf(proto) !== null)) {
+    return "must be a plain object of { [language tag]: name }";
+  }
+  for (const [tag, value] of Object.entries(names)) {
+    let canonical: string | undefined;
+    try {
+      canonical = Intl.getCanonicalLocales(tag)[0];
+    } catch {
+      return `${JSON.stringify(tag)} is not a BCP 47 language tag`;
+    }
+    if (canonical !== tag) {
+      return `${JSON.stringify(tag)} must be written in canonical form ${JSON.stringify(canonical)}`;
+    }
+    if (typeof value !== "string" || value === "") {
+      return `${JSON.stringify(tag)} must be a non-empty string`;
+    }
+  }
+  return undefined;
 }
 
 /** @internal 祝日を調べる機能を作る（設定は検証済みであること） */
