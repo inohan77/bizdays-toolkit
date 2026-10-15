@@ -71,7 +71,7 @@
 | テスト                     | `node --test`。性質のテスト（`test/properties.test.ts`、種を固定した乱数）も含む                                                                           |
 | タイムゾーンを変えたテスト | 環境変数 `TZ` を UTC・Asia/Tokyo・America/Los_Angeles・Pacific/Chatham に変えて、テストをすべて実行する                                                    |
 | ビルドと整形               | `tsc -p tsconfig.build.json`、`oxfmt --check`                                                                                                              |
-| パッケージの中身           | 公開するファイル・exports・依存ゼロ・CHANGELOG の節                                                                                                        |
+| パッケージの中身           | 公開するファイル・exports・依存ゼロ。CHANGELOG の版の節（並び・日付）と末尾のリンク定義がそろっていること                                                  |
 | サイズの上限               | エントリーごとの gzip のサイズを `size-limits.json` の上限と比べる。上限を上げるときは理由をコミットメッセージに書く                                       |
 | API のスナップショット     | 公開している名前と型を `etc/api.md` と比べる。意図した変更なら `pnpm api:update` で更新してコミットする                                                    |
 
@@ -89,7 +89,7 @@ npm 12 の動作要件は Node.js `^22.22.2 || ^24.15.0` です。版を上げ�
 公開は staged publishing で行います。GitHub Actions（`.github/workflows/release.yml`）は版を npm に**ステージ**するだけで、メンテナーが 2FA 付きで**承認**するまで利用者には届きません。GitHub のアカウントやワークフローが乗っ取られても、承認なしに公開されることはありません。手元の端末から `npm publish` はしません（provenance を付けるため）。
 
 1. `package.json` の `version` を更新する
-2. `CHANGELOG.md` の `[Unreleased]` を新しい版の節に移す（`pnpm check` は、現在の版の節がないと失敗します）。見出しの日付は、タグをプッシュする日（日本時間）にする。リリースのワークフローが、タグを付けたコミットの日から実行した日までの範囲にあるかを確かめ、範囲の外ならステージする前に止まる
+2. `CHANGELOG.md` の `[Unreleased]` を新しい版の節に移し、末尾のリンク定義（`[Unreleased]` の比較元と新しい版の行）を更新する（`pnpm check` は、現在の版の節やリンク定義が合わないと失敗します）。見出しの日付は、タグをプッシュする日（日本時間）にする。リリースのワークフローが、タグを付けたコミットの日から実行した日までの範囲にあるかを確かめ、範囲の外ならステージする前に止まる
 3. `pnpm check` が通ることを確かめてコミットし、main をプッシュして CI の合格を確認する
 4. `v<version>` のタグを付けてプッシュする（例: `git tag v0.1.2 && git push origin v0.1.2`）
 5. ワークフローが、タグと `package.json` の版の一致と、同じ版が npm にまだないことを確かめ、`pnpm check` のあと npm にステージし、CHANGELOG の節を本文にした GitHub Release を**下書き**で作ります。ワークフローの実行結果の Summary に、承認の手順が表示されます
