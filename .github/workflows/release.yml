@@ -22,6 +22,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # サイズの上限の検査（scripts/check-size.ts）が前の版のタグを読むため、履歴とタグを取得する
+          fetch-depth: 0
       - uses: ./.github/actions/setup-toolchain
         with:
           node-version: "24.21.0"

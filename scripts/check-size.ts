@@ -38,26 +38,38 @@ function moduleGraph(entry: string): string[] {
   return [...seen].sort();
 }
 
-/** タグの時点の size-limits.json（git やタグがなければ undefined） */
-function limitsAt(tag: string): Record<string, number> | undefined {
+/** git を実行して出力を返す（git やタグがなければ undefined） */
+function git(args: readonly string[]): string | undefined {
   try {
-    const text = execFileSync("git", ["show", `${tag}:size-limits.json`], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return JSON.parse(text) as Record<string, number>;
+    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch {
     return undefined;
   }
 }
 
+/** タグの時点の size-limits.json（読めなければ undefined） */
+function limitsAt(tag: string): Record<string, number> | undefined {
+  const text = git(["show", `${tag}:size-limits.json`]);
+  return text === undefined ? undefined : (JSON.parse(text) as Record<string, number>);
+}
+
+/** タグが HEAD を指しているか（リリースのワークフローでタグを付けたコミットを検査しているか） */
+function tagIsHead(tag: string): boolean {
+  const head = git(["rev-parse", "HEAD"])?.trim();
+  const tagged = git(["rev-parse", `${tag}^{commit}`])?.trim();
+  return head !== undefined && head === tagged;
+}
+
 /**
  * 前の版のタグと比べて上限が上がっていれば、CHANGELOG に理由の記載があるかを確かめる。
  *
- * 比べるタグ: 現在の版のタグがあれば（公開後）そのタグと比べ、[Unreleased] に記載を求める。
- * なければ（公開の準備中）、CHANGELOG で 1 つ前の版のうちタグがある最新のものと比べ、
- * [Unreleased] か現在の版の節に記載を求める。
- * タグを読めない環境（CI の checkout はタグを取得しない）では確認を飛ばす。手元の pnpm check で確かめる
+ * 比べるタグと、記載を探す節:
+ * - 現在の版のタグがあり、HEAD 以外を指す（公開後の開発中）: そのタグと比べ、[Unreleased] を探す
+ * - それ以外（公開の準備中・リリースのワークフローでタグのコミットを検査中）: CHANGELOG で 1 つ前の版のうち
+ *   タグがある最新のものと比べ、[Unreleased] と現在の版の節を探す
+ *
+ * タグを読めないときは、手元では確認を飛ばし、CI（環境変数 CI が設定されている）では失敗する。
+ * CI のワークフローは履歴とタグを取得する（fetch-depth: 0）ので、読めないのは設定の誤り
  */
 function checkLimitChanges(): boolean {
   const changelog = readFileSync("CHANGELOG.md", "utf8");
@@ -69,9 +81,11 @@ function checkLimitChanges(): boolean {
   let base: string | undefined;
   let baseLimits: Record<string, number> | undefined;
   const searched = ["Unreleased"];
-  baseLimits = limitsAt(`v${pkg.version}`);
-  if (baseLimits) {
-    base = `v${pkg.version}`;
+  const currentTag = `v${pkg.version}`;
+  const currentLimits = limitsAt(currentTag);
+  if (currentLimits && !tagIsHead(currentTag)) {
+    base = currentTag;
+    baseLimits = currentLimits;
   } else {
     searched.push(pkg.version);
     for (const v of versions.filter((v) => v !== pkg.version)) {
@@ -83,9 +97,13 @@ function checkLimitChanges(): boolean {
     }
   }
   if (!base || !baseLimits) {
-    console.log(
-      "SKIP limit changes: no release tag readable with git (checked locally before commit)",
-    );
+    if (process.env["CI"]) {
+      console.error(
+        "Cannot read release tags with git in CI; check out with fetch-depth: 0 to compare size limits",
+      );
+      return false;
+    }
+    console.log("SKIP limit changes: no release tag readable with git (run git fetch --tags)");
     return true;
   }
   const raised = Object.entries(limits).filter(([entry, limit]) => {
