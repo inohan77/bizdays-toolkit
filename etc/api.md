@@ -253,12 +253,6 @@ export interface HolidayProvider<Kind extends string = string> {
 }
 ```
 
-### HolidayRule (@public)
-
-```ts
-export type HolidayRule<T> = HolidayValueRule<T>;
-```
-
 ### HolidaySourceOptions (@public)
 
 ```ts
@@ -544,4 +538,48 @@ export declare function toJapanDateTime(input: DateInput): {
     readonly date: DateString;
     readonly time: string | null;
 };
+```
+
+## bizdays-toolkit/diagnose
+
+### diagnoseCalendar (@public)
+
+```ts
+export declare function diagnoseCalendar(options?: CalendarOptions | object): readonly Diagnostic[];
+```
+
+### diagnoseSchedule (@public)
+
+```ts
+export declare function diagnoseSchedule(options: ScheduleOptions<unknown> | object): readonly Diagnostic[];
+```
+
+### Diagnostic (@public)
+
+```ts
+export interface Diagnostic {
+    readonly severity: DiagnosticSeverity;
+    readonly code: DiagnosticCode;
+    readonly path: string;
+    readonly message: string;
+    readonly relatedPath?: string;
+}
+```
+
+### DiagnosticCode (@public)
+
+```ts
+export type DiagnosticCode = KnownDiagnosticCode | (string & {});
+```
+
+### DiagnosticSeverity (@public)
+
+```ts
+export type DiagnosticSeverity = "error" | "warning" | "info";
+```
+
+### KnownDiagnosticCode (@public)
+
+```ts
+export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "shadowed" | "never-matches" | "redundant";
 ```

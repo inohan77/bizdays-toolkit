@@ -3,6 +3,7 @@
  *
  * 例外は従来どおり RangeError・TypeError・Error のインスタンスで、code プロパティを持つ。
  * 例外のメッセージの文言は API に含まない（変わることがある）。判定には code を使う。
+ * 問題を集める仕組み（IssueCollector）は、作成時のチェックと規則の診断（diagnose）で共通。
  */
 
 /**
@@ -82,7 +83,7 @@ export function plainError(code: KnownErrorCode, message: string): Error {
 }
 
 // ------------------------------------------------------------
-// 問題を集める仕組み（作成時のチェックと、将来の診断機能で共通）
+// 問題を集める仕組み（作成時のチェックと、規則の診断で共通）
 // ------------------------------------------------------------
 
 /** @internal 問題の重さ */
@@ -92,9 +93,14 @@ export type IssueSeverity = "error" | "warning" | "info";
 export interface Issue {
   readonly severity: IssueSeverity;
   readonly code: string;
-  /** 設定の中の位置（例: "dates[1].from"） */
+  /** 設定の中の位置（例: "dates[1].from"）。設定全体なら "" */
   readonly path: string;
   readonly message: string;
+  /** 関係する別の位置（例: 覆っている先の規則） */
+  readonly relatedPath?: string;
+  /** unknown-option の知らないキーと既知のキー（診断で候補を挙げるため。結果には出さない） */
+  readonly unknownKey?: string;
+  readonly knownKeys?: readonly string[];
 }
 
 /** @internal 問題を集める */
@@ -105,8 +111,26 @@ export class IssueCollector {
     this.issues.push({ severity: "error", code, path, message });
   }
 
-  warning(code: string, path: string, message: string): void {
-    this.issues.push({ severity: "warning", code, path, message });
+  warning(code: string, path: string, message: string, relatedPath?: string): void {
+    this.add("warning", code, path, message, relatedPath);
+  }
+
+  info(code: string, path: string, message: string, relatedPath?: string): void {
+    this.add("info", code, path, message, relatedPath);
+  }
+
+  private add(
+    severity: IssueSeverity,
+    code: string,
+    path: string,
+    message: string,
+    relatedPath: string | undefined,
+  ): void {
+    this.issues.push(
+      relatedPath === undefined
+        ? { severity, code, path, message }
+        : { severity, code, path, message, relatedPath },
+    );
   }
 
   get hasErrors(): boolean {
@@ -122,7 +146,10 @@ export class IssueCollector {
   }
 }
 
-/** @internal 設定のオブジェクトに、知らないキーがあれば警告として記録する */
+/**
+ * @internal 設定のオブジェクトに、知らないキーがあれば警告として記録する。
+ * 近い既知のキーを候補に挙げるのは規則の診断で行う（作成時は警告を使わないので、ここでは既知のキーを渡すだけ）
+ */
 export function checkUnknownKeys(
   collector: IssueCollector,
   path: string,
@@ -131,11 +158,14 @@ export function checkUnknownKeys(
 ): void {
   for (const key of Object.keys(value)) {
     if (!known.includes(key)) {
-      collector.warning(
-        "unknown-option",
-        path ? `${path}.${key}` : key,
-        `Unknown option ${JSON.stringify(key)} is ignored`,
-      );
+      collector.issues.push({
+        severity: "warning",
+        code: "unknown-option",
+        path: path ? `${path}.${key}` : key,
+        message: `Unknown option ${JSON.stringify(key)} is ignored`,
+        unknownKey: key,
+        knownKeys: known,
+      });
     }
   }
 }

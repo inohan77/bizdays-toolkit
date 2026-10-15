@@ -19,6 +19,7 @@
 - **日本の祝日を内閣府のデータで全日照合**: 1955 年〜官報公表済みの年まで、内閣府「国民の祝日」CSV のすべての日付と一致することをテストで確かめています（振替休日・国民の休日・皇室行事による休日・五輪特措法による移動を含む）
 - **繰り返しの規則**: 「第 3 水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」のような規則を、祝日に当たったときの扱い（祝日に従う・祝日でも当てはめる・翌日に振り替える）とあわせて指定できます
 - **日ごとの値（営業時間など）**: 「火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業」のように、曜日・祝日・特定日で変わる値を同じ規則で引けます
+- **設定の診断**: `bizdays-toolkit/diagnose` の `diagnoseCalendar`・`diagnoseSchedule` が、決して使われない規則・取り除いても結果が変わらない規則・キーの打ち間違い・営業日が 1 日もない設定などを、例外を投げずに一覧で返します。テストに 1 行足せば、設定の変更で規則が死んでいないかを確かめられます
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
 - **軽量・依存ゼロ**: minify + gzip で約 6.5KB（日本の祝日込みで約 7.5KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
@@ -275,6 +276,64 @@ try {
 
 主なコード: `invalid-date`・`invalid-month-day`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-option`・`out-of-range`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
 
+### 設定の診断
+
+`bizdays-toolkit/diagnose` の `diagnoseCalendar`・`diagnoseSchedule` は、設定を調べて問題を一覧で返します。例外は投げません（問題がなければ空の配列）。
+
+```ts
+import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
+import { jp } from "bizdays-toolkit/jp";
+
+diagnoseCalendar({
+  holidays: jp,
+  closedWeekdays: [0],
+  closedRecurring: [
+    { weekday: 3, nth: 3, name: "第 3 水曜定休" },
+    { weekday: 3, nth: 3, months: [8], name: "8 月の第 3 水曜" }, // 先の規則に含まれる
+    { weekday: 0, name: "日曜休み" }, // 定休日の曜日と同じ
+  ],
+  closedDates: ["2100-01-05"], // 日本の祝日の対応年（1955〜2099 年）の外
+  closeAnnual: ["12-31"], // 打ち間違い
+});
+// [
+//   { severity: "warning", code: "unknown-option", path: "closeAnnual", message: '… (did you mean "closedAnnual"?)' },
+//   { severity: "warning", code: "out-of-range", path: "closedDates[0]", relatedPath: "holidays", message: "…" },
+//   { severity: "warning", code: "shadowed", path: "closedRecurring[1]", relatedPath: "closedRecurring[0]", message: "…" },
+//   { severity: "info", code: "redundant", path: "closedRecurring[2]", message: "…" },
+// ]
+```
+
+| 重さ（`severity`） | `code`                  | 内容                                                                                                                       |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `error`            | 例外と同じコード        | `createCalendar`・`createSchedule` で例外になる誤り。作成時は最初の 1 件で止まりますが、診断ではすべて返します             |
+| `error`            | `invalid-provider-data` | 祝日の提供元が返したデータの誤り。作成時は使った年だけを調べますが、診断では対応年のすべての年を調べます                   |
+| `warning`          | `unknown-option`        | 知らないキー（作成時は無視されます）。近い既知のキーがあれば `message` に候補を挙げます                                    |
+| `warning`          | `shadowed`              | 同じ種類の先の規則（`relatedPath`）に完全に含まれ、決して使われない規則                                                    |
+| `warning`          | `never-matches`         | 当てはまる日がない繰り返しの規則（`{ day: 30, months: [2] }` など）                                                        |
+| `warning`          | `out-of-range`          | 個別の日付が祝日の提供元（`relatedPath`）の対応年の外                                                                      |
+| `warning`          | `no-business-day`       | 営業日が 1 日もない設定（営業日カレンダーのみ。営業日を探すと例外になります）                                              |
+| `info`             | `redundant`             | 取り除いても結果が変わらない規則（先の規則の組み合わせに覆われる、定休日の曜日と同じ、スケジュールで曜日の値と同じ値など） |
+
+- 判定には `code` を使ってください。`message` は英語で、文言は変わることがあります。`code` は将来の版で増えることがあります
+- `error` があるときは、規則どうしの診断（`shadowed`・`redundant` など）は行いません
+- `shadowed` は同じ種類の規則どうし（個別の日付どうし、毎年の月日どうし、繰り返しの規則どうし）だけを調べます。判定の順番は固定なので、種類をまたいで使われない規則は `redundant` として見つかります。臨時営業日（`openDates`）と臨時休業日（`closedDates`）は同じ種類で、先の臨時営業日に含まれる臨時休業日は `shadowed` です
+- 繰り返しの規則の `shadowed` は、祝日の扱い（`onHolidayRule`）も見ます。たとえば `"under-holiday"` の規則は、同じ日に当たる `"over-holiday"` の規則を覆いません（祝日には後の規則が当たるため）
+- `redundant` は、規則を取り除いた結果と 1 日ずつ比べます。個別の日付はその期間を、毎年の月日と繰り返しの規則は個別の日付を除いた設定で、祝日の提供元の対応年（日本は 1955〜2099 年）を、提供元がなければ 2001〜2028 年（曜日と月日の組み合わせが一巡する 28 年）を調べます。スケジュールの値は、配列と普通のオブジェクトなら中身で、それ以外（`Date` など）は同じものかで比べます
+- 日本の祝日を使う設定では、全日を調べるため数百ミリ秒かかります。リクエストごとではなく、テストや起動時の確認で使ってください。開発・テスト用の道具なので、アプリの本体のバンドルに入らないようサブパスに分けています
+
+テストで設定を守る例:
+
+```ts
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
+import { shippingOptions } from "../src/calendar.ts";
+
+test("出荷カレンダーの設定に問題がない", () => {
+  assert.deepEqual(diagnoseCalendar(shippingOptions), []);
+});
+```
+
 ## バージョン番号とデータの更新
 
 [Semantic Versioning](https://semver.org/lang/ja/) に従います。詳しくは [RELEASING.md](./RELEASING.md) を参照してください。
@@ -283,7 +342,7 @@ try {
 - 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.1.0"`）
 - 反映済みのデータは `dataVersion`（日本は反映済みの官報の年月）と `confirmedThrough` で確認できます
 - 1.0.0 までは、マイナー版で破壊的変更を行うことがあります
-- 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](./RELEASING.md) の「互換性の約束」）
+- 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコード・診断のコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](./RELEASING.md) の「互換性の約束」）
 
 ## 出典
 
@@ -302,6 +361,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **Japanese holidays verified day by day** against the Cabinet Office CSV, from 1955 through the latest year officially announced (substitute holidays, citizens' holidays, imperial ceremonies, and the Olympic moves included)
 - **Day-by-day schedules**: `createSchedule` returns any value per day (e.g. store hours) from weekly values, a holiday rule (`"weekday"`, `{ sameAs: 0 }`, or `{ value }`), annual dates and specific dates
 - **Recurring rules**: weekly, nth-weekday-of-month (`{ weekday: 3, nth: 3 }`) and day-of-month (`{ day: -1 }`) rules, with per-rule holiday handling (`onHolidayRule`: `"under-holiday"`, `"over-holiday"`, or `"after-holiday"` to move the rule to the next non-holiday, e.g. "closed on Mondays; if Monday is a holiday, closed on the next weekday")
+- **Option diagnostics**: `diagnoseCalendar` / `diagnoseSchedule` from `bizdays-toolkit/diagnose` return a list of problems without throwing: rules that can never apply (`shadowed`, `never-matches`), rules whose removal changes nothing (`redundant`), typos in option keys with a suggestion (`unknown-option`), dates outside the holiday provider's years (`out-of-range`), and calendars with no business day. Use `code` to branch; `message` is for humans
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed/open dates, holiday policy, `addBusinessDays`, cut-off times, and more
 - **Time-zone safe**: instants (`Date`, ISO strings with offsets, Temporal) are converted to a civil date in the calendar's time zone before evaluation
 - **Lightweight, zero dependencies**: about 6.5 KB min+gzip (about 7.5 KB with Japanese holidays), ESM, bundled types, `sideEffects: false`

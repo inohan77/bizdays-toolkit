@@ -32,7 +32,6 @@ export {
   type DayOfMonth,
   type DayOfMonthPattern,
   type HolidayLookup,
-  type HolidayRule,
   type HolidaySourceOptions,
   type HolidayValueRule,
   type KnownScheduleReason,

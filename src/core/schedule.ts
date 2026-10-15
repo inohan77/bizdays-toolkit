@@ -52,13 +52,6 @@ export type HolidayValueRule<T> =
   | { readonly value: T };
 
 /**
- * HolidayValueRule の旧名。繰り返しの規則の onHolidayRule と紛れないよう改名した。
- * @deprecated HolidayValueRule を使うこと。次以降のマイナー版で削除する
- * @public
- */
-export type HolidayRule<T> = HolidayValueRule<T>;
-
-/**
  * 月の第 n 回目（1〜5）。-1 は最終（その月の最後のその曜日）。
  * @public
  */
@@ -349,6 +342,8 @@ export const isWeekday = (value: unknown): value is Weekday =>
 
 /** @internal 個別の日付の規則（日数で表した期間） */
 export interface DateRule<T> {
+  /** 設定の中の位置（例: "closedDates[1]"） */
+  readonly path: string;
   readonly from: number;
   readonly to: number;
   readonly value: T;
@@ -357,6 +352,8 @@ export interface DateRule<T> {
 
 /** @internal 毎年の月日の規則 */
 export interface AnnualRule<T> {
+  /** 設定の中の位置（例: "closedAnnual[0]"） */
+  readonly path: string;
   readonly from: string;
   readonly to: string;
   readonly value: T;
@@ -425,7 +422,8 @@ export function compileDateRules<T>(
     if ("date" in entry) {
       checkUnknownKeys(c, p, entry, ["date", "name", "value"]);
       const n = checkDate(c, `${p}.date`, entry["date"]);
-      if (n !== undefined && value !== undefined) rules.push({ from: n, to: n, value, name });
+      if (n !== undefined && value !== undefined)
+        rules.push({ path: p, from: n, to: n, value, name });
       return;
     }
     if (!("from" in entry) || !("to" in entry)) {
@@ -444,7 +442,7 @@ export function compileDateRules<T>(
       );
       return;
     }
-    if (value !== undefined) rules.push({ from, to, value, name });
+    if (value !== undefined) rules.push({ path: p, from, to, value, name });
   });
   return rules;
 }
@@ -479,7 +477,9 @@ export function compileAnnualRules<T>(
     if ("date" in entry) {
       checkUnknownKeys(c, p, entry, ["date", "name", "value"]);
       const md = checkMonthDay(c, `${p}.date`, entry["date"]);
-      if (md !== undefined && value !== undefined) rules.push({ from: md, to: md, value, name });
+      if (md !== undefined && value !== undefined) {
+        rules.push({ path: p, from: md, to: md, value, name });
+      }
       return;
     }
     if (!("from" in entry) || !("to" in entry)) {
@@ -490,7 +490,7 @@ export function compileAnnualRules<T>(
     const from = checkMonthDay(c, `${p}.from`, entry["from"]);
     const to = checkMonthDay(c, `${p}.to`, entry["to"]);
     if (from !== undefined && to !== undefined && value !== undefined) {
-      rules.push({ from, to, value, name });
+      rules.push({ path: p, from, to, value, name });
     }
   });
   return rules;
@@ -498,6 +498,8 @@ export function compileAnnualRules<T>(
 
 /** @internal 繰り返しの規則（検証済み） */
 export interface RecurringRuleCompiled<T> {
+  /** 設定の中の位置（例: "closedRecurring[0]"） */
+  readonly path: string;
   /** 曜日の規則なら曜日、日の規則なら null */
   readonly weekday: Weekday | null;
   /** 第 n 回目の集合（null は毎週） */
@@ -624,6 +626,7 @@ export function compileRecurringRules<T>(
     if (ok && value !== undefined) {
       rules.push(
         Object.freeze({
+          path: p,
           weekday,
           nth,
           days,
@@ -945,18 +948,33 @@ export function compileScheduleOptions<T, Kind extends string>(
 /** 振替元をさかのぼる最大日数（祝日が続く日数の上限。2019 年の大型連休でも 10 日） */
 const MAX_HOLIDAY_RUN = 31;
 
-function matchAnnual(rule: AnnualRule<unknown>, monthDay: string): boolean {
+/** @internal 毎年の月日の規則がその月日 "MM-DD" に当てはまるか */
+export function matchAnnual(rule: AnnualRule<unknown>, monthDay: string): boolean {
   return rule.from <= rule.to
     ? monthDay >= rule.from && monthDay <= rule.to
     : monthDay >= rule.from || monthDay <= rule.to;
 }
 
-/** @internal 検証済みの規則からスケジュールを作る */
-export function buildSchedule<T, Kind extends string>(
+/** @internal 値を決めた規則（祝日・曜日で決まった場合は null） */
+export type DecidingRule<T> = DateRule<T> | AnnualRule<T> | RecurringRuleCompiled<T>;
+
+/** @internal 1 日分の結果と、値を決めた規則 */
+export interface Resolution<T, Kind extends string> {
+  readonly day: ScheduleDay<T, Kind>;
+  readonly rule: DecidingRule<T> | null;
+}
+
+type HolidayLookupInternal<Kind extends string> = ReturnType<typeof createHolidayLookup<Kind>>;
+
+/**
+ * @internal 検証済みの規則から、1 日分の値と値を決めた規則を返す関数を作る。
+ * 規則の診断では、規則を取り除いた版と結果を比べるために、祝日を調べる機能（lookup）を共有して作る
+ */
+export function createResolver<T, Kind extends string>(
   compiled: CompiledSchedule<T, Kind>,
-): Schedule<T, Kind> {
+  lookup: HolidayLookupInternal<Kind>,
+): (date: DateString) => Resolution<T, Kind> {
   const { weekly, holiday: holidayRule, annual, dates, recurring } = compiled;
-  const lookup = createHolidayLookup(compiled.source);
   const hasShift = recurring.some((r) => r.onHolidayRule === "after-holiday");
 
   /** 振替の判断に使う「祝日」か。提供元の対応年の外は祝日でないとみなす（振替元をさかのぼる途中で範囲を出る場合のため） */
@@ -981,16 +999,17 @@ export function buildSchedule<T, Kind extends string>(
     return undefined;
   }
 
-  function info(date: DateString): ScheduleDay<T, Kind> {
+  return function resolve(date: DateString): Resolution<T, Kind> {
     const dayNumber = toDayNumber(date);
     const weekday = weekdayOf(date);
     const holiday = lookup.holidayOn(date);
     const make = (
       value: T,
       reason: KnownScheduleReason,
+      rule: DecidingRule<T> | null,
       name: string | undefined,
       shiftedFrom?: DateString,
-    ): ScheduleDay<T, Kind> => {
+    ): Resolution<T, Kind> => {
       const result: { -readonly [K in keyof ScheduleDay<T, Kind>]: ScheduleDay<T, Kind>[K] } = {
         date,
         weekday,
@@ -1000,47 +1019,56 @@ export function buildSchedule<T, Kind extends string>(
       if (name !== undefined) result.name = name;
       if (holiday !== undefined) result.holiday = holiday;
       if (shiftedFrom !== undefined) result.shiftedFrom = shiftedFrom;
-      return Object.freeze(result);
+      return { day: Object.freeze(result), rule };
     };
 
     // 1. 個別の日付  2. 毎年の月日
     const byDate = dates.find((r) => dayNumber >= r.from && dayNumber <= r.to);
-    if (byDate) return make(byDate.value, "date", byDate.name);
+    if (byDate) return make(byDate.value, "date", byDate, byDate.name);
     const monthDay = date.slice(5);
     const byAnnual = annual.find((r) => matchAnnual(r, monthDay));
-    if (byAnnual) return make(byAnnual.value, "annual", byAnnual.name);
+    if (byAnnual) return make(byAnnual.value, "annual", byAnnual, byAnnual.name);
 
     if (holiday) {
       // 3. 祝日の上（"over-holiday"）
       const over = recurring.find(
         (r) => r.onHolidayRule === "over-holiday" && matchRecurring(r, date),
       );
-      if (over) return make(over.value, "recurring", over.name);
+      if (over) return make(over.value, "recurring", over, over.name);
       // 4. 祝日
       if (holidayRule !== "weekday") {
         const value = "sameAs" in holidayRule ? weekly[holidayRule.sameAs] : holidayRule.value;
-        return make(value as T, "holiday", holiday.name);
+        return make(value as T, "holiday", null, holiday.name);
       }
       // 祝日の扱いが「曜日どおり」なら、祝日の下（"under-holiday"）の規則も当てはまる。
       // "after-holiday" の規則は祝日には当てはめない（振り替える）
       const under = recurring.find(
         (r) => r.onHolidayRule === "under-holiday" && matchRecurring(r, date),
       );
-      if (under) return make(under.value, "recurring", under.name);
-      return make(weekly[weekday] as T, "weekday", undefined);
+      if (under) return make(under.value, "recurring", under, under.name);
+      return make(weekly[weekday] as T, "weekday", null, undefined);
     }
 
     // 5. 繰り返しの規則（祝日でない日。配列で先に書いたものが優先）。振替先も同じ段階で判定する
     for (const rule of recurring) {
-      if (matchRecurring(rule, date)) return make(rule.value, "recurring", rule.name);
+      if (matchRecurring(rule, date)) return make(rule.value, "recurring", rule, rule.name);
       if (hasShift && rule.onHolidayRule === "after-holiday") {
         const origin = shiftedOrigin(rule, date);
-        if (origin !== undefined) return make(rule.value, "recurring", rule.name, origin);
+        if (origin !== undefined) return make(rule.value, "recurring", rule, rule.name, origin);
       }
     }
     // 6. 曜日
-    return make(weekly[weekday] as T, "weekday", undefined);
-  }
+    return make(weekly[weekday] as T, "weekday", null, undefined);
+  };
+}
+
+/** @internal 検証済みの規則からスケジュールを作る */
+export function buildSchedule<T, Kind extends string>(
+  compiled: CompiledSchedule<T, Kind>,
+): Schedule<T, Kind> {
+  const lookup = createHolidayLookup(compiled.source);
+  const resolve = createResolver(compiled, lookup);
+  const info = (date: DateString): ScheduleDay<T, Kind> => resolve(date).day;
 
   const schedule: Schedule<T, Kind> = {
     timeZone: lookup.timeZone,

@@ -9,7 +9,6 @@ import {
   createCalendar,
   createSchedule,
   isBizdaysError,
-  type HolidayRule,
   type HolidayValueRule,
   type DayReason,
   type ErrorCode,
@@ -23,6 +22,12 @@ import {
   type JapaneseHolidayKind,
   type KnownJapaneseHolidayKind,
 } from "../src/jp/index.ts";
+import {
+  diagnoseCalendar,
+  diagnoseSchedule,
+  type DiagnosticCode,
+  type KnownDiagnosticCode,
+} from "../src/diagnose/index.ts";
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -134,5 +139,26 @@ createSchedule({ weekly: [1, 1, 1, 1, 1, 1, 1], recurring: [{ day: 1 }] });
 const shifted: string | undefined = createCalendar().dayInfo("2026-10-13").shiftedFrom;
 void shifted;
 
-// 旧名 HolidayRule は非推奨の別名として残り、HolidayValueRule と同じ型
-expectType<Equal<HolidayRule<number>, HolidayValueRule<number>>>();
+// 祝日の値の決め方の型（0.4.0 で HolidayValueRule に改名。旧名 HolidayRule は 0.5.0 で削除）
+const sundayHours: HolidayValueRule<number> = { sameAs: 0 };
+createSchedule({ weekly: [1, 2, 3, 4, 5, 6, 7], holiday: sundayHours });
+
+// --- 規則の診断（0.5.0） ---
+const diagnostics = diagnoseCalendar({ holidays: jp, closedWeekdays: [0] });
+// 打ち間違いのキーも型エラーにならずに渡せる（診断で見つけるため）
+diagnoseCalendar({ closeWeekdays: [0] });
+diagnoseSchedule({ weekly: [1, 1, 1, 1, 1, 1, 1], recurring: [{ day: 1, value: 0 }] });
+for (const d of diagnostics) {
+  // 重さは閉じた型（網羅できる）
+  expectType<Equal<typeof d.severity, "error" | "warning" | "info">>();
+  // code は開いた型
+  expectType<Equal<typeof d.code, DiagnosticCode>>();
+  const known: KnownDiagnosticCode = "shadowed";
+  const code: DiagnosticCode = "some-future-code";
+  void known;
+  void code;
+  const related: string | undefined = d.relatedPath;
+  void related;
+}
+// @ts-expect-error -- 診断の結果は変更できない
+diagnostics.push(diagnostics[0]!);

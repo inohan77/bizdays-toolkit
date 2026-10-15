@@ -53,7 +53,7 @@ for (const [subpath, target] of Object.entries(pkg.exports)) {
   const ok = size <= limit;
   if (!ok) failed = true;
   console.log(
-    `${ok ? "OK  " : "OVER"} ${subpath.padEnd(6)} gzip ${String(size).padStart(6)} bytes / limit ${limit} (${Math.round((size / limit) * 100)}%, ${files.length} files)`,
+    `${ok ? "OK  " : "OVER"} ${subpath.padEnd(10)} gzip ${String(size).padStart(6)} bytes / limit ${limit} (${Math.round((size / limit) * 100)}%, ${files.length} files)`,
   );
 }
 process.exit(failed ? 1 : 0);

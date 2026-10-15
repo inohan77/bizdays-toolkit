@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-16
+
+### Added
+
+- 規則の診断（サブパス `bizdays-toolkit/diagnose`）: `diagnoseCalendar(options)`・`diagnoseSchedule(options)`。例外を投げず、`{ severity, code, path, message, relatedPath? }` の配列を返す
+  - `error`: 作成で例外になる誤り（`code` は例外と同じ）。作成時は最初の 1 件で止まるが、診断ではすべて返す。祝日の提供元が返すデータは、対応年のすべての年を調べる（`invalid-provider-data`）
+  - `warning`: `unknown-option`（知らないキー。近い既知のキーを候補に挙げる）・`shadowed`（同じ種類の先の規則に完全に含まれる。`relatedPath` に先の規則）・`never-matches`（当てはまる日がない繰り返しの規則）・`out-of-range`（個別の日付が祝日の提供元の対応年の外）・`no-business-day`（営業日が 1 日もない設定）
+  - `info`: `redundant`（取り除いても結果が変わらない規則）
+- 型: `Diagnostic`・`DiagnosticSeverity`・`DiagnosticCode`・`KnownDiagnosticCode`
+
+### Removed
+
+- `HolidayRule` 型（0.4.0 で非推奨）: `HolidayValueRule` を使う
+
+### 開発
+
+- 診断の性質のテスト（`test/diagnose-properties.test.ts`）: 使われない・取り除いても変わらないと診断した規則を実際に取り除き、結果が変わらないことを乱数の設定で確かめる
+- サイズの上限に `./diagnose` を追加
+- `docs/decisions.md` に 15 番目（規則の診断の設計）を追加
+
 ## [0.4.0] - 2026-10-15
 
 ### Added
