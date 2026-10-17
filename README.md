@@ -35,7 +35,7 @@ A business-day calendar that combines public holidays with company or store clos
 pnpm add bizdays-toolkit
 ```
 
-Node.js 22.12 or later. CI tests the package on Node.js 22.12, 22, 24 and 26. The package is ESM only, but it can also be loaded from CommonJS with `require()` (tested in CI as well).
+Node.js 22.12 or later. CI tests the package on Node.js 22.12, 22, 24 and 26. The package is ESM only, but it can also be loaded from CommonJS with `require()` (tested in CI as well; on Node.js 22.12, `require()` prints an experimental-feature warning, which does not affect the result, and Node.js 26 prints none).
 
 ## Usage
 

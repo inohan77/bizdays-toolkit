@@ -9,6 +9,7 @@
  * src/jp/rules.ts の CONFIRMED_THROUGH・DATA_VERSION を更新する。
  */
 
+import "./strict-warnings.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { holidaysInYear, type JapaneseHoliday } from "../src/jp/index.ts";

@@ -36,7 +36,7 @@ jobs:
         run: npm pack --dry-run --ignore-scripts
 
   compat:
-    # 公開する dist を、engines の下限（22.12.0）と、check で使わない LTS の系列（26）で確かめる（decisions.md の 23 番）。
+    # 公開する dist を、engines の下限（22.12.0）と、LTS 入りを控えた系列（26）で確かめる（decisions.md の 23 番）。
     # これらの版ではテスト（.ts の直接実行）も npm 12 も動かないため、ビルドは固定の Node.js 24 で行い、
     # Node.js を切り替えてから、プレーンな JavaScript の確認（test/compat）だけを実行する
     runs-on: ubuntu-24.04

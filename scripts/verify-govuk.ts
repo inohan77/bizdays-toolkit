@@ -6,6 +6,7 @@
  *   pnpm verify:govuk --write            … 照合に成功したらテスト用フィクスチャを更新
  *   pnpm verify:govuk --report <path>    … 結果を Markdown で書き出す（監視のワークフローが issue の本文に使う）
  *   pnpm verify:govuk --skip-welsh       … ウェールズ語の名称の照合を飛ばす（翻訳ファイルを取得しない）
+ *   pnpm verify:govuk --simulate         … 取得したデータに架空の祝日を 1 件足して照合する（監視のワークフローの差分の経路を確かめる。--write とは併用できない）
  *
  * 照合すること:
  * - GOV.UK に載っている年の日付と名称が、ライブラリの計算結果と一致するか（England・Wales・Scotland・Northern Ireland）
@@ -18,6 +19,7 @@
  * 終了コード: 0 = 一致、1 = 差分あり、2 = 取得・解析の失敗（監視が機能していない）
  */
 
+import "./strict-warnings.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Holiday } from "../src/core/types.ts";
@@ -55,6 +57,8 @@ const file = option("--file");
 const report = option("--report");
 const write = args.includes("--write");
 const skipWelsh = args.includes("--skip-welsh");
+const simulate = args.includes("--simulate");
+if (simulate && write) throw new Error("--simulate cannot be combined with --write");
 const today = new Date().toISOString().slice(0, 10);
 
 /** 一時的な失敗で監視が issue を立てないよう、3 回まで試す */
@@ -125,6 +129,12 @@ const addSection = (title: string, lines: string[]): void => {
 
 async function main(): Promise<number> {
   const remote = parseGovuk(file ? readFileSync(file, "utf8") : await fetchText(JSON_URL));
+  if (simulate) {
+    // 最後の年の 10 月 1 日に、Scotland だけの架空の祝日を足す（ライブラリ・フィクスチャの両方と食い違う）
+    const last = remote.scotland.at(-1)!.date.slice(0, 4);
+    remote.scotland.push({ date: `${last}-10-01`, title: "Simulated bank holiday", notes: "" });
+    remote.scotland.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  }
   const remoteYears = [
     ...new Set(DIVISIONS.flatMap((d) => remote[d].map((e) => yearOf(e.date)))),
   ].sort();
@@ -267,7 +277,16 @@ function writeFixtures(
 
 function writeReport(status: "OK" | "DIFF" | "ERROR", error?: string): void {
   if (!report) return;
-  const lines = [`Result: **${status}** (checked ${today} with \`pnpm verify:govuk\`)`, ""];
+  const lines = [
+    `Result: **${status}** (checked ${today} with \`pnpm verify:govuk${simulate ? " --simulate" : ""}\`)`,
+    "",
+  ];
+  if (simulate) {
+    lines.push(
+      "This is a **simulation**: a fictitious holiday was added to the GOV.UK data to test the watch workflow. Close this issue after checking it.",
+      "",
+    );
+  }
   if (error)
     lines.push(
       "The check itself failed, so GOV.UK changes are not being detected.",

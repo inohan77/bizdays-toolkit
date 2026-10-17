@@ -4,6 +4,7 @@
  *   node scripts/release-notes.ts 0.1.0
  */
 
+import "./strict-warnings.ts";
 import { readFileSync } from "node:fs";
 
 const version = process.argv[2];

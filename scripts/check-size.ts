@@ -9,6 +9,7 @@
  * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。
  */
 
+import "./strict-warnings.ts";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";

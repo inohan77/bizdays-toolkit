@@ -8,6 +8,7 @@
  * - README.md（英語）と docs/README.ja.md（日本語）の構成がそろっていること（checkReadmes）
  */
 
+import "./strict-warnings.ts";
 import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";

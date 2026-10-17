@@ -6,6 +6,7 @@
  * ソースを直接読み込んで測る（Node.js が型を取り除いて実行するので、処理は dist と同じ）。
  */
 
+import "./strict-warnings.ts";
 import { performance } from "node:perf_hooks";
 import { createCalendar, createSchedule } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";

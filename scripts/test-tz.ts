@@ -5,6 +5,7 @@
  * 実行環境のタイムゾーンに依存する処理（Date#getHours など）が紛れ込むと、どれかの TZ で失敗する。
  */
 
+import "./strict-warnings.ts";
 import { spawnSync } from "node:child_process";
 
 const ZONES = [
@@ -19,7 +20,13 @@ for (const tz of ZONES) {
   // 結果の表示形式は Node.js の版で既定が違う（22 は TAP、24 は spec）ため、読み取れるよう TAP に固定する
   const result = spawnSync(
     process.execPath,
-    ["--test", "--test-reporter=tap", "test/**/*.test.ts"],
+    [
+      "--import",
+      "./scripts/strict-warnings.ts",
+      "--test",
+      "--test-reporter=tap",
+      "test/**/*.test.ts",
+    ],
     {
       env: { ...process.env, TZ: tz },
       encoding: "utf8",

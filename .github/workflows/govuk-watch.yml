@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: "17 21 * * *" # 毎日 06:17（日本時間）
   workflow_dispatch:
+    inputs:
+      simulate:
+        description: "Add a fictitious holiday to test the issue path (opens a govuk-data-simulation issue)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -26,6 +31,10 @@ jobs:
       actions: write # このワークフローの有効化（60 日間動きのないリポジトリで定期実行が止まるのを防ぐ）
     env:
       GH_TOKEN: ${{ github.token }}
+      # 模擬（手動実行の simulate）では、本物の差分の issue と混ざらないよう、別のラベルと題名にする
+      LABEL: ${{ inputs.simulate && 'govuk-data-simulation' || 'govuk-data' }}
+      TITLE: ${{ inputs.simulate && '[Simulation] ' || '' }}GOV.UK bank holidays differ from the bundled data
+      SIMULATE: ${{ inputs.simulate && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,7 +50,10 @@ jobs:
       - name: Compare with GOV.UK
         id: verify
         continue-on-error: true
-        run: node scripts/verify-govuk.ts --report "${REPORT}"
+        run: |
+          args=(--report "${REPORT}")
+          if [ "${SIMULATE}" = "true" ]; then args+=(--simulate); fi
+          node scripts/verify-govuk.ts "${args[@]}"
 
       - name: Add the latest changes to the GOV.UK data
         if: steps.verify.outcome == 'failure'
@@ -57,13 +69,13 @@ jobs:
       - name: Open or update the issue
         if: steps.verify.outcome == 'failure'
         run: |
-          gh label create govuk-data --repo "${GITHUB_REPOSITORY}" --color D93F0B \
+          gh label create "${LABEL}" --repo "${GITHUB_REPOSITORY}" --color D93F0B \
             --description "GOV.UK bank holidays differ from the bundled data" --force
-          number="$(gh issue list --repo "${GITHUB_REPOSITORY}" --label govuk-data --state open \
+          number="$(gh issue list --repo "${GITHUB_REPOSITORY}" --label "${LABEL}" --state open \
             --json number --jq '.[0].number // empty')"
           if [ -z "${number}" ]; then
-            gh issue create --repo "${GITHUB_REPOSITORY}" --label govuk-data \
-              --title "GOV.UK bank holidays differ from the bundled data" --body-file "${REPORT}"
+            gh issue create --repo "${GITHUB_REPOSITORY}" --label "${LABEL}" \
+              --title "${TITLE}" --body-file "${REPORT}"
             exit 0
           fi
           # 1 行目（確認した日付）を除いて内容が変わったときだけ、本文を更新してコメントで知らせる
@@ -81,5 +93,5 @@ jobs:
       - name: Fail when GOV.UK differs
         if: steps.verify.outcome == 'failure'
         run: |
-          echo "::error::GOV.UK bank holidays differ from the bundled data (see the govuk-data issue)" >&2
+          echo "::error::GOV.UK bank holidays differ from the bundled data (see the ${LABEL} issue)" >&2
           exit 1

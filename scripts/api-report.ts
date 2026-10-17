@@ -12,6 +12,7 @@
  * RELEASING.md の「互換性の約束」に沿っているか（入力への追加・出力の列挙への追加だけか）を確かめる。
  */
 
+import "./strict-warnings.ts";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import ts from "typescript";
 

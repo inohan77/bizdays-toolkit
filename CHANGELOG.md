@@ -6,12 +6,15 @@
 
 ### Changed
 
-- README に、CI で確かめている Node.js の版（22.12・22・24・26）と、CommonJS の `require()` で読み込めることを CI で確かめていることを書いた。`engines`（`>=22.12`）は変わらない
+- README に、CI で確かめている Node.js の版（22.12・22・24・26）と、CommonJS の `require()` で読み込めることを CI で確かめていることを書いた。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ることも書いた（結果には影響しない）。`engines`（`>=22.12`）は変わらない
 
 ### 開発
 
 - 公開する `dist` を ESM（`import`）と CommonJS（`require()`）で確かめるテスト（`test/compat`、`pnpm test:compat`）を追加し、`pnpm check` に含めた。CI に `compat` ジョブを追加し、engines の下限の Node.js 22.12.0 と 26.12.0 でも確かめる（これらの版ではテストの `.ts` と npm 12 が動かないため、ビルドは Node.js 24 で行い、Node.js を切り替えて `dist` だけを確かめる）
 
+- 自前のスクリプトとテストで Node.js の警告が出たら失敗にするようにした（`scripts/strict-warnings.ts`。`test/compat` は対象外）
+- `pnpm check` の最初に、開発用のツールの版を確かめる `scripts/check-toolchain.ts` を追加した（ワークフローどうしの Node.js の版、compat の行列の engines の下限、実行している Node.js・npm・pnpm と固定版の比較。固定版との違いは CI ではエラー、手元では注意の表示）
+- GOV.UK の監視のワークフローに、手動実行の入力 `simulate` を追加した。架空の祝日を 1 件足して照合し（`pnpm verify:govuk --simulate`）、ラベル `govuk-data-simulation` の issue で差分の経路を確かめられる
 - `pnpm check` のパッケージの中身の検査（`npm pack --dry-run`）を、Windows で Node.js の非推奨の警告（DEP0190）が出ない形で npm を起動するようにした
 
 ## [0.8.0] - 2026-10-17
