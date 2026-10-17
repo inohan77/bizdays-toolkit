@@ -8,7 +8,7 @@
  * - README.md（英語）と docs/README.ja.md（日本語）の構成がそろっていること（checkReadmes）
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -186,12 +186,13 @@ else
 for (const entry of pkg.files) {
   if (!existsSync(entry)) errors.push(`"files" entry not found: ${entry}`);
 }
-const windows = process.platform === "win32";
+// Windows の npm は npm.cmd で、シェルなしでは起動できない（Node.js が .cmd の直接の実行を拒む）。
+// シェルに引数の配列を渡すと DEP0190 の警告が出るため、Windows では固定のコマンド文字列で実行する
+const npmPack = ["pack", "--dry-run", "--json", "--ignore-scripts"];
 const packed = JSON.parse(
-  execFileSync(windows ? "npm.cmd" : "npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
-    encoding: "utf8",
-    shell: windows,
-  }),
+  process.platform === "win32"
+    ? execSync(`npm ${npmPack.join(" ")}`, { encoding: "utf8" })
+    : execFileSync("npm", npmPack, { encoding: "utf8" }),
 ) as unknown;
 // npm 10 は配列、npm 12 はパッケージ名をキーにしたオブジェクトで返す（どちらも読む）
 const packEntry = (

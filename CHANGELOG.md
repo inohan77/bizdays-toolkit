@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 開発
+
+- `pnpm check` のパッケージの中身の検査（`npm pack --dry-run`）を、Windows で Node.js の非推奨の警告（DEP0190）が出ない形で npm を起動するようにした
+
 ## [0.8.0] - 2026-10-17
 
 ### Added
