@@ -7,6 +7,11 @@ import "./strict-warnings.ts";
  * pnpm build の後に実行する。Node.js の標準機能だけで小さな Web サーバーを立てて dist と test/compat を配り、
  * ランナーに入っているドライバー（chromedriver・geckodriver・msedgedriver・safaridriver）を WebDriver（HTTP）で操作して、
  * ページの中で ES モジュールとして読み込んだ smoke.mjs の結果を受け取る。npm の依存は使わない。
+ *
+ * ブラウザーの側が一時的に止まることがある（ランナー上の Edge がページの読み込みで応答しなくなった例がある）ため、
+ * 時間制限を短くし、結果を受け取る前の段階（ドライバーの起動・セッションの作成・ページの読み込み・結果の待ち）で
+ * 止まったときだけ、ドライバーを起動し直して 1 回だけやり直す。確認の結果が FAIL のときはやり直さない
+ * （本物の失敗を隠さないため）。やり直したときは、その理由をログに出す。
  */
 
 import { spawn } from "node:child_process";
@@ -81,69 +86,99 @@ await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 const address = server.address();
 const sitePort = typeof address === "object" && address ? address.port : 0;
 
-const driverPort = 4444 + Math.floor(Math.random() * 1000);
-// chromedriver・msedgedriver は --port=N、geckodriver・safaridriver は --port N
-const args =
-  browser === "firefox" || browser === "safari"
-    ? ["--port", String(driverPort)]
-    : [`--port=${driverPort}`];
-const child = spawn(driver, args, {
-  stdio: ["ignore", "ignore", "inherit"],
-});
-const base = `http://127.0.0.1:${driverPort}`;
-
-async function call<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: { "content-type": "application/json" },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  const json = (await res.json()) as { value: T };
-  if (!res.ok) throw new Error(`${method} ${path}: ${JSON.stringify(json.value)}`);
-  return json.value;
-}
+/** 結果を受け取る前の段階での失敗（やり直しの対象） */
+class TransientError extends Error {}
 
 interface Outcome {
   results: { name: string; ok: boolean; error?: string }[];
   temporal: string;
 }
 
-let code = 1;
-let session: string | undefined;
-try {
-  for (let i = 0; ; i++) {
-    try {
-      if ((await call<{ ready?: boolean }>("GET", "/status")).ready !== false) break;
-    } catch {
-      // ドライバーの起動待ち
-    }
-    if (i > 50) throw new Error(`${browser}: the driver did not start`);
-    await new Promise((r) => setTimeout(r, 200));
-  }
-  const created = await call<{
-    sessionId: string;
-    capabilities?: { browserVersion?: string };
-  }>("POST", "/session", {
-    capabilities: { alwaysMatch: capabilities[browser] },
-  });
-  session = created.sessionId;
-  console.log(`${browser} ${created.capabilities?.browserVersion ?? "(unknown version)"}`);
-  await call("POST", `/session/${session}/url`, {
-    url: `http://127.0.0.1:${sitePort}/compat.html`,
-  });
+/** ページの読み込み・スクリプトの実行の時間制限（WebDriver の timeouts）と、各 HTTP 呼び出しの時間制限 */
+const PAGE_LOAD_MS = 30_000;
+const REQUEST_MS = 60_000;
 
-  let outcome: {
-    results: { name: string; ok: boolean; error?: string }[];
-    temporal: string;
-  } | null = null;
-  for (let i = 0; i < 100 && outcome === null; i++) {
-    outcome = await call<Outcome | null>("POST", `/session/${session}/execute/sync`, {
-      script: "return window.__results ?? null;",
-      args: [],
+async function runOnce(): Promise<Outcome> {
+  const driverPort = 4444 + Math.floor(Math.random() * 1000);
+  // chromedriver・msedgedriver は --port=N、geckodriver・safaridriver は --port N
+  const args =
+    browser === "firefox" || browser === "safari"
+      ? ["--port", String(driverPort)]
+      : [`--port=${driverPort}`];
+  const child = spawn(driver!, args, { stdio: ["ignore", "ignore", "inherit"] });
+  const base = `http://127.0.0.1:${driverPort}`;
+
+  async function call<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+    const res = await fetch(`${base}${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      signal: AbortSignal.timeout(REQUEST_MS),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    if (outcome === null) await new Promise((r) => setTimeout(r, 200));
+    const json = (await res.json()) as { value: T };
+    if (!res.ok) throw new Error(`${method} ${path}: ${JSON.stringify(json.value)}`);
+    return json.value;
   }
-  if (outcome === null) throw new Error(`${browser}: no result from the page`);
+
+  let session: string | undefined;
+  try {
+    let outcome: Outcome | null = null;
+    try {
+      for (let i = 0; ; i++) {
+        try {
+          if ((await call<{ ready?: boolean }>("GET", "/status")).ready !== false) break;
+        } catch {
+          // ドライバーの起動待ち
+        }
+        if (i > 50) throw new Error("the driver did not start");
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      const created = await call<{
+        sessionId: string;
+        capabilities?: { browserVersion?: string };
+      }>("POST", "/session", {
+        capabilities: {
+          alwaysMatch: {
+            ...capabilities[browser!],
+            timeouts: { pageLoad: PAGE_LOAD_MS, script: PAGE_LOAD_MS },
+          },
+        },
+      });
+      session = created.sessionId;
+      console.log(`${browser} ${created.capabilities?.browserVersion ?? "(unknown version)"}`);
+      await call("POST", `/session/${session}/url`, {
+        url: `http://127.0.0.1:${sitePort}/compat.html`,
+      });
+      for (let i = 0; i < 100 && outcome === null; i++) {
+        outcome = await call<Outcome | null>("POST", `/session/${session}/execute/sync`, {
+          script: "return window.__results ?? null;",
+          args: [],
+        });
+        if (outcome === null) await new Promise((r) => setTimeout(r, 200));
+      }
+    } catch (e) {
+      throw new TransientError(e instanceof Error ? e.message : String(e));
+    }
+    if (outcome === null) throw new TransientError("no result from the page");
+    return outcome;
+  } finally {
+    if (session) {
+      await call("DELETE", `/session/${session}`).catch(() => undefined);
+    }
+    child.kill();
+  }
+}
+
+let code = 1;
+try {
+  let outcome: Outcome;
+  try {
+    outcome = await runOnce();
+  } catch (e) {
+    if (!(e instanceof TransientError)) throw e;
+    console.log(`RETRY ${browser}: ${e.message}`);
+    outcome = await runOnce();
+  }
   for (const r of outcome.results) {
     console.log(`${r.ok ? "OK  " : "FAIL"} ${r.name}${r.error ? `: ${r.error}` : ""}`);
   }
@@ -152,8 +187,6 @@ try {
   );
   code = outcome.results.length > 0 && outcome.results.every((r) => r.ok) ? 0 : 1;
 } finally {
-  if (session) await call("DELETE", `/session/${session}`).catch(() => undefined);
-  child.kill();
   server.close();
 }
 process.exitCode = code;
