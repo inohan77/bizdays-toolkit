@@ -1,0 +1,82 @@
+name: Watch GOV.UK bank holidays
+
+# GOV.UK の bank holidays（英国の祝日）を毎日取得し、ライブラリ・フィクスチャと食い違えば
+# issue（ラベル govuk-data）を立てる。照合は scripts/verify-govuk.ts（pnpm verify:govuk と同じ）。
+# 臨時の祝日（国葬など）は 10 日ほど前に発表されることがあるため、毎日確かめる。
+# 差分を見つけたら、フィクスチャと src/uk/rules.ts を 1 つのコミットで直してパッチ版を出す（RELEASING.md）。
+
+on:
+  schedule:
+    - cron: "17 21 * * *" # 毎日 06:17（日本時間）
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: govuk-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write # 差分の issue の作成・更新
+      actions: write # このワークフローの有効化（60 日間動きのないリポジトリで定期実行が止まるのを防ぐ）
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPORT: ${{ runner.temp }}/govuk-report.md
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.21.0"
+
+      - name: Compare with GOV.UK
+        id: verify
+        continue-on-error: true
+        run: node scripts/verify-govuk.ts --report "${REPORT}"
+
+      - name: Add the latest changes to the GOV.UK data
+        if: steps.verify.outcome == 'failure'
+        run: |
+          {
+            echo "### Latest commits to the GOV.UK data (alphagov/frontend)"
+            echo
+            gh api "repos/alphagov/frontend/commits?path=lib/data/bank-holidays.json&per_page=3" \
+              --jq '.[] | "- \(.commit.committer.date[:10]) [\(.sha[:8])](\(.html_url)) \(.commit.message | split("\n")[0])"' \
+              || echo "- (could not read the commits)"
+          } >> "${REPORT}"
+
+      - name: Open or update the issue
+        if: steps.verify.outcome == 'failure'
+        run: |
+          gh label create govuk-data --repo "${GITHUB_REPOSITORY}" --color D93F0B \
+            --description "GOV.UK bank holidays differ from the bundled data" --force
+          number="$(gh issue list --repo "${GITHUB_REPOSITORY}" --label govuk-data --state open \
+            --json number --jq '.[0].number // empty')"
+          if [ -z "${number}" ]; then
+            gh issue create --repo "${GITHUB_REPOSITORY}" --label govuk-data \
+              --title "GOV.UK bank holidays differ from the bundled data" --body-file "${REPORT}"
+            exit 0
+          fi
+          # 1 行目（確認した日付）を除いて内容が変わったときだけ、本文を更新してコメントで知らせる
+          current="$(gh issue view "${number}" --repo "${GITHUB_REPOSITORY}" --json body --jq .body | tail -n +2)"
+          if [ "${current}" != "$(tail -n +2 "${REPORT}")" ]; then
+            gh issue edit "${number}" --repo "${GITHUB_REPOSITORY}" --body-file "${REPORT}"
+            gh issue comment "${number}" --repo "${GITHUB_REPOSITORY}" \
+              --body "The differences changed on $(TZ=Asia/Tokyo date +%F). See the updated description."
+          fi
+
+      - name: Keep the schedule enabled
+        if: always()
+        run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/govuk-watch.yml/enable"
+
+      - name: Fail when GOV.UK differs
+        if: steps.verify.outcome == 'failure'
+        run: |
+          echo "::error::GOV.UK bank holidays differ from the bundled data (see the govuk-data issue)" >&2
+          exit 1

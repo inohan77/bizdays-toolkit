@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [0.8.0] - YYYY-MM-DD
+
+### Added
+
+- 英国の bank holidays の提供元を `bizdays-toolkit/uk` に追加した。地域ごとに `england`（`GB-ENG`）・`wales`（`GB-WLS`）・`scotland`（`GB-SCT`）・`northernIreland`（`GB-NIR`）の 4 つで、タイムゾーンは `Europe/London`、対応年は 2012〜2099 年。2012 年から GOV.UK が公表している最後の年（2028 年）までのすべての日付と名称が、GOV.UK のデータ（現在の `https://www.gov.uk/bank-holidays.json` と、それより前の年は GOV.UK の公式リポジトリ alphagov/calendars・alphagov/frontend の履歴）と一致することをテストで確かめている。それより後の年は規則による予測（`confirmed: false`）。GOV.UK では England と Wales が 1 つの区分だが、別の提供元にした（日付は現在同じ）。Wales の祝日には、GOV.UK のウェールズ語版の名称を `names.cy` に付ける。種別（`kind`）は `"regular"`（毎年の祝日。布告で移動した年を含む）・`"substitute"`（振替）・`"special"`（布告による臨時の祝日）で、型は `UkHolidayKind`・`KnownUkHolidayKind`・`UkHoliday`
+- `pnpm verify:govuk`（`scripts/verify-govuk.ts`）を追加した。GOV.UK の JSON とウェールズ語の名称（alphagov/frontend の翻訳ファイル）を取得し、ライブラリの計算結果・テスト用フィクスチャと照合する
+
+### Changed
+
+- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表）を、マイナー版ではなく**パッチ版**で公開する方針に改めた（RELEASING.md）。0.x の期間は `^0.8.0` が 0.9.0 を受け取らないため、マイナー版では臨時の祝日が利用者に届かない。パッチ版なら 0.x でも 1.0.0 以降でも、`^`・`~` のどちらの指定にも届く
+- README を英語を既定にした（`README.md`）。日本語版は `README.ja.md` に移し、それぞれの冒頭に切り替えのリンクを置いた。npm に公開するファイルは変わらない（`README.ja.md` はパッケージに含めない）。README に書いている minify + gzip のサイズを測り直し、日本の祝日込みを約 8.5KB から約 9.0KB に直した（0.7.0 までの記載が実際より小さかった）。英国の祝日込みは約 9.0KB
+
+### 開発
+
+- `bizdays-toolkit/uk` のサイズの上限（gzip 6,700 バイト）を `size-limits.json` に追加した（エントリーの追加。計測は 6,225 バイト）。README の minify + gzip のサイズは、ルートのすべてと国の提供元（`jp`、または英国の 4 つ）を読み込む入口を esbuild で bundle・minify して gzip で測った（ルート 7,394 バイト、日本 8,953 バイト、英国 9,043 バイト）
+- GOV.UK の bank holidays を毎日照合するワークフロー（`.github/workflows/govuk-watch.yml`）を追加した。差分があれば `pnpm verify:govuk` の結果と alphagov/frontend の該当ファイルの最新のコミットを本文にした issue（ラベル `govuk-data`）を立て、同じ issue が開いていれば内容が変わったときだけ本文を更新してコメントする。取得に失敗した場合も、監視が機能していないことを issue で知らせる。60 日間動きのないリポジトリで定期実行が止まらないよう、実行のたびにワークフローを有効化し直す。フィクスチャはワークフローでは更新せず、規則の修正と同じコミットで更新する
+- `pnpm check`（`scripts/check-package.ts`）で、`README.md` と `README.ja.md` の見出しの数（段ごと）とコードブロックの数が一致し、互いへの切り替えのリンクがあることを確かめるようにした
+
 ## [0.7.0] - 2026-10-16
 
 ### Added
@@ -158,7 +176,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.4.0...v0.5.0

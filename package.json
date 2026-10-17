@@ -1,8 +1,9 @@
 {
   "name": "bizdays-toolkit",
-  "version": "0.7.0",
-  "description": "Holidays, business-day calendar and day-by-day schedules (e.g. store hours) with time zone support. Japanese holidays verified against the Cabinet Office data. / 祝日と営業日のカレンダー（タイムゾーン対応・日本の祝日は内閣府データで全日照合）",
+  "version": "0.8.0",
+  "description": "Holidays, business-day calendar and day-by-day schedules (e.g. store hours) with time zone support. Japanese holidays verified against the Cabinet Office data; UK bank holidays (England, Wales, Scotland, Northern Ireland) verified against GOV.UK. / 祝日と営業日のカレンダー（タイムゾーン対応・日本の祝日は内閣府、英国の bank holidays は GOV.UK のデータで全日照合）",
   "keywords": [
+    "bank-holidays",
     "bizdays",
     "business-day",
     "business-days",
@@ -10,6 +11,7 @@
     "holiday",
     "holidays",
     "japan",
+    "uk",
     "workday",
     "営業日",
     "祝日"
@@ -40,6 +42,10 @@
       "types": "./dist/jp/index.d.ts",
       "default": "./dist/jp/index.js"
     },
+    "./uk": {
+      "types": "./dist/uk/index.d.ts",
+      "default": "./dist/uk/index.js"
+    },
     "./diagnose": {
       "types": "./dist/diagnose/index.d.ts",
       "default": "./dist/diagnose/index.js"
@@ -57,6 +63,7 @@
     "fmt:check": "oxfmt --check",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm test:tz && pnpm build && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/api-report.ts",
     "verify:cao": "node scripts/verify-cao.ts",
+    "verify:govuk": "node scripts/verify-govuk.ts",
     "prepublishOnly": "pnpm check",
     "release-notes": "node scripts/release-notes.ts",
     "api:update": "pnpm build && node scripts/api-report.ts --update"

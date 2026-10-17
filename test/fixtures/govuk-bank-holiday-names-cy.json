@@ -1,0 +1,18 @@
+{
+  "source": "https://github.com/alphagov/frontend/blob/1082b2bd/config/locales/cy.yml",
+  "names": {
+    "Bank Holiday for the State Funeral of Queen Elizabeth II": "Gŵyl y Banc ar gyfer Angladd Gwladol y Frenhines Elizabeth II",
+    "Bank holiday for the coronation of King Charles III": "Gŵyl y banc ar gyfer coroni Brenin Siarl III",
+    "Boxing Day": "Dydd San Steffan",
+    "Christmas Day": "Dydd Nadolig",
+    "Early May bank holiday": "Gŵyl banc dechrau Mai",
+    "Early May bank holiday (VE day)": "Gŵyl banc dechrau Mai (diwrnod VE)",
+    "Easter Monday": "Llun y Pasg",
+    "Good Friday": "Gwener y Groglith",
+    "New Year’s Day": "Dydd Calan",
+    "Platinum Jubilee bank holiday": "Gŵyl banc Jiwbilî Blatinwm",
+    "Queen’s Diamond Jubilee": "Jiwbilî Ddiemwnt y Frenhines",
+    "Spring bank holiday": "Gŵyl banc y gwanwyn",
+    "Summer bank holiday": "Gŵyl banc yr haf"
+  }
+}

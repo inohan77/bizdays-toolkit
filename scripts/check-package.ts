@@ -5,6 +5,7 @@
  * - exports のすべてのエントリーが存在し、読み込めること
  * - ランタイムの依存（dependencies）がないこと
  * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
+ * - README.md（英語）と README.ja.md（日本語）の構成がそろっていること（checkReadmes）
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -124,6 +125,56 @@ errors.push(...checkChangelog(readFileSync("CHANGELOG.md", "utf8")));
 if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
   errors.push(`dependencies must be empty: ${Object.keys(pkg.dependencies).join(", ")}`);
 }
+
+/**
+ * README.md（英語。npm に公開する）と README.ja.md（日本語。リポジトリのみ）の構成を比べる。
+ *
+ * - 見出しの数が段ごとに一致し、コードブロックの数が一致すること（節や例の足し忘れを見つける。文章の中身は比べない）
+ * - 互いへの切り替えのリンクがあること。README.md からのリンクは、npm のページからも辿れるよう GitHub の絶対 URL
+ */
+function checkReadmes(en: string, ja: string): string[] {
+  const problems: string[] = [];
+  const base = pkg.repository.url.replace(/^git\+/, "").replace(/\.git$/, "");
+  const shape = (text: string) => {
+    const withoutCode = text.replace(/^```[\s\S]*?^```/gm, "");
+    const levels = [1, 2, 3, 4, 5, 6].map(
+      (n) => [...withoutCode.matchAll(new RegExp(`^#{${n}} `, "gm"))].length,
+    );
+    const fences = [...text.matchAll(/^```/gm)].length;
+    return { levels, blocks: fences / 2, oddFences: fences % 2 !== 0 };
+  };
+  const a = shape(en);
+  const b = shape(ja);
+  for (const [name, s] of [
+    ["README.md", a],
+    ["README.ja.md", b],
+  ] as const) {
+    if (s.oddFences) problems.push(`${name}: unbalanced code fences`);
+  }
+  a.levels.forEach((count, i) => {
+    if (count !== b.levels[i]) {
+      problems.push(
+        `README headings differ at level ${i + 1}: README.md ${count}, README.ja.md ${b.levels[i]}`,
+      );
+    }
+  });
+  if (a.blocks !== b.blocks) {
+    problems.push(`README code blocks differ: README.md ${a.blocks}, README.ja.md ${b.blocks}`);
+  }
+  if (!en.includes(`${base}/blob/main/README.ja.md`)) {
+    problems.push(`README.md must link to ${base}/blob/main/README.ja.md`);
+  }
+  if (!ja.includes("](./README.md)") && !ja.includes('href="./README.md"')) {
+    problems.push("README.ja.md must link to ./README.md");
+  }
+  return problems;
+}
+
+if (!existsSync("README.ja.md")) errors.push("README.ja.md not found");
+else
+  errors.push(
+    ...checkReadmes(readFileSync("README.md", "utf8"), readFileSync("README.ja.md", "utf8")),
+  );
 
 // 公開されるファイルを package.json の files から数える（npm を起動しないので OS に依存しない）。
 // npm が実際に含めるファイルは、CI のログ（npm pack --dry-run）でも確認できる

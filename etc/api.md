@@ -587,6 +587,62 @@ export declare function toJapanDateTime(input: DateInput): {
 };
 ```
 
+## bizdays-toolkit/uk
+
+### confirmedThrough (@public)
+
+```ts
+export declare const confirmedThrough: number;
+```
+
+### dataVersion (@public)
+
+```ts
+export declare const dataVersion: string;
+```
+
+### england (@public)
+
+```ts
+export declare const england: HolidayProvider<UkHolidayKind>;
+```
+
+### KnownUkHolidayKind (@public)
+
+```ts
+export type KnownUkHolidayKind = "regular" | "substitute" | "special";
+```
+
+### northernIreland (@public)
+
+```ts
+export declare const northernIreland: HolidayProvider<UkHolidayKind>;
+```
+
+### scotland (@public)
+
+```ts
+export declare const scotland: HolidayProvider<UkHolidayKind>;
+```
+
+### UkHoliday (@public)
+
+```ts
+export type UkHoliday = Holiday<UkHolidayKind>;
+```
+
+### UkHolidayKind (@public)
+
+```ts
+export type UkHolidayKind = KnownUkHolidayKind | (string & {});
+```
+
+### wales (@public)
+
+```ts
+export declare const wales: HolidayProvider<UkHolidayKind>;
+```
+
 ## bizdays-toolkit/diagnose
 
 ### diagnoseCalendar (@public)

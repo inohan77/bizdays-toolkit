@@ -2,7 +2,7 @@
  * 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダー（createCalendar）と、
  * 曜日・祝日・特定日で変わる値（営業時間など）のスケジュール（createSchedule）。
  *
- * 国ごとの祝日はサブパスから読み込む（例: "bizdays-toolkit/jp"）。
+ * 国ごとの祝日はサブパスから読み込む（例: "bizdays-toolkit/jp"・"bizdays-toolkit/uk"）。
  *
  * 公開する API には TSDoc の @public（安定）または @beta（マイナー版で変わりうる）を付ける。
  * 公開する名前と型は etc/api.md に記録し、pnpm check で意図しない変化を検出する。
