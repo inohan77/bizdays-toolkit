@@ -1,3 +1,7 @@
 node_modules/
 dist/
 *.tgz
+
+# scripts/test-workerd.ts の一時ディレクトリ
+.workerd-*/
+.readme-examples-*/

@@ -49,10 +49,12 @@ if (checkNodes.length === 0) errors.push("ci.yml: the check job has no node matr
 
 // 1. ワークフローどうしの Node.js の版
 const places: [string, string][] = [
-  ...literals(ciJobs.get("compat") ?? "").map((v): [string, string] => [
-    "ci.yml (compat build)",
-    v,
-  ]),
+  // ci.yml の check 以外のジョブ（compat のビルド・browsers・safari・workerd など）が固定する版
+  ...[...ciJobs]
+    .filter(([name]) => name !== "check")
+    .flatMap(([name, text]) =>
+      literals(text).map((v): [string, string] => [`ci.yml (${name})`, v]),
+    ),
   ...others.flatMap(([path, text]) => literals(text).map((v): [string, string] => [path, v])),
 ];
 for (const [where, version] of places) {

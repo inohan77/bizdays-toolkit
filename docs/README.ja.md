@@ -26,7 +26,7 @@
 - **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 7.4KB（日本の祝日込みで約 9.0KB、英国の祝日込みで約 9.0KB）。ESM・型定義同梱・`sideEffects: false` で、Node.js・ブラウザー・Edge ランタイムで動作します
+- **軽量・依存ゼロ**: minify + gzip で約 7.4KB（日本の祝日込みで約 9.0KB、英国の祝日込みで約 9.0KB。0.8.1 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。日本と英国を同梱しています
 
 ## インストール
@@ -35,7 +35,7 @@
 pnpm add bizdays-toolkit
 ```
 
-Node.js 22.12 以上。CI で Node.js 22.12・22・24・26 を確認しています。ESM のみですが、CommonJS からも `require()` で読み込めます（これも CI で確認しています。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ますが、結果には影響しません。Node.js 26 では出ません）。
+Node.js 22.12 以上。CI で Node.js 22.12・22・24・26、Chrome・Firefox・Edge（Linux）と Safari（macOS）、Cloudflare Workers（Workers のオープンソースの実行環境 workerd）を確認しています。ブラウザーは GitHub のランナーに入っている最新の安定版なので、ランナーの更新で版が変わります。ESM のみですが、CommonJS からも `require()` で読み込めます（これも CI で確認しています。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ますが、結果には影響しません。Node.js 26 では出ません）。ほかの実行環境（Deno・Bun・Vercel の Edge Runtime など）は確認していません。
 
 ## 使い方
 
@@ -310,6 +310,8 @@ const isOpen = hours !== null && time !== null && hours.open <= time && time < h
 | Temporal の `PlainDate`・`PlainDateTime`             | 暦日・日時（Temporal への依存はありません）    |
 | Temporal の `Instant`・`ZonedDateTime`               | 瞬間                                           |
 
+Temporal のオブジェクトは形で判別するので、Temporal には依存しません。CI では、Temporal を備えた実行環境で、本物の Temporal のオブジェクトでも確かめています（どの環境に Temporal があったかは CI のログに出ます）。
+
 カレンダーのタイムゾーンは、`timeZone` オプション、祝日の提供元のタイムゾーン、`"UTC"` の順に決まります。
 
 ### 他の国・地域の祝日
@@ -374,7 +376,7 @@ try {
 }
 ```
 
-主なコード: `invalid-date`・`invalid-month`・`invalid-month-day`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-option`・`out-of-range`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
+主なコード: `invalid-date`・`invalid-input`・`invalid-month`・`invalid-month-day`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-option`・`out-of-range`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
 
 ### 設定の診断
 

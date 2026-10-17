@@ -4,14 +4,22 @@
 
 ## [Unreleased]
 
+## [0.8.1] - YYYY-MM-DD
+
+ライブラリのコードは 0.8.0 と同じ。動作を確かめる環境を広げ、README の記述を確かめた範囲に合わせた。
+
 ### Changed
 
+- README の動作環境の記述を、CI で確かめた範囲に合わせた。「Node.js・ブラウザー・エッジランタイムで動作」を、確かめている環境（Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers）の明記に改め、確かめていない環境（Deno・Bun・Vercel の Edge Runtime など）も書いた。Temporal は形で判別していることと、本物の Temporal を備えた環境では CI で確かめていることを書いた。サイズの値に測った版（0.8.1）を添えた。エラーコードの一覧に `invalid-input` を足した
 - README に、CI で確かめている Node.js の版（22.12・22・24・26）と、CommonJS の `require()` で読み込めることを CI で確かめていることを書いた。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ることも書いた（結果には影響しない）。`engines`（`>=22.12`）は変わらない
 
 ### 開発
 
 - 公開する `dist` を ESM（`import`）と CommonJS（`require()`）で確かめるテスト（`test/compat`、`pnpm test:compat`）を追加し、`pnpm check` に含めた。CI に `compat` ジョブを追加し、engines の下限の Node.js 22.12.0 と 26.12.0 でも確かめる（これらの版ではテストの `.ts` と npm 12 が動かないため、ビルドは Node.js 24 で行い、Node.js を切り替えて `dist` だけを確かめる）
 
+- CI に、公開する `dist` をブラウザーと Cloudflare Workers で確かめるジョブを追加した。`browsers`（Chrome・Firefox・Edge。ランナーのドライバーを WebDriver で操作する `scripts/test-browsers.ts`）・`safari`（macOS）・`workerd`（版と SHA-256 を固定した公式のリリースの workerd で動かす `scripts/test-workerd.ts`）。確認の中身は `test/compat/smoke.mjs` に共通化し、本物の Temporal を備えた環境では Temporal のオブジェクトでも確かめる
+- `pnpm check` で、README（英語・日本語）のコード例を実行し、コメントに書いた結果と比べるようにした（`scripts/check-readme-examples.ts`）
+- `pnpm check`（`scripts/check-package.ts`）で、`src` が Node.js 固有の機能（`node:` のモジュール・`process`・`Buffer` など）を使っていないことを確かめるようにした
 - 自前のスクリプトとテストで Node.js の警告が出たら失敗にするようにした（`scripts/strict-warnings.ts`。`test/compat` は対象外）
 - `pnpm check` の最初に、開発用のツールの版を確かめる `scripts/check-toolchain.ts` を追加した（ワークフローどうしの Node.js の版、compat の行列の engines の下限、実行している Node.js・npm・pnpm と固定版の比較。固定版との違いは CI ではエラー、手元では注意の表示）
 - GOV.UK の監視のワークフローに、手動実行の入力 `simulate` を追加した。架空の祝日を 1 件足して照合し（`pnpm verify:govuk --simulate`）、ラベル `govuk-data-simulation` の issue で差分の経路を確かめられる
@@ -192,7 +200,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.5.0...v0.6.0

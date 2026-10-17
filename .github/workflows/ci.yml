@@ -61,6 +61,65 @@ jobs:
           node --version
           node --test test/compat/esm.test.mjs test/compat/cjs.test.cjs
 
+  browsers:
+    # 公開する dist を、ランナーに入っている Chrome・Firefox・Edge で確かめる（decisions.md の 26 番）。
+    # ブラウザーの版はランナーのイメージの更新で変わる（その時点の最新の安定版で確かめる）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      # ドライバーの場所は、ランナーのイメージが環境変数で示す
+      - run: node scripts/test-browsers.ts chrome "${CHROMEWEBDRIVER}/chromedriver"
+      - run: node scripts/test-browsers.ts firefox "${GECKOWEBDRIVER}/geckodriver"
+      - run: node scripts/test-browsers.ts edge "${EDGEWEBDRIVER}/msedgedriver"
+
+  safari:
+    # Safari は macOS のランナーでだけ動く。macos-latest は移り変わるので版を固定する
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - run: sudo safaridriver --enable
+      - run: node scripts/test-browsers.ts safari /usr/bin/safaridriver
+
+  workerd:
+    # 公開する dist を、Cloudflare Workers の実行環境（workerd。本番と同じコード）で確かめる（decisions.md の 26 番）。
+    # workerd は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - name: Install workerd
+        env:
+          WORKERD_VERSION: "1.20261014.1"
+          WORKERD_SHA256: "f4fcdafea302598cc1dfd7ab155b50340019cd52bce9472553ba84d31283ba5b"
+        run: |
+          curl -fsSL -o "${RUNNER_TEMP}/workerd.gz" \
+            "https://github.com/cloudflare/workerd/releases/download/v${WORKERD_VERSION}/workerd-linux-64.gz"
+          echo "${WORKERD_SHA256}  ${RUNNER_TEMP}/workerd.gz" | sha256sum -c -
+          gunzip "${RUNNER_TEMP}/workerd.gz"
+          chmod +x "${RUNNER_TEMP}/workerd"
+          "${RUNNER_TEMP}/workerd" --version
+      - run: node scripts/test-workerd.ts "${RUNNER_TEMP}/workerd"
+
   workflows:
     # ワークフローの構文・式・シェルスクリプトの誤りを actionlint で検出する（pnpm check はワークフローを検査しない）。
     # actionlint は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）

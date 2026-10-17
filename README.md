@@ -26,7 +26,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **Month-based due dates**: due dates such as "closing on the 20th, paid on the 10th of the next month (next business day if closed)" or "the last business day of the month", with the four adjustment conventions used in finance (following, preceding, modified-following, modified-preceding)
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed and open dates, and holidays combine to compute "N business days later", "next business day after the cut-off time" and more
 - **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
-- **Lightweight, zero dependencies**: about 7.4 KB min+gzip (about 9.0 KB with Japanese holidays, about 9.0 KB with UK bank holidays). ESM, bundled types and `sideEffects: false`; runs on Node.js, browsers and edge runtimes
+- **Lightweight, zero dependencies**: about 7.4 KB min+gzip (about 9.0 KB with Japanese holidays, about 9.0 KB with UK bank holidays; measured for 0.8.1). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan and the UK are bundled
 
 ## Installation
@@ -35,7 +35,7 @@ A business-day calendar that combines public holidays with company or store clos
 pnpm add bizdays-toolkit
 ```
 
-Node.js 22.12 or later. CI tests the package on Node.js 22.12, 22, 24 and 26. The package is ESM only, but it can also be loaded from CommonJS with `require()` (tested in CI as well; on Node.js 22.12, `require()` prints an experimental-feature warning, which does not affect the result, and Node.js 26 prints none).
+Node.js 22.12 or later. CI tests the package on Node.js 22.12, 22, 24 and 26, on Chrome, Firefox and Edge (Linux) and Safari (macOS), and on Cloudflare Workers (workerd, the open-source Workers runtime). The browsers are the latest stable versions on GitHub's runners, so their versions change as the runners are updated. The package is ESM only, but it can also be loaded from CommonJS with `require()` (tested in CI as well; on Node.js 22.12, `require()` prints an experimental-feature warning, which does not affect the result, and Node.js 26 prints none). Other runtimes (such as Deno, Bun or Vercel's Edge Runtime) are not tested.
 
 ## Usage
 
@@ -315,6 +315,8 @@ Every method accepts the following inputs. Returned dates are always `"YYYY-MM-D
 | Temporal `PlainDate`, `PlainDateTime`                | A civil date or date and time (no dependency on Temporal)         |
 | Temporal `Instant`, `ZonedDateTime`                  | An instant                                                        |
 
+Temporal objects are recognized by their shape, so the package does not depend on Temporal. CI also checks real Temporal objects in the runtimes that provide Temporal (the CI log shows whether each runtime had it).
+
 The calendar's time zone is the `timeZone` option, then the holiday provider's time zone, then `"UTC"`.
 
 ### Holidays of other countries and regions
@@ -379,7 +381,7 @@ try {
 }
 ```
 
-Main codes: `invalid-date`, `invalid-month`, `invalid-month-day`, `invalid-time`, `invalid-range`, `invalid-weekday`, `invalid-time-zone`, `invalid-option`, `out-of-range`, `invalid-provider`, `invalid-provider-data`, `no-business-day`. Future versions may add codes.
+Main codes: `invalid-date`, `invalid-input`, `invalid-month`, `invalid-month-day`, `invalid-time`, `invalid-range`, `invalid-weekday`, `invalid-time-zone`, `invalid-option`, `out-of-range`, `invalid-provider`, `invalid-provider-data`, `no-business-day`. Future versions may add codes.
 
 ### Option diagnostics
 

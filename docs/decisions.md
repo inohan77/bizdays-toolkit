@@ -205,3 +205,22 @@ Wales の提供元の祝日は、GOV.UK のウェールズ語版の名称を `na
 - 確かめること: ワークフローどうしで同じ系列の Node.js の版がそろっていること（`ci.yml` の `check` の行列が基準。版を上げるときの書き換え漏れを防ぐ）、`compat` の行列に engines の下限が入っていること、実行している Node.js・npm・pnpm が固定版と同じこと
 - 固定版との違いは、CI ではエラー、手元では注意の表示だけにします。熟成ゲートや別の作業の都合で、手元を先に変えることがあるためです。RELEASING.md の「手元と CI で同じ版を使う」に戻すまでの間も、作業を止めないようにしています
 - スクリプトから起動する npm は、Windows でも `cmd.exe` から `npm.cmd` を直接呼ぶので、PowerShell の関数として定義された Safe Chain を通りません。スクリプトからレジストリに接続する npm の操作（`install` など）はしません
+
+## 26. 公開物をブラウザーと Cloudflare Workers でも確かめる
+
+公開する `dist` を、Node.js に加えて Chrome・Firefox・Edge（ubuntu のランナー）、Safari（macOS のランナー）、Cloudflare Workers の実行環境 workerd で確かめます。確認の中身は `test/compat/smoke.mjs` の 1 つで、Node.js・ブラウザー・workerd が同じものを呼びます。
+
+- README に「ブラウザー・エッジランタイムで動く」と書いていましたが、確かめていませんでした。ソースが標準の JavaScript と `Intl` だけで書かれていることは `pnpm check` で確かめ（`src` が `node:` のモジュール・`process`・`Buffer` などを使わない）、実際の動作は CI で確かめます
+- 新しい npm の依存は足しません。ブラウザーはランナーに入っているドライバーを WebDriver（HTTP）で操作し（`scripts/test-browsers.ts`。Node.js の `fetch` だけ）、workerd は版と SHA-256 を固定した公式のリリースを取得します（`scripts/test-workerd.ts`）
+- ブラウザーの版は固定できません。ランナーのイメージの更新で変わるので、「その時点の最新の安定版」で確かめています（README にもそう書く）
+- エッジランタイムは Cloudflare Workers だけにしました。workerd は Cloudflare が本番で動かしているのと同じコードで、Deno のチームも Cloudflare に加わって workerd との統合を進めています（2026 年 10 月）。Vercel の Edge Runtime を確かめるには npm の依存（`edge-runtime`）が要るので、確かめません。確かめていない環境は README に書きます
+- 本物の Temporal を持つ環境では、Temporal のオブジェクトを入力にした確認も行い、持たない環境では飛ばしたことをログに出します（黙って飛ばすと、確かめたように見えるため）
+
+## 27. README のコード例を pnpm check で実行する
+
+`pnpm check` は README（英語・日本語）の ts のコード例をすべて実行し、コメントに書いた結果（`expr; // "2026-11-02"` や、次の行から続く `// { ... }`）と比べます（`scripts/check-readme-examples.ts`）。
+
+- コード例は利用者が最もよく読む部分で、日英 2 つあるので、仕様の変更で片方だけ古くなりやすいところです
+- ブロックは 1 つずつ別のモジュールにして、ビルド済みの `dist` で実行します。ブロックが import していない公開の名前は補い、ほかのブロックで定義した値を使う断片には決まった定義（`FIXTURES`）を補います。利用者のプロジェクトのファイルを import するブロックは実行できないので飛ばします
+- 比べないもの: リテラルで始まらないコメント（説明だけのもの）、現在時刻（`new Date()`）を使う式。`{…}` は何にでも一致し、`…` を含む文字列は … 以外の部分を順に含めば一致とします
+- README のサイズの値（minify + gzip）は、測るのに新しい依存（esbuild など）が要るので自動では確かめません。測った版を添え、マイナー版で測り直します（RELEASING.md）

@@ -6,11 +6,13 @@
  * - ランタイムの依存（dependencies）がないこと
  * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
  * - README.md（英語）と docs/README.ja.md（日本語）の構成がそろっていること（checkReadmes）
+ * - ライブラリのソース（src）が Node.js 固有の機能を使っていないこと（checkPortableSource。decisions.md の 26 番）
  */
 
 import "./strict-warnings.ts";
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 interface Pkg {
@@ -173,6 +175,38 @@ function checkReadmes(en: string, ja: string): string[] {
   }
   return problems;
 }
+
+/**
+ * ライブラリのソースが Node.js 固有の機能（node: のモジュール・require・process・Buffer・__dirname など）を使っていないことを確かめる。
+ * ブラウザーや Cloudflare Workers でも動くことの前提で、実際の動作は CI の browsers・safari・workerd ジョブで確かめる
+ */
+function checkPortableSource(dir: string): string[] {
+  const problems: string[] = [];
+  const walk = (d: string): string[] =>
+    readdirSync(d).flatMap((name) => {
+      const path = join(d, name);
+      return statSync(path).isDirectory() ? walk(path) : [path];
+    });
+  const forbidden: [RegExp, string][] = [
+    [/from\s+["']node:/, "a node: module"],
+    [/\brequire\s*\(/, "require()"],
+    [/\bprocess\s*\./, "process"],
+    [/\bBuffer\b/, "Buffer"],
+    [/\b__(dirname|filename)\b/, "__dirname / __filename"],
+    [/\bglobal\s*\./, "global (use globalThis)"],
+  ];
+  for (const file of walk(dir).filter((f) => f.endsWith(".ts"))) {
+    // コメントの中の言及は数えない
+    const code = readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    for (const [pattern, label] of forbidden) {
+      if (pattern.test(code)) problems.push(`${file.replaceAll("\\", "/")}: uses ${label}`);
+    }
+  }
+  return problems;
+}
+errors.push(...checkPortableSource("src"));
 
 if (existsSync("README.ja.md"))
   errors.push("README.ja.md must not be at the root (npm always publishes root README* files)");

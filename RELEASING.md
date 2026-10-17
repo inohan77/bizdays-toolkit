@@ -61,6 +61,10 @@
 4. 春分・秋分の日が近似式と食い違っていた場合は、`rules.ts` に例外を追加する
 5. CHANGELOG の **Data** に記載して、パッチ版として公開する
 
+## README のサイズの値
+
+README の minify + gzip のサイズは、手で測った値です（測った版を README に添えています）。マイナー版を出すときと、`src` を大きく変えたときに測り直します。測り方は、ルートのすべてと国の提供元（`jp`、または英国の 4 つ）を読み込む入口を esbuild で bundle・minify して gzip で測ります。esbuild はリポジトリの依存にしないため、熟成ゲートを通る手元の環境で一時的に使います。
+
 ## 英国のデータの更新
 
 英国の bank holidays は、布告による臨時の祝日が 10 日ほど前に発表されることがあり、日本のように時期が決まっていません。そのため、GitHub Actions（`.github/workflows/govuk-watch.yml`）が毎日 GOV.UK と照合し、差分があればラベル `govuk-data` の issue を立てます（Actions の実行も失敗になります）。issue の本文には、`pnpm verify:govuk` の結果と、GOV.UK の公式リポジトリ（alphagov/frontend）の該当ファイルの最新のコミット（変更の理由の手がかり）が入ります。
@@ -98,6 +102,8 @@
 | サイズの上限               | エントリーごとの gzip のサイズを `size-limits.json` の上限と比べる。上限を上げる（エントリーを足す）ときは、CHANGELOG の「開発」に「サイズの上限」という言葉を含めて理由を書く。前の版のタグの上限より上がっているのに記載がなければ失敗する（CI とリリースのワークフローは履歴とタグを取得して確かめる。手元でタグがなければ、この確認だけ飛ばすので `git fetch --tags` しておく） |
 | 公開物の互換性             | `test/compat` の ESM（`import`）と CommonJS（`require()`）の確認を、`pnpm check` では手元・CI の版で、CI の `compat` ジョブでは engines の下限（22.12.0）と 26 系で、ビルド済みの `dist` に対して実行する                                                                                                                                                                           |
 | Node.js の警告             | 自前のスクリプトとテストで、Node.js の警告（非推奨の API・実験的な機能など）が出たら失敗にする（`scripts/strict-warnings.ts`）。`test/compat` は対象外                                                                                                                                                                                                                              |
+| ブラウザー・Workers        | CI のみ。`browsers` ジョブ（Chrome・Firefox・Edge）・`safari` ジョブ（macOS）・`workerd` ジョブで、ビルド済みの `dist` に `test/compat/smoke.mjs` を実行する。`pnpm check` は、`src` が Node.js 固有の機能を使っていないことを確かめる                                                                                                                                              |
+| README のコード例          | README（英語・日本語）の ts のコード例を実行し、コメントに書いた結果と比べる（`scripts/check-readme-examples.ts`）                                                                                                                                                                                                                                                                  |
 | ワークフローの検査         | CI のみ（`ci.yml` の `workflows` ジョブ）。`actionlint` で `.github/workflows` の構文・式・コンテキストの使い方と、`run:` のシェルスクリプト（ランナーの `shellcheck`）を検査する。`pnpm check` には含まない（ワークフローの誤りは GitHub に読み込まれるまで分からないため、CI で止める）                                                                                           |
 | API のスナップショット     | 公開している名前と型を `etc/api.md` と比べる。意図した変更なら `pnpm api:update` で更新してコミットする                                                                                                                                                                                                                                                                             |
 
@@ -108,6 +114,7 @@ Node.js・npm・pnpm は、手元の開発環境と CI で同じ版を使いま�
 - `.github/actions/setup-toolchain/action.yml`: npm と pnpm の版
 - `.github/workflows/ci.yml`・`release.yml`・`govuk-watch.yml`: Node.js の版とランナー（`ubuntu-24.04`）
 - `.github/workflows/ci.yml` の `compat` ジョブ: 公開物を確かめる Node.js の版（engines の下限と、LTS の系列・LTS 入りを控えた系列のうち `check` で使わないもの。decisions.md の 23 番）
+- `.github/workflows/ci.yml` の `workerd` ジョブ: workerd の版と SHA-256（公式のリリースの `workerd-linux-64.gz` を取得して計算する。熟成ゲートを過ぎた版を指定する）。`safari` ジョブの macOS のランナーの版（`macos-15`）
 - `.github/workflows/ci.yml` の `workflows` ジョブ: actionlint の版と SHA-256（公式のリリースの `actionlint_<版>_checksums.txt` の `linux_amd64` の行）
 
 `pnpm check` は最初に `scripts/check-toolchain.ts` で、ワークフローどうしの Node.js の版がそろっていること、compat の行列に engines の下限が入っていること、実行している Node.js・npm・pnpm が固定版と同じことを確かめます（固定版との違いは、CI ではエラー、手元では注意の表示）。

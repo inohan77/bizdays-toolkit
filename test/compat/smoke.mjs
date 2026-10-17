@@ -1,0 +1,105 @@
+/**
+ * 公開する dist の確認の中身（Node.js・ブラウザー・Cloudflare Workers の共通。decisions.md の 26 番）。
+ *
+ * どの実行環境でも動くよう、標準の JavaScript だけで書く（node:test・node:assert などは使わない）。
+ * 読み込み方は環境ごとに違うので、呼び出し側が各サブパスのモジュールを渡す。
+ * 本物の Temporal がある環境では、Temporal のオブジェクトを入力にした確認も行う。
+ *
+ * @param {{ root: any, jp: any, uk: any, diagnose: any }} modules
+ * @returns {{ results: { name: string, ok: boolean, error?: string }[], temporal: "native" | "absent" }}
+ */
+export function smoke({ root, jp, uk, diagnose }) {
+  const results = [];
+  const check = (name, fn) => {
+    try {
+      fn();
+      results.push({ name, ok: true });
+    } catch (e) {
+      results.push({ name, ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+  const equal = (actual, expected, label) => {
+    const a = JSON.stringify(actual);
+    const b = JSON.stringify(expected);
+    if (a !== b) throw new Error(`${label}: expected ${b}, got ${a}`);
+  };
+
+  check("日本の祝日（Date は日本時間で判定する）", () => {
+    equal(jp.isHoliday("2026-11-23"), true, "isHoliday");
+    equal(jp.isHoliday(new Date("2026-11-22T15:30:00Z")), true, "isHoliday(Date)");
+    equal(jp.getHoliday("2026-09-22")?.kind, "citizens", "getHoliday");
+  });
+
+  check("営業日カレンダー（年末年始の休業・タイムゾーンの変換・期日）", () => {
+    const calendar = root.createCalendar({
+      holidays: jp.jp,
+      closedWeekdays: [0],
+      closedAnnual: [{ from: "12-31", to: "01-03" }],
+    });
+    equal(calendar.addBusinessDays("2026-12-30", 1), "2027-01-04", "addBusinessDays");
+    equal(
+      calendar.civilOf(new Date("2026-11-22T15:30:00Z")),
+      { date: "2026-11-23", time: "00:30" },
+      "civilOf",
+    );
+    const due = calendar.dueDate(root.monthOf(root.closingMonth("2026-10-21", 20), 1), {
+      day: -1,
+      convention: "preceding",
+    });
+    equal(due, "2026-12-30", "dueDate");
+  });
+
+  check("英国の地域ごとの祝日（Europe/London の夏時間）", () => {
+    const edinburgh = root.createCalendar({ holidays: uk.scotland, closedWeekdays: [0, 6] });
+    equal(edinburgh.addBusinessDays("2026-06-12", 1), "2026-06-16", "addBusinessDays");
+    equal(uk.wales.holidaysInYear(2026)[0]?.names?.cy, "Dydd Calan", "names.cy");
+    const ukWide = root.createCalendar({ holidays: [uk.england, uk.northernIreland] });
+    equal(ukWide.isHoliday("2026-07-13"), true, "union");
+    equal(
+      root.createCalendar({ holidays: uk.england }).isHoliday(new Date("2026-08-30T23:30:00Z")),
+      true,
+      "BST",
+    );
+  });
+
+  check("日ごとの値・診断・エラーコード", () => {
+    const schedule = root.createSchedule({
+      holidays: jp.jp,
+      weekly: [0, 1, 1, 1, 1, 1, 0],
+      holiday: { sameAs: 0 },
+    });
+    equal(schedule.valueOn("2026-11-03"), 0, "valueOn");
+    equal(diagnose.diagnoseCalendar({ holidays: jp.jp, closedWeekdays: [0] }), [], "diagnose");
+    let code;
+    try {
+      root.createCalendar({ closedDates: ["2026-12-32"] });
+    } catch (e) {
+      code = root.isBizdaysError(e) ? e.code : "not a bizdays error";
+    }
+    equal(code, "invalid-date", "error code");
+  });
+
+  const T = globalThis.Temporal;
+  if (T !== undefined) {
+    check("本物の Temporal を入力にする", () => {
+      equal(jp.isHoliday(T.PlainDate.from("2026-11-23")), true, "PlainDate");
+      equal(jp.isHoliday(T.Instant.from("2026-11-22T15:30:00Z")), true, "Instant");
+      equal(
+        jp.isHoliday(T.ZonedDateTime.from("2026-11-23T00:30:00+09:00[Asia/Tokyo]")),
+        true,
+        "ZonedDateTime",
+      );
+      const calendar = root.createCalendar({ holidays: jp.jp });
+      equal(
+        calendar.civilOf(T.PlainDateTime.from("2026-11-23T10:00")),
+        {
+          date: "2026-11-23",
+          time: "10:00",
+        },
+        "PlainDateTime",
+      );
+    });
+  }
+
+  return { results, temporal: T === undefined ? "absent" : "native" };
+}
