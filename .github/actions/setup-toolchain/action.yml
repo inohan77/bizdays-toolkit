@@ -25,7 +25,7 @@ runs:
       shell: bash
       env:
         NPM_VERSION: "12.2.0"
-        PNPM_VERSION: "12.11.2"
+        PNPM_VERSION: "12.14.0"
       run: |
         npm install -g "npm@${NPM_VERSION}"
         npm install -g --allow-scripts=pnpm "pnpm@${PNPM_VERSION}"

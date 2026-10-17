@@ -26,14 +26,17 @@ jobs:
       actions: write # このワークフローの有効化（60 日間動きのないリポジトリで定期実行が止まるのを防ぐ）
     env:
       GH_TOKEN: ${{ github.token }}
-      REPORT: ${{ runner.temp }}/govuk-report.md
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "24.21.0"
+          node-version: "24.22.0"
+
+      # runner コンテキストはジョブの env では使えないため、結果のファイルのパスはここで決める
+      - name: Set the report path
+        run: echo "REPORT=${RUNNER_TEMP}/govuk-report.md" >> "${GITHUB_ENV}"
 
       - name: Compare with GOV.UK
         id: verify
