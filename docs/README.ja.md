@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/types-included-blue" alt="TypeScript types included">
 </p>
 
-<p align="center"><a href="./README.md">English</a> | <b>日本語</b></p>
+<p align="center"><a href="../README.md">English</a> | <b>日本語</b></p>
 
 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダーです。
 
@@ -436,13 +436,13 @@ test("出荷カレンダーの設定に問題がない", () => {
 
 ## バージョン番号とデータの更新
 
-[Semantic Versioning](https://semver.org/lang/ja/) に従います。詳しくは [RELEASING.md](./RELEASING.md) を参照してください。
+[Semantic Versioning](https://semver.org/lang/ja/) に従います。詳しくは [RELEASING.md](../RELEASING.md) を参照してください。
 
 - 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
 - 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.1.0"`）
 - 反映済みのデータは `dataVersion`（日本は反映済みの官報の年月、英国は反映済みの GOV.UK のデータの年月）と `confirmedThrough` で確認できます
 - 1.0.0 までは、マイナー版で破壊的変更を行うことがあります
-- 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコード・診断のコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](./RELEASING.md) の「互換性の約束」）
+- 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコード・診断のコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](../RELEASING.md) の「互換性の約束」）
 
 ## 出典
 

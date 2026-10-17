@@ -5,11 +5,11 @@
  * - exports のすべてのエントリーが存在し、読み込めること
  * - ランタイムの依存（dependencies）がないこと
  * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
- * - README.md（英語）と README.ja.md（日本語）の構成がそろっていること（checkReadmes）
+ * - README.md（英語）と docs/README.ja.md（日本語）の構成がそろっていること（checkReadmes）
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 interface Pkg {
@@ -127,7 +127,8 @@ if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
 }
 
 /**
- * README.md（英語。npm に公開する）と README.ja.md（日本語。リポジトリのみ）の構成を比べる。
+ * README.md（英語。npm に公開する）と docs/README.ja.md（日本語。リポジトリのみ）の構成を比べる。
+ * 日本語版をルートに置かないのは、npm がルートの README* を files の指定にかかわらず必ず含めるため。
  *
  * - 見出しの数が段ごとに一致し、コードブロックの数が一致すること（節や例の足し忘れを見つける。文章の中身は比べない）
  * - 互いへの切り替えのリンクがあること。README.md からのリンクは、npm のページからも辿れるよう GitHub の絶対 URL
@@ -147,50 +148,61 @@ function checkReadmes(en: string, ja: string): string[] {
   const b = shape(ja);
   for (const [name, s] of [
     ["README.md", a],
-    ["README.ja.md", b],
+    ["docs/README.ja.md", b],
   ] as const) {
     if (s.oddFences) problems.push(`${name}: unbalanced code fences`);
   }
   a.levels.forEach((count, i) => {
     if (count !== b.levels[i]) {
       problems.push(
-        `README headings differ at level ${i + 1}: README.md ${count}, README.ja.md ${b.levels[i]}`,
+        `README headings differ at level ${i + 1}: README.md ${count}, docs/README.ja.md ${b.levels[i]}`,
       );
     }
   });
   if (a.blocks !== b.blocks) {
-    problems.push(`README code blocks differ: README.md ${a.blocks}, README.ja.md ${b.blocks}`);
+    problems.push(
+      `README code blocks differ: README.md ${a.blocks}, docs/README.ja.md ${b.blocks}`,
+    );
   }
-  if (!en.includes(`${base}/blob/main/README.ja.md`)) {
-    problems.push(`README.md must link to ${base}/blob/main/README.ja.md`);
+  if (!en.includes(`${base}/blob/main/docs/README.ja.md`)) {
+    problems.push(`README.md must link to ${base}/blob/main/docs/README.ja.md`);
   }
-  if (!ja.includes("](./README.md)") && !ja.includes('href="./README.md"')) {
-    problems.push("README.ja.md must link to ./README.md");
+  if (!ja.includes("](../README.md)") && !ja.includes('href="../README.md"')) {
+    problems.push("docs/README.ja.md must link to ../README.md");
   }
   return problems;
 }
 
-if (!existsSync("README.ja.md")) errors.push("README.ja.md not found");
+if (existsSync("README.ja.md"))
+  errors.push("README.ja.md must not be at the root (npm always publishes root README* files)");
+if (!existsSync("docs/README.ja.md")) errors.push("docs/README.ja.md not found");
 else
   errors.push(
-    ...checkReadmes(readFileSync("README.md", "utf8"), readFileSync("README.ja.md", "utf8")),
+    ...checkReadmes(readFileSync("README.md", "utf8"), readFileSync("docs/README.ja.md", "utf8")),
   );
 
-// 公開されるファイルを package.json の files から数える（npm を起動しないので OS に依存しない）。
-// npm が実際に含めるファイルは、CI のログ（npm pack --dry-run）でも確認できる
-function walk(path: string): string[] {
-  if (!statSync(path).isDirectory()) return [path];
-  return readdirSync(path).flatMap((name) => walk(join(path, name)));
-}
-const published = new Set<string>(["package.json"]);
+// 公開されるファイルは、npm が実際に詰めるもの（npm pack --dry-run）で確かめる。
+// files の指定から推定すると、npm が指定にかかわらず含めるファイル（ルートの README* など）を見落とすため
 for (const entry of pkg.files) {
-  if (!existsSync(entry)) {
-    errors.push(`"files" entry not found: ${entry}`);
-    continue;
-  }
-  for (const file of walk(entry)) published.add(file.replaceAll("\\", "/"));
+  if (!existsSync(entry)) errors.push(`"files" entry not found: ${entry}`);
 }
-const files = [...published].sort();
+const windows = process.platform === "win32";
+const packed = JSON.parse(
+  execFileSync(windows ? "npm.cmd" : "npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+    encoding: "utf8",
+    shell: windows,
+  }),
+) as unknown;
+// npm 10 は配列、npm 12 はパッケージ名をキーにしたオブジェクトで返す（どちらも読む）
+const packEntry = (
+  Array.isArray(packed) ? packed[0] : Object.values(packed as Record<string, unknown>)[0]
+) as { files?: { path: string }[] } | undefined;
+if (!Array.isArray(packEntry?.files)) {
+  throw new Error(
+    `Unexpected output of npm pack --dry-run --json: ${JSON.stringify(packed).slice(0, 200)}`,
+  );
+}
+const files = packEntry.files.map((f) => f.path.replaceAll("\\", "/")).sort();
 const allowed = /^(dist\/.+\.(js|d\.ts)|README\.md|CHANGELOG\.md|LICENSE|package\.json)$/;
 for (const f of files) if (!allowed.test(f)) errors.push(`unexpected file in package: ${f}`);
 

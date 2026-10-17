@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/types-included-blue" alt="TypeScript types included">
 </p>
 
-<p align="center"><b>English</b> | <a href="https://github.com/inohan77/bizdays-toolkit/blob/main/README.ja.md">日本語</a></p>
+<p align="center"><b>English</b> | <a href="https://github.com/inohan77/bizdays-toolkit/blob/main/docs/README.ja.md">日本語</a></p>
 
 A business-day calendar that combines public holidays with company or store closures.
 
