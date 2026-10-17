@@ -94,6 +94,7 @@
 | ビルドと整形               | `tsc -p tsconfig.build.json`、`oxfmt --check`                                                                                                                                                                                                                                                                                                                                       |
 | パッケージの中身           | 公開するファイル（実際の `npm pack --dry-run` の結果）・exports・依存ゼロ。CHANGELOG の版の節（並び・日付）と末尾のリンク定義がそろっていること。`README.md`（英語）と `docs/README.ja.md`（日本語）の見出しの数・コードブロックの数が一致し、互いへの切り替えのリンクがあること                                                                                                    |
 | サイズの上限               | エントリーごとの gzip のサイズを `size-limits.json` の上限と比べる。上限を上げる（エントリーを足す）ときは、CHANGELOG の「開発」に「サイズの上限」という言葉を含めて理由を書く。前の版のタグの上限より上がっているのに記載がなければ失敗する（CI とリリースのワークフローは履歴とタグを取得して確かめる。手元でタグがなければ、この確認だけ飛ばすので `git fetch --tags` しておく） |
+| 公開物の互換性             | `test/compat` の ESM（`import`）と CommonJS（`require()`）の確認を、`pnpm check` では手元・CI の版で、CI の `compat` ジョブでは engines の下限（22.12.0）と 26 系で、ビルド済みの `dist` に対して実行する                                                                                                                                                                           |
 | ワークフローの検査         | CI のみ（`ci.yml` の `workflows` ジョブ）。`actionlint` で `.github/workflows` の構文・式・コンテキストの使い方と、`run:` のシェルスクリプト（ランナーの `shellcheck`）を検査する。`pnpm check` には含まない（ワークフローの誤りは GitHub に読み込まれるまで分からないため、CI で止める）                                                                                           |
 | API のスナップショット     | 公開している名前と型を `etc/api.md` と比べる。意図した変更なら `pnpm api:update` で更新してコミットする                                                                                                                                                                                                                                                                             |
 
@@ -103,6 +104,7 @@ Node.js・npm・pnpm は、手元の開発環境と CI で同じ版を使いま�
 
 - `.github/actions/setup-toolchain/action.yml`: npm と pnpm の版
 - `.github/workflows/ci.yml`・`release.yml`・`govuk-watch.yml`: Node.js の版とランナー（`ubuntu-24.04`）
+- `.github/workflows/ci.yml` の `compat` ジョブ: 公開物を確かめる Node.js の版（engines の下限と、`check` で使わない LTS の系列。decisions.md の 23 番）
 - `.github/workflows/ci.yml` の `workflows` ジョブ: actionlint の版と SHA-256（公式のリリースの `actionlint_<版>_checksums.txt` の `linux_amd64` の行）
 
 npm 12 の動作要件は Node.js `^22.22.2 || ^24.15.0` です。版を上げるときは、公開から 48 時間を過ぎた版を指定し、手元の環境もそろえてください。開発用の依存（devDependencies）は版の完全一致で指定し、更新時は `pnpm install` で `pnpm-lock.yaml` も更新してコミットします。

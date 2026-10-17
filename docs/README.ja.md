@@ -35,7 +35,7 @@
 pnpm add bizdays-toolkit
 ```
 
-Node.js 22.12 以上。ESM のみですが、Node.js 22.12 以降は CommonJS からも `require()` で読み込めます。
+Node.js 22.12 以上。CI で Node.js 22.12・22・24・26 を確認しています。ESM のみですが、CommonJS からも `require()` で読み込めます（これも CI で確認しています）。
 
 ## 使い方
 

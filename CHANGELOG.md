@@ -4,7 +4,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- README に、CI で確かめている Node.js の版（22.12・22・24・26）と、CommonJS の `require()` で読み込めることを CI で確かめていることを書いた。`engines`（`>=22.12`）は変わらない
+
 ### 開発
+
+- 公開する `dist` を ESM（`import`）と CommonJS（`require()`）で確かめるテスト（`test/compat`、`pnpm test:compat`）を追加し、`pnpm check` に含めた。CI に `compat` ジョブを追加し、engines の下限の Node.js 22.12.0 と 26.12.0 でも確かめる（これらの版ではテストの `.ts` と npm 12 が動かないため、ビルドは Node.js 24 で行い、Node.js を切り替えて `dist` だけを確かめる）
 
 - `pnpm check` のパッケージの中身の検査（`npm pack --dry-run`）を、Windows で Node.js の非推奨の警告（DEP0190）が出ない形で npm を起動するようにした
 

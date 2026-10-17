@@ -35,6 +35,32 @@ jobs:
       - name: Show package contents
         run: npm pack --dry-run --ignore-scripts
 
+  compat:
+    # 公開する dist を、engines の下限（22.12.0）と、check で使わない LTS の系列（26）で確かめる（decisions.md の 23 番）。
+    # これらの版ではテスト（.ts の直接実行）も npm 12 も動かないため、ビルドは固定の Node.js 24 で行い、
+    # Node.js を切り替えてから、プレーンな JavaScript の確認（test/compat）だけを実行する
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22.12.0", "26.12.0"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Check dist on Node.js ${{ matrix.node }}
+        run: |
+          node --version
+          node --test test/compat/esm.test.mjs test/compat/cjs.test.cjs
+
   workflows:
     # ワークフローの構文・式・シェルスクリプトの誤りを actionlint で検出する（pnpm check はワークフローを検査しない）。
     # actionlint は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）
