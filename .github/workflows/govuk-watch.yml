@@ -4,10 +4,17 @@ name: Watch GOV.UK bank holidays
 # issue（ラベル govuk-data）を立てる。照合は scripts/verify-govuk.ts（pnpm verify:govuk と同じ）。
 # 臨時の祝日（国葬など）は 10 日ほど前に発表されることがあるため、毎日確かめる。
 # 差分を見つけたら、フィクスチャと src/uk/rules.ts を 1 つのコミットで直してパッチ版を出す（RELEASING.md）。
+#
+# 起動のしかた（decisions.md の 28 番）:
+# - 主: 外部の cron サービス（cron-job.org）が、毎日 06:00（日本時間）に workflow_dispatch を API で呼ぶ。
+#   GitHub の schedule は高負荷時に遅れたり落ちたりし、このリポジトリでは一度も動かなかったため
+# - 予備: GitHub の schedule（時刻をずらして 18:17）。どちらかが動けば確認が入る
+# - 動いたことは、最後にハートビート（healthchecks.io）へ知らせる。知らせが一定時間来なければ、
+#   healthchecks.io からメールが届く（監視が動かなかったことに気付くため）
 
 on:
   schedule:
-    - cron: "17 21 * * *" # 毎日 06:17（日本時間）
+    - cron: "17 9 * * *" # 毎日 18:17（日本時間）。主の起動は cron-job.org（06:00）
   workflow_dispatch:
     inputs:
       simulate:
@@ -53,7 +60,13 @@ jobs:
         run: |
           args=(--report "${REPORT}")
           if [ "${SIMULATE}" = "true" ]; then args+=(--simulate); fi
+          # 終了コード（0 = 一致、1 = 差分あり、2 = 取得・解析の失敗）を、ハートビートの知らせ方に使う
+          set +e
           node scripts/verify-govuk.ts "${args[@]}"
+          code=$?
+          set -e
+          echo "code=${code}" >> "${GITHUB_OUTPUT}"
+          exit "${code}"
 
       - name: Add the latest changes to the GOV.UK data
         if: steps.verify.outcome == 'failure'
@@ -89,6 +102,23 @@ jobs:
       - name: Keep the schedule enabled
         if: always()
         run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/govuk-watch.yml/enable"
+
+      # 照合まで動いたら（一致・差分あり）成功を、照合そのものが失敗したら /fail を知らせる。
+      # 知らせ先の URL は Secrets（HEALTHCHECKS_PING_URL）に置く。未設定なら知らせずに通知だけ出す
+      - name: Send the heartbeat
+        if: always()
+        env:
+          PING_URL: ${{ secrets.HEALTHCHECKS_PING_URL }}
+          CODE: ${{ steps.verify.outputs.code }}
+        run: |
+          if [ -z "${PING_URL}" ]; then
+            echo "::notice::HEALTHCHECKS_PING_URL is not set; no heartbeat sent"
+            exit 0
+          fi
+          url="${PING_URL}"
+          if [ "${CODE}" != "0" ] && [ "${CODE}" != "1" ]; then url="${PING_URL}/fail"; fi
+          curl -fsS -m 10 --retry 3 -o /dev/null "${url}" \
+            || echo "::warning::could not send the heartbeat (healthchecks.io will alert if pings stop)"
 
       - name: Fail when GOV.UK differs
         if: steps.verify.outcome == 'failure'

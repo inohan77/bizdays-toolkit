@@ -85,7 +85,34 @@ README の minify + gzip のサイズは、手で測った値です（測った�
 
 差分があったときの経路（issue の作成・更新・コメント）を確かめるには、Actions の「Run workflow」で **simulate** に印を付けて実行します。GOV.UK のデータに架空の祝日を 1 件足して照合するので、ラベル `govuk-data-simulation`・題名に `[Simulation]` の付いた issue が作られ、実行は失敗になります（想定どおり）。もう一度実行すると、内容が同じなので issue は更新されません。確かめたら issue を閉じてください。監視の仕組み（`scripts/verify-govuk.ts` やワークフロー）を変えたときにも行います。
 
-監視のワークフローは、リポジトリに 60 日間動きがないと GitHub が定期実行を止めるのを防ぐため、実行のたびに自分を有効化し直します。それでも止まった場合に気付けるよう、Actions の画面で最後の実行日を時々確かめてください（手動で実行するには「Run workflow」）。
+### 監視の起動とハートビート
+
+GitHub の schedule は高負荷時に遅れたり落ちたりし、このリポジトリでは追加してから一度も動きませんでした。そこで、監視は次の 3 つで支えます（decisions.md の 28 番）。
+
+| 仕組み             | 役割                                                                           | 設定の場所                                                       |
+| ------------------ | ------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| cron-job.org       | 主の起動。毎日 06:00（日本時間）に `workflow_dispatch` を API で呼ぶ           | cron-job.org のジョブ（下記）                                    |
+| GitHub の schedule | 予備の起動。毎日 18:17（日本時間）                                             | `govuk-watch.yml` の `cron`                                      |
+| healthchecks.io    | 監視が動いたことの確認。最後のステップで知らせ、知らせが途絶えたらメールが届く | healthchecks.io のチェックと、Secrets の `HEALTHCHECKS_PING_URL` |
+
+ハートビートは、照合まで動いたとき（一致・差分あり）は成功を、照合そのものが失敗したとき（取得の失敗など）やそれより前で止まったときは `/fail` を知らせます。差分は、これまでどおり GitHub の失敗の通知と issue で知らせます。
+
+**cron-job.org のジョブ**
+
+- URL: `https://api.github.com/repos/inohan77/bizdays-toolkit/actions/workflows/govuk-watch.yml/dispatches`（POST）
+- ヘッダー: `Accept: application/vnd.github+json`、`Authorization: Bearer <トークン>`、`Content-Type: application/json`
+- 本文: `{"ref":"main"}`
+- 時刻: 毎日 06:00（タイムゾーン Asia/Tokyo）。失敗したときのメール通知を有効にする
+- トークン: Fine-grained のトークンを、このリポジトリだけ・**Actions の Read and write だけ**で作る（Contents は不要）。このトークンで起動できるのは `workflow_dispatch` のある govuk-watch だけで、コードの変更や npm への公開はできない。期限を設け（1 年など）、切れる前に作り直して cron-job.org のヘッダーを差し替える（切れると呼び出しが 401 で失敗し、cron-job.org の失敗の通知と、healthchecks.io の知らせの途絶の両方で分かる）
+
+**healthchecks.io のチェック**
+
+- 種類は Simple、Period は 1 day、Grace は 6 hours（最後の知らせから 30 時間来なければメールが届く）
+- チェックの Ping URL を、リポジトリの Secrets に `HEALTHCHECKS_PING_URL` として登録する（URL を知っていれば誰でも知らせを送れるため、公開しない）
+
+監視の仕組みを変えたときや、トークンを作り直したときは、cron-job.org の Test Run で govuk-watch が起動し、healthchecks.io に知らせが届くことを確かめてください。
+
+監視のワークフローは、リポジトリに 60 日間動きがないと GitHub が定期実行を止めるのを防ぐため、実行のたびに自分を有効化し直します（予備の schedule のため）。
 
 ## 品質の確認
 
