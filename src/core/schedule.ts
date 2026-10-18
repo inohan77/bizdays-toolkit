@@ -10,7 +10,8 @@
  *   6. weekly  … 曜日ごとの値
  *
  * "under-holiday" の規則は、祝日の扱いが "weekday"（曜日どおり）なら祝日にも当てはまる。
- * "after-holiday" の規則は、祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）
+ * "after-holiday" の規則は、祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）。
+ * 毎年の月日・繰り返しの規則の有効期間（effectiveFrom・effectiveTo）の外では、その規則は書かれていないのと同じ
  *
  * 営業日カレンダー（createCalendar）は、このスケジュールの真偽値版として作られている。
  */
@@ -116,13 +117,32 @@ export type Month = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
 
 /**
+ * 規則の有効期間（両端を含む "YYYY-MM-DD"）。期間の外では、その規則は書かれていないのと同じに扱う。
+ * @public
+ */
+export interface EffectivePeriod {
+  /** この日から有効（省略時は期限なし） */
+  readonly effectiveFrom?: DateString;
+  /** この日まで有効（省略時は期限なし） */
+  readonly effectiveTo?: DateString;
+}
+
+/**
  * 曜日の繰り返し。nth を省略すると毎週、指定すると月の第 n 回目（例: 第 3 水曜日）。
+ * interval と anchor を指定すると、anchor と同じ曜日で、anchor から interval 週おきの日（例: 隔週水曜日）。
  * @public
  */
 export interface WeekdayPattern {
   readonly weekday: Weekday;
-  /** 月の第 n 回目（その月で n 回目のその曜日。1〜7 日が第 1）。配列で複数指定できる */
+  /** 月の第 n 回目（その月で n 回目のその曜日。1〜7 日が第 1）。配列で複数指定できる。interval とは併用できない */
   readonly nth?: Nth | readonly Nth[];
+  /** 周期（週）。2 以上の整数。anchor と一緒に指定する（例: 2 で隔週） */
+  readonly interval?: number;
+  /**
+   * 周期の起点の日付 "YYYY-MM-DD"（weekday と同じ曜日）。この日の前後に interval 週おきに当てはまる。
+   * 起点より前の日にも当てはまるので、起点から始めるには effectiveFrom を併せて指定する
+   */
+  readonly anchor?: DateString;
   /** 当てはめる月（省略時はすべての月） */
   readonly months?: readonly Month[];
   readonly day?: never;
@@ -139,6 +159,8 @@ export interface DayOfMonthPattern {
   readonly months?: readonly Month[];
   readonly weekday?: never;
   readonly nth?: never;
+  readonly interval?: never;
+  readonly anchor?: never;
 }
 
 /**
@@ -151,11 +173,12 @@ export type RecurringPattern = WeekdayPattern | DayOfMonthPattern;
  * 繰り返しの規則（営業日カレンダーの closedRecurring・openRecurring）。
  * @public
  */
-export type RecurringRule = RecurringPattern & {
-  readonly name?: string;
-  /** 祝日に当たったときの扱い（既定: "under-holiday"） */
-  readonly onHolidayRule?: OnHolidayRule;
-};
+export type RecurringRule = RecurringPattern &
+  EffectivePeriod & {
+    readonly name?: string;
+    /** 祝日に当たったときの扱い（既定: "under-holiday"） */
+    readonly onHolidayRule?: OnHolidayRule;
+  };
 
 /**
  * 繰り返しの規則の値（スケジュールの recurring）。
@@ -167,7 +190,7 @@ export type RecurringValue<T> = RecurringRule & { readonly value: T };
  * 毎年の月日 "MM-DD" の値。
  * @public
  */
-export interface AnnualValue<T> {
+export interface AnnualValue<T> extends EffectivePeriod {
   readonly date: string;
   readonly value: T;
   readonly name?: string;
@@ -177,7 +200,7 @@ export interface AnnualValue<T> {
  * 毎年の月日の期間の値（from > to なら年をまたぐ。例: 12-31 〜 01-03）。
  * @public
  */
-export interface AnnualRangeValue<T> {
+export interface AnnualRangeValue<T> extends EffectivePeriod {
   readonly from: string;
   readonly to: string;
   readonly value: T;
@@ -350,14 +373,53 @@ export interface DateRule<T> {
   readonly name: string | undefined;
 }
 
+/** @internal 有効期間（日数。省略した側は null） */
+export interface CompiledPeriod {
+  readonly effectiveFrom: number | null;
+  readonly effectiveTo: number | null;
+}
+
 /** @internal 毎年の月日の規則 */
-export interface AnnualRule<T> {
+export interface AnnualRule<T> extends CompiledPeriod {
   /** 設定の中の位置（例: "closedAnnual[0]"） */
   readonly path: string;
   readonly from: string;
   readonly to: string;
   readonly value: T;
   readonly name: string | undefined;
+}
+
+/** @internal 日数 n が有効期間の中か */
+export const inPeriod = (rule: CompiledPeriod, n: number): boolean =>
+  (rule.effectiveFrom === null || n >= rule.effectiveFrom) &&
+  (rule.effectiveTo === null || n <= rule.effectiveTo);
+
+/** 有効期間（effectiveFrom・effectiveTo）を検証して日数にする（誤りは c に記録して undefined） */
+function checkPeriod(
+  c: IssueCollector,
+  path: string,
+  entry: Record<string, unknown>,
+): CompiledPeriod | undefined {
+  let ok = true;
+  const read = (key: "effectiveFrom" | "effectiveTo"): number | null => {
+    const raw = entry[key];
+    if (raw === undefined) return null;
+    const n = checkDate(c, `${path}.${key}`, raw);
+    if (n === undefined) ok = false;
+    return n ?? null;
+  };
+  const effectiveFrom = read("effectiveFrom");
+  const effectiveTo = read("effectiveTo");
+  if (!ok) return undefined;
+  if (effectiveFrom !== null && effectiveTo !== null && effectiveFrom > effectiveTo) {
+    c.error(
+      "invalid-range",
+      path,
+      `"effectiveFrom" must not be after "effectiveTo" (${String(entry["effectiveFrom"])} > ${String(entry["effectiveTo"])})`,
+    );
+    return undefined;
+  }
+  return { effectiveFrom, effectiveTo };
 }
 
 function checkName(c: IssueCollector, path: string, name: unknown): string | undefined {
@@ -474,11 +536,12 @@ export function compileAnnualRules<T>(
     }
     const value = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
+    const period = checkPeriod(c, p, entry);
     if ("date" in entry) {
-      checkUnknownKeys(c, p, entry, ["date", "name", "value"]);
+      checkUnknownKeys(c, p, entry, ["date", "name", "value", ...PERIOD_KEYS]);
       const md = checkMonthDay(c, `${p}.date`, entry["date"]);
-      if (md !== undefined && value !== undefined) {
-        rules.push({ path: p, from: md, to: md, value, name });
+      if (md !== undefined && value !== undefined && period) {
+        rules.push({ path: p, from: md, to: md, value, name, ...period });
       }
       return;
     }
@@ -486,24 +549,28 @@ export function compileAnnualRules<T>(
       c.error("invalid-option", p, 'must have "date" or both "from" and "to"');
       return;
     }
-    checkUnknownKeys(c, p, entry, ["from", "to", "name", "value"]);
+    checkUnknownKeys(c, p, entry, ["from", "to", "name", "value", ...PERIOD_KEYS]);
     const from = checkMonthDay(c, `${p}.from`, entry["from"]);
     const to = checkMonthDay(c, `${p}.to`, entry["to"]);
-    if (from !== undefined && to !== undefined && value !== undefined) {
-      rules.push({ path: p, from, to, value, name });
+    if (from !== undefined && to !== undefined && value !== undefined && period) {
+      rules.push({ path: p, from, to, value, name, ...period });
     }
   });
   return rules;
 }
 
 /** @internal 繰り返しの規則（検証済み） */
-export interface RecurringRuleCompiled<T> {
+export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   /** 設定の中の位置（例: "closedRecurring[0]"） */
   readonly path: string;
   /** 曜日の規則なら曜日、日の規則なら null */
   readonly weekday: Weekday | null;
   /** 第 n 回目の集合（null は毎週） */
   readonly nth: ReadonlySet<number> | null;
+  /** 周期（週）。null は毎週・第 n 回目・日の規則 */
+  readonly interval: number | null;
+  /** 周期の起点（日数）。interval が null なら null */
+  readonly anchor: number | null;
   /** 日の集合（曜日の規則では null） */
   readonly days: ReadonlySet<number> | null;
   /** 月の集合（null はすべての月） */
@@ -573,6 +640,10 @@ export function compileRecurringRules<T>(
     let weekday: Weekday | null = null;
     let nth: Set<number> | null = null;
     let days: Set<number> | null = null;
+    let interval: number | null = null;
+    let anchor: number | null = null;
+    const hasInterval = "interval" in entry;
+    const hasAnchor = "anchor" in entry;
     if (hasWeekday) {
       if (isWeekday(entry["weekday"])) weekday = entry["weekday"];
       else {
@@ -594,10 +665,36 @@ export function compileRecurringRules<T>(
         if (set) nth = set;
         else ok = false;
       }
-    } else {
-      if ("nth" in entry) {
-        c.error("invalid-option", `${p}.nth`, '"nth" can be used only with "weekday"');
+      if (hasInterval !== hasAnchor) {
+        c.error("invalid-option", p, '"interval" and "anchor" must be specified together');
         ok = false;
+      } else if (hasInterval) {
+        if ("nth" in entry) {
+          c.error("invalid-option", `${p}.interval`, '"interval" cannot be used with "nth"');
+          ok = false;
+        }
+        const i = entry["interval"];
+        if (!Number.isInteger(i) || (i as number) < 2) {
+          c.error("invalid-option", `${p}.interval`, "must be an integer of 2 or more (weeks)");
+          ok = false;
+        } else interval = i as number;
+        const a = checkDate(c, `${p}.anchor`, entry["anchor"]);
+        if (a === undefined) ok = false;
+        else if (weekday !== null && weekdayOf(entry["anchor"] as DateString) !== weekday) {
+          c.error(
+            "invalid-option",
+            `${p}.anchor`,
+            `must be on the same weekday as "weekday" (${String(entry["anchor"])} is weekday ${weekdayOf(entry["anchor"] as DateString)})`,
+          );
+          ok = false;
+        } else anchor = a;
+      }
+    } else {
+      for (const key of ["nth", "interval", "anchor"] as const) {
+        if (key in entry) {
+          c.error("invalid-option", `${p}.${key}`, `"${key}" can be used only with "weekday"`);
+          ok = false;
+        }
       }
       const set = checkSet(c, `${p}.day`, entry["day"], isDayOfMonth, "1-31 or -1 (last day)");
       if (set) days = set;
@@ -623,17 +720,21 @@ export function compileRecurringRules<T>(
       );
       ok = false;
     }
-    if (ok && value !== undefined) {
+    const period = checkPeriod(c, p, entry);
+    if (ok && period && value !== undefined) {
       rules.push(
         Object.freeze({
           path: p,
           weekday,
           nth,
+          interval,
+          anchor,
           days,
           months,
           onHolidayRule: onHoliday as OnHolidayRule,
           value,
           name,
+          ...period,
         }),
       );
     }
@@ -641,17 +742,27 @@ export function compileRecurringRules<T>(
   return rules;
 }
 
-/** @internal 繰り返しの規則がその日に当てはまるか（祝日かどうかは考えない） */
-export function matchRecurring(rule: RecurringRuleCompiled<unknown>, date: DateString): boolean {
+/**
+ * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・月）がその日に当てはまるか。
+ * 有効期間と祝日かどうかは考えない（規則の診断で、形どうしの包含を調べるために分けている）
+ */
+export function matchPattern(rule: RecurringRuleCompiled<unknown>, date: DateString): boolean {
   const { year, month, day } = parseDate(date);
   if (rule.months && !rule.months.has(month)) return false;
   const dim = daysInMonth(year, month);
   if (rule.weekday !== null) {
     if (weekdayOf(date) !== rule.weekday) return false;
+    if (rule.interval !== null)
+      return (toDayNumber(date) - rule.anchor!) % (7 * rule.interval) === 0;
     if (rule.nth === null) return true;
     return rule.nth.has(Math.ceil(day / 7)) || (rule.nth.has(-1) && day + 7 > dim);
   }
   return rule.days!.has(day) || (rule.days!.has(-1) && day === dim);
+}
+
+/** @internal 繰り返しの規則がその日に当てはまるか（有効期間を含む。祝日かどうかは考えない） */
+export function matchRecurring(rule: RecurringRuleCompiled<unknown>, date: DateString): boolean {
+  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date);
 }
 
 /** 規則の value を取り出す（value が必須の規則用） */
@@ -930,7 +1041,19 @@ const SCHEDULE_OPTION_KEYS = [
   "recurring",
 ];
 /** @internal 繰り返しの規則の項目 */
-export const RECURRING_RULE_KEYS = ["weekday", "nth", "day", "months", "name", "onHolidayRule"];
+/** @internal 有効期間の項目 */
+export const PERIOD_KEYS = ["effectiveFrom", "effectiveTo"];
+export const RECURRING_RULE_KEYS = [
+  "weekday",
+  "nth",
+  "interval",
+  "anchor",
+  "day",
+  "months",
+  "name",
+  "onHolidayRule",
+  ...PERIOD_KEYS,
+];
 
 /** @internal スケジュールの設定を検証して取り込む（誤りは c に集める） */
 export function compileScheduleOptions<T, Kind extends string>(
@@ -985,11 +1108,16 @@ export function compileScheduleOptions<T, Kind extends string>(
 /** 振替元をさかのぼる最大日数（祝日が続く日数の上限。2019 年の大型連休でも 10 日） */
 const MAX_HOLIDAY_RUN = 31;
 
-/** @internal 毎年の月日の規則がその月日 "MM-DD" に当てはまるか */
-export function matchAnnual(rule: AnnualRule<unknown>, monthDay: string): boolean {
+/** @internal 毎年の月日の規則の形がその月日 "MM-DD" に当てはまるか（有効期間は考えない） */
+export function matchMonthDay(rule: AnnualRule<unknown>, monthDay: string): boolean {
   return rule.from <= rule.to
     ? monthDay >= rule.from && monthDay <= rule.to
     : monthDay >= rule.from || monthDay <= rule.to;
+}
+
+/** @internal 毎年の月日の規則がその日に当てはまるか（有効期間を含む） */
+export function matchAnnual(rule: AnnualRule<unknown>, date: DateString): boolean {
+  return inPeriod(rule, toDayNumber(date)) && matchMonthDay(rule, date.slice(5));
 }
 
 /** @internal 値を決めた規則（祝日・曜日で決まった場合は null） */
@@ -1062,8 +1190,7 @@ export function createResolver<T, Kind extends string>(
     // 1. 個別の日付  2. 毎年の月日
     const byDate = dates.find((r) => dayNumber >= r.from && dayNumber <= r.to);
     if (byDate) return make(byDate.value, "date", byDate, byDate.name);
-    const monthDay = date.slice(5);
-    const byAnnual = annual.find((r) => matchAnnual(r, monthDay));
+    const byAnnual = annual.find((r) => matchAnnual(r, date));
     if (byAnnual) return make(byAnnual.value, "annual", byAnnual, byAnnual.name);
 
     if (holiday) {

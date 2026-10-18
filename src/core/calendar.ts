@@ -40,6 +40,7 @@ import {
   RECURRING_RULE_KEYS,
   type CompiledSchedule,
   type DayOfMonth,
+  type EffectivePeriod,
   type KnownScheduleReason,
   type RecurringRule,
   type HolidayLookup,
@@ -54,15 +55,17 @@ import type { Holiday } from "./types.ts";
 export type HolidayPolicy = "closed" | "open" | "ignore";
 
 /**
- * 毎年の月日 "MM-DD"（名前付きも可）。
+ * 毎年の月日 "MM-DD"（名前付き・有効期間付きも可）。
  * @public
  */
-export type AnnualDate = string | { readonly date: string; readonly name?: string };
+export type AnnualDate =
+  | string
+  | ({ readonly date: string; readonly name?: string } & EffectivePeriod);
 /**
  * 毎年の月日の期間（from > to なら年をまたぐ。例: 12-31 〜 01-03）。
  * @public
  */
-export interface AnnualRange {
+export interface AnnualRange extends EffectivePeriod {
   readonly from: string;
   readonly to: string;
   readonly name?: string;
@@ -89,15 +92,16 @@ export interface DateRange {
 export interface CalendarOptions<Kind extends string = string> extends HolidaySourceOptions<Kind> {
   /** 定休日の曜日（0 = 日曜日） */
   readonly closedWeekdays?: readonly Weekday[];
-  /** 毎年の休業日 */
+  /** 毎年の休業日（有効期間 effectiveFrom・effectiveTo を付けられる） */
   readonly closedAnnual?: readonly (AnnualDate | AnnualRange)[];
   /** 臨時休業日 */
   readonly closedDates?: readonly (SpecificDate | DateRange)[];
   /** 臨時営業日（ほかのすべての規則より優先） */
   readonly openDates?: readonly (SpecificDate | DateRange)[];
   /**
-   * 繰り返しの休業日（毎週・毎月の第 n 曜日・毎月の日）。
-   * 祝日に当たったときの扱いは規則ごとに onHolidayRule で指定する（既定: "under-holiday"）
+   * 繰り返しの休業日（毎週・隔週などの周期・毎月の第 n 曜日・毎月の日）。
+   * 祝日に当たったときの扱いは規則ごとに onHolidayRule で指定する（既定: "under-holiday"）。
+   * 有効期間（effectiveFrom・effectiveTo）を付けると、期間の外では書かれていないのと同じに扱う
    */
   readonly closedRecurring?: readonly RecurringRule[];
   /** 繰り返しの営業日。closedRecurring と同じ日に当たる場合はこちらが優先 */

@@ -8,14 +8,16 @@
  * - warning … 作れるが、意図と違う可能性が高いもの
  *     unknown-option … 知らないキー（作成時は無視される）。近い既知のキーがあれば message に候補を挙げる
  *     shadowed       … 同じ種類の先の規則に完全に覆われ、決して使われない（relatedPath に先の規則）
- *     never-matches  … 当てはまる日がない繰り返しの規則（2 月 30 日など）
- *     out-of-range   … 個別の日付が祝日の提供元の対応年の外にある（relatedPath に提供元）
+ *     never-matches  … 当てはまる日がない繰り返しの規則（2 月 30 日、有効期間の中に第 5 水曜日がない、など）
+ *     out-of-range   … 個別の日付、または規則の有効期間が祝日の提供元の対応年の外にある（relatedPath に提供元）
  *     no-business-day … 営業日が 1 日もない設定（営業日カレンダーのみ）
  * - info    … redundant: 取り除いても結果が変わらない規則
  *
  * 判定の順番（個別の日付 → 毎年の月日 → 繰り返し（over）→ 祝日 → 繰り返し（under・振替先）→ 曜日）は
  * 固定なので、shadowed は同じ種類の規則どうしに限って調べる。種類をまたいで使われない規則は
  * redundant（取り除いても結果が変わらない）として見つかる。
+ * 有効期間（effectiveFrom・effectiveTo）のある規則は期間の包含も、周期（interval）のある規則は周期の包含も
+ * shadowed の条件にする。redundant の走査の範囲は、周期がそろう長さと、範囲の外にある有効期間まで広げる
  */
 
 import { daysInMonth, fromDayNumber, parseDate, toDayNumber } from "./date.ts";
@@ -25,9 +27,10 @@ import {
   compileScheduleOptions,
   createHolidayLookup,
   createResolver,
-  matchAnnual,
-  matchRecurring,
+  matchMonthDay,
+  matchPattern,
   type AnnualRule,
+  type CompiledPeriod,
   type CompiledSchedule,
   type DecidingRule,
   type HolidaySource,
@@ -135,18 +138,38 @@ function closestKey(key: string, known: readonly string[]): string | undefined {
 // 調べる期間
 // ------------------------------------------------------------
 
-/** 繰り返しの規則の当てはまり方は、年の種類（1 月 1 日の曜日 × うるう年か）の 14 通りで決まる。28 年でそろう */
+/**
+ * 繰り返しの規則の当てはまり方は、年の種類（1 月 1 日の曜日 × うるう年か）の 14 通りで決まり、28 年でそろう。
+ * 周期（interval）のある規則は、28 年（10,227 日）が 7 × interval 日の倍数とは限らないので、別に周期を求める（patternCycle）
+ */
 const PATTERN_FROM = toDayNumber("2001-01-01");
-const PATTERN_TO = toDayNumber("2028-12-31");
+const PATTERN_DAYS = toDayNumber("2028-12-31") - PATTERN_FROM + 1;
 
-/** 祝日の提供元があるときに調べる年の上限（長すぎる対応年は 1900〜2099 年に絞る） */
+/** 祝日の提供元があるときに調べる年の上限（長すぎる対応年は 1900〜2099 年に絞る）。周期・有効期間で広げる長さの上限でもある */
 const MAX_WINDOW_YEARS = 200;
 /** 個別の日付の期間で、取り除いた結果と比べる最大日数 */
 const MAX_DATE_RULE_DAYS = 366 * MAX_WINDOW_YEARS;
 
-interface Window {
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+const lcm = (a: number, b: number): number => (a / gcd(a, b)) * b;
+
+/**
+ * 繰り返しの規則の当てはまり方がそろう日数（最大 MAX_WINDOW_YEARS 年）。
+ * 周期 k 週の規則は、28 年と 7k 日の最小公倍数でそろう（隔週なら 56 年）
+ */
+function patternCycle(rules: readonly RecurringRuleCompiled<unknown>[]): number {
+  let weeks = 1;
+  for (const rule of rules) if (rule.interval !== null) weeks = lcm(weeks, rule.interval);
+  return Math.min(lcm(PATTERN_DAYS, 7 * weeks), 366 * MAX_WINDOW_YEARS);
+}
+
+interface Range {
   readonly from: number;
   readonly to: number;
+}
+
+interface Window {
+  readonly ranges: readonly Range[];
   readonly label: string;
 }
 
@@ -158,41 +181,93 @@ function clipYears(from: number, to: number): [number, number] {
   return a <= b ? [a, b] : [from, from + MAX_WINDOW_YEARS - 1];
 }
 
-/** 毎年の月日・繰り返しの規則を調べる期間（祝日が年ごとに変わるので、提供元の対応年を使う） */
-function scanWindow(source: HolidaySource<string>): Window | undefined {
+const dayOfYear = (year: number, last: boolean): number =>
+  toDayNumber(`${String(year).padStart(4, "0")}-${last ? "12-31" : "01-01"}`);
+
+/**
+ * 毎年の月日・繰り返しの規則を調べる期間。祝日が年ごとに変わるので、提供元の対応年を使う。
+ * 提供元がなければ、繰り返しの規則がそろう周期（2001 年から 28 年、周期のある規則があれば長く）。
+ * 規則の有効期間が基準の範囲の外にあれば、その期間（期限のない側は周期の長さ）も加える
+ * （対応年の外で例外になる設定では加えない）
+ */
+function scanWindow(
+  source: HolidaySource<string>,
+  rules: readonly (CompiledPeriod & { readonly path: string })[],
+  cycle: number,
+): Window | undefined {
+  const ranges: Range[] = [];
+  let extend = true;
   if (source.providers.length === 0) {
-    return { from: PATTERN_FROM, to: PATTERN_TO, label: "2001-2028" };
-  }
-  const ranges = source.providers.map((p) => p.supportedYears);
-  let from: number;
-  let to: number;
-  if (source.outOfRange === "ignore") {
-    from = Math.min(...ranges.map((r) => r.from));
-    to = Math.max(...ranges.map((r) => r.to));
+    ranges.push({ from: PATTERN_FROM, to: PATTERN_FROM + cycle - 1 });
   } else {
-    from = Math.max(...ranges.map((r) => r.from));
-    to = Math.min(...ranges.map((r) => r.to));
+    const years = source.providers.map((p) => p.supportedYears);
+    let from: number;
+    let to: number;
+    if (source.outOfRange === "ignore") {
+      from = Math.min(...years.map((r) => r.from));
+      to = Math.max(...years.map((r) => r.to));
+    } else {
+      from = Math.max(...years.map((r) => r.from));
+      to = Math.min(...years.map((r) => r.to));
+      extend = false;
+    }
+    if (from > to) return undefined;
+    [from, to] = clipYears(from, to);
+    ranges.push({ from: dayOfYear(from, false), to: dayOfYear(to, true) });
   }
-  if (from > to) return undefined;
-  [from, to] = clipYears(from, to);
-  return {
-    from: toDayNumber(`${String(from).padStart(4, "0")}-01-01`),
-    to: toDayNumber(`${String(to).padStart(4, "0")}-12-31`),
-    label: `${from}-${to}`,
-  };
+  if (extend) {
+    for (const rule of rules) {
+      if (rule.effectiveFrom === null && rule.effectiveTo === null) continue;
+      const from = rule.effectiveFrom ?? rule.effectiveTo! - cycle + 1;
+      const to = Math.min(rule.effectiveTo ?? from + cycle - 1, from + 366 * MAX_WINDOW_YEARS - 1);
+      ranges.push({ from, to });
+    }
+  }
+  ranges.sort((a, b) => a.from - b.from);
+  const merged: Range[] = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.from <= last.to + 1)
+      merged[merged.length - 1] = { from: last.from, to: Math.max(last.to, r.to) };
+    else merged.push(r);
+  }
+  const yearOf = (n: number): number => parseDate(fromDayNumber(n)).year;
+  const label = merged.map((r) => `${yearOf(r.from)}-${yearOf(r.to)}`).join(", ");
+  return { ranges: merged, label };
+}
+
+/** 期間の日ごとに fn を呼ぶ（true を返したら止める） */
+function eachDay(window: Window, fn: (dayNumber: number) => boolean | void): void {
+  for (const { from, to } of window.ranges) {
+    for (let n = from; n <= to; n++) if (fn(n) === true) return;
+  }
 }
 
 // ------------------------------------------------------------
 // 規則の当てはまる日（覆われているかの判定用）
 // ------------------------------------------------------------
 
-/** 繰り返しの規則が当てはまる日（代表の 28 年間）。祝日・振替は考えない */
-function recurringMatches(rule: RecurringRuleCompiled<unknown>): Uint8Array {
-  const bits = new Uint8Array(PATTERN_TO - PATTERN_FROM + 1);
-  for (let n = PATTERN_FROM; n <= PATTERN_TO; n++) {
-    if (matchRecurring(rule, fromDayNumber(n))) bits[n - PATTERN_FROM] = 1;
+/** 繰り返しの規則の形（有効期間・周期の位相は除く）が当てはまる日（代表の 28 年間）。祝日・振替は考えない */
+function patternBits(rule: RecurringRuleCompiled<unknown>): Uint8Array {
+  const bits = new Uint8Array(PATTERN_DAYS);
+  // 周期のある規則は、位相を除いた形（毎週）で調べ、周期と位相は intervalCovers で比べる
+  const weekly = rule.interval === null ? rule : { ...rule, interval: null, anchor: null };
+  for (let i = 0; i < PATTERN_DAYS; i++) {
+    if (matchPattern(weekly, fromDayNumber(PATTERN_FROM + i))) bits[i] = 1;
   }
   return bits;
+}
+
+/**
+ * 繰り返しの規則が当てはまる日が 1 日でもあるか。
+ * 有効期間があればその期間（期限のない側は、当てはまり方がそろう周期の長さ）を、なければ周期の長さを 1 日ずつ調べる
+ */
+function matchesAnyDay(rule: RecurringRuleCompiled<unknown>, cycle: number): boolean {
+  const from =
+    rule.effectiveFrom ?? (rule.effectiveTo === null ? PATTERN_FROM : rule.effectiveTo - cycle + 1);
+  const to = Math.min(rule.effectiveTo ?? Infinity, from + cycle - 1);
+  for (let n = from; n <= to; n++) if (matchPattern(rule, fromDayNumber(n))) return true;
+  return false;
 }
 
 /** 毎年の月日の規則が当てはまる月日（うるう年の 366 日） */
@@ -206,14 +281,36 @@ const LEAP_MONTH_DAYS: readonly string[] = (() => {
   return list;
 })();
 
-function annualMatches(rule: AnnualRule<unknown>): Uint8Array {
-  return Uint8Array.from(LEAP_MONTH_DAYS, (md) => (matchAnnual(rule, md) ? 1 : 0));
+function annualBits(rule: AnnualRule<unknown>): Uint8Array {
+  return Uint8Array.from(LEAP_MONTH_DAYS, (md) => (matchMonthDay(rule, md) ? 1 : 0));
 }
 
-const isEmpty = (bits: Uint8Array): boolean => bits.every((b) => b === 0);
 /** a が当てはまる日に、b もすべて当てはまるか（a ⊆ b） */
 const isSubset = (a: Uint8Array, b: Uint8Array): boolean =>
   a.every((v, i) => v === 0 || b[i] === 1);
+
+/** 先の規則の有効期間が、後の規則の有効期間を含むか */
+const periodCovers = (earlier: CompiledPeriod, later: CompiledPeriod): boolean =>
+  (earlier.effectiveFrom === null ||
+    (later.effectiveFrom !== null && earlier.effectiveFrom <= later.effectiveFrom)) &&
+  (earlier.effectiveTo === null ||
+    (later.effectiveTo !== null && earlier.effectiveTo >= later.effectiveTo));
+
+/**
+ * 周期の点で、先の規則が後の規則を覆えるか（形の包含は patternBits で別に調べる）。
+ * 周期のある先の規則は、後の規則の周期がその倍数で、位相も同じ（起点の差が先の周期の倍数）ときだけ覆う
+ */
+function intervalCovers(
+  earlier: RecurringRuleCompiled<unknown>,
+  later: RecurringRuleCompiled<unknown>,
+): boolean {
+  if (earlier.interval === null) return true;
+  if (later.interval === null) return false;
+  return (
+    later.interval % earlier.interval === 0 &&
+    (later.anchor! - earlier.anchor!) % (7 * earlier.interval) === 0
+  );
+}
 
 /**
  * 先の繰り返しの規則 earlier が、後の規則 later を完全に覆えるか（祝日の扱いの組み合わせ）。
@@ -323,7 +420,8 @@ function analyze<T, Kind extends string>(
   const { source, dates, annual, recurring } = compiled;
   if (!checkProviderData(c, source as HolidaySource<string>)) return;
   const lookup = createHolidayLookup(source);
-  const window = scanWindow(source as HolidaySource<string>);
+  const cycle = patternCycle(recurring);
+  const window = scanWindow(source as HolidaySource<string>, [...annual, ...recurring], cycle);
   /** 使われないことが分かった規則（redundant を重ねて出さない） */
   const unused = new Set<DecidingRule<T>>();
 
@@ -357,10 +455,33 @@ function analyze<T, Kind extends string>(
     }
   });
 
-  // --- 毎年の月日: 覆われている ---
-  const annualBits = annual.map(annualMatches);
+  // --- 有効期間が提供元の対応年の外にある（対応年の外で例外になる設定では、その規則は決して使われない） ---
+  for (const rule of [...annual, ...recurring]) {
+    if (rule.effectiveFrom === null && rule.effectiveTo === null) continue;
+    source.providers.forEach((p, i) => {
+      const { from, to } = p.supportedYears;
+      const after = rule.effectiveFrom !== null && yearOf(rule.effectiveFrom) > to;
+      const before = rule.effectiveTo !== null && yearOf(rule.effectiveTo) < from;
+      if (!after && !before) return;
+      if (source.outOfRange === "throw") unused.add(rule);
+      c.warning(
+        "out-of-range",
+        rule.path,
+        `The effective period is outside the years supported by holiday provider ${p.id} (${from}-${to}); ` +
+          (source.outOfRange === "throw"
+            ? "looking up these dates throws, so this rule is never used"
+            : "holidays are not considered for these dates"),
+        source.providers.length === 1 ? "holidays" : `holidays[${i}]`,
+      );
+    });
+  }
+
+  // --- 毎年の月日: 覆われている（月日と有効期間の両方で） ---
+  const annualMatches = annual.map(annualBits);
   annual.forEach((rule, j) => {
-    const k = annualBits.findIndex((bits, i) => i < j && isSubset(annualBits[j]!, bits));
+    const k = annualMatches.findIndex(
+      (bits, i) => i < j && periodCovers(annual[i]!, rule) && isSubset(annualMatches[j]!, bits),
+    );
     if (k < 0) return;
     unused.add(rule);
     c.warning(
@@ -372,20 +493,27 @@ function analyze<T, Kind extends string>(
   });
 
   // --- 繰り返しの規則: 当てはまる日がない・覆われている ---
-  const recurringBits = recurring.map(recurringMatches);
+  const recurringBits = recurring.map(patternBits);
   recurring.forEach((rule, j) => {
     const bits = recurringBits[j]!;
-    if (isEmpty(bits)) {
+    if (!matchesAnyDay(rule, cycle)) {
       unused.add(rule);
       c.warning(
         "never-matches",
         rule.path,
-        "This rule matches no day (for example, a day that does not exist in the selected months)",
+        rule.effectiveFrom === null && rule.effectiveTo === null
+          ? "This rule matches no day (for example, a day that does not exist in the selected months)"
+          : "This rule matches no day within its effective period",
       );
       return;
     }
     const k = recurring.findIndex(
-      (r, i) => i < j && canCover(r, rule) && isSubset(bits, recurringBits[i]!),
+      (r, i) =>
+        i < j &&
+        canCover(r, rule) &&
+        periodCovers(r, rule) &&
+        intervalCovers(r, rule) &&
+        isSubset(bits, recurringBits[i]!),
     );
     if (k < 0) return;
     unused.add(rule);
@@ -402,9 +530,7 @@ function analyze<T, Kind extends string>(
   if (isCalendar && window && !dates.some((r) => r.value === true)) {
     const resolve = createResolver(without(compiled, null, true), lookup);
     let found = false;
-    for (let n = window.from; n <= window.to && !found; n++) {
-      if (resolve(fromDayNumber(n)).day.value === true) found = true;
-    }
+    eachDay(window, (n) => (found = resolve(fromDayNumber(n)).day.value === true));
     if (!found) {
       c.warning(
         "no-business-day",
@@ -456,10 +582,10 @@ function analyze<T, Kind extends string>(
   const base = without(compiled, null, true);
   const resolveBase = createResolver(base, lookup);
   const decided = new Map<DecidingRule<T>, number[]>(candidates.map((r) => [r, []]));
-  for (let n = window.from; n <= window.to; n++) {
+  eachDay(window, (n) => {
     const rule = resolveBase(fromDayNumber(n)).rule;
     if (rule) decided.get(rule)?.push(n);
-  }
+  });
   for (const rule of candidates) {
     const days = decided.get(rule)!;
     if (!redundant(rule, base, days)) continue;

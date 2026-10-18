@@ -4,6 +4,33 @@
 
 パッチ版（0.x.y の y）は、公式データの反映と不具合の修正なので、作業は要りません。
 
+## 0.10.0
+
+動作は変わりません（繰り返しの規則・毎年の月日の規則への有効期間 `effectiveFrom`・`effectiveTo` と、曜日の規則への周期 `interval`・`anchor` の追加。診断の改善）。`bizdays-toolkit/jp` の 2 つの関数が非推奨になったので、使っていれば書き換えてください（1.0.0 で削除します）。
+
+| 非推奨                   | 移行先（同じ変換・同じ型）                                                                               |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `toJapanDate(input)`     | ルートの `toDateString(input, "Asia/Tokyo")`、または営業日カレンダー・スケジュールの `dateOf(input)`     |
+| `toJapanDateTime(input)` | ルートの `toDateTimeParts(input, "Asia/Tokyo")`、または営業日カレンダー・スケジュールの `civilOf(input)` |
+
+```ts
+// 0.9.x
+import { toJapanDate, toJapanDateTime } from "bizdays-toolkit/jp";
+toJapanDate(new Date());
+toJapanDateTime(new Date()).time;
+
+// 0.10.0 から
+import { toDateString, toDateTimeParts } from "bizdays-toolkit";
+toDateString(new Date(), "Asia/Tokyo");
+toDateTimeParts(new Date(), "Asia/Tokyo").time;
+// 営業日カレンダーを作っているなら、そのタイムゾーンで同じ変換ができる
+calendar.dateOf(new Date());
+calendar.civilOf(new Date()).time;
+```
+
+- 同じ変換が `bizdays-toolkit/jp` の関数・ルートの関数・カレンダーのメソッドの 3 経路にあり、国ごとの関数は日本だけの特別扱い（英国には対応物がない）だったため、国に依らない 2 経路に集約します（decisions.md の 32 番）
+- 規則の診断（`diagnoseCalendar`・`diagnoseSchedule`）で、規則の有効期間が祝日の提供元の対応年の外にあるときも `out-of-range` の warning になります。新しい `code` はありません
+
 ## 0.9.0
 
 作業は要りません（機能の追加だけ）。

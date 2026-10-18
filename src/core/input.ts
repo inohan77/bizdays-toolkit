@@ -50,7 +50,7 @@ export interface TemporalDateTimeLike extends TemporalDateLike {
 
 /**
  * 時刻を必ず持つ入力（瞬間、Temporal.PlainDateTime、"YYYY-MM-DDTHH:mm…" の文字列）。
- * これを渡すと、civilOf・toDateTimeParts・toJapanDateTime の time の型が string になる。
+ * これを渡すと、civilOf・toDateTimeParts の time の型が string になる。
  * @public
  */
 export type DateTimeInput =

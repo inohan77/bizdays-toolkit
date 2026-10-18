@@ -388,3 +388,220 @@ test("診断した設定でも、作成の結果は変わらない", () => {
   assert.equal(createCalendar(options).isBusinessDay("2026-10-18"), false);
   assert.equal(createSchedule({ weekly: [0, 1, 1, 1, 1, 1, 0] }).valueOn("2026-10-18"), 0);
 });
+
+test("shadowed・never-matches・out-of-range: 有効期間", () => {
+  const shadowed = (rules: RecurringRule[], extra: object = {}) =>
+    recurring(rules, extra)
+      .filter((d) => d.code === "shadowed")
+      .map((d) => `${d.path}<${d.relatedPath}`);
+  assert.deepEqual(
+    shadowed([
+      { weekday: 1, effectiveTo: "2027-03-31" },
+      { weekday: 1, effectiveFrom: "2027-04-01" },
+    ]),
+    [],
+    "期間が重ならない同じ曜日の規則は互いを覆わない",
+  );
+  assert.deepEqual(
+    shadowed([{ weekday: 1 }, { weekday: 1, effectiveFrom: "2027-04-01" }]),
+    ["closedRecurring[1]<closedRecurring[0]"],
+    "期限のない規則は、期間付きの同じ規則を覆う",
+  );
+  assert.deepEqual(
+    shadowed([{ weekday: 1, effectiveFrom: "2027-04-01" }, { weekday: 1 }]),
+    [],
+    "期間付きの規則は、期限のない規則を覆わない",
+  );
+  assert.deepEqual(
+    shadowed([
+      { weekday: 1, effectiveFrom: "2026-01-01", effectiveTo: "2027-12-31" },
+      { weekday: 1, nth: 1, effectiveFrom: "2026-04-01", effectiveTo: "2027-03-31" },
+    ]),
+    ["closedRecurring[1]<closedRecurring[0]"],
+    "期間と形の両方で含まれる",
+  );
+  // 毎年の月日も同じ
+  assert.deepEqual(
+    brief(
+      diagnoseCalendar({
+        closedAnnual: [
+          { from: "12-29", to: "01-03", effectiveTo: "2027-12-31" },
+          { date: "01-02", effectiveFrom: "2027-01-01", effectiveTo: "2027-12-31" },
+          { date: "01-03", effectiveFrom: "2028-01-01" },
+        ],
+      }),
+    ),
+    [
+      {
+        severity: "warning",
+        code: "shadowed",
+        path: "closedAnnual[1]",
+        relatedPath: "closedAnnual[0]",
+      },
+    ],
+  );
+  // 期間の中に当てはまる日がない
+  assert.deepEqual(
+    recurring([{ weekday: 3, nth: 5, effectiveFrom: "2027-04-01", effectiveTo: "2027-04-20" }]),
+    [{ severity: "warning", code: "never-matches", path: "closedRecurring[0]" }],
+  );
+  assert.deepEqual(
+    recurring([{ weekday: 3, nth: 5, effectiveFrom: "2027-03-01", effectiveTo: "2027-03-31" }]),
+    [],
+    "2027 年 3 月には第 5 水曜日（3/31）がある",
+  );
+  assert.deepEqual(
+    recurring([{ day: 29, months: [2], effectiveFrom: "2029-01-01", effectiveTo: "2031-12-31" }]),
+    [{ severity: "warning", code: "never-matches", path: "closedRecurring[0]" }],
+    "期間にうるう年がない",
+  );
+  // 有効期間が提供元の対応年の外（対応年の外で例外になる設定では、その規則は使われない）
+  assert.deepEqual(
+    recurring([{ weekday: 1, effectiveTo: "1950-12-31" }], {
+      closedAnnual: [{ date: "01-02", effectiveFrom: "2100-01-01" }],
+    }),
+    [
+      {
+        severity: "warning",
+        code: "out-of-range",
+        path: "closedAnnual[0]",
+        relatedPath: "holidays",
+      },
+      {
+        severity: "warning",
+        code: "out-of-range",
+        path: "closedRecurring[0]",
+        relatedPath: "holidays",
+      },
+    ],
+  );
+  assert.deepEqual(
+    recurring([{ weekday: 1, effectiveFrom: "2100-01-01" }], { outOfRange: "ignore" }),
+    [
+      {
+        severity: "warning",
+        code: "out-of-range",
+        path: "closedRecurring[0]",
+        relatedPath: "holidays",
+      },
+    ],
+  );
+});
+
+test("redundant: 走査の範囲は、固定の範囲と規則の有効期間を合わせたもの", () => {
+  // 提供元がない設定の固定範囲（2001〜2028 年）の外にある規則を、使われないと誤診しない
+  assert.deepEqual(
+    brief(diagnoseCalendar({ closedRecurring: [{ weekday: 1, effectiveFrom: "2030-01-01" }] })),
+    [],
+  );
+  assert.deepEqual(
+    brief(
+      diagnoseCalendar({
+        closedWeekdays: [1],
+        closedRecurring: [{ weekday: 1, effectiveFrom: "2030-01-01", effectiveTo: "2031-12-31" }],
+      }),
+    ),
+    [{ severity: "info", code: "redundant", path: "closedRecurring[0]" }],
+  );
+  // 期限のない側は、当てはまり方がそろう周期（28 年）の長さを調べる
+  assert.deepEqual(
+    brief(
+      diagnoseCalendar({ closedRecurring: [{ weekday: 3, nth: 5, effectiveTo: "1990-12-31" }] }),
+    ),
+    [],
+  );
+  assert.ok(
+    /checked 1963-1990, 2001-2028/.test(
+      diagnoseCalendar({
+        closedWeekdays: [3],
+        closedRecurring: [{ weekday: 3, nth: 5, effectiveTo: "1990-12-31" }],
+      })[0]!.message,
+    ),
+  );
+});
+
+test("shadowed・never-matches・redundant: 周期（interval）", () => {
+  const shadowed = (rules: RecurringRule[], extra: object = {}) =>
+    recurring(rules, extra)
+      .filter((d) => d.code === "shadowed")
+      .map((d) => `${d.path}<${d.relatedPath}`);
+  const wed = (interval: number, anchor: string): RecurringRule => ({
+    weekday: 3,
+    interval,
+    anchor,
+  });
+  assert.deepEqual(
+    shadowed([{ weekday: 3 }, wed(2, "2026-01-07")]),
+    ["closedRecurring[1]<closedRecurring[0]"],
+    "毎週は隔週を覆う",
+  );
+  assert.deepEqual(shadowed([wed(2, "2026-01-07"), { weekday: 3 }]), [], "隔週は毎週を覆わない");
+  assert.deepEqual(
+    shadowed([wed(2, "2026-01-07"), wed(2, "2026-01-14")]),
+    [],
+    "位相の違う隔週は互いに素",
+  );
+  assert.deepEqual(
+    shadowed([wed(2, "2026-01-07"), wed(2, "2026-01-21")]),
+    ["closedRecurring[1]<closedRecurring[0]"],
+    "同じ位相の隔週",
+  );
+  assert.deepEqual(
+    shadowed([wed(2, "2026-01-07"), wed(4, "2026-02-04")]),
+    ["closedRecurring[1]<closedRecurring[0]"],
+    "4 週おきは、同じ位相の隔週に覆われる",
+  );
+  assert.deepEqual(shadowed([wed(2, "2026-01-07"), wed(4, "2026-01-14")]), []);
+  assert.deepEqual(
+    shadowed([wed(2, "2026-01-07"), wed(3, "2026-01-07")]),
+    [],
+    "3 週おきは隔週に覆われない",
+  );
+  assert.deepEqual(
+    shadowed([{ weekday: 3, nth: [1, 3] }, wed(2, "2026-01-07")]),
+    [],
+    "第 1・3 水曜は隔週を覆わない（5 回ある月でずれる）",
+  );
+  // 周期のある規則の redundant は、28 年の固定範囲では確かめられない（隔週の位相は 28 年で反転する）ので 56 年を調べる
+  const list = diagnoseCalendar({
+    closedWeekdays: [3],
+    closedRecurring: [wed(2, "2026-01-07")],
+  });
+  assert.deepEqual(brief(list), [
+    { severity: "info", code: "redundant", path: "closedRecurring[0]" },
+  ]);
+  assert.ok(/checked 2001-2056/.test(list[0]!.message), list[0]!.message);
+  assert.deepEqual(
+    brief(diagnoseCalendar({ closedRecurring: [wed(2, "2026-01-07"), wed(2, "2026-01-14")] })),
+    [],
+    "位相の違う隔週を 2 つ書いても、毎週とは別の規則として扱う（どちらも使われる）",
+  );
+  assert.deepEqual(
+    recurring([
+      {
+        weekday: 3,
+        interval: 6,
+        anchor: "2026-01-07",
+        months: [2],
+        effectiveFrom: "2027-02-01",
+        effectiveTo: "2027-02-28",
+      },
+    ]),
+    [{ severity: "warning", code: "never-matches", path: "closedRecurring[0]" }],
+    "2027 年 2 月の水曜は起点から 56〜59 週で、6 週おきの日がない",
+  );
+  assert.deepEqual(
+    recurring([
+      {
+        weekday: 3,
+        interval: 2,
+        anchor: "2026-01-07",
+        months: [2],
+        effectiveFrom: "2027-02-01",
+        effectiveTo: "2027-02-28",
+      },
+    ]),
+    [],
+    "隔週なら 2027-02-03（56 週後）が当てはまる",
+  );
+});

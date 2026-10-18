@@ -22,16 +22,16 @@ export interface AdjustOptions {
 ### AnnualDate (@public)
 
 ```ts
-export type AnnualDate = string | {
+export type AnnualDate = string | ({
     readonly date: string;
     readonly name?: string;
-};
+} & EffectivePeriod);
 ```
 
 ### AnnualRange (@public)
 
 ```ts
-export interface AnnualRange {
+export interface AnnualRange extends EffectivePeriod {
     readonly from: string;
     readonly to: string;
     readonly name?: string;
@@ -41,7 +41,7 @@ export interface AnnualRange {
 ### AnnualRangeValue (@public)
 
 ```ts
-export interface AnnualRangeValue<T> {
+export interface AnnualRangeValue<T> extends EffectivePeriod {
     readonly from: string;
     readonly to: string;
     readonly value: T;
@@ -52,7 +52,7 @@ export interface AnnualRangeValue<T> {
 ### AnnualValue (@public)
 
 ```ts
-export interface AnnualValue<T> {
+export interface AnnualValue<T> extends EffectivePeriod {
     readonly date: string;
     readonly value: T;
     readonly name?: string;
@@ -214,6 +214,8 @@ export interface DayOfMonthPattern {
     readonly months?: readonly Month[];
     readonly weekday?: never;
     readonly nth?: never;
+    readonly interval?: never;
+    readonly anchor?: never;
 }
 ```
 
@@ -235,6 +237,15 @@ export declare function diffDays(from: DateString, to: DateString): number;
 export interface DueDateOptions {
     readonly day: DayOfMonth;
     readonly convention: BusinessDayConvention;
+}
+```
+
+### EffectivePeriod (@public)
+
+```ts
+export interface EffectivePeriod {
+    readonly effectiveFrom?: DateString;
+    readonly effectiveTo?: DateString;
 }
 ```
 
@@ -387,7 +398,7 @@ export type RecurringPattern = WeekdayPattern | DayOfMonthPattern;
 ### RecurringRule (@public)
 
 ```ts
-export type RecurringRule = RecurringPattern & {
+export type RecurringRule = RecurringPattern & EffectivePeriod & {
     readonly name?: string;
     readonly onHolidayRule?: OnHolidayRule;
 };
@@ -521,6 +532,8 @@ export declare function weekdayOf(date: DateString): Weekday;
 export interface WeekdayPattern {
     readonly weekday: Weekday;
     readonly nth?: Nth | readonly Nth[];
+    readonly interval?: number;
+    readonly anchor?: DateString;
     readonly months?: readonly Month[];
     readonly day?: never;
 }
@@ -588,13 +601,13 @@ export declare const jp: HolidayProvider<JapaneseHolidayKind>;
 export type KnownJapaneseHolidayKind = "national" | "substitute" | "citizens" | "special";
 ```
 
-### toJapanDate (@public)
+### toJapanDate (@public, @deprecated)
 
 ```ts
 export declare function toJapanDate(input: DateInput): DateString;
 ```
 
-### toJapanDateTime (@public)
+### toJapanDateTime (@public, @deprecated)
 
 ```ts
 export declare function toJapanDateTime(input: DateTimeInput): CivilDateTimeParts<string>;

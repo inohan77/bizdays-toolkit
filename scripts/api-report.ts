@@ -53,6 +53,12 @@ function releaseTag(node: ts.Node): string | undefined {
   return undefined;
 }
 
+/** 宣言に @deprecated が付いているか（非推奨の記録。削除は少なくとも 1 つのマイナー版の後。RELEASING.md） */
+function isDeprecated(node: ts.Node): boolean {
+  const target = ts.isVariableDeclaration(node) ? node.parent.parent : node;
+  return ts.getJSDocTags(target).some((tag) => tag.tagName.text === "deprecated");
+}
+
 /** 宣言を、コメントを除いた型定義の文として書き出す */
 function printDeclaration(node: ts.Node): string {
   const target = ts.isVariableDeclaration(node) ? node.parent.parent : node;
@@ -90,7 +96,8 @@ for (const { subpath, file } of entries) {
     const tags = new Set(declarations.map(releaseTag));
     const tag = tags.has("beta") ? "beta" : tags.has("public") ? "public" : undefined;
     if (!tag) errors.push(`${specifier}: ${symbol.getName()} has no @public or @beta tag`);
-    lines.push("", `### ${symbol.getName()} (@${tag ?? "untagged"})`, "", "```ts");
+    const deprecated = declarations.some(isDeprecated) ? ", @deprecated" : "";
+    lines.push("", `### ${symbol.getName()} (@${tag ?? "untagged"}${deprecated})`, "", "```ts");
     for (const d of declarations) lines.push(printDeclaration(d));
     lines.push("```");
   }

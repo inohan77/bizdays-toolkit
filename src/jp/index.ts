@@ -91,6 +91,8 @@ export function holidaysBetween(from: DateInput, to: DateInput): readonly Japane
 
 /**
  * 日本時間での暦日。
+ * @deprecated 0.10.0 で非推奨。ルートの toDateString(input, "Asia/Tokyo")、または営業日カレンダー・スケジュールの
+ * dateOf(input) に移行する（同じ変換。docs/migration.md）。1.0.0 で削除する
  * @public
  */
 export function toJapanDate(input: DateInput): DateString {
@@ -100,10 +102,15 @@ export function toJapanDate(input: DateInput): DateString {
 /**
  * 日本時間での暦日と時刻（"HH:mm"。暦日だけの入力では null）。
  * 時刻を必ず持つ入力（Date・Temporal.Instant など）では、time の型が string になる。
+ * @deprecated 0.10.0 で非推奨。ルートの toDateTimeParts(input, "Asia/Tokyo")、または営業日カレンダー・スケジュールの
+ * civilOf(input) に移行する（同じ変換・同じ型。docs/migration.md）。1.0.0 で削除する
  * @public
  */
 export function toJapanDateTime(input: DateTimeInput): CivilDateTimeParts<string>;
-/** @public */
+/**
+ * @deprecated 0.10.0 で非推奨。toDateTimeParts(input, "Asia/Tokyo") または civilOf(input) に移行する
+ * @public
+ */
 export function toJapanDateTime(input: DateInput): CivilDateTimeParts;
 export function toJapanDateTime(input: DateInput): CivilDateTimeParts {
   return calendar().civilOf(input);

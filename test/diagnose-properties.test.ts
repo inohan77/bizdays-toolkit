@@ -37,6 +37,15 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
   const int = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
   const pick = <T>(items: readonly T[]): T => items[int(0, items.length - 1)]!;
   const date = () => addDays("2026-01-01", int(0, 120));
+  /** 有効期間（固定の走査範囲の外・周期をまたぐ範囲も混ぜる） */
+  const period = () => {
+    const r = rand();
+    if (r < 0.6) return {};
+    const from = pick(["2026-01-01", "2026-04-01", "2027-04-01", "2029-01-01", "2031-01-01"]);
+    if (r < 0.75) return { effectiveFrom: from };
+    if (r < 0.85) return { effectiveTo: addDays(from, int(0, 400)) };
+    return { effectiveFrom: from, effectiveTo: addDays(from, int(0, 400)) };
+  };
   const rule = () => {
     const base =
       rand() < 0.6
@@ -45,20 +54,35 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
             ...(rand() < 0.6 ? { nth: pick([1, 2, -1, [4, 5], [1, 3]]) } : {}),
           }
         : { day: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) };
+    // 周期（nth とは併用できない。起点は曜日に合わせる）
+    const interval =
+      "weekday" in base && base.nth === undefined && rand() < 0.4
+        ? {
+            interval: pick([2, 2, 3, 4]),
+            anchor: addDays("2026-01-04", base.weekday + 7 * int(0, 5)),
+          }
+        : {};
     return {
       ...base,
+      ...interval,
       ...(rand() < 0.3 ? { months: pick([[2], [1, 2], [2, 4, 6, 9, 11]]) } : {}),
       onHolidayRule: pick(["under-holiday", "over-holiday", "after-holiday"]),
+      ...period(),
     };
   };
   const annual = () =>
     rand() < 0.5
       ? pick(["01-01", "02-29", "12-31", "05-05"])
-      : pick([
-          { from: "12-29", to: "01-03" },
-          { from: "12-30", to: "01-02" },
-          { from: "05-01", to: "05-06" },
-        ]);
+      : {
+          ...pick([
+            { from: "12-29", to: "01-03" },
+            { from: "12-30", to: "01-02" },
+            { from: "05-01", to: "05-06" },
+            { date: "01-01" },
+            { date: "05-05" },
+          ]),
+          ...period(),
+        };
   const dates = () => {
     if (rand() < 0.5) return date();
     const from = date();
@@ -89,6 +113,8 @@ function remove(options: Options, path: string): Options {
 test("性質: 使われない・取り除いても変わらないと診断した規則は、取り除いても結果が変わらない", () => {
   const rand = random(SEED);
   const found: Record<string, number> = { shadowed: 0, "never-matches": 0, redundant: 0 };
+  let withPeriod = 0;
+  let withInterval = 0;
   for (let run = 0; run < RUNS; run++) {
     const options = randomOptions(rand, run % 3 === 0);
     const describe = () =>
@@ -103,11 +129,20 @@ test("性質: 使われない・取り除いても変わらないと診断した
       // 規則の日付の周辺と、28 年の周期をまたぐ年を混ぜる
       i % 2 === 0
         ? addDays("2025-12-01", Math.floor(rand() * 200))
-        : addDays("1960-01-01", Math.floor(rand() * 365 * 130)),
+        : i % 4 === 1
+          ? addDays("2026-01-01", Math.floor(rand() * 365 * 8))
+          : addDays("1960-01-01", Math.floor(rand() * 365 * 130)),
     );
     for (const d of list) {
       if (d.code !== "shadowed" && d.code !== "never-matches" && d.code !== "redundant") continue;
       found[d.code] = (found[d.code] ?? 0) + 1;
+      const target = JSON.stringify(
+        (options[d.path.replace(/\[\d+\]$/, "")] as unknown[])[
+          Number(/\[(\d+)\]/.exec(d.path)![1])
+        ],
+      );
+      if (target.includes("effective")) withPeriod++;
+      if (target.includes("interval")) withInterval++;
       const reduced = createCalendar(remove(options, d.path) as CalendarOptions);
       for (const date of dates) {
         if (d.code === "redundant") {
@@ -128,4 +163,9 @@ test("性質: 使われない・取り除いても変わらないと診断した
   }
   // 性質が空振りしていない（診断が実際に出ている）ことも確かめる（never-matches は少ないので単体テストで確かめる）
   assert.ok(found["shadowed"]! > 0 && found["redundant"]! > 0, JSON.stringify(found));
+  // 周期のある規則の診断は少ない（種によっては 0 件）ので、単体テストで確かめる
+  assert.ok(
+    withPeriod > 0,
+    `有効期間のある規則にも診断が出ている: ${withPeriod} (interval: ${withInterval})`,
+  );
 });

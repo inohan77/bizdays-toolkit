@@ -203,7 +203,7 @@ const withoutNames: HolidayProvider = {
 void withoutNames;
 
 // ------------------------------------------------------------
-// 時刻を必ず持つ入力では time が string になる（toDateTimeParts・toJapanDateTime・civilOf）
+// 時刻を必ず持つ入力では time が string になる（toDateTimeParts・civilOf・非推奨の toJapanDateTime も削除までは確かめる）
 // ------------------------------------------------------------
 {
   const instant = { epochMilliseconds: 0 };

@@ -4,6 +4,34 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-19
+
+### 移行
+
+動作は変わりません（繰り返しの規則・毎年の月日の規則への省略可能な項目の追加と、診断の改善）。`bizdays-toolkit/jp` の `toJapanDate`・`toJapanDateTime` が非推奨になったので、使っていれば `toDateString(input, "Asia/Tokyo")`・`toDateTimeParts(input, "Asia/Tokyo")`（または営業日カレンダー・スケジュールの `dateOf`・`civilOf`）に書き換える。書き換え方は [docs/migration.md](./docs/migration.md)。
+
+### Added
+
+- 繰り返しの規則（`closedRecurring`・`openRecurring`・スケジュールの `recurring`）と毎年の月日の規則（`closedAnnual` のオブジェクトの形・スケジュールの `annual`）に、有効期間 `effectiveFrom`・`effectiveTo`（両端を含む `"YYYY-MM-DD"`。一方だけなら、もう一方は期限なし）を付けられるようにした。期間の外では、その規則は書かれていないのと同じに扱う（判定の順番は変わらない）。「2027 年 4 月から定休日を月曜から火曜に変える」「夏季休業を今年限りでやめる」を 1 つのカレンダーで表せ、切り替え日をまたぐ営業日の計算（`addBusinessDays` など）も正しくなる。`"after-holiday"` の振替は振替元の日で期間を判定する。型 `EffectivePeriod` を追加した。`effectiveFrom` が `effectiveTo` より後なら `invalid-range`
+- 曜日の規則に周期 `interval`（週数。2 以上の整数）と起点 `anchor`（`weekday` と同じ曜日の日付）を付けて、「隔週水曜定休」のような規則を書けるようにした。`anchor` と同じ曜日で、`anchor` との日数の差が 7 × `interval` の倍数の日（起点より前の日も）に当てはまる。`nth` とは併用できず、`months`・`onHolidayRule`・有効期間とは組み合わせられる。「第 1・第 3 水曜」（`nth: [1, 3]`）は水曜が 5 回ある月で隔週からずれるため、別の書き方にした。`interval` と `anchor` の片方だけ、`anchor` の曜日違い、`day` の規則への指定は `invalid-option`
+
+### Deprecated
+
+- `bizdays-toolkit/jp` の `toJapanDate`・`toJapanDateTime` を非推奨にした（`@deprecated`）。同じ変換がルートの `toDateString(input, "Asia/Tokyo")`・`toDateTimeParts(input, "Asia/Tokyo")` と、営業日カレンダー・スケジュールの `dateOf`・`civilOf` にあり、国ごとの関数は日本だけの特別扱い（英国には対応物がない）だったため。少なくとも 1 つのマイナー版は残し、1.0.0 で削除する。`etc/api.md` に `@deprecated` を記録するようにした
+
+### Changed
+
+- 規則の診断（`bizdays-toolkit/diagnose`）を、有効期間と周期に対応させた。`shadowed` は先の規則の期間が後の規則の期間を含み、周期も含む（毎週は隔週を覆う。位相の違う隔週どうしは覆わない）ときだけ出す。有効期間の中に当てはまる日がない規則は `never-matches`。規則の有効期間が祝日の提供元の対応年の外にあれば `out-of-range`（新しい code は足していない）
+- `redundant`・`no-business-day` の走査の範囲を見直した。周期のある規則があれば、提供元がない設定の 2001〜2028 年を周期がそろう長さ（隔週なら 56 年。上限 200 年）に広げ、規則の有効期間が範囲の外にあれば、その期間も調べる（`outOfRange: "throw"` では対応年の中だけ）。これまでは固定の範囲の外にある期間の規則を「使われない」と誤診した。調べた年は `message` に書く
+- README: 繰り返しの規則の節に、有効期間と隔週の書き方・例を足した。`businessDaysBetween` だけが `to` を含まない理由（区間を足し合わせられ、`addBusinessDays` の逆算になる）を書いた
+- README のサイズの値を測り直した（ルート約 7.9KB・日本の祝日込み約 9.8KB・英国の祝日込み約 9.6KB。0.10.0 で測定）
+- `docs/decisions.md`: 有効期間と周期の設計（30 番）と `businessDaysBetween` の範囲（31 番）を足し、6 番（契約の項目に `names` を追記）・13 番と 16 番（その月にない日の扱いが `dueDate`・`closingMonth` と繰り返しの規則で違うことの相互参照）・14 番（土曜日を避ける方法は個別の日付での上書き、振替と有効期間）・15 番（走査の範囲）の記述を直した
+
+### 開発
+
+- サイズの上限（`size-limits.json`）を上げた。ルート 16,500 → 17,500、`./jp` 19,500 → 20,500、`./diagnose` 22,000 → 24,000（gzip）。有効期間と周期の検証・判定（ルートで約 0.8KB）と、診断の走査範囲・包含判定の見直し（約 2.3KB）のため
+- 性質のテスト（`test/diagnose-properties.test.ts`）で、有効期間と周期のある規則も作るようにした。固定の走査範囲（2001〜2028 年）の外や、28 年の周期をまたぐ年の日付も比べる
+
 ## [0.9.1] - 2026-10-18
 
 ライブラリのコードは 0.9.0 と同じ。
@@ -238,7 +266,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.0...v0.8.1
