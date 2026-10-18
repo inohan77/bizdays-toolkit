@@ -313,9 +313,15 @@ storeHours
   .daysBetween("2026-11-01", "2026-11-30")
   .filter((d) => d.holiday)
   .map((d) => d.date); // ["2026-11-03", "2026-11-23"]
+
+// 個別の日付・毎年の月日で値を決めた日を除く祝日（元日は毎年の月日の規則で休業）
+storeHours
+  .daysBetween("2026-12-28", "2027-01-11")
+  .filter((d) => d.holiday && d.reason !== "date" && d.reason !== "annual")
+  .map((d) => d.date); // ["2027-01-11"]
 ```
 
-`reason` は値を決めた規則です。`holiday: "weekday"`（祝日も曜日どおり）のときは、祝日でも `reason` は `"weekday"` になるので、祝日かどうかは `holiday` の有無で判定します。
+`reason` は値を決めた規則です。`holiday: "weekday"`（祝日も曜日どおり）のときは、祝日でも `reason` は `"weekday"` になるので、祝日かどうかは `holiday` の有無で判定します。`holiday` だけで絞ると、`dates`・`annual` で値を決めた祝日（元日の特別営業など）も含まれます。祝日の扱いに従う祝日だけを一覧にする場合は、最後の例のように、`reason` が `"date"`・`"annual"` の日も除きます。祝日かどうかは `holiday` で、どの規則が値を決めたかは `reason` で見る、という分担です。
 
 値は `dates`（個別の日付・期間）→ `annual`（毎年の月日・期間）→ `recurring`（`"over-holiday"`）→ 祝日 → `recurring`（既定・振替先）→ `weekly`（曜日）の順に決まります。同じ種類の規則が重なる場合は、配列で先に書いたものが優先です。
 

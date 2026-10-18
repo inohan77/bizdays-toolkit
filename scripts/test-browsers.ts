@@ -28,7 +28,11 @@ const capabilities: Record<string, Record<string, unknown>> = {
   firefox: { browserName: "firefox", "moz:firefoxOptions": { args: ["-headless"] } },
   edge: {
     browserName: "MicrosoftEdge",
-    "ms:edgeOptions": { args: ["--headless=new", "--no-sandbox"] },
+    // CI のランナーで、Edge のページの読み込みが止まる（レンダラーが応答しない）ことが続いたため、
+    // 共有メモリ（/dev/shm）の代わりに一時ファイルを使い、GPU の処理を止める（decisions.md の 26 番）
+    "ms:edgeOptions": {
+      args: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    },
   },
   safari: { browserName: "safari" },
 };

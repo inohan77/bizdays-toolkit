@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- README: スケジュールの `daysBetween` を `holiday` だけで絞ると、`dates`・`annual` で値を決めた祝日（特別営業日など）も含まれることと、それを除く絞り込み（`reason` が `"date"`・`"annual"` の日を除く）の例を足した
+
+### 開発
+
+- ブラウザーでの確認の Edge の起動オプションに、`--disable-dev-shm-usage` と `--disable-gpu` を足した。CI のランナーで Edge のページの読み込みが止まり、やり直し（`RETRY`）がほぼ毎回起きていたため
+
 ## [0.9.0] - 2026-10-18
 
 ### 移行

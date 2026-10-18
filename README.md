@@ -318,9 +318,15 @@ storeHours
   .daysBetween("2026-11-01", "2026-11-30")
   .filter((d) => d.holiday)
   .map((d) => d.date); // ["2026-11-03", "2026-11-23"]
+
+// Holidays not overridden by specific or annual dates (New Year's Day is closed by the annual rule)
+storeHours
+  .daysBetween("2026-12-28", "2027-01-11")
+  .filter((d) => d.holiday && d.reason !== "date" && d.reason !== "annual")
+  .map((d) => d.date); // ["2027-01-11"]
 ```
 
-`reason` is the rule that decided the value. With `holiday: "weekday"` (holidays follow the weekday rule), a holiday has `reason: "weekday"`, so check `holiday` to know whether a day is a holiday.
+`reason` is the rule that decided the value. With `holiday: "weekday"` (holidays follow the weekday rule), a holiday has `reason: "weekday"`, so check `holiday` to know whether a day is a holiday. Filtering by `holiday` alone also keeps holidays whose value is set by `dates` or `annual` (such as special hours on New Year's Day). To list only holidays that follow the holiday handling, also exclude `reason` `"date"` and `"annual"`, as in the last example: `holiday` tells whether the day is a holiday, and `reason` tells which rule decided the value.
 
 Values are decided in the order `dates` (specific dates and ranges) → `annual` (annual dates and ranges) → `recurring` (`"over-holiday"`) → holidays → `recurring` (default and moved days) → `weekly` (weekday). When rules of the same type overlap, the one written first in the array wins.
 
