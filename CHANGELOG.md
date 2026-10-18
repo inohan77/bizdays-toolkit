@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-18
+
+ライブラリのコードは 0.9.0 と同じ。
+
 ### Changed
 
 - README: スケジュールの `daysBetween` を `holiday` だけで絞ると、`dates`・`annual` で値を決めた祝日（特別営業日など）も含まれることと、それを除く絞り込み（`reason` が `"date"`・`"annual"` の日を除く）の例を足した
@@ -234,7 +238,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.7.0...v0.8.0
