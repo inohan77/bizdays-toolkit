@@ -296,6 +296,44 @@ const special = createSchedule<Hours>({
 special.valueOn("2027-01-01"); // null
 ```
 
+**Which business day of the month a date is**: count the business days from the first of the month up to (and excluding) the date, then add one. `businessDaysBetween` excludes `to`, so the date itself is the `+ 1`. This is the inverse of `nthBusinessDayOfMonth`.
+
+```ts
+import { monthOf } from "bizdays-toolkit";
+
+const calendar = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+const businessDayIndex = (date: string): number =>
+  calendar.isBusinessDay(date) ? calendar.businessDaysBetween(`${monthOf(date)}-01`, date) + 1 : 0;
+businessDayIndex("2026-10-07"); // 5 (the 5th business day of October)
+businessDayIndex("2026-10-03"); // 0 (Saturday: not a business day)
+calendar.nthBusinessDayOfMonth("2026-10", 5); // "2026-10-07"
+```
+
+**The next closed day and why**: there is no `nextClosedDay`, but `daysBetween` returns `dayInfo` for every day, so take the first one that is not a business day.
+
+```ts
+import { addDays } from "bizdays-toolkit";
+
+const calendar = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+const nextClosedDay = (date: string) =>
+  calendar.daysBetween(addDays(date, 1), addDays(date, 60)).find((d) => !d.businessDay);
+nextClosedDay("2026-10-05")?.date; // "2026-10-10"
+nextClosedDay("2026-10-05")?.reason; // "closed-weekday"
+nextClosedDay("2026-10-11")?.reason; // "holiday" (Sports Day, October 12)
+```
+
+**Business days of Japanese banks**: banks are closed on weekends, holidays and December 31 to January 3, so a bank calendar is three lines. Combine it with your own calendar for a remittance date (see "Combining calendars").
+
+```ts
+const bank = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedAnnual: [{ from: "12-31", to: "01-03", name: "Bank holiday period" }],
+});
+bank.isBusinessDay("2026-12-30"); // true
+bank.nextBusinessDay("2026-12-30"); // "2027-01-04"
+```
+
 **Build per-store calendars from shared options**: options are plain objects, so spread and extend them.
 
 ```ts

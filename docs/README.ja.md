@@ -290,6 +290,44 @@ const special = createSchedule<Hours>({
 special.valueOn("2027-01-01"); // null
 ```
 
+**その日が月の第何営業日か**：月初からその日の前日までの営業日数に 1 を足します。`businessDaysBetween` は `to` を含まないので、その日の分が `+ 1` です。`nthBusinessDayOfMonth` の逆算になります。
+
+```ts
+import { monthOf } from "bizdays-toolkit";
+
+const calendar = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+const businessDayIndex = (date: string): number =>
+  calendar.isBusinessDay(date) ? calendar.businessDaysBetween(`${monthOf(date)}-01`, date) + 1 : 0;
+businessDayIndex("2026-10-07"); // 5（10 月の第 5 営業日）
+businessDayIndex("2026-10-03"); // 0（土曜日は営業日でない）
+calendar.nthBusinessDayOfMonth("2026-10", 5); // "2026-10-07"
+```
+
+**次の休業日と、その理由**：`nextClosedDay` はありませんが、`daysBetween` が毎日の `dayInfo` を返すので、営業日でない最初の日を取ります。
+
+```ts
+import { addDays } from "bizdays-toolkit";
+
+const calendar = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+const nextClosedDay = (date: string) =>
+  calendar.daysBetween(addDays(date, 1), addDays(date, 60)).find((d) => !d.businessDay);
+nextClosedDay("2026-10-05")?.date; // "2026-10-10"
+nextClosedDay("2026-10-05")?.reason; // "closed-weekday"
+nextClosedDay("2026-10-11")?.reason; // "holiday"（10 月 12 日のスポーツの日）
+```
+
+**銀行の営業日**：銀行は土日・祝日と 12 月 31 日〜1 月 3 日が休みなので、3 行で書けます。振込の着金日は、自社のカレンダーと合成して求めます（「カレンダーの合成」）。
+
+```ts
+const bank = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedAnnual: [{ from: "12-31", to: "01-03", name: "銀行休業日" }],
+});
+bank.isBusinessDay("2026-12-30"); // true
+bank.nextBusinessDay("2026-12-30"); // "2027-01-04"
+```
+
 **共通の設定から店舗ごとのカレンダーを作る**：設定は普通のオブジェクトなので、展開して足します。
 
 ```ts

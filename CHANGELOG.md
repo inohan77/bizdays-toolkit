@@ -4,11 +4,20 @@
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-19
+
+ライブラリのコードは 0.11.0 と同じ。
+
+### Changed
+
+- README: よくある設定の例に、「その日が月の第何営業日か」（`businessDaysBetween` + 1。`nthBusinessDayOfMonth` の逆算）、「次の休業日と、その理由」（`daysBetween` で営業日でない最初の日）、「銀行の営業日」（3 行の設定。着金日は合成で求める）の 3 件を足した
+- CHANGELOG: 0.11.0 の「移行」に `docs/migration.md` への案内を足した（GitHub Release の本文は公開後に直してあり、これでリポジトリ側もそろう）
+
 ## [0.11.0] - 2026-10-19
 
 ### 移行
 
-作業は要りません（繰り返しの規則の新しい形と、カレンダーを合成する関数の追加）。
+作業は要りません（繰り返しの規則の新しい形と、カレンダーを合成する関数の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -291,7 +300,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.0...v0.9.1
