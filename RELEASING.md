@@ -100,7 +100,7 @@ GitHub の schedule は高負荷時に遅れたり落ちたりし、このリポ
 **cron-job.org のジョブ**
 
 - URL: `https://api.github.com/repos/inohan77/bizdays-toolkit/actions/workflows/govuk-watch.yml/dispatches`（POST）
-- ヘッダー: `Accept: application/vnd.github+json`、`Authorization: Bearer <トークン>`、`Content-Type: application/json`、`X-GitHub-Api-Version: 2026-03-10`（REST API の版。指定しないと 2022-11-28 版になり、その版は 2028 年 3 月 10 日に提供が終わる）
+- ヘッダー: `Accept: application/vnd.github+json`、`Authorization: Bearer <トークン>`、`Content-Type: application/json`、`X-GitHub-Api-Version: 2026-03-10`（REST API の版。指定しないと 2022-11-28 版になり、その版は 2028 年 3 月 10 日に提供が終わる。出典: https://docs.github.com/en/rest/about-the-rest-api/api-versions の Supported API versions）
 - 本文: `{"ref":"main"}`
 - 時刻: 毎日 06:00（タイムゾーン Asia/Tokyo）。失敗したときのメール通知を有効にする
 - トークン: Fine-grained のトークンを、このリポジトリだけ・**Actions の Read and write だけ**で作る（Contents は不要）。このトークンで起動できるのは `workflow_dispatch` のある govuk-watch だけで、コードの変更や npm への公開はできない。期限を設け（1 年など）、切れる前に作り直して cron-job.org のヘッダーを差し替える（切れると呼び出しが 401 で失敗し、cron-job.org の失敗の通知と、healthchecks.io の知らせの途絶の両方で分かる）
