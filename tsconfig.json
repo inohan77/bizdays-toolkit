@@ -20,5 +20,7 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "scripts"]
+  "include": ["src", "test", "scripts"],
+  // test/consumer はビルド済みの dist を利用者として型チェックする（scripts/check-consumer-types.ts）
+  "exclude": ["test/consumer"]
 }

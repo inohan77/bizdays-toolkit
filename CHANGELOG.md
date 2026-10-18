@@ -4,7 +4,27 @@
 
 ## [Unreleased]
 
+## [0.9.0] - YYYY-MM-DD
+
+### 移行
+
+作業は要りません（機能の追加だけ）。時刻を必ず持つ入力では `time` の型が `string` になったので、これまでの `null` の分岐は不要になります（残しても動く）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- 期間の日ごとの情報を返す `daysBetween(from, to)` を、スケジュール（`ScheduleDay` の配列）と営業日カレンダー（`DayInfo` の配列）に追加した。両端を含み、`from` が `to` より後なら `invalid-range`。祝日だけ欲しい場合は、結果を `holiday` で絞る
+- 時刻を必ず持つ入力の型 `DateTimeInput`（`Date`・Temporal の `Instant`・`ZonedDateTime`・`PlainDateTime`・`"YYYY-MM-DDTHH:mm…"` の文字列）と、`TemporalDateTimeLike` を追加した
+
+### Changed
+
+- `civilOf`（スケジュール・営業日カレンダー）・`toDateTimeParts`・`toJapanDateTime` に、`DateTimeInput` を渡したときは `time` の型を `string` とするオーバーロードを加えた。返す値は変わらない。`CivilDateTimeParts` は時刻の型を引数に取る型になった（省略時はこれまでと同じ `string | null`）
+- README: スケジュールの `dayInfo` の `reason` は値を決めた規則であり、祝日の規則が `"weekday"` のときは祝日でも `"weekday"` になること（祝日かどうかは `holiday` で判定する）を書いた。`createCalendar`・`createSchedule` は作ったものを使い回すのが基本で、作成のコストも小さいこと（測った値）を書いた。1 つの配列で持つ特別営業日を `dates` と `annual` に振り分ける例と、型定義の確認の範囲（CI で `moduleResolution` の `node16`・`nodenext`・`bundler`、0.9.0 の時点で TypeScript 5.0・5.5・5.8 も手作業で確認）を足した
+- README のサイズの値を測り直した（ルート約 7.5KB・日本の祝日込み約 9.0KB・英国の祝日込み約 9.1KB。0.9.0 で測定）
+- 移行ガイド（`docs/migration.md`）を追加した。0.2.0〜0.9.0 で利用者がする作業を版ごとにまとめた
+
 ### 開発
+
+- `pnpm check` で、利用者のプロジェクトとして公開する型定義を型チェックするようにした（`scripts/check-consumer-types.ts`・`test/consumer/consumer.mts`。`moduleResolution` を `node16`・`nodenext`・`bundler` に変え、ライブラリの型定義の検査も有効にする）
 
 - GOV.UK の監視を、外部の cron サービス（cron-job.org）から `workflow_dispatch` で起動する形にした（毎日 06:00 日本時間）。GitHub の schedule は予備として 18:17（日本時間）に移した。GitHub の schedule は高負荷時に遅れたり落ちたりし、追加してから一度も動かなかったため。動いたことは最後に healthchecks.io へ知らせ（Secrets の `HEALTHCHECKS_PING_URL`。照合そのものが失敗したときは `/fail`）、知らせが途絶えたらメールが届くようにした（RELEASING.md の「監視の起動とハートビート」。cron-job.org からの呼び出しは REST API の 2026-03-10 版を指定する）
 
@@ -206,7 +226,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.6.0...v0.7.0

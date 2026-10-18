@@ -78,6 +78,7 @@ export interface BusinessDayOptions {
 ```ts
 export interface Calendar<Kind extends string = string> extends HolidayLookup<Kind> {
     dayInfo(input: DateInput): DayInfo<Kind>;
+    daysBetween(from: DateInput, to: DateInput): readonly DayInfo<Kind>[];
     isBusinessDay(input: DateInput): boolean;
     nextBusinessDay(input: DateInput): DateString;
     previousBusinessDay(input: DateInput): DateString;
@@ -112,9 +113,9 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
 ### CivilDateTimeParts (@public)
 
 ```ts
-export interface CivilDateTimeParts {
+export interface CivilDateTimeParts<Time extends string | null = string | null> {
     readonly date: DateString;
-    readonly time: string | null;
+    readonly time: Time;
 }
 ```
 
@@ -167,6 +168,12 @@ export interface DateRangeValue<T> {
 
 ```ts
 export type DateString = string;
+```
+
+### DateTimeInput (@public)
+
+```ts
+export type DateTimeInput = Date | TemporalInstantLike | TemporalDateTimeLike | `${number}-${number}-${number}T${string}`;
 ```
 
 ### DateValue (@public)
@@ -257,6 +264,7 @@ export interface HolidayLookup<Kind extends string = string> {
     readonly timeZone: string;
     readonly providers: readonly HolidayProvider<Kind>[];
     dateOf(input: DateInput): DateString;
+    civilOf(input: DateTimeInput): CivilDateTimeParts<string>;
     civilOf(input: DateInput): CivilDateTimeParts;
     today(now?: Date): DateString;
     isHoliday(input: DateInput): boolean;
@@ -399,6 +407,7 @@ export type RecurringValue<T> = RecurringRule & {
 export interface Schedule<T, Kind extends string = string> extends HolidayLookup<Kind> {
     valueOn(input: DateInput): T;
     dayInfo(input: DateInput): ScheduleDay<T, Kind>;
+    daysBetween(from: DateInput, to: DateInput): readonly ScheduleDay<T, Kind>[];
 }
 ```
 
@@ -464,6 +473,15 @@ export interface TemporalDateLike {
 }
 ```
 
+### TemporalDateTimeLike (@public)
+
+```ts
+export interface TemporalDateTimeLike extends TemporalDateLike {
+    readonly hour: number;
+    readonly minute: number;
+}
+```
+
 ### TemporalInstantLike (@public)
 
 ```ts
@@ -481,10 +499,8 @@ export declare function toDateString(input: DateInput, timeZone: string): DateSt
 ### toDateTimeParts (@public)
 
 ```ts
-export declare function toDateTimeParts(input: DateInput, timeZone: string): {
-    readonly date: DateString;
-    readonly time: string | null;
-};
+export declare function toDateTimeParts(input: DateTimeInput, timeZone: string): CivilDateTimeParts<string>;
+export declare function toDateTimeParts(input: DateInput, timeZone: string): CivilDateTimeParts;
 ```
 
 ### Weekday (@public)
@@ -581,10 +597,8 @@ export declare function toJapanDate(input: DateInput): DateString;
 ### toJapanDateTime (@public)
 
 ```ts
-export declare function toJapanDateTime(input: DateInput): {
-    readonly date: DateString;
-    readonly time: string | null;
-};
+export declare function toJapanDateTime(input: DateTimeInput): CivilDateTimeParts<string>;
+export declare function toJapanDateTime(input: DateInput): CivilDateTimeParts;
 ```
 
 ## bizdays-toolkit/uk

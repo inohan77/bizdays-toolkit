@@ -13,7 +13,7 @@
 
 import { createCalendar, type Calendar } from "../core/calendar.ts";
 import type { DateString } from "../core/date.ts";
-import type { DateInput } from "../core/input.ts";
+import type { CivilDateTimeParts, DateInput, DateTimeInput } from "../core/input.ts";
 import type { Holiday, HolidayProvider } from "../core/types.ts";
 import {
   CONFIRMED_THROUGH,
@@ -99,12 +99,13 @@ export function toJapanDate(input: DateInput): DateString {
 
 /**
  * 日本時間での暦日と時刻（"HH:mm"。暦日だけの入力では null）。
+ * 時刻を必ず持つ入力（Date・Temporal.Instant など）では、time の型が string になる。
  * @public
  */
-export function toJapanDateTime(input: DateInput): {
-  readonly date: DateString;
-  readonly time: string | null;
-} {
+export function toJapanDateTime(input: DateTimeInput): CivilDateTimeParts<string>;
+/** @public */
+export function toJapanDateTime(input: DateInput): CivilDateTimeParts;
+export function toJapanDateTime(input: DateInput): CivilDateTimeParts {
   return calendar().civilOf(input);
 }
 

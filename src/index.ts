@@ -64,7 +64,9 @@ export {
   toDateString,
   toDateTimeParts,
   type DateInput,
+  type DateTimeInput,
   type TemporalDateLike,
+  type TemporalDateTimeLike,
   type TemporalInstantLike,
 } from "./core/input.ts";
 export type { Holiday, HolidayProvider } from "./core/types.ts";

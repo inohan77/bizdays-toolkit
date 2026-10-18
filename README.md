@@ -26,7 +26,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **Month-based due dates**: due dates such as "closing on the 20th, paid on the 10th of the next month (next business day if closed)" or "the last business day of the month", with the four adjustment conventions used in finance (following, preceding, modified-following, modified-preceding)
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed and open dates, and holidays combine to compute "N business days later", "next business day after the cut-off time" and more
 - **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
-- **Lightweight, zero dependencies**: about 7.4 KB min+gzip (about 9.0 KB with Japanese holidays, about 9.0 KB with UK bank holidays; measured for 0.8.1). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
+- **Lightweight, zero dependencies**: about 7.5 KB min+gzip (about 9.0 KB with Japanese holidays, about 9.1 KB with UK bank holidays; measured for 0.9.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan and the UK are bundled
 
 ## Installation
@@ -36,6 +36,8 @@ pnpm add bizdays-toolkit
 ```
 
 Node.js 22.12 or later. CI tests the package on Node.js 22.12, 22, 24 and 26, on Chrome, Firefox and Edge (Linux) and Safari (macOS), and on Cloudflare Workers (workerd, the open-source Workers runtime). The browsers are the latest stable versions on GitHub's runners, so their versions change as the runners are updated. The package is ESM only, but it can also be loaded from CommonJS with `require()` (tested in CI as well; on Node.js 22.12, `require()` prints an experimental-feature warning, which does not affect the result, and Node.js 26 prints none). Other runtimes (such as Deno, Bun or Vercel's Edge Runtime) are not tested.
+
+Types are bundled. CI type-checks a consumer project against the published type definitions with `moduleResolution` set to `node16`, `nodenext` and `bundler` (TypeScript 6); TypeScript 5.0, 5.5 and 5.8 were also checked by hand for 0.9.0.
 
 ## Usage
 
@@ -112,7 +114,12 @@ shipping.businessDayOnOrAfter(new Date(), { cutoff: "14:00" });
 
 shipping.dayInfo("2027-01-01");
 // { date: "2027-01-01", weekday: 5, businessDay: false, reason: "closed-annual", name: "New Year closure", holiday: {…} }
+shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.businessDay); // [true, false, false, false, false, true]
 ```
+
+`daysBetween(from, to)` returns `dayInfo` for every day in the period (both ends included).
+
+`createCalendar` and `createSchedule` validate the options when they are created, so the usual pattern is to create them once and reuse them. Creating is also cheap (about 0.02 ms for a calendar and 0.04 ms for a schedule with Japanese holidays on a development machine), so creating one per request is not a problem in practice.
 
 Each day is decided in this order of priority (top first).
 
@@ -203,6 +210,23 @@ const jpWithoutCitizensHoliday = {
 const calendar = createCalendar({ holidays: jpWithoutCitizensHoliday, closedWeekdays: [0, 6] });
 ```
 
+**Split special days kept in one list**: dates (`"YYYY-MM-DD"`) go in `dates` and annual dates (`"MM-DD"`) in `annual`.
+
+```ts
+type Hours = { open: string; close: string } | null;
+const regular: Hours = { open: "10:00", close: "19:00" };
+const specialDays: { date: string; value: Hours }[] = [
+  { date: "2026-12-31", value: { open: "10:00", close: "17:00" } },
+  { date: "01-01", value: null },
+];
+const special = createSchedule<Hours>({
+  weekly: [regular, regular, regular, regular, regular, regular, regular],
+  dates: specialDays.filter((d) => d.date.length === 10),
+  annual: specialDays.filter((d) => d.date.length === 5),
+});
+special.valueOn("2027-01-01"); // null
+```
+
 **Build per-store calendars from shared options**: options are plain objects, so spread and extend them.
 
 ```ts
@@ -288,7 +312,15 @@ const storeHours = createSchedule<Hours>({
 storeHours.valueOn("2026-11-03"); // { open: "10:00", close: "19:00" } (Culture Day uses Sunday hours)
 storeHours.dayInfo("2027-01-01");
 // { date: "2027-01-01", weekday: 5, value: null, reason: "annual", name: "Closed on New Year's Day", holiday: {…} }
+
+// Holidays in a period with their hours: filter daysBetween by holiday
+storeHours
+  .daysBetween("2026-11-01", "2026-11-30")
+  .filter((d) => d.holiday)
+  .map((d) => d.date); // ["2026-11-03", "2026-11-23"]
 ```
+
+`reason` is the rule that decided the value. With `holiday: "weekday"` (holidays follow the weekday rule), a holiday has `reason: "weekday"`, so check `holiday` to know whether a day is a holiday.
 
 Values are decided in the order `dates` (specific dates and ranges) → `annual` (annual dates and ranges) → `recurring` (`"over-holiday"`) → holidays → `recurring` (default and moved days) → `weekly` (weekday). When rules of the same type overlap, the one written first in the array wins.
 
@@ -297,10 +329,10 @@ Checking a time range such as "is the store open now" is left to your app, becau
 ```ts
 const { date, time } = storeHours.civilOf(new Date()); // { date: "2026-10-14", time: "16:30" } (Japan time)
 const hours = storeHours.valueOn(date);
-const isOpen = hours !== null && time !== null && hours.open <= time && time < hours.close;
+const isOpen = hours !== null && hours.open <= time && time < hours.close;
 ```
 
-`civilOf` is also on business-day calendars, and the same conversion is available as `toJapanDateTime` in `bizdays-toolkit/jp` and `toDateTimeParts(input, timeZone)` in the root.
+For inputs that always carry a time (a `Date`, Temporal `Instant`, `ZonedDateTime` or `PlainDateTime`, or a `"YYYY-MM-DDTHH:mm"` string), `time` is typed as `string`, so no `null` check is needed. `civilOf` is also on business-day calendars, and the same conversion is available as `toJapanDateTime` in `bizdays-toolkit/jp` and `toDateTimeParts(input, timeZone)` in the root.
 
 ### Date and date-time inputs
 
@@ -448,7 +480,7 @@ Versioning follows [Semantic Versioning](https://semver.org/). See [RELEASING.md
 - Official data updates (new, moved and one-off holidays by law, Official Gazette or proclamation, fixed equinox days in Japan, newly published years on GOV.UK) are released as **patch** versions, so they reach you with either `^` or `~`
 - To freeze the holiday results, pin an exact version (for example `"bizdays-toolkit": "0.8.0"`)
 - The reflected data is shown by `dataVersion` (for Japan, the year and month of the Official Gazette reflected; for the UK, the year and month of the GOV.UK data reflected) and `confirmedThrough`
-- Before 1.0.0, minor versions may contain breaking changes
+- Before 1.0.0, minor versions may contain breaking changes. What you need to change when moving between minor versions is listed in the [migration guide](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/migration.md) (Japanese) and in the "移行" (migration) part of each version in the CHANGELOG
 - Decision reasons (`reason`), holiday kinds (`kind`), error codes and diagnostic codes may gain values in future versions. When you branch on their values, handle "anything else" too (see "互換性の約束", the compatibility promise, in [RELEASING.md](https://github.com/inohan77/bizdays-toolkit/blob/main/RELEASING.md))
 
 ## Data sources

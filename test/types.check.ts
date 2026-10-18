@@ -10,7 +10,11 @@ import {
   createSchedule,
   isBizdaysError,
   monthOf,
+  toDateTimeParts,
   type BusinessDayConvention,
+  type DateInput,
+  type DayInfo,
+  type ScheduleDay,
   type HolidayProvider,
   type HolidayValueRule,
   type DayReason,
@@ -22,6 +26,7 @@ import {
 import {
   getHoliday,
   jp,
+  toJapanDateTime,
   type JapaneseHolidayKind,
   type KnownJapaneseHolidayKind,
 } from "../src/jp/index.ts";
@@ -196,3 +201,35 @@ const withoutNames: HolidayProvider = {
   ],
 };
 void withoutNames;
+
+// ------------------------------------------------------------
+// 時刻を必ず持つ入力では time が string になる（toDateTimeParts・toJapanDateTime・civilOf）
+// ------------------------------------------------------------
+{
+  const instant = { epochMilliseconds: 0 };
+  const plainDateTime = { year: 2026, month: 11, day: 23, hour: 10, minute: 0 };
+  const plainDate = { year: 2026, month: 11, day: 23 };
+  const timedParts = toDateTimeParts(new Date(), "Asia/Tokyo");
+  expectType<Equal<typeof timedParts.time, string>>();
+  const jstFromDate = toJapanDateTime(new Date());
+  expectType<Equal<(typeof jstFromDate)["time"], string>>();
+  const jstFromInstant = toJapanDateTime(instant);
+  expectType<Equal<(typeof jstFromInstant)["time"], string>>();
+  const jstFromPlainDateTime = toJapanDateTime(plainDateTime);
+  expectType<Equal<(typeof jstFromPlainDateTime)["time"], string>>();
+  const jstFromString = toJapanDateTime("2026-11-23T10:00");
+  expectType<Equal<(typeof jstFromString)["time"], string>>();
+  const jstFromDateString = toJapanDateTime("2026-11-23");
+  expectType<Equal<(typeof jstFromDateString)["time"], string | null>>();
+  const jstFromPlainDate = toJapanDateTime(plainDate);
+  expectType<Equal<(typeof jstFromPlainDate)["time"], string | null>>();
+  const cal = createCalendar({});
+  const calTimed = cal.civilOf(new Date());
+  expectType<Equal<(typeof calTimed)["time"], string>>();
+  const anyInput: DateInput = "2026-11-23";
+  expectType<Equal<(typeof calAny)["time"], string | null>>();
+  const calAny = cal.civilOf(anyInput);
+  expectType<Equal<ReturnType<typeof cal.daysBetween>, readonly DayInfo[]>>();
+  const sched = createSchedule({ weekly: [0, 1, 1, 1, 1, 1, 0] });
+  expectType<Equal<ReturnType<typeof sched.daysBetween>, readonly ScheduleDay<number>[]>>();
+}

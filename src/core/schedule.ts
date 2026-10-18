@@ -18,6 +18,7 @@
 import {
   addDays,
   daysInMonth,
+  fromDayNumber,
   isValidDate,
   parseDate,
   toDayNumber,
@@ -31,8 +32,12 @@ import {
   toCivil,
   toDateTimeParts,
   validateTimeZone,
+  type CivilDateTimeParts,
   type DateInput,
+  type DateTimeInput,
 } from "./input.ts";
+
+export type { CivilDateTimeParts } from "./input.ts";
 import type { Holiday, HolidayProvider } from "./types.ts";
 
 // ------------------------------------------------------------
@@ -268,17 +273,6 @@ export interface ScheduleDay<T, Kind extends string = string> {
 }
 
 /**
- * 暦日と時刻（カレンダーのタイムゾーン）。
- * @public
- */
-export interface CivilDateTimeParts {
-  /** 暦日 "YYYY-MM-DD" */
-  readonly date: DateString;
-  /** 時刻 "HH:mm"。暦日だけの入力では null */
-  readonly time: string | null;
-}
-
-/**
  * 祝日を調べる機能（スケジュールと営業日カレンダーで共通）。
  * @public
  */
@@ -291,6 +285,7 @@ export interface HolidayLookup<Kind extends string = string> {
   /** 入力をタイムゾーンでの暦日に変換する */
   dateOf(input: DateInput): DateString;
   /** 入力をタイムゾーンでの暦日と時刻に変換する */
+  civilOf(input: DateTimeInput): CivilDateTimeParts<string>;
   civilOf(input: DateInput): CivilDateTimeParts;
   /** 今日の日付（タイムゾーン） */
   today(now?: Date): DateString;
@@ -312,8 +307,13 @@ export interface HolidayLookup<Kind extends string = string> {
 export interface Schedule<T, Kind extends string = string> extends HolidayLookup<Kind> {
   /** その日の値 */
   valueOn(input: DateInput): T;
-  /** その日の値と、値を決めた規則 */
+  /**
+   * その日の値と、値を決めた規則（reason）。reason は値を決めた規則なので、祝日の規則が "weekday"（曜日どおり）の
+   * ときは、祝日でも "weekday" になる。祝日かどうかは holiday の有無で判定する
+   */
   dayInfo(input: DateInput): ScheduleDay<T, Kind>;
+  /** 期間内の日ごとの値と規則（両端を含む。from が to より後ならエラー） */
+  daysBetween(from: DateInput, to: DateInput): readonly ScheduleDay<T, Kind>[];
 }
 
 // ------------------------------------------------------------
@@ -886,7 +886,8 @@ export function createHolidayLookup<Kind extends string>(
     providers,
     holidayOn,
     dateOf,
-    civilOf: (input) => toDateTimeParts(input, timeZone),
+    civilOf: ((input: DateInput) =>
+      toDateTimeParts(input, timeZone)) as HolidayLookup<Kind>["civilOf"],
     today: (now = new Date()) => instantToCivil(now.getTime(), timeZone).date,
     isHoliday: (input) => holidayOn(dateOf(input)) !== undefined,
     getHoliday: (input) => holidayOn(dateOf(input)),
@@ -1098,6 +1099,20 @@ export function createResolver<T, Kind extends string>(
   };
 }
 
+/** @internal 期間（両端を含む）の日ごとに fn を呼んだ結果。from が to より後ならエラー */
+export function mapDays<R>(
+  from: DateString,
+  to: DateString,
+  fn: (date: DateString) => R,
+): readonly R[] {
+  if (from > to) {
+    throw rangeError("invalid-range", `"from" must not be after "to" (${from} > ${to})`);
+  }
+  const result: R[] = [];
+  for (let n = toDayNumber(from); n <= toDayNumber(to); n++) result.push(fn(fromDayNumber(n)));
+  return Object.freeze(result);
+}
+
 /** @internal 検証済みの規則からスケジュールを作る */
 export function buildSchedule<T, Kind extends string>(
   compiled: CompiledSchedule<T, Kind>,
@@ -1118,6 +1133,7 @@ export function buildSchedule<T, Kind extends string>(
     holidaysBetween: lookup.holidaysBetween,
     valueOn: (input) => info(lookup.dateOf(input)).value,
     dayInfo: (input) => info(lookup.dateOf(input)),
+    daysBetween: (from, to) => mapDays(lookup.dateOf(from), lookup.dateOf(to), info),
   };
   return Object.freeze(schedule);
 }

@@ -26,7 +26,7 @@
 - **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 7.4KB（日本の祝日込みで約 9.0KB、英国の祝日込みで約 9.0KB。0.8.1 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
+- **軽量・依存ゼロ**: minify + gzip で約 7.5KB（日本の祝日込みで約 9.0KB、英国の祝日込みで約 9.1KB。0.9.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。日本と英国を同梱しています
 
 ## インストール
@@ -36,6 +36,8 @@ pnpm add bizdays-toolkit
 ```
 
 Node.js 22.12 以上。CI で Node.js 22.12・22・24・26、Chrome・Firefox・Edge（Linux）と Safari（macOS）、Cloudflare Workers（Workers のオープンソースの実行環境 workerd）を確認しています。ブラウザーは GitHub のランナーに入っている最新の安定版なので、ランナーの更新で版が変わります。ESM のみですが、CommonJS からも `require()` で読み込めます（これも CI で確認しています。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ますが、結果には影響しません。Node.js 26 では出ません）。ほかの実行環境（Deno・Bun・Vercel の Edge Runtime など）は確認していません。
+
+型定義を同梱しています。CI で、利用者のプロジェクトとして公開する型定義を、`moduleResolution` を `node16`・`nodenext`・`bundler` にして型チェックしています（TypeScript 6）。TypeScript 5.0・5.5・5.8 でも、0.9.0 の時点で手作業で確かめました。
 
 ## 使い方
 
@@ -112,7 +114,12 @@ shipping.businessDayOnOrAfter(new Date(), { cutoff: "14:00" });
 
 shipping.dayInfo("2027-01-01");
 // { date: "2027-01-01", weekday: 5, businessDay: false, reason: "closed-annual", name: "年末年始", holiday: {…} }
+shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.businessDay); // [true, false, false, false, false, true]
 ```
+
+`daysBetween(from, to)` は、期間のすべての日の `dayInfo` を返します（両端を含む）。
+
+`createCalendar`・`createSchedule` は作る時点で設定を検証するので、作ったものを使い回すのが基本です。作成も軽く（開発用の機械で、日本の祝日を使う営業日カレンダーが約 0.02 ミリ秒、スケジュールが約 0.04 ミリ秒）、呼び出しのたびに作っても実用上の問題はありません。
 
 1 日の判定は次の優先順位で行います（上が優先）。
 
@@ -196,6 +203,23 @@ const jpWithoutCitizensHoliday = {
   holidaysInYear: (year: number) => jp.holidaysInYear(year).filter((h) => h.kind !== "citizens"),
 };
 const calendar = createCalendar({ holidays: jpWithoutCitizensHoliday, closedWeekdays: [0, 6] });
+```
+
+**1 つの配列で持っている特別営業日を振り分ける**：年月日（`"YYYY-MM-DD"`）は `dates`、毎年の月日（`"MM-DD"`）は `annual` に渡します。
+
+```ts
+type Hours = { open: string; close: string } | null;
+const regular: Hours = { open: "10:00", close: "19:00" };
+const specialDays: { date: string; value: Hours }[] = [
+  { date: "2026-12-31", value: { open: "10:00", close: "17:00" } },
+  { date: "01-01", value: null },
+];
+const special = createSchedule<Hours>({
+  weekly: [regular, regular, regular, regular, regular, regular, regular],
+  dates: specialDays.filter((d) => d.date.length === 10),
+  annual: specialDays.filter((d) => d.date.length === 5),
+});
+special.valueOn("2027-01-01"); // null
 ```
 
 **共通の設定から店舗ごとのカレンダーを作る**：設定は普通のオブジェクトなので、展開して足します。
@@ -283,7 +307,15 @@ const storeHours = createSchedule<Hours>({
 storeHours.valueOn("2026-11-03"); // { open: "10:00", close: "19:00" }（文化の日は日曜の営業時間）
 storeHours.dayInfo("2027-01-01");
 // { date: "2027-01-01", weekday: 5, value: null, reason: "annual", name: "元日休業", holiday: {…} }
+
+// 期間の祝日と営業時間: daysBetween を holiday で絞る
+storeHours
+  .daysBetween("2026-11-01", "2026-11-30")
+  .filter((d) => d.holiday)
+  .map((d) => d.date); // ["2026-11-03", "2026-11-23"]
 ```
+
+`reason` は値を決めた規則です。`holiday: "weekday"`（祝日も曜日どおり）のときは、祝日でも `reason` は `"weekday"` になるので、祝日かどうかは `holiday` の有無で判定します。
 
 値は `dates`（個別の日付・期間）→ `annual`（毎年の月日・期間）→ `recurring`（`"over-holiday"`）→ 祝日 → `recurring`（既定・振替先）→ `weekly`（曜日）の順に決まります。同じ種類の規則が重なる場合は、配列で先に書いたものが優先です。
 
@@ -292,10 +324,10 @@ storeHours.dayInfo("2027-01-01");
 ```ts
 const { date, time } = storeHours.civilOf(new Date()); // { date: "2026-10-14", time: "16:30" }（日本時間）
 const hours = storeHours.valueOn(date);
-const isOpen = hours !== null && time !== null && hours.open <= time && time < hours.close;
+const isOpen = hours !== null && hours.open <= time && time < hours.close;
 ```
 
-`civilOf` は営業日カレンダーにもあり、`bizdays-toolkit/jp` の `toJapanDateTime`、ルートの `toDateTimeParts(input, timeZone)` でも同じ変換ができます。
+時刻を必ず持つ入力（`Date`、Temporal の `Instant`・`ZonedDateTime`・`PlainDateTime`、`"YYYY-MM-DDTHH:mm"` の文字列）では、`time` の型が `string` になるので、`null` の確認は要りません。`civilOf` は営業日カレンダーにもあり、`bizdays-toolkit/jp` の `toJapanDateTime`、ルートの `toDateTimeParts(input, timeZone)` でも同じ変換ができます。
 
 ### 日付・日時の入力
 
@@ -443,7 +475,7 @@ test("出荷カレンダーの設定に問題がない", () => {
 - 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
 - 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.1.0"`）
 - 反映済みのデータは `dataVersion`（日本は反映済みの官報の年月、英国は反映済みの GOV.UK のデータの年月）と `confirmedThrough` で確認できます
-- 1.0.0 までは、マイナー版で破壊的変更を行うことがあります
+- 1.0.0 までは、マイナー版で破壊的変更を行うことがあります。マイナー版の間を移るときに利用者がする作業は、[移行ガイド](./migration.md)と、CHANGELOG の各版の「移行」にまとめています
 - 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコード・診断のコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](../RELEASING.md) の「互換性の約束」）
 
 ## 出典

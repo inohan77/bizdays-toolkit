@@ -36,6 +36,7 @@ import {
   compileHolidaySource,
   compileRecurringRules,
   isWeekday,
+  mapDays,
   RECURRING_RULE_KEYS,
   type CompiledSchedule,
   type DayOfMonth,
@@ -201,6 +202,8 @@ export interface DueDateOptions {
 export interface Calendar<Kind extends string = string> extends HolidayLookup<Kind> {
   /** 1 日分の判定結果（営業日か・理由・祝日） */
   dayInfo(input: DateInput): DayInfo<Kind>;
+  /** 期間内の日ごとの判定結果（両端を含む。from が to より後ならエラー） */
+  daysBetween(from: DateInput, to: DateInput): readonly DayInfo<Kind>[];
   /** 営業日か */
   isBusinessDay(input: DateInput): boolean;
   /** 翌営業日（入力日の翌日以降） */
@@ -500,6 +503,7 @@ export function createCalendar<Kind extends string = string>(
     holidaysBetween: schedule.holidaysBetween,
 
     dayInfo: (input) => info(dateOf(input)),
+    daysBetween: (from, to) => mapDays(dateOf(from), dateOf(to), info),
     isBusinessDay: (input) => isOpen(dateOf(input)),
     nextBusinessDay: (input) => search(addDays(dateOf(input), 1), 1),
     previousBusinessDay: (input) => search(addDays(dateOf(input), -1), -1),

@@ -39,6 +39,37 @@ export interface TemporalInstantLike {
  */
 export type DateInput = string | Date | TemporalDateLike | TemporalInstantLike;
 
+/**
+ * Temporal.PlainDateTime として受け付ける最小限の形（時刻を持つ TemporalDateLike）。
+ * @public
+ */
+export interface TemporalDateTimeLike extends TemporalDateLike {
+  readonly hour: number;
+  readonly minute: number;
+}
+
+/**
+ * 時刻を必ず持つ入力（瞬間、Temporal.PlainDateTime、"YYYY-MM-DDTHH:mm…" の文字列）。
+ * これを渡すと、civilOf・toDateTimeParts・toJapanDateTime の time の型が string になる。
+ * @public
+ */
+export type DateTimeInput =
+  | Date
+  | TemporalInstantLike
+  | TemporalDateTimeLike
+  | `${number}-${number}-${number}T${string}`;
+
+/**
+ * タイムゾーンでの暦日と時刻。Time は時刻の型で、時刻を必ず持つ入力（DateTimeInput）では string になる。
+ * @public
+ */
+export interface CivilDateTimeParts<Time extends string | null = string | null> {
+  /** 暦日 "YYYY-MM-DD" */
+  readonly date: DateString;
+  /** 時刻 "HH:mm"。暦日だけの入力では null */
+  readonly time: Time;
+}
+
 /** @internal 暦日と、分かる場合は 0 時からの経過分 */
 export interface CivilDateTime {
   readonly date: DateString;
@@ -191,12 +222,13 @@ export function toDateString(input: DateInput, timeZone: string): DateString {
 
 /**
  * 入力を、タイムゾーンでの暦日と時刻（"HH:mm"。暦日だけの入力では null）に変換する。
+ * 時刻を必ず持つ入力（DateTimeInput）では、time の型が string になる。
  * @public
  */
-export function toDateTimeParts(
-  input: DateInput,
-  timeZone: string,
-): { readonly date: DateString; readonly time: string | null } {
+export function toDateTimeParts(input: DateTimeInput, timeZone: string): CivilDateTimeParts<string>;
+/** @public */
+export function toDateTimeParts(input: DateInput, timeZone: string): CivilDateTimeParts;
+export function toDateTimeParts(input: DateInput, timeZone: string): CivilDateTimeParts {
   const civil = toCivil(input, validateTimeZone(timeZone));
   const time =
     civil.minutes === null
