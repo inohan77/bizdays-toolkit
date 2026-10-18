@@ -11,7 +11,8 @@
  *
  * "under-holiday" の規則は、祝日の扱いが "weekday"（曜日どおり）なら祝日にも当てはまる。
  * "after-holiday" の規則は、祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）。
- * 毎年の月日・繰り返しの規則の有効期間（effectiveFrom・effectiveTo）の外では、その規則は書かれていないのと同じ
+ * 毎年の月日・繰り返しの規則の有効期間（effectiveFrom・effectiveTo）の外では、その規則は書かれていないのと同じ。
+ * 祝日の翌日の規則（dayAfterHoliday）は、前日が祝日でその日自身は祝日でない日に当てはまる（提供元の祝日だけで判定）
  *
  * 営業日カレンダー（createCalendar）は、このスケジュールの真偽値版として作られている。
  */
@@ -146,6 +147,7 @@ export interface WeekdayPattern {
   /** 当てはめる月（省略時はすべての月） */
   readonly months?: readonly Month[];
   readonly day?: never;
+  readonly dayAfterHoliday?: never;
 }
 
 /**
@@ -161,13 +163,30 @@ export interface DayOfMonthPattern {
   readonly nth?: never;
   readonly interval?: never;
   readonly anchor?: never;
+  readonly dayAfterHoliday?: never;
+}
+
+/**
+ * 祝日の翌日（祝日が続く場合は連休が明けた日。その日自身は祝日でない）。「祝日」は提供元の祝日だけ。
+ * 当てはまる日は祝日でないので、onHolidayRule は指定できない（指定すると invalid-option）。
+ * @public
+ */
+export interface DayAfterHolidayPattern {
+  readonly dayAfterHoliday: true;
+  /** 当てはめる月（翌日の月。省略時はすべての月） */
+  readonly months?: readonly Month[];
+  readonly weekday?: never;
+  readonly nth?: never;
+  readonly interval?: never;
+  readonly anchor?: never;
+  readonly day?: never;
 }
 
 /**
  * 繰り返しのパターン。
  * @public
  */
-export type RecurringPattern = WeekdayPattern | DayOfMonthPattern;
+export type RecurringPattern = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern;
 
 /**
  * 繰り返しの規則（営業日カレンダーの closedRecurring・openRecurring）。
@@ -304,6 +323,8 @@ export interface HolidayLookup<Kind extends string = string> {
   readonly timeZone: string;
   /** 祝日の提供元 */
   readonly providers: readonly HolidayProvider<Kind>[];
+  /** 祝日の提供元の対応年を外れた日付の扱い（設定の outOfRange） */
+  readonly outOfRange: "throw" | "ignore";
 
   /** 入力をタイムゾーンでの暦日に変換する */
   dateOf(input: DateInput): DateString;
@@ -573,6 +594,8 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly anchor: number | null;
   /** 日の集合（曜日の規則では null） */
   readonly days: ReadonlySet<number> | null;
+  /** 祝日の翌日の規則か */
+  readonly dayAfterHoliday: boolean;
   /** 月の集合（null はすべての月） */
   readonly months: ReadonlySet<number> | null;
   readonly onHolidayRule: OnHolidayRule;
@@ -632,8 +655,13 @@ export function compileRecurringRules<T>(
     const name = checkName(c, p, entry["name"]);
     const hasWeekday = "weekday" in entry;
     const hasDay = "day" in entry;
-    if (hasWeekday === hasDay) {
-      c.error("invalid-option", p, 'must have either "weekday" or "day" (not both)');
+    const hasAfter = "dayAfterHoliday" in entry;
+    if (Number(hasWeekday) + Number(hasDay) + Number(hasAfter) !== 1) {
+      c.error(
+        "invalid-option",
+        p,
+        'must have exactly one of "weekday", "day" or "dayAfterHoliday"',
+      );
       return;
     }
     let ok = true;
@@ -696,9 +724,24 @@ export function compileRecurringRules<T>(
           ok = false;
         }
       }
-      const set = checkSet(c, `${p}.day`, entry["day"], isDayOfMonth, "1-31 or -1 (last day)");
-      if (set) days = set;
-      else ok = false;
+      if (hasDay) {
+        const set = checkSet(c, `${p}.day`, entry["day"], isDayOfMonth, "1-31 or -1 (last day)");
+        if (set) days = set;
+        else ok = false;
+      } else {
+        if (entry["dayAfterHoliday"] !== true) {
+          c.error("invalid-option", `${p}.dayAfterHoliday`, "must be true");
+          ok = false;
+        }
+        if ("onHolidayRule" in entry) {
+          c.error(
+            "invalid-option",
+            `${p}.onHolidayRule`,
+            'cannot be used with "dayAfterHoliday" (the day after a holiday is never a holiday)',
+          );
+          ok = false;
+        }
+      }
     }
     let months: Set<number> | null = null;
     if (entry["months"] !== undefined) {
@@ -730,6 +773,7 @@ export function compileRecurringRules<T>(
           interval,
           anchor,
           days,
+          dayAfterHoliday: hasAfter,
           months,
           onHolidayRule: onHoliday as OnHolidayRule,
           value,
@@ -742,13 +786,24 @@ export function compileRecurringRules<T>(
   return rules;
 }
 
+/** @internal 祝日かを返す関数（祝日の翌日の規則の判定に使う。提供元の対応年の外は祝日でないとみなすこと） */
+export type IsHoliday = (date: DateString) => boolean;
+
 /**
- * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・月）がその日に当てはまるか。
- * 有効期間と祝日かどうかは考えない（規則の診断で、形どうしの包含を調べるために分けている）
+ * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・祝日の翌日・月）がその日に当てはまるか。
+ * 有効期間は考えない（規則の診断で、形どうしの包含を調べるために分けている）。
+ * 祝日の翌日の規則は isHoliday で判定し、isHoliday を渡さなければ当てはまらない
  */
-export function matchPattern(rule: RecurringRuleCompiled<unknown>, date: DateString): boolean {
+export function matchPattern(
+  rule: RecurringRuleCompiled<unknown>,
+  date: DateString,
+  isHoliday?: IsHoliday,
+): boolean {
   const { year, month, day } = parseDate(date);
   if (rule.months && !rule.months.has(month)) return false;
+  if (rule.dayAfterHoliday) {
+    return isHoliday !== undefined && !isHoliday(date) && isHoliday(addDays(date, -1));
+  }
   const dim = daysInMonth(year, month);
   if (rule.weekday !== null) {
     if (weekdayOf(date) !== rule.weekday) return false;
@@ -760,9 +815,13 @@ export function matchPattern(rule: RecurringRuleCompiled<unknown>, date: DateStr
   return rule.days!.has(day) || (rule.days!.has(-1) && day === dim);
 }
 
-/** @internal 繰り返しの規則がその日に当てはまるか（有効期間を含む。祝日かどうかは考えない） */
-export function matchRecurring(rule: RecurringRuleCompiled<unknown>, date: DateString): boolean {
-  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date);
+/** @internal 繰り返しの規則がその日に当てはまるか（有効期間を含む） */
+export function matchRecurring(
+  rule: RecurringRuleCompiled<unknown>,
+  date: DateString,
+  isHoliday: IsHoliday,
+): boolean {
+  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date, isHoliday);
 }
 
 /** 規則の value を取り出す（value が必須の規則用） */
@@ -995,6 +1054,7 @@ export function createHolidayLookup<Kind extends string>(
   return {
     timeZone,
     providers,
+    outOfRange,
     holidayOn,
     dateOf,
     civilOf: ((input: DateInput) =>
@@ -1049,6 +1109,7 @@ export const RECURRING_RULE_KEYS = [
   "interval",
   "anchor",
   "day",
+  "dayAfterHoliday",
   "months",
   "name",
   "onHolidayRule",
@@ -1159,7 +1220,7 @@ export function createResolver<T, Kind extends string>(
     for (let k = 1; k <= MAX_HOLIDAY_RUN; k++) {
       const prev = addDays(date, -k);
       if (!isHolidaySafe(prev)) return undefined;
-      if (matchRecurring(rule, prev)) return prev;
+      if (matchRecurring(rule, prev, isHolidaySafe)) return prev;
     }
     return undefined;
   }
@@ -1196,7 +1257,7 @@ export function createResolver<T, Kind extends string>(
     if (holiday) {
       // 3. 祝日の上（"over-holiday"）
       const over = recurring.find(
-        (r) => r.onHolidayRule === "over-holiday" && matchRecurring(r, date),
+        (r) => r.onHolidayRule === "over-holiday" && matchRecurring(r, date, isHolidaySafe),
       );
       if (over) return make(over.value, "recurring", over, over.name);
       // 4. 祝日
@@ -1207,7 +1268,7 @@ export function createResolver<T, Kind extends string>(
       // 祝日の扱いが「曜日どおり」なら、祝日の下（"under-holiday"）の規則も当てはまる。
       // "after-holiday" の規則は祝日には当てはめない（振り替える）
       const under = recurring.find(
-        (r) => r.onHolidayRule === "under-holiday" && matchRecurring(r, date),
+        (r) => r.onHolidayRule === "under-holiday" && matchRecurring(r, date, isHolidaySafe),
       );
       if (under) return make(under.value, "recurring", under, under.name);
       return make(weekly[weekday] as T, "weekday", null, undefined);
@@ -1215,7 +1276,8 @@ export function createResolver<T, Kind extends string>(
 
     // 5. 繰り返しの規則（祝日でない日。配列で先に書いたものが優先）。振替先も同じ段階で判定する
     for (const rule of recurring) {
-      if (matchRecurring(rule, date)) return make(rule.value, "recurring", rule, rule.name);
+      if (matchRecurring(rule, date, isHolidaySafe))
+        return make(rule.value, "recurring", rule, rule.name);
       if (hasShift && rule.onHolidayRule === "after-holiday") {
         const origin = shiftedOrigin(rule, date);
         if (origin !== undefined) return make(rule.value, "recurring", rule, rule.name, origin);
@@ -1251,6 +1313,7 @@ export function buildSchedule<T, Kind extends string>(
   const schedule: Schedule<T, Kind> = {
     timeZone: lookup.timeZone,
     providers: lookup.providers,
+    outOfRange: lookup.outOfRange,
     dateOf: lookup.dateOf,
     civilOf: lookup.civilOf,
     today: lookup.today,

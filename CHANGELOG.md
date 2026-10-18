@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-19
+
+### 移行
+
+作業は要りません（繰り返しの規則の新しい形と、カレンダーを合成する関数の追加）。
+
+### Added
+
+- 繰り返しの規則（`closedRecurring`・`openRecurring`・スケジュールの `recurring`）に、祝日の翌日の形 `{ dayAfterHoliday: true }` を追加した。前日が祝日でその日自身は祝日でない日（連休なら連休が明けた日）に当てはまる。「祝日」は提供元の祝日だけで、休業日の設定は含めない。当てはまる日は祝日でないので `onHolidayRule` は指定できない（`invalid-option`）。`months`・`name`・有効期間と組み合わせられる。型 `DayAfterHolidayPattern` を追加した
+- 作成済みの営業日カレンダーを合成する `combineCalendars(calendars, { businessDay: "all" | "any", maxSearchDays? })` を追加した。すべてが営業している日（`"all"`）、またはいずれかが営業している日（`"any"`）を営業日とする通常のカレンダーを返し、営業日の加減算・調整・期日などが合成結果で動く。`dayInfo` の `reason`・`name`・`shiftedFrom` は合成結果と同じ判定をした最初のカレンダーの結果で、その番号を新しい項目 `decidedBy` で返す。祝日は各カレンダーの提供元の和集合で判定する。タイムゾーンが違えば `time-zone-conflict`、2 つ未満・同じカレンダーの重複は `invalid-argument`。型 `CombineOptions` を追加した
+- `DayInfo` に省略可能な `decidedBy`（合成したカレンダーで判定を決めたカレンダーの番号）を追加した。合成していないカレンダーでは付かない
+- `HolidayLookup`（営業日カレンダー・スケジュール）に `outOfRange`（設定の値）を追加した。合成するときに引き継ぐため
+
+### Changed
+
+- 規則の診断で、祝日の翌日の規則を扱えるようにした。提供元のない設定では `never-matches`。`shadowed` は祝日の翌日の規則どうし（`months` と有効期間）でだけ調べ、曜日の規則との重なりは `redundant` で見つける
+- 繰り返しの規則の形の誤りのメッセージを、`"weekday"`・`"day"`・`"dayAfterHoliday"` のうち 1 つだけを持つ、に改めた（code は `invalid-option` のまま）
+- README: 繰り返しの規則の節に祝日の翌日を、新しい節「カレンダーの合成」を足した。サイズの値を測り直した（ルート約 8.6KB・日本の祝日込み約 10.3KB・英国の祝日込み約 10.2KB。0.11.0 で測定）
+
+### 開発
+
+- サイズの上限（`size-limits.json`）を上げた。ルート 17,500 → 19,500、`./jp` 20,500 → 22,500、`./diagnose` 24,000 → 26,000（gzip）。祝日の翌日の規則と `combineCalendars`（ルートで約 1.7KB）と、診断の祝日の翌日への対応（約 1.9KB）のため
+- `createCalendar` の営業日の探索・調整・月の営業日の実装を、祝日を調べる機能と 1 日分の判定を引数に取る内部関数（`buildCalendar`）に切り出し、`combineCalendars` と共用した。公開 API と結果は変わらない
+- 性質のテストに祝日の翌日の規則を加えた
+
 ## [0.10.0] - 2026-10-19
 
 ### 移行
@@ -266,7 +291,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.8.1...v0.9.0

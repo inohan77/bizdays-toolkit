@@ -15,6 +15,8 @@
  * 祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）
  *
  * 内部では、営業日かどうか（真偽値）を返すスケジュール（createSchedule）として作っている。
+ * 営業日の探索・調整・月の営業日などの機能は buildCalendar に切り出し、作成済みのカレンダーを
+ * 合成する combineCalendars（両方が営業している日・どちらかが営業している日）でも同じ実装を使う。
  */
 
 import {
@@ -35,6 +37,7 @@ import {
   compileDateRules,
   compileHolidaySource,
   compileRecurringRules,
+  createHolidayLookup,
   isWeekday,
   mapDays,
   RECURRING_RULE_KEYS,
@@ -46,7 +49,7 @@ import {
   type HolidayLookup,
   type HolidaySourceOptions,
 } from "./schedule.ts";
-import type { Holiday } from "./types.ts";
+import type { Holiday, HolidayProvider } from "./types.ts";
 
 /**
  * 祝日の扱い。
@@ -149,6 +152,25 @@ export interface DayInfo<Kind extends string = string> {
   readonly holiday?: Holiday<Kind>;
   /** 祝日から振り替えられた繰り返しの規則で決まった場合、振替の元の日付（onHolidayRule: "after-holiday"） */
   readonly shiftedFrom?: DateString;
+  /**
+   * 合成したカレンダー（combineCalendars）で、判定を決めたカレンダーの番号（渡した配列の位置）。
+   * reason・name・shiftedFrom はそのカレンダーの結果。合成していないカレンダーでは付かない
+   */
+  readonly decidedBy?: number;
+}
+
+/**
+ * カレンダーの合成のオプション。
+ * @public
+ */
+export interface CombineOptions {
+  /**
+   * 営業日とする条件。"all": すべてのカレンダーが営業日（例: 自社と銀行の両方が営業している日）/
+   * "any": いずれかのカレンダーが営業日（例: 複数の店舗のどこかが開いている日）
+   */
+  readonly businessDay: "all" | "any";
+  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら Error */
+  readonly maxSearchDays?: number;
 }
 
 /**
@@ -401,8 +423,20 @@ export function createCalendar<Kind extends string = string>(
     return Object.freeze(result);
   }
 
-  const isOpen = (date: DateString): boolean => schedule.valueOn(date);
-  const dateOf = schedule.dateOf;
+  return buildCalendar(schedule, (date) => schedule.valueOn(date), info, maxSearchDays);
+}
+
+/**
+ * @internal 祝日を調べる機能と 1 日分の判定から、営業日カレンダーの機能（探索・調整・月の営業日・期日）を組み立てる。
+ * createCalendar と combineCalendars で共用する
+ */
+function buildCalendar<Kind extends string>(
+  lookup: HolidayLookup<Kind>,
+  isOpen: (date: DateString) => boolean,
+  info: (date: DateString) => DayInfo<Kind>,
+  maxSearchDays: number,
+): Calendar<Kind> {
+  const dateOf = lookup.dateOf;
 
   function search(start: DateString, step: 1 | -1): DateString {
     let n = toDayNumber(start);
@@ -496,15 +530,16 @@ export function createCalendar<Kind extends string = string>(
   }
 
   const calendar: Calendar<Kind> = {
-    timeZone: schedule.timeZone,
-    providers: schedule.providers,
+    timeZone: lookup.timeZone,
+    providers: lookup.providers,
+    outOfRange: lookup.outOfRange,
     dateOf,
-    civilOf: schedule.civilOf,
-    today: schedule.today,
-    isHoliday: schedule.isHoliday,
-    getHoliday: schedule.getHoliday,
-    holidaysInYear: schedule.holidaysInYear,
-    holidaysBetween: schedule.holidaysBetween,
+    civilOf: lookup.civilOf,
+    today: lookup.today,
+    isHoliday: lookup.isHoliday,
+    getHoliday: lookup.getHoliday,
+    holidaysInYear: lookup.holidaysInYear,
+    holidaysBetween: lookup.holidaysBetween,
 
     dayInfo: (input) => info(dateOf(input)),
     daysBetween: (from, to) => mapDays(dateOf(from), dateOf(to), info),
@@ -512,7 +547,7 @@ export function createCalendar<Kind extends string = string>(
     nextBusinessDay: (input) => search(addDays(dateOf(input), 1), 1),
     previousBusinessDay: (input) => search(addDays(dateOf(input), -1), -1),
     businessDayOnOrAfter(input, opts = {}) {
-      const civil = toCivil(input, schedule.timeZone);
+      const civil = toCivil(input, lookup.timeZone);
       let start = civil.date;
       if (opts.cutoff !== undefined) {
         const cutoff = parseTimeOfDay(opts.cutoff);
@@ -563,4 +598,94 @@ export function createCalendar<Kind extends string = string>(
     },
   };
   return Object.freeze(calendar);
+}
+
+const isCalendarLike = (v: unknown): v is Calendar =>
+  typeof v === "object" &&
+  v !== null &&
+  typeof (v as Calendar).dayInfo === "function" &&
+  typeof (v as Calendar).isBusinessDay === "function" &&
+  typeof (v as Calendar).timeZone === "string" &&
+  Array.isArray((v as Calendar).providers);
+
+/**
+ * 作成済みの営業日カレンダーを合成する。"all" はすべてのカレンダーが営業している日、"any" はいずれかが
+ * 営業している日を営業日とする。返すのは通常の営業日カレンダーで、営業日の加減算・調整・期日などが合成結果で動く。
+ *
+ * - dayInfo の reason・name・shiftedFrom は、合成結果と同じ判定をした最初のカレンダーの結果で、
+ *   その番号を decidedBy で返す。holiday・isHoliday などは、すべてのカレンダーの祝日の提供元の和集合で判定する
+ * - タイムゾーンはすべてのカレンダーで同じでなければならない（time-zone-conflict）。
+ *   2 つ未満、同じカレンダーを 2 回渡した場合は invalid-argument
+ * - 合成したカレンダーをさらに合成することもできる。規則の診断（diagnoseCalendar）の対象にはならないので、
+ *   元のカレンダーの設定をそれぞれ診断する
+ * @public
+ */
+export function combineCalendars<Kind extends string = string>(
+  calendars: readonly Calendar<Kind>[],
+  options: CombineOptions,
+): Calendar<Kind> {
+  if (!Array.isArray(calendars) || calendars.length < 2) {
+    throw rangeError("invalid-argument", "calendars must be an array of two or more calendars");
+  }
+  calendars.forEach((c, i) => {
+    if (!isCalendarLike(c))
+      throw rangeError("invalid-argument", `calendars[${i}] is not a calendar`);
+    if (calendars.indexOf(c) !== i) {
+      throw rangeError(
+        "invalid-argument",
+        `calendars[${i}] is the same calendar as calendars[${calendars.indexOf(c)}]`,
+      );
+    }
+  });
+  const mode = (options as { businessDay?: unknown } | undefined)?.businessDay;
+  if (mode !== "all" && mode !== "any") {
+    throw rangeError("invalid-option", 'businessDay must be "all" or "any"');
+  }
+  const maxSearchDays = options.maxSearchDays ?? 3660;
+  if (!Number.isInteger(maxSearchDays) || maxSearchDays < 1) {
+    throw rangeError("invalid-option", "maxSearchDays must be a positive integer");
+  }
+  const zones = [...new Set(calendars.map((c) => c.timeZone))];
+  if (zones.length > 1) {
+    throw rangeError(
+      "time-zone-conflict",
+      `Calendars use different time zones (${zones.join(", ")}); combine calendars with the same time zone`,
+    );
+  }
+  const providers: HolidayProvider<Kind>[] = [];
+  for (const c of calendars)
+    for (const p of c.providers) if (!providers.includes(p)) providers.push(p);
+  const lookup = createHolidayLookup<Kind>({
+    providers: Object.freeze(providers),
+    timeZone: zones[0]!,
+    outOfRange: calendars.every((c) => c.outOfRange === "ignore") ? "ignore" : "throw",
+  });
+
+  const isOpen = (date: DateString): boolean =>
+    mode === "all"
+      ? calendars.every((c) => c.isBusinessDay(date))
+      : calendars.some((c) => c.isBusinessDay(date));
+
+  function info(date: DateString): DayInfo<Kind> {
+    const results = calendars.map((c) => c.dayInfo(date));
+    const open =
+      mode === "all" ? results.every((r) => r.businessDay) : results.some((r) => r.businessDay);
+    // 合成結果と同じ判定をした最初のカレンダー（"all" で休業なら最初に休みのもの、営業ならすべて営業なので 0 番）
+    const decidedBy = results.findIndex((r) => r.businessDay === open);
+    const base = results[decidedBy]!;
+    const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
+      date,
+      weekday: base.weekday,
+      businessDay: open,
+      reason: base.reason,
+    };
+    if (base.name !== undefined) result.name = base.name;
+    const holiday = lookup.holidayOn(date);
+    if (holiday !== undefined) result.holiday = holiday;
+    if (base.shiftedFrom !== undefined) result.shiftedFrom = base.shiftedFrom;
+    result.decidedBy = decidedBy;
+    return Object.freeze(result);
+  }
+
+  return buildCalendar(lookup, isOpen, info, maxSearchDays);
 }

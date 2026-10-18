@@ -125,6 +125,21 @@ export interface CivilDateTimeParts<Time extends string | null = string | null> 
 export declare function closingMonth(date: DateString, closingDay: number): MonthString;
 ```
 
+### combineCalendars (@public)
+
+```ts
+export declare function combineCalendars<Kind extends string = string>(calendars: readonly Calendar<Kind>[], options: CombineOptions): Calendar<Kind>;
+```
+
+### CombineOptions (@public)
+
+```ts
+export interface CombineOptions {
+    readonly businessDay: "all" | "any";
+    readonly maxSearchDays?: number;
+}
+```
+
 ### createCalendar (@public)
 
 ```ts
@@ -186,6 +201,20 @@ export interface DateValue<T> {
 }
 ```
 
+### DayAfterHolidayPattern (@public)
+
+```ts
+export interface DayAfterHolidayPattern {
+    readonly dayAfterHoliday: true;
+    readonly months?: readonly Month[];
+    readonly weekday?: never;
+    readonly nth?: never;
+    readonly interval?: never;
+    readonly anchor?: never;
+    readonly day?: never;
+}
+```
+
 ### DayInfo (@public)
 
 ```ts
@@ -197,6 +226,7 @@ export interface DayInfo<Kind extends string = string> {
     readonly name?: string;
     readonly holiday?: Holiday<Kind>;
     readonly shiftedFrom?: DateString;
+    readonly decidedBy?: number;
 }
 ```
 
@@ -216,6 +246,7 @@ export interface DayOfMonthPattern {
     readonly nth?: never;
     readonly interval?: never;
     readonly anchor?: never;
+    readonly dayAfterHoliday?: never;
 }
 ```
 
@@ -274,6 +305,7 @@ export interface Holiday<Kind extends string = string> {
 export interface HolidayLookup<Kind extends string = string> {
     readonly timeZone: string;
     readonly providers: readonly HolidayProvider<Kind>[];
+    readonly outOfRange: "throw" | "ignore";
     dateOf(input: DateInput): DateString;
     civilOf(input: DateTimeInput): CivilDateTimeParts<string>;
     civilOf(input: DateInput): CivilDateTimeParts;
@@ -392,7 +424,7 @@ export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
 ### RecurringPattern (@public)
 
 ```ts
-export type RecurringPattern = WeekdayPattern | DayOfMonthPattern;
+export type RecurringPattern = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern;
 ```
 
 ### RecurringRule (@public)
@@ -536,6 +568,7 @@ export interface WeekdayPattern {
     readonly anchor?: DateString;
     readonly months?: readonly Month[];
     readonly day?: never;
+    readonly dayAfterHoliday?: never;
 }
 ```
 

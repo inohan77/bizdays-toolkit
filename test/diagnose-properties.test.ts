@@ -47,13 +47,16 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
     return { effectiveFrom: from, effectiveTo: addDays(from, int(0, 400)) };
   };
   const rule = () => {
+    const r = rand();
     const base =
-      rand() < 0.6
+      r < 0.5
         ? {
             weekday: pick([1, 3, 6]),
             ...(rand() < 0.6 ? { nth: pick([1, 2, -1, [4, 5], [1, 3]]) } : {}),
           }
-        : { day: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) };
+        : r < 0.85
+          ? { day: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) }
+          : { dayAfterHoliday: true as const };
     // 周期（nth とは併用できない。起点は曜日に合わせる）
     const interval =
       "weekday" in base && base.nth === undefined && rand() < 0.4
@@ -66,7 +69,10 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
       ...base,
       ...interval,
       ...(rand() < 0.3 ? { months: pick([[2], [1, 2], [2, 4, 6, 9, 11]]) } : {}),
-      onHolidayRule: pick(["under-holiday", "over-holiday", "after-holiday"]),
+      // 祝日の翌日の規則には onHolidayRule を付けられない
+      ...("dayAfterHoliday" in base
+        ? {}
+        : { onHolidayRule: pick(["under-holiday", "over-holiday", "after-holiday"]) }),
       ...period(),
     };
   };

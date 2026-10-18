@@ -2,6 +2,7 @@
 // moduleResolution を node16・nodenext・bundler に変えて tsc で確かめる。ライブラリの型定義の検査も有効にする）。
 // 実行の前に pnpm build が必要
 import {
+  combineCalendars,
   createCalendar,
   createSchedule,
   toDateTimeParts,
@@ -26,6 +27,12 @@ const schedule = createSchedule({
   holiday: { sameAs: 0 },
 });
 const values: readonly ScheduleDay<number>[] = schedule.daysBetween("2026-11-01", "2026-11-30");
+const combined = combineCalendars(
+  [calendar, createCalendar({ holidays: jp, closedRecurring: [{ dayAfterHoliday: true }] })],
+  { businessDay: "all" },
+);
+const decidedBy: number | undefined = combined.dayInfo("2026-11-24").decidedBy;
+void decidedBy;
 
 const timed = toJapanDateTime(new Date());
 expectType<Equal<typeof timed.time, string>>();

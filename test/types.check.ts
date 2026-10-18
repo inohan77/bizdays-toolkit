@@ -6,6 +6,7 @@
  */
 
 import {
+  combineCalendars,
   createCalendar,
   createSchedule,
   isBizdaysError,
@@ -142,6 +143,39 @@ createCalendar({ closedRecurring: [{ day: 1, months: [13] }] });
 createCalendar({ closedRecurring: [{ day: 1, onHolidayRule: "rule" }] });
 // @ts-expect-error -- スケジュールの繰り返しの規則には value が必要
 createSchedule({ weekly: [1, 1, 1, 1, 1, 1, 1], recurring: [{ day: 1 }] });
+
+// --- 有効期間・周期（0.10.0）、祝日の翌日（0.11.0） ---
+createCalendar({
+  holidays: jp,
+  closedRecurring: [
+    { weekday: 1, effectiveTo: "2027-03-31" },
+    { weekday: 3, interval: 2, anchor: "2026-01-07", effectiveFrom: "2026-01-07" },
+    { dayAfterHoliday: true, months: [5], name: "x" },
+  ],
+  closedAnnual: [{ from: "08-13", to: "08-16", effectiveTo: "2026-12-31" }, "12-31"],
+});
+// @ts-expect-error -- interval は曜日の規則でだけ使える
+createCalendar({ closedRecurring: [{ day: 1, interval: 2, anchor: "2026-01-07" }] });
+// @ts-expect-error -- dayAfterHoliday は true だけ
+createCalendar({ closedRecurring: [{ dayAfterHoliday: false }] });
+// @ts-expect-error -- dayAfterHoliday と weekday は同時に指定できない
+createCalendar({ closedRecurring: [{ dayAfterHoliday: true, weekday: 1 }] });
+// @ts-expect-error -- 個別の日付には有効期間を付けられない
+createCalendar({ closedDates: [{ date: "2026-10-19", effectiveTo: "2026-12-31" }] });
+
+// --- カレンダーの合成（0.11.0） ---
+{
+  const a = createCalendar({ holidays: jp });
+  const b = createCalendar({ holidays: jp, closedWeekdays: [0] });
+  const combined = combineCalendars([a, b], { businessDay: "all" });
+  expectType<Equal<typeof combined, ReturnType<typeof createCalendar<JapaneseHolidayKind>>>>();
+  const decidedBy: number | undefined = combined.dayInfo("2026-10-19").decidedBy;
+  void decidedBy;
+  // @ts-expect-error -- businessDay は "all" か "any"
+  combineCalendars([a, b], { businessDay: "both" });
+  // @ts-expect-error -- businessDay は必須
+  combineCalendars([a, b], {});
+}
 
 // 振替の元の日付は省略可能な文字列
 const shifted: string | undefined = createCalendar().dayInfo("2026-10-13").shiftedFrom;

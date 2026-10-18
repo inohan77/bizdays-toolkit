@@ -20,13 +20,14 @@ A business-day calendar that combines public holidays with company or store clos
 
 - **Japanese holidays verified day by day against the Cabinet Office data**: from 1955 through the latest year announced in the Official Gazette, every date in the Cabinet Office "National Holidays" CSV is checked in the tests (substitute holidays, citizens' holidays, holidays for imperial ceremonies and the Olympic moves included)
 - **UK bank holidays verified day by day against GOV.UK**: choose England, Wales, Scotland or Northern Ireland. From 2012 through the last year GOV.UK has published, every date and name is checked against the GOV.UK data in the tests, and differences are watched daily
-- **Recurring rules**: rules such as "closed on the 3rd Wednesday", "closed every other Wednesday", "stocktaking on the last day of the month" or "closed on Mondays (on the next weekday if Monday is a holiday)", together with what happens when they fall on a holiday (follow the holiday, apply anyway, or move to the next day). Rules can have an effective period, so "closed on Tuesdays instead of Mondays from April 2027" is one calendar
+- **Recurring rules**: rules such as "closed on the 3rd Wednesday", "closed every other Wednesday", "stocktaking on the last day of the month", "closed on Mondays (on the next weekday if Monday is a holiday)" or "closed on the day after a holiday", together with what happens when they fall on a holiday (follow the holiday, apply anyway, or move to the next day). Rules can have an effective period, so "closed on Tuesdays instead of Mondays from April 2027" is one calendar
 - **Day-by-day values (e.g. store hours)**: values that change by weekday, holiday and specific date, such as "closed on Tuesdays, Sunday hours on holidays, closed on New Year's Day, short hours on New Year's Eve", are looked up with the same rules
 - **Option diagnostics**: `diagnoseCalendar` and `diagnoseSchedule` from `bizdays-toolkit/diagnose` list rules that can never apply, rules whose removal changes nothing, typos in option keys, calendars with no business day and more, without throwing. One line in your tests keeps a change of settings from silently killing a rule
 - **Month-based due dates**: due dates such as "closing on the 20th, paid on the 10th of the next month (next business day if closed)" or "the last business day of the month", with the four adjustment conventions used in finance (following, preceding, modified-following, modified-preceding)
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed and open dates, and holidays combine to compute "N business days later", "next business day after the cut-off time" and more
+- **Combining calendars**: `combineCalendars` builds a calendar of the days on which all of several calendars are open (your company and the bank, for a remittance date) or any of them is open (any of several stores), and business-day arithmetic works on the result
 - **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
-- **Lightweight, zero dependencies**: about 7.9 KB min+gzip (about 9.8 KB with Japanese holidays, about 9.6 KB with UK bank holidays; measured for 0.10.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
+- **Lightweight, zero dependencies**: about 8.6 KB min+gzip (about 10.3 KB with Japanese holidays, about 10.2 KB with UK bank holidays; measured for 0.11.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan and the UK are bundled
 
 ## Installation
@@ -134,9 +135,9 @@ Each day is decided in this order of priority (top first).
 
 This order is fixed. Only the relation between a recurring rule and holidays can be chosen per rule with `onHolidayRule` (next section).
 
-### Recurring rules (weekly, every other week, nth weekday, day of month)
+### Recurring rules (weekly, every other week, nth weekday, day of month, day after a holiday)
 
-Recurring closed and open days such as "closed on the 3rd Wednesday", "closed on the 2nd and 4th Saturdays", "closed every other Wednesday", "stocktaking on the last day of the month" or "closed on Mondays (on the next weekday if Monday is a holiday)" go in `closedRecurring` and `openRecurring`.
+Recurring closed and open days such as "closed on the 3rd Wednesday", "closed on the 2nd and 4th Saturdays", "closed every other Wednesday", "stocktaking on the last day of the month", "closed on Mondays (on the next weekday if Monday is a holiday)" or "closed on the day after a holiday" go in `closedRecurring` and `openRecurring`.
 
 ```ts
 const museum = createCalendar({
@@ -151,6 +152,7 @@ const museum = createCalendar({
       name: "Closed on the 3rd Wednesday in February and August",
     },
     { day: -1, name: "Stocktaking", onHolidayRule: "over-holiday" }, // closed even on holidays
+    { dayAfterHoliday: true, name: "Closed on the day after a holiday" },
   ],
 });
 
@@ -158,6 +160,8 @@ museum.isBusinessDay("2026-10-12"); // true (open on Monday, Sports Day)
 museum.dayInfo("2026-10-13");
 // { date: "2026-10-13", weekday: 2, businessDay: false, reason: "closed-recurring",
 //   name: "Closed on Mondays", shiftedFrom: "2026-10-12" }
+museum.dayInfo("2026-02-12").name; // "Closed on the day after a holiday" (National Foundation Day is February 11)
+museum.isBusinessDay("2026-05-07"); // false (the day after the May 3–6 run of holidays)
 ```
 
 | Pattern                                             | Meaning                                                                                                              |
@@ -166,13 +170,15 @@ museum.dayInfo("2026-10-13");
 | `{ weekday: 3, nth: 3 }`                            | The 3rd Wednesday. `nth` is 1–5 or -1 (last); an array such as `[2, 4]` gives several                                |
 | `{ weekday: 3, interval: 2, anchor: "2026-01-07" }` | Every other Wednesday: the Wednesdays an even number of weeks from `anchor` (2 or more weeks; see below)             |
 | `{ day: 20 }`                                       | The 20th of every month. `day` is 1–31 or -1 (last day); an array gives several                                      |
+| `{ dayAfterHoliday: true }`                         | The day after a holiday: the first non-holiday after a holiday or a run of holidays (holidays of the provider only)  |
 | `months: [8, 12]`                                   | Narrows any pattern to these months                                                                                  |
 | `effectiveFrom: "2027-04-01"`, `effectiveTo: "…"`   | The period the rule is in effect (both ends included). Outside it, the rule is as if it were not written (see below) |
 
 - **The nth weekday** is the nth occurrence of that weekday in the month (days 1–7 hold the 1st). It is not the weekday in the nth row of a printed calendar
 - **Days that do not exist in a month** (`nth: 5` or `day: 31` in a month without one) do not match. Use `day: -1` for the last day
 - **Every other week** (`interval: 2`) is not the same as the 1st and 3rd weekdays (`nth: [1, 3]`): a month with five Wednesdays shifts the latter by a week. `interval` is the number of weeks (an integer of 2 or more) and `anchor` is a date on the same weekday that the cycle passes through; the rule matches that date and every `interval` weeks before and after it. Stores announce "every other Wednesday from January 7", so copy that date. To start at the anchor rather than also matching earlier dates, add `effectiveFrom`. `interval` cannot be combined with `nth`
-- Among recurring rules, the one written first in the array wins, and `openRecurring` wins over `closedRecurring`
+- **The day after a holiday** is never itself a holiday, so `onHolidayRule` cannot be set on such a rule (it is an `invalid-option`). "Holidays" are those of the holiday provider, not annual closures. A rule of this kind matches no day without a holiday provider
+- Among recurring rules, the one written first in the array wins, and `openRecurring` wins over `closedRecurring`. The day after Labor Thanksgiving Day on a Monday (2026-11-23) is both the day the Monday rule moves to and the day after a holiday; the rule written first decides, and `dayInfo` shows which
 
 **Effective periods** (`effectiveFrom`, `effectiveTo`) let one calendar represent a change of rules and still reproduce past dates. They go on recurring rules and on annual closures (`closedAnnual` in object form).
 
@@ -221,6 +227,43 @@ const hours = createSchedule<Hours>({
   ],
 });
 ```
+
+### Combining calendars
+
+`combineCalendars` makes one calendar out of several: the days on which **all** of them are open (`businessDay: "all"`), or on which **any** of them is open (`"any"`). The result is an ordinary calendar, so business-day arithmetic, `adjust`, `dueDate` and the rest work on the combination.
+
+```ts
+import { combineCalendars, createCalendar } from "bizdays-toolkit";
+import { jp } from "bizdays-toolkit/jp";
+
+const company = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedAnnual: [{ from: "12-29", to: "01-03", name: "New Year closure" }],
+});
+const bank = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedAnnual: [{ from: "12-31", to: "01-03", name: "Bank holiday period" }],
+});
+
+// A remittance is processed only on days when both the company and the bank are open
+const remittance = combineCalendars([company, bank], { businessDay: "all" });
+remittance.addBusinessDays("2026-12-28", 2); // "2027-01-05"
+remittance.dayInfo("2026-12-29");
+// { date: "2026-12-29", weekday: 2, businessDay: false, reason: "closed-annual", name: "New Year closure", decidedBy: 0 }
+
+// Any of several stores is open
+const anyStore = combineCalendars([company, bank], { businessDay: "any" });
+anyStore.isBusinessDay("2026-12-29"); // true
+```
+
+- `dayInfo` reports `reason`, `name` and `shiftedFrom` from the first calendar whose result equals the combined result, and the index of that calendar in `decidedBy`. With `"all"`, a closed day is explained by the first calendar that is closed, and an open day by calendar 0 (all are open). With `"any"` it is the other way round
+- `holiday`, `isHoliday`, `holidaysInYear` and so on use the union of the calendars' holiday providers. `outOfRange` is `"throw"` if any calendar throws outside its supported years
+- All calendars must share a time zone (`time-zone-conflict` otherwise). Passing fewer than two calendars, or the same calendar twice, is an `invalid-argument`. `maxSearchDays` (default 3660) can be given in the options
+- A combined calendar can be combined again. Option diagnostics work on options, not on calendars, so diagnose each calendar's options separately
+
+Combining options instead would not work: a specific open day (`openDates`) in one set of options would override closures in the other, and wrapping one calendar as a holiday provider of the other would turn its closures into "holidays" (`isHoliday` would be true, and `holidayPolicy: "open"` would open on them).
 
 ### Common recipes
 
@@ -474,21 +517,22 @@ diagnoseCalendar({
 // ]
 ```
 
-| `severity` | `code`                       | Meaning                                                                                                                                                            |
-| ---------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `error`    | The same codes as exceptions | Errors that make `createCalendar` or `createSchedule` throw. Creation stops at the first one; diagnostics return them all                                          |
-| `error`    | `invalid-provider-data`      | Errors in the data returned by a holiday provider. Creation checks only the years used; diagnostics check every supported year                                     |
-| `warning`  | `unknown-option`             | Unknown keys (ignored at creation). If a close known key exists, `message` suggests it                                                                             |
-| `warning`  | `shadowed`                   | A rule fully covered by an earlier rule of the same type (`relatedPath`) and never used                                                                            |
-| `warning`  | `never-matches`              | A recurring rule that matches no day (such as `{ day: 30, months: [2] }`, or a 5th Wednesday with an effective period that has none)                               |
-| `warning`  | `out-of-range`               | A specific date, or the effective period of a rule, outside the supported years of the holiday provider (`relatedPath`)                                            |
-| `warning`  | `no-business-day`            | No business day at all (calendars only; searching for a business day throws)                                                                                       |
-| `info`     | `redundant`                  | A rule whose removal changes nothing (covered by a combination of earlier rules, same as a closed weekday, the same value as the weekday in a schedule, and so on) |
+| `severity` | `code`                       | Meaning                                                                                                                                                                            |
+| ---------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error`    | The same codes as exceptions | Errors that make `createCalendar` or `createSchedule` throw. Creation stops at the first one; diagnostics return them all                                                          |
+| `error`    | `invalid-provider-data`      | Errors in the data returned by a holiday provider. Creation checks only the years used; diagnostics check every supported year                                                     |
+| `warning`  | `unknown-option`             | Unknown keys (ignored at creation). If a close known key exists, `message` suggests it                                                                                             |
+| `warning`  | `shadowed`                   | A rule fully covered by an earlier rule of the same type (`relatedPath`) and never used                                                                                            |
+| `warning`  | `never-matches`              | A recurring rule that matches no day (such as `{ day: 30, months: [2] }`, a 5th Wednesday with an effective period that has none, or `dayAfterHoliday` without a holiday provider) |
+| `warning`  | `out-of-range`               | A specific date, or the effective period of a rule, outside the supported years of the holiday provider (`relatedPath`)                                                            |
+| `warning`  | `no-business-day`            | No business day at all (calendars only; searching for a business day throws)                                                                                                       |
+| `info`     | `redundant`                  | A rule whose removal changes nothing (covered by a combination of earlier rules, same as a closed weekday, the same value as the weekday in a schedule, and so on)                 |
 
 - Branch on `code`. `message` is in English and its wording may change. Future versions may add codes
 - When there is an `error`, the rule relation checks (`shadowed`, `redundant` and so on) are skipped
 - `shadowed` compares only rules of the same type (specific dates, annual dates, recurring rules). The order of evaluation is fixed, so rules unused across types are found as `redundant`. Specific open days (`openDates`) and specific closed days (`closedDates`) are of the same type, and a closed day covered by an earlier open day is `shadowed`
 - `shadowed` for recurring rules also considers `onHolidayRule`. For example, an `"under-holiday"` rule does not cover an `"over-holiday"` rule on the same days (the later rule applies on holidays)
+- `shadowed` for `dayAfterHoliday` rules is checked only against other `dayAfterHoliday` rules (by `months` and period), because which days they match depend on the holidays of each year; overlap with weekday rules is found as `redundant`
 - `shadowed` for rules with effective periods also requires the earlier rule's period to contain the later rule's period, and for `interval` rules the earlier rule's cycle to contain the later one (a weekly rule covers an every-other-week rule; two every-other-week rules with opposite phases do not cover each other)
 - `redundant` compares the results with and without the rule day by day. Specific dates are checked over their range; annual dates and recurring rules are checked, with specific dates removed, over the holiday provider's supported years (1955–2099 for Japan), or 2001–2028 without a provider (28 years cover every combination of weekday and date; with `interval` rules the range is extended to the length of their cycle, such as 56 years for every other week). Effective periods outside that range are checked as well (with `outOfRange: "throw"`, only within the supported years). `message` names the years checked. Schedule values are compared by content for arrays and plain objects, and by identity otherwise (such as `Date`)
 - With Japanese holidays, checking every day takes a few hundred milliseconds. Use it in tests or at startup, not per request. As a development and test tool, it lives in a subpath so it stays out of your app's main bundle

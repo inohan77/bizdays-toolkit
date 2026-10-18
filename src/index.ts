@@ -9,6 +9,7 @@
  */
 
 export {
+  combineCalendars,
   createCalendar,
   type AdjustOptions,
   type AnnualDate,
@@ -17,6 +18,7 @@ export {
   type BusinessDayOptions,
   type Calendar,
   type CalendarOptions,
+  type CombineOptions,
   type DateRange,
   type DayInfo,
   type DayReason,
@@ -32,6 +34,7 @@ export {
   type CivilDateTimeParts,
   type DateRangeValue,
   type DateValue,
+  type DayAfterHolidayPattern,
   type DayOfMonth,
   type DayOfMonthPattern,
   type EffectivePeriod,

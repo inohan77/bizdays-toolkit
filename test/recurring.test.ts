@@ -208,9 +208,9 @@ test("入力の誤りは、コードと設定の中の位置で分かる", () =>
     [
       { weekday: 1, day: 3 },
       "invalid-option",
-      /closedRecurring\[0\]: must have either "weekday" or "day"/,
+      /closedRecurring\[0\]: must have exactly one of "weekday", "day" or "dayAfterHoliday"/,
     ],
-    [{}, "invalid-option", /must have either "weekday" or "day"/],
+    [{}, "invalid-option", /must have exactly one of "weekday", "day" or "dayAfterHoliday"/],
     [{ weekday: 7 }, "invalid-weekday", /closedRecurring\[0\]\.weekday/],
     [{ weekday: 1, nth: 6 }, "invalid-option", /closedRecurring\[0\]\.nth/],
     [{ weekday: 1, nth: [] }, "invalid-option", /closedRecurring\[0\]\.nth/],
