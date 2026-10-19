@@ -25,9 +25,10 @@ A business-day calendar that combines public holidays with company or store clos
 - **Option diagnostics**: `diagnoseCalendar` and `diagnoseSchedule` from `bizdays-toolkit/diagnose` list rules that can never apply, rules whose removal changes nothing, typos in option keys, calendars with no business day and more, without throwing. One line in your tests keeps a change of settings from silently killing a rule
 - **Month-based due dates**: due dates such as "closing on the 20th, paid on the 10th of the next month (next business day if closed)" or "the last business day of the month", with the four adjustment conventions used in finance (following, preceding, modified-following, modified-preceding)
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed and open dates, and holidays combine to compute "N business days later", "next business day after the cut-off time" and more
+- **A calendar from a schedule**: `createCalendarFromSchedule` turns a schedule such as store hours into a business-day calendar, so the hours are the only configuration and business-day arithmetic works on them
 - **Combining calendars**: `combineCalendars` builds a calendar of the days on which all of several calendars are open (your company and the bank, for a remittance date) or any of them is open (any of several stores), and business-day arithmetic works on the result
 - **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
-- **Lightweight, zero dependencies**: about 8.8 KB min+gzip (about 10.6 KB with Japanese holidays, about 10.5 KB with UK bank holidays; measured for 0.12.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
+- **Lightweight, zero dependencies**: about 9.0 KB min+gzip (about 10.8 KB with Japanese holidays, about 10.7 KB with UK bank holidays; measured for 0.13.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan and the UK are bundled
 
 ## Installation
@@ -38,7 +39,7 @@ pnpm add bizdays-toolkit
 
 Node.js 22.12 or later. CI tests the package on Node.js 22.12, 22, 24 and 26, on Chrome, Firefox and Edge (Linux) and Safari (macOS), and on Cloudflare Workers (workerd, the open-source Workers runtime). The browsers are the latest stable versions on GitHub's runners, so their versions change as the runners are updated. The package is ESM only, but it can also be loaded from CommonJS with `require()` (tested in CI as well; on Node.js 22.12, `require()` prints an experimental-feature warning, which does not affect the result, and Node.js 26 prints none). Other runtimes (such as Deno, Bun or Vercel's Edge Runtime) are not tested.
 
-Types are bundled. CI type-checks a consumer project against the published type definitions with `moduleResolution` set to `node16`, `nodenext` and `bundler` (TypeScript 6); TypeScript 5.0, 5.5 and 5.8 were also checked by hand for 0.9.0.
+Types are bundled. CI type-checks a consumer project against the published type definitions with TypeScript 5.0, 5.5, 5.8, 6.0 and 7.0 (the native compiler), each with `moduleResolution` set to `node16`, `nodenext` and `bundler`, and confirms that an intentional type error is reported by each.
 
 ## Usage
 
@@ -449,6 +450,33 @@ const isOpen = hours !== null && hours.open <= time && time < hours.close;
 ```
 
 For inputs that always carry a time (a `Date`, Temporal `Instant`, `ZonedDateTime` or `PlainDateTime`, or a `"YYYY-MM-DDTHH:mm"` string), `time` is typed as `string`, so no `null` check is needed. `civilOf` is also on business-day calendars, and the same conversion is available as `toDateTimeParts(input, timeZone)` in the root. (`toJapanDate` and `toJapanDateTime` in `bizdays-toolkit/jp` are deprecated since 0.10.0: use `toDateString(input, "Asia/Tokyo")`, `toDateTimeParts(input, "Asia/Tokyo")` or `dateOf`/`civilOf` on a calendar instead. They will be removed in 1.0.0.)
+
+### A business-day calendar from a schedule
+
+When the schedule (store hours, say) is the real configuration, `createCalendarFromSchedule(schedule, isOpen)` makes a business-day calendar from it, so you do not write a second set of rules to keep in sync. `isOpen` decides from the value alone whether the day is a business day; the result is an ordinary calendar with business-day arithmetic, `adjust`, `dueDate` and the rest.
+
+```ts
+import { createCalendarFromSchedule } from "bizdays-toolkit";
+
+const hours = createSchedule<Hours>({
+  holidays: jp,
+  weekly: [null, weekday, weekday, weekday, weekday, weekday, { open: "10:00", close: "17:00" }],
+  holiday: { sameAs: 0 },
+  annual: [
+    { from: "12-31", to: "01-03", value: null, name: "New Year closure" },
+    { date: "01-04", value: { open: "11:00", close: "15:00" }, name: "First day of the year" },
+  ],
+});
+const calendar = createCalendarFromSchedule(hours, (v) => v !== null);
+calendar.addBusinessDays("2026-12-29", 2); // "2027-01-04"
+calendar.dayInfo("2027-01-04");
+// { date: "2027-01-04", weekday: 1, businessDay: true, reason: "open-annual", name: "First day of the year", rulePath: "annual[1]" }
+```
+
+- `isOpen` must be a pure function of the value: it receives only the value (not the date), and the calendar calls it repeatedly while searching for business days, so a function that looks at the date, the time or outside state would make the result change from call to call. Conditions that depend on the date belong in the schedule's rules (`dates`, `recurring`)
+- `dayInfo` maps the schedule's `reason` to the calendar's: `date` → `"open-date"`/`"closed-date"`, `annual` → `"open-annual"`/`"closed-annual"`, `recurring` → `"open-recurring"`/`"closed-recurring"`, `holiday` → `"holiday"` (whether or not the holiday is open, as with `holidayPolicy: "open"`), `weekday` → `"regular"`/`"closed-weekday"`. `"open-annual"` exists only for calendars made this way, since `closedAnnual` of `createCalendar` only closes. `name`, `holiday`, `shiftedFrom` and `rulePath` are the schedule's
+- Holidays, the time zone and `outOfRange` are the schedule's. Diagnose the schedule's options with `diagnoseSchedule`; the calendar itself is not diagnosed. `maxSearchDays` (default 3660) can be given in the options
+- Use `createCalendar` when you only need open or closed; use this when you have a schedule anyway
 
 ### Date and date-time inputs
 

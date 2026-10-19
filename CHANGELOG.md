@@ -4,6 +4,28 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-20
+
+### 移行
+
+動作は変わりません（スケジュールから営業日カレンダーを作る関数と、判定の理由の新しい値の追加。CI の改善）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- スケジュールから営業日カレンダーを作る `createCalendarFromSchedule(schedule, isOpen, { maxSearchDays? })` を追加した。`isOpen` が true を返す値の日を営業日とする通常のカレンダーを返し、営業時間表のようなスケジュールが唯一の設定になる。`isOpen` は値だけを受け取る純粋な関数（日付は渡さない。営業日の探索で繰り返し呼ぶため）。`dayInfo` の `reason` はスケジュールの `reason` と営業・休業の組み合わせで、`name`・`holiday`・`shiftedFrom`・`rulePath` はスケジュールの結果を引き継ぐ。祝日・タイムゾーン・`outOfRange` はスケジュールのもの。`createSchedule` が作ったスケジュール以外は `invalid-argument`
+- 判定の理由（`DayReason`）に `"open-annual"`（スケジュールの `annual` の値で営業になる日）を追加した。`createCalendar` の結果には現れない（`closedAnnual` は休業だけ）
+
+### Changed
+
+- README: 「スケジュールから営業日カレンダーを作る」の節を足した。型定義の確認の範囲を、CI で確かめる TypeScript の版（5.0・5.5・5.8・6.0・7.0）に改めた。サイズの値を測り直した（ルート約 9.0KB・日本の祝日込み約 10.8KB・英国の祝日込み約 10.7KB。0.13.0 で測定）
+- `docs/decisions.md`: 38 番（スケジュールからのカレンダー・`"open-annual"`・利用者の TypeScript の版の確認）を追加した
+
+### 開発
+
+- CI に `consumer-types` ジョブを追加した。公開する型定義を、利用者が使う TypeScript 5.0.4・5.5.4・5.8.3・7.0.2（ネイティブ版）のそれぞれで、`moduleResolution` の `node16`・`nodenext`・`bundler` で型チェックする。各版は依存にせず、版と SHA-256 を固定した tgz から一時ディレクトリに入れる（7.0 はランナー向けの実行形式 `@typescript/typescript-linux-x64` も固定）。`pnpm check` は従来どおり開発用の 6.0.3 で確かめる
+- `scripts/check-consumer-types.ts` に `--tsc <path>` を足し、わざと型エラーを含む `test/consumer/consumer-error.mts` が各版で失敗として報告されること（検査が機能していること）も確かめるようにした。リポジトリの `@types` を読まないよう `--typeRoots` を空にした（古い TypeScript では `@types/node` の新しい構文を読めないため）。`--ignoreConfig` は 6.0 以降でだけ渡す
+- `createCalendar` の `dayInfo` の変換を `createCalendarFromSchedule` と共用の内部関数に切り出した。結果は変わらない
+
 ## [0.12.0] - 2026-10-20
 
 ### 移行
@@ -330,7 +352,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.10.0...v0.11.0

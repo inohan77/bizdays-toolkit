@@ -329,3 +329,21 @@ GOV.UK の監視（govuk-watch）は、外部の cron サービス（cron-job.or
 - 公開済みの前の版（npm の `latest`）と今回の `dist` を、同じランナー・同じ Node.js で `scripts/bench.ts` にかけ、比率で比べます（`scripts/bench-compare.ts`）。ランナーの性能は実行ごとに数十%ぶれるので、絶対値では判定しません。同じ実行の中の 2 つの結果の比率にはぶれが現れにくく、安定します
 - 判定は「どれかの計測が前の版の 2 倍より遅い」で失敗にします。アルゴリズムの悪化（走査が 2 重になった、など）を捉える粗い線で、数十%の差はノイズとみなします。絶対値は Job Summary に残し、リリースごとの傾向を追えるようにします
 - `pnpm check` には含めません（結果が機械に依存するため。RELEASING.md の「品質の確認」）
+
+## 38. スケジュールから営業日カレンダーを作る（`createCalendarFromSchedule`）。利用者の TypeScript の版は CI で確かめる
+
+営業時間表のようなスケジュールが設定の正本である利用者のために、スケジュールと「値が営業か」を決める関数から営業日カレンダーを作る関数を足しました（0.13.0）。
+
+- 営業日カレンダーをもう一式書いて同期を取る必要をなくすためです。内部では、`createCalendar`・`combineCalendars` と共用の `buildCalendar` に、スケジュールの内部の判定（`infoOfSchedule`。公開メソッドの入力の解析を通らない）をつなぎます。作成時のコストは `createCalendar` と同程度です
+- 名前は `createCalendarFromSchedule` です。ルートの「作る」関数（`createCalendar`・`createSchedule`・`combineCalendars`）はすべて動詞で始まり、`create` の接頭辞には「引数を検証して不変のものを返す」含みがあります。`createCalendar` のオーバーロードにしなかったのは、第 1 引数の形で分岐すると型が複雑になり、設定の誤りの診断（`options must be an object`）とも衝突するためです
+- `isOpen` は値だけを受け取ります（`ScheduleDay` や日付は渡しません）。日付や祝日を見られる形にすると「純粋な関数」の前提を利用者が破りやすく、営業日の探索の結果が呼ぶたびに変わる危険があります。日付で変えたい条件はスケジュールの規則（`dates`・`recurring`）に書くべきもので、値だけで決まるほうが、37 番で見送った営業日表のキャッシュを将来入れる場合の前提も単純です。将来 `ScheduleDay` を渡したい要望が来ても、この理由で断ります。位置引数にしたのは、将来足す項目が `maxSearchDays` 以外に見えないためです（`combineCalendars` のようにオプションの形にする理由が薄い）
+- `dayInfo` の `reason` は、`createCalendar` の内部の変換と同じ対応（`date` → `"open-date"`/`"closed-date"` など）です。違いは `annual` だけで、`createCalendar` の `closedAnnual` が休業専用なのに対し、スケジュールの `annual` は営業の値も取れるので `"open-annual"` を足しました。既存の値に押し込むと、`"open-date"` では嘘になり、`"regular"` では規則で決まったことが消えます。`DayReason` は開いた型（2 番）で、`createCalendar` の結果は変わりません
+- 営業になる祝日（`holiday: { sameAs: 0 }` で曜日の値が営業、など）の `reason` は `"holiday"` のままです。`createCalendar` の `holidayPolicy: "open"` と同じで、`reason` は「決めた規則」、営業・休業は `businessDay`、という分担を崩しません
+- 診断の対象にはしません。スケジュールの設定を `diagnoseSchedule` で診断します
+
+利用者の TypeScript の版の確認は、0.9.0 の時点で 5.0・5.5・5.8 を手作業で確かめたままになっていたので、CI に `consumer-types` ジョブを置きました。
+
+- 確かめる版は 5.0.4（README で約束する下限）・5.5.4（`moduleResolution: "bundler"` が安定した系列）・5.8.3（5 系の最終）・7.0.2（ネイティブ版の現行）で、`pnpm check` の 6.0.3 とあわせて 5 系列です。約束する範囲の両端と、解決方式の変わり目を押さえています
+- 各版は依存にせず、版と SHA-256 を固定した tgz を `npm pack` で取り出して一時ディレクトリに入れます（10 番の考え方。7.0 は実行形式を optional dependency として配るので、ランナー向けの `@typescript/typescript-linux-x64` も固定して入れ、ほかのプラットフォームの実行形式は入れません）
+- 7.0 の `tsc` はコンパイラー API を持たないので、`api-report.ts`（API のスナップショット）が使う開発用の TypeScript は 6.0 のままです（7.1 で API が出たときに改めて判断）。7.0 の `bin/tsc` は Node.js のスクリプト（中で実行形式を起動する）なので、起動の仕方は 5・6 系と同じです
+- 黙って合格になる検査を避けるため（26 番と同じ考え）、わざと型エラーを含む入力（`test/consumer/consumer-error.mts`）も各版・各設定で実行し、失敗として報告されることを確かめます。リポジトリの `@types`（`@types/node`）は古い版では読めない構文を含むので、`--typeRoots` を空にして読みません

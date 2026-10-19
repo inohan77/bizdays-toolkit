@@ -8,6 +8,7 @@
 import {
   combineCalendars,
   createCalendar,
+  createCalendarFromSchedule,
   createSchedule,
   isBizdaysError,
   monthOf,
@@ -184,6 +185,24 @@ createCalendar({ closedRecurring: [{ holiday: true, dayAfterHoliday: true }] });
   const rulePath2: string | undefined = s.dayInfo("2026-10-19").rulePath;
   void rulePath;
   void rulePath2;
+}
+
+// --- スケジュールからのカレンダー（0.13.0） ---
+{
+  const hours = createSchedule<{ open: string } | null>({
+    weekly: [null, { open: "9" }, null, null, null, null, null],
+  });
+  const c = createCalendarFromSchedule(hours, (v) => v !== null);
+  expectType<Equal<typeof c, ReturnType<typeof createCalendar<string>>>>();
+  createCalendarFromSchedule(hours, (v) => v !== null, { maxSearchDays: 10 });
+  // @ts-expect-error -- isOpen は値だけを受け取る（日付は渡されない）
+  createCalendarFromSchedule(hours, (v, date: string) => v !== null && date > "");
+  // @ts-expect-error -- 値の型が合わない
+  createCalendarFromSchedule(hours, (v: number) => v > 0);
+  // @ts-expect-error -- カレンダーは渡せない
+  createCalendarFromSchedule(c, () => true);
+  const reason: "open-annual" | "closed-annual" | string = c.dayInfo("2026-10-20").reason;
+  void reason;
 }
 
 // --- カレンダーの合成（0.11.0） ---

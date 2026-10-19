@@ -4,6 +4,12 @@
 
 パッチ版（0.x.y の y）は、公式データの反映と不具合の修正なので、作業は要りません。
 
+## 0.13.0
+
+作業は要りません（スケジュールから営業日カレンダーを作る `createCalendarFromSchedule` と、判定の理由 `"open-annual"` の追加。CI の改善）。
+
+- `DayReason` に `"open-annual"` が加わりました。`createCalendarFromSchedule` で作ったカレンダーの `dayInfo` にだけ現れます。`reason` の値で分岐しているコードは「その他」も扱う約束（RELEASING.md の互換性の約束）どおりなら、そのまま動きます。`KnownDayReason` を `switch` で網羅しているコードは、`"open-annual"` の分岐を足してください
+
 ## 0.12.0
 
 動作は変わりません（繰り返しの規則の祝日の形 `{ holiday: true, kinds?, months? }` と、`dayInfo` の `rulePath` の追加。診断・CI の改善）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` の 2 つの定数が非推奨になったので、使っていれば書き換えてください（1.0.0 で削除します）。

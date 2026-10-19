@@ -4,6 +4,7 @@
 import {
   combineCalendars,
   createCalendar,
+  createCalendarFromSchedule,
   createSchedule,
   toDateTimeParts,
   type DateInput,
@@ -36,6 +37,9 @@ void decidedBy;
 const rulePath: string | undefined = combined.dayInfo("2026-11-24").rulePath;
 void rulePath;
 createCalendar({ holidays: jp, openRecurring: [{ holiday: true, kinds: ["substitute"] }] });
+const fromSchedule = createCalendarFromSchedule(schedule, (v) => v > 0);
+const open: boolean = fromSchedule.isBusinessDay("2026-11-24");
+void open;
 
 const timed = toJapanDateTime(new Date());
 expectType<Equal<typeof timed.time, string>>();

@@ -11,6 +11,7 @@
 export {
   combineCalendars,
   createCalendar,
+  createCalendarFromSchedule,
   type AdjustOptions,
   type AnnualDate,
   type AnnualRange,

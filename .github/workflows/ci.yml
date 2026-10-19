@@ -120,6 +120,63 @@ jobs:
           "${RUNNER_TEMP}/workerd" --version
       - run: node scripts/test-workerd.ts "${RUNNER_TEMP}/workerd"
 
+  consumer-types:
+    # 公開する型定義を、利用者が使う TypeScript の複数の版で型チェックする（decisions.md の 38 番）。
+    # pnpm check は開発用の版（6.0）だけなので、約束する下限（5.0）・bundler が安定した 5.5・5 系の最終（5.8）・
+    # ネイティブ版（7.0）を CI で確かめる。各版は npm の依存にせず、版と SHA-256 を固定した tgz から一時的に入れる
+    # （7.0 は実行形式を optional dependency として配るので、ランナー向けの linux-x64 も固定して入れる）。
+    # 版を上げるときは、各系列の最終パッチを、公開から 48 時間を過ぎたものから選ぶ（RELEASING.md）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: "5.0.4"
+            sha256: "1e83cd17f6d48dc60d539b64684d225c019db032685f28903aa45c42dac9fa5e"
+          - version: "5.5.4"
+            sha256: "2680b6354d462a1d90a2cf10c790e071f1c45081c9d4561cb47ce23c934d8586"
+          - version: "5.8.3"
+            sha256: "72e75dbeb92c2e6eb9a34cb59d74fab5c2ee6f32a0324a89405f6165d5a08374"
+          - version: "7.0.2"
+            sha256: "da2513f4b95176d6dde8b51aab7afe8a927656c9d277369793f77f7e59371c08"
+            binary: "@typescript/typescript-linux-x64"
+            binary_sha256: "7ecad6f67377e831856367ab062ef394f21506a611405bf8ac0ff039348637d3"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - name: Install TypeScript ${{ matrix.version }} into a temporary directory
+        env:
+          TS_VERSION: ${{ matrix.version }}
+          TS_SHA256: ${{ matrix.sha256 }}
+          TS_BINARY: ${{ matrix.binary }}
+          TS_BINARY_SHA256: ${{ matrix.binary_sha256 }}
+        run: |
+          dir="${RUNNER_TEMP}/typescript"
+          mkdir -p "${dir}"
+          cd "${dir}"
+          npm pack "typescript@${TS_VERSION}" --ignore-scripts --silent
+          echo "${TS_SHA256}  typescript-${TS_VERSION}.tgz" | sha256sum -c -
+          packages=("./typescript-${TS_VERSION}.tgz")
+          if [ -n "${TS_BINARY}" ]; then
+            npm pack "${TS_BINARY}@${TS_VERSION}" --ignore-scripts --silent
+            file="$(echo "${TS_BINARY}" | sed 's|^@||; s|/|-|')-${TS_VERSION}.tgz"
+            echo "${TS_BINARY_SHA256}  ${file}" | sha256sum -c -
+            packages+=("./${file}")
+          fi
+          npm init -y > /dev/null
+          npm install --ignore-scripts --no-audit --no-fund --save=false "${packages[@]}"
+          node node_modules/typescript/bin/tsc --version
+      - name: Type-check the consumer project with TypeScript ${{ matrix.version }}
+        run: node scripts/check-consumer-types.ts --tsc "${RUNNER_TEMP}/typescript/node_modules/typescript/bin/tsc"
+      - name: The repository's dependencies are unchanged
+        run: git diff --exit-code -- package.json pnpm-lock.yaml
+
   bench:
     # 性能の退行を、公開済みの前の版（npm の latest）と同じランナー・同じ Node.js で比べて検出する（decisions.md の 37 番）。
     # ランナーの性能は実行ごとにぶれるので、絶対値ではなく比率で判定する（どれかの計測が 2 倍より遅ければ失敗）。

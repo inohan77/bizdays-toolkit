@@ -146,6 +146,14 @@ export interface CombineOptions {
 export declare function createCalendar<Kind extends string = string>(options?: CalendarOptions<Kind>): Calendar<Kind>;
 ```
 
+### createCalendarFromSchedule (@public)
+
+```ts
+export declare function createCalendarFromSchedule<T, Kind extends string = string>(schedule: Schedule<T, Kind>, isOpen: (value: T) => boolean, options?: {
+    readonly maxSearchDays?: number;
+}): Calendar<Kind>;
+```
+
 ### createSchedule (@public)
 
 ```ts
@@ -395,7 +403,7 @@ export declare function isValidDate(value: unknown): value is DateString;
 ### KnownDayReason (@public)
 
 ```ts
-export type KnownDayReason = "open-date" | "closed-date" | "closed-annual" | "open-recurring" | "closed-recurring" | "holiday" | "closed-weekday" | "regular";
+export type KnownDayReason = "open-date" | "closed-date" | "open-annual" | "closed-annual" | "open-recurring" | "closed-recurring" | "holiday" | "closed-weekday" | "regular";
 ```
 
 ### KnownErrorCode (@public)

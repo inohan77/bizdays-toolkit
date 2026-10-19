@@ -1383,6 +1383,19 @@ export function mapDays<R>(
 }
 
 /** @internal 検証済みの規則からスケジュールを作る */
+/**
+ * @internal スケジュールの内部の判定（暦日の文字列を直接受け取る）。createCalendarFromSchedule が、公開メソッド
+ * （入力の解析を通る）を経由せずに 1 日分の結果を得るために使う。スケジュールごとに作成時に登録する
+ */
+const internalInfo = new WeakMap<object, (date: DateString) => ScheduleDay<unknown, string>>();
+
+/** @internal スケジュールの内部の判定を取り出す（createSchedule が作ったものでなければ undefined） */
+export function infoOfSchedule<T, Kind extends string>(
+  schedule: Schedule<T, Kind>,
+): ((date: DateString) => ScheduleDay<T, Kind>) | undefined {
+  return internalInfo.get(schedule) as ((date: DateString) => ScheduleDay<T, Kind>) | undefined;
+}
+
 export function buildSchedule<T, Kind extends string>(
   compiled: CompiledSchedule<T, Kind>,
 ): Schedule<T, Kind> {
@@ -1405,7 +1418,9 @@ export function buildSchedule<T, Kind extends string>(
     dayInfo: (input) => info(lookup.dateOf(input)),
     daysBetween: (from, to) => mapDays(lookup.dateOf(from), lookup.dateOf(to), info),
   };
-  return Object.freeze(schedule);
+  Object.freeze(schedule);
+  internalInfo.set(schedule, info as (date: DateString) => ScheduleDay<unknown, string>);
+  return schedule;
 }
 
 /**

@@ -38,6 +38,7 @@ import {
   compileHolidaySource,
   compileRecurringRules,
   createHolidayLookup,
+  infoOfSchedule,
   isWeekday,
   mapDays,
   RECURRING_RULE_KEYS,
@@ -48,6 +49,8 @@ import {
   type RecurringRule,
   type HolidayLookup,
   type HolidaySourceOptions,
+  type Schedule,
+  type ScheduleDay,
 } from "./schedule.ts";
 import type { Holiday, HolidayProvider } from "./types.ts";
 
@@ -122,6 +125,7 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
 export type KnownDayReason =
   | "open-date"
   | "closed-date"
+  | "open-annual"
   | "closed-annual"
   | "open-recurring"
   | "closed-recurring"
@@ -389,52 +393,64 @@ export function createCalendar<Kind extends string = string>(
   const { maxSearchDays } = compiled!;
   const schedule = buildSchedule(compiled!.schedule);
 
-  function info(date: DateString): DayInfo<Kind> {
+  const info = (date: DateString): DayInfo<Kind> => {
     const day = schedule.dayInfo(date);
-    let reason: KnownDayReason;
-    // 内部では閉じた型（KnownScheduleReason）で分岐し、値が増えたときの対応漏れを型で検出する
-    const known = day.reason as KnownScheduleReason;
-    switch (known) {
-      case "date":
-        reason = day.value ? "open-date" : "closed-date";
-        break;
-      case "annual":
-        reason = "closed-annual";
-        break;
-      case "recurring":
-        reason = day.value ? "open-recurring" : "closed-recurring";
-        break;
-      case "holiday":
-        reason = "holiday";
-        break;
-      case "weekday":
-        reason = day.value ? "regular" : "closed-weekday";
-        break;
-      default: {
-        const unreachable: never = known;
-        throw plainError("invalid-option", `Unexpected schedule reason: ${String(unreachable)}`);
-      }
-    }
-    const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
-      date: day.date,
-      weekday: day.weekday,
-      businessDay: day.value,
-      reason,
-    };
-    // 曜日で決まった日には名前を付けない（祝日名は holiday で分かる）
-    if (day.name !== undefined && day.reason !== "weekday") result.name = day.name;
-    if (day.holiday !== undefined) result.holiday = day.holiday;
-    if (day.shiftedFrom !== undefined) result.shiftedFrom = day.shiftedFrom;
-    if (day.rulePath !== undefined) result.rulePath = day.rulePath;
-    return Object.freeze(result);
-  }
+    return dayInfoFromScheduleDay(day, day.value);
+  };
 
   return buildCalendar(schedule, (date) => schedule.valueOn(date), info, maxSearchDays);
 }
 
 /**
+ * @internal スケジュールの 1 日分の結果（値は営業日か）を、営業日カレンダーの結果に変換する。
+ * reason はスケジュールの reason と営業・休業の組み合わせで決まる。createCalendar の closedAnnual は休業だけなので
+ * "open-annual" にはならないが、createCalendarFromSchedule では annual の値で営業になる日がある
+ */
+function dayInfoFromScheduleDay<Kind extends string>(
+  day: ScheduleDay<boolean, Kind>,
+  open: boolean,
+): DayInfo<Kind> {
+  let reason: KnownDayReason;
+  // 内部では閉じた型（KnownScheduleReason）で分岐し、値が増えたときの対応漏れを型で検出する
+  const known = day.reason as KnownScheduleReason;
+  switch (known) {
+    case "date":
+      reason = open ? "open-date" : "closed-date";
+      break;
+    case "annual":
+      reason = open ? "open-annual" : "closed-annual";
+      break;
+    case "recurring":
+      reason = open ? "open-recurring" : "closed-recurring";
+      break;
+    case "holiday":
+      reason = "holiday";
+      break;
+    case "weekday":
+      reason = open ? "regular" : "closed-weekday";
+      break;
+    default: {
+      const unreachable: never = known;
+      throw plainError("invalid-option", `Unexpected schedule reason: ${String(unreachable)}`);
+    }
+  }
+  const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
+    date: day.date,
+    weekday: day.weekday,
+    businessDay: open,
+    reason,
+  };
+  // 曜日で決まった日には名前を付けない（祝日名は holiday で分かる）
+  if (day.name !== undefined && day.reason !== "weekday") result.name = day.name;
+  if (day.holiday !== undefined) result.holiday = day.holiday;
+  if (day.shiftedFrom !== undefined) result.shiftedFrom = day.shiftedFrom;
+  if (day.rulePath !== undefined) result.rulePath = day.rulePath;
+  return Object.freeze(result);
+}
+
+/**
  * @internal 祝日を調べる機能と 1 日分の判定から、営業日カレンダーの機能（探索・調整・月の営業日・期日）を組み立てる。
- * createCalendar と combineCalendars で共用する
+ * createCalendar・combineCalendars・createCalendarFromSchedule で共用する
  */
 function buildCalendar<Kind extends string>(
   lookup: HolidayLookup<Kind>,
@@ -695,4 +711,50 @@ export function combineCalendars<Kind extends string = string>(
   }
 
   return buildCalendar(lookup, isOpen, info, maxSearchDays);
+}
+
+/**
+ * スケジュール（createSchedule）から営業日カレンダーを作る。isOpen が true を返す値の日を営業日とする。
+ * 営業時間表のような日ごとの値が設定の正本で、営業日の計算（加減算・調整・期日など）も同じ設定から行いたいときに使う
+ * （営業日カレンダーを別に書いて同期を取る必要がなくなる）。
+ *
+ * - isOpen は値だけで決まる純粋な関数であること（日付・時刻・外部の状態を見ない）。営業日の探索は isOpen を繰り返し呼ぶので、
+ *   結果が変わる関数を渡すと探索の結果が呼ぶたびに変わる。日付で変えたい条件は、スケジュールの規則（dates・recurring）に書く
+ * - dayInfo の reason は、スケジュールの reason と営業・休業の組み合わせ（date → "open-date"/"closed-date"、annual → "open-annual"/
+ *   "closed-annual"、recurring → "open-recurring"/"closed-recurring"、holiday → "holiday"、weekday → "regular"/"closed-weekday"）。
+ *   name・holiday・shiftedFrom・rulePath はスケジュールの結果をそのまま引き継ぐ
+ * - 祝日の判定（holiday・isHoliday など）・タイムゾーン・outOfRange はスケジュールのもの。規則の診断（diagnoseSchedule）は
+ *   スケジュールの設定に対して行う
+ * @public
+ */
+export function createCalendarFromSchedule<T, Kind extends string = string>(
+  schedule: Schedule<T, Kind>,
+  isOpen: (value: T) => boolean,
+  options?: { readonly maxSearchDays?: number },
+): Calendar<Kind> {
+  const info = infoOfSchedule(schedule);
+  if (info === undefined) {
+    throw rangeError("invalid-argument", "schedule must be a schedule created by createSchedule");
+  }
+  if (typeof isOpen !== "function") {
+    throw rangeError("invalid-argument", "isOpen must be a function (value) => boolean");
+  }
+  const maxSearchDays = options?.maxSearchDays ?? 3660;
+  if (!Number.isInteger(maxSearchDays) || maxSearchDays < 1) {
+    throw rangeError("invalid-option", "maxSearchDays must be a positive integer");
+  }
+  const open = (date: DateString): boolean => isOpen(info(date).value) === true;
+  return buildCalendar(
+    schedule,
+    open,
+    (date) => {
+      const day = info(date);
+      // 変換は value を読まない（営業・休業は open で渡す）ので、boolean の値として扱ってよい
+      return dayInfoFromScheduleDay(
+        day as ScheduleDay<unknown, Kind> as ScheduleDay<boolean, Kind>,
+        isOpen(day.value) === true,
+      );
+    },
+    maxSearchDays,
+  );
 }

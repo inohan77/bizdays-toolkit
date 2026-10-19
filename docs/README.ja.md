@@ -22,11 +22,12 @@
 - **英国の bank holidays を GOV.UK のデータで全日照合**: England・Wales・Scotland・Northern Ireland を地域ごとに選べます。2012 年から GOV.UK が公表している最後の年まで、すべての日付と名称が GOV.UK のデータと一致することをテストで確かめ、差分は毎日監視しています
 - **繰り返しの規則**: 「第 3 水曜定休」「隔週水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」「祝日の翌日は休館」のような規則を、祝日に当たったときの扱い（祝日に従う・祝日でも当てはめる・翌日に振り替える）とあわせて指定できます。規則には有効期間を付けられるので、「2027 年 4 月から定休日を月曜から火曜に変更」も 1 つのカレンダーで表せます
 - **日ごとの値（営業時間など）**: 「火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業」のように、曜日・祝日・特定日で変わる値を同じ規則で引けます
+- **スケジュールからのカレンダー**: `createCalendarFromSchedule` で、営業時間表のようなスケジュールから営業日カレンダーを作れます。営業時間表が唯一の設定になり、そのまま営業日の計算ができます
 - **設定の診断**: `bizdays-toolkit/diagnose` の `diagnoseCalendar`・`diagnoseSchedule` が、決して使われない規則・取り除いても結果が変わらない規則・キーの打ち間違い・営業日が 1 日もない設定などを、例外を投げずに一覧で返します。テストに 1 行足せば、設定の変更で規則が死んでいないかを確かめられます
 - **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 8.8KB（日本の祝日込みで約 10.6KB、英国の祝日込みで約 10.5KB。0.12.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
+- **軽量・依存ゼロ**: minify + gzip で約 9.0KB（日本の祝日込みで約 10.8KB、英国の祝日込みで約 10.7KB。0.13.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。日本と英国を同梱しています
 
 ## インストール
@@ -37,7 +38,7 @@ pnpm add bizdays-toolkit
 
 Node.js 22.12 以上。CI で Node.js 22.12・22・24・26、Chrome・Firefox・Edge（Linux）と Safari（macOS）、Cloudflare Workers（Workers のオープンソースの実行環境 workerd）を確認しています。ブラウザーは GitHub のランナーに入っている最新の安定版なので、ランナーの更新で版が変わります。ESM のみですが、CommonJS からも `require()` で読み込めます（これも CI で確認しています。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ますが、結果には影響しません。Node.js 26 では出ません）。ほかの実行環境（Deno・Bun・Vercel の Edge Runtime など）は確認していません。
 
-型定義を同梱しています。CI で、利用者のプロジェクトとして公開する型定義を、`moduleResolution` を `node16`・`nodenext`・`bundler` にして型チェックしています（TypeScript 6）。TypeScript 5.0・5.5・5.8 でも、0.9.0 の時点で手作業で確かめました。
+型定義を同梱しています。CI で、利用者のプロジェクトとして公開する型定義を、TypeScript 5.0・5.5・5.8・6.0・7.0（ネイティブ版）のそれぞれで、`moduleResolution` を `node16`・`nodenext`・`bundler` にして型チェックし、わざと入れた型エラーが各版で報告されることも確かめています。
 
 ## 使い方
 
@@ -443,6 +444,33 @@ const isOpen = hours !== null && hours.open <= time && time < hours.close;
 ```
 
 時刻を必ず持つ入力（`Date`、Temporal の `Instant`・`ZonedDateTime`・`PlainDateTime`、`"YYYY-MM-DDTHH:mm"` の文字列）では、`time` の型が `string` になるので、`null` の確認は要りません。`civilOf` は営業日カレンダーにもあり、ルートの `toDateTimeParts(input, timeZone)` でも同じ変換ができます（`bizdays-toolkit/jp` の `toJapanDate`・`toJapanDateTime` は 0.10.0 で非推奨です。`toDateString(input, "Asia/Tokyo")`・`toDateTimeParts(input, "Asia/Tokyo")`、またはカレンダーの `dateOf`・`civilOf` に移行してください。1.0.0 で削除します）。
+
+### スケジュールから営業日カレンダーを作る
+
+営業時間表のようなスケジュールが設定の正本なら、`createCalendarFromSchedule(schedule, isOpen)` でそこから営業日カレンダーを作れます。営業日の規則をもう一式書いて同期を取る必要がなくなります。`isOpen` は値だけから営業日かどうかを決める関数で、結果は通常のカレンダーなので、営業日の加減算・`adjust`・`dueDate` などがそのまま使えます。
+
+```ts
+import { createCalendarFromSchedule } from "bizdays-toolkit";
+
+const hours = createSchedule<Hours>({
+  holidays: jp,
+  weekly: [null, weekday, weekday, weekday, weekday, weekday, { open: "10:00", close: "17:00" }],
+  holiday: { sameAs: 0 },
+  annual: [
+    { from: "12-31", to: "01-03", value: null, name: "年末年始休業" },
+    { date: "01-04", value: { open: "11:00", close: "15:00" }, name: "仕事始め" },
+  ],
+});
+const calendar = createCalendarFromSchedule(hours, (v) => v !== null);
+calendar.addBusinessDays("2026-12-29", 2); // "2027-01-04"
+calendar.dayInfo("2027-01-04");
+// { date: "2027-01-04", weekday: 1, businessDay: true, reason: "open-annual", name: "仕事始め", rulePath: "annual[1]" }
+```
+
+- `isOpen` は値だけで決まる純粋な関数にしてください。受け取るのは値だけ（日付は渡されません）で、カレンダーは営業日を探す間に `isOpen` を繰り返し呼ぶので、日付・時刻・外部の状態を見る関数を渡すと、結果が呼ぶたびに変わってしまいます。日付で変えたい条件は、スケジュールの規則（`dates`・`recurring`）に書きます
+- `dayInfo` の `reason` は、スケジュールの `reason` をカレンダーの `reason` に対応させたものです。`date` → `"open-date"`/`"closed-date"`、`annual` → `"open-annual"`/`"closed-annual"`、`recurring` → `"open-recurring"`/`"closed-recurring"`、`holiday` → `"holiday"`（祝日が営業でも。`holidayPolicy: "open"` と同じ）、`weekday` → `"regular"`/`"closed-weekday"`。`"open-annual"` はこの作り方のカレンダーにだけ現れます（`createCalendar` の `closedAnnual` は休業だけのため）。`name`・`holiday`・`shiftedFrom`・`rulePath` はスケジュールの結果のままです
+- 祝日・タイムゾーン・`outOfRange` はスケジュールのものです。設定の診断は `diagnoseSchedule` でスケジュールの設定に対して行います（カレンダー自体は診断しません）。`maxSearchDays`（既定 3660）をオプションで指定できます
+- 営業・休業だけが要るなら `createCalendar`、スケジュールがどのみちあるならこちら、という使い分けです
 
 ### 日付・日時の入力
 
