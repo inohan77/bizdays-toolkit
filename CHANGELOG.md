@@ -4,6 +4,27 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-20
+
+### 移行
+
+動作は変わりません（締め期間と、暦日と時刻から瞬間への変換の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- 締め日で区切ったときのその月分の期間を返す `closingPeriod(monthOrDate, closingDay)` を追加した（`closingMonth` の逆算。前月の締め日の翌日からその月の締め日まで、両端を含む `{ from, to }`）。暦日を渡すとその日が属する期間。返す値は変更できず、日付の期間の形なので `closedDates` や `listBusinessDays` にそのまま渡せる。締め日がその月にない場合の読み替え（末日）は `closingMonth` と同じ内部関数で行い、期間が隙間も重なりもなく敷き詰められることをテストで確かめた
+- 暦日と時刻（`"HH:mm"` または `"HH:mm:ss"`）からタイムゾーンでの瞬間を `Date` で返す `toInstant(date, time, timeZone)` と、営業日カレンダー・スケジュールのメソッド `instantOf(date, time)`（そのタイムゾーンで。合成したカレンダー・スケジュールからのカレンダーにも付く）を追加した。`civilOf`・`toDateTimeParts` の逆向き。夏時間で存在しない時刻は飛んだ分だけ後ろに、2 回ある時刻は先のほう（Temporal の `disambiguation: "compatible"` と同じ）。`Intl` だけで実装し、オフセットの差が 1 時間でないゾーン（`Australia/Lord_Howe`）と南半球（`Pacific/Auckland`）でも確かめた。受け付けるのは暦日の文字列だけ（`invalid-date`）。時刻の誤りは `invalid-time`
+
+### Changed
+
+- README: 月のヘルパーの節に `closingPeriod` を、日付・日時の入力の節に `toInstant`・`instantOf` と夏時間の例を足した。サイズの値を測り直した（ルート約 9.3KB・日本の祝日込み約 11.1KB・英国の祝日込み約 11.1KB。0.14.0 で測定）
+- `docs/decisions.md`: 39 番（`closingPeriod`）・40 番（`toInstant`）を追加した
+- `src/core/schedule.ts` の `buildSchedule` の注釈の位置を直した（0.13.0 で関数の間に別の定義が入り、注釈が離れていた。動作は変わらない）
+
+### 開発
+
+- サイズの上限（`size-limits.json`）を上げた。ルート 20,500 → 22,000、`./jp` 23,500 → 25,000、`./diagnose` 27,000 → 28,500（gzip）。`closingPeriod` と瞬間への変換（ルートで約 1.3KB）のため。0.13.0 で上限に近づいていた分も含めて余裕を持たせた
+
 ## [0.13.0] - 2026-10-20
 
 ### 移行
@@ -352,7 +373,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.0...v0.11.1

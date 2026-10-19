@@ -125,6 +125,15 @@ export interface CivilDateTimeParts<Time extends string | null = string | null> 
 export declare function closingMonth(date: DateString, closingDay: number): MonthString;
 ```
 
+### closingPeriod (@public)
+
+```ts
+export declare function closingPeriod(input: DateString | MonthString, closingDay: number): {
+    readonly from: DateString;
+    readonly to: DateString;
+};
+```
+
 ### combineCalendars (@public)
 
 ```ts
@@ -320,6 +329,7 @@ export interface HolidayLookup<Kind extends string = string> {
     dateOf(input: DateInput): DateString;
     civilOf(input: DateTimeInput): CivilDateTimeParts<string>;
     civilOf(input: DateInput): CivilDateTimeParts;
+    instantOf(date: DateString, time: string): Date;
     today(now?: Date): DateString;
     isHoliday(input: DateInput): boolean;
     getHoliday(input: DateInput): Holiday<Kind> | undefined;
@@ -572,6 +582,12 @@ export declare function toDateString(input: DateInput, timeZone: string): DateSt
 ```ts
 export declare function toDateTimeParts(input: DateTimeInput, timeZone: string): CivilDateTimeParts<string>;
 export declare function toDateTimeParts(input: DateInput, timeZone: string): CivilDateTimeParts;
+```
+
+### toInstant (@public)
+
+```ts
+export declare function toInstant(date: DateString, time: string, timeZone: string): Date;
 ```
 
 ### Weekday (@public)

@@ -27,7 +27,7 @@
 - **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 9.0KB（日本の祝日込みで約 10.8KB、英国の祝日込みで約 10.7KB。0.13.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
+- **軽量・依存ゼロ**: minify + gzip で約 9.3KB（日本の祝日込みで約 11.1KB、英国の祝日込みで約 11.1KB。0.14.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。日本と英国を同梱しています
 
 ## インストール
@@ -391,6 +391,15 @@ calendar.dueDate(monthOf(billing, 1), { day: -1, convention: "preceding" }); // 
 
 - `monthOf(dateOrMonth, offset?)`: 日付または月 `"YYYY-MM"` の、`offset` か月後（負なら前）の月
 - `closingMonth(date, closingDay)`: 締め日（1〜31、`-1` は末日）で区切ったときに日付が属する月。締め日の翌日から次の締め日までを、次の締め日の月とします。締め日がその月にない日（31 日締めの 2 月など）は末日締めです
+- `closingPeriod(monthOrDate, closingDay)`: その逆算で、その月分の期間 `{ from, to }`（両端を含む。前月の締め日の翌日から締め日まで）。暦日を渡すと、その日が属する期間です。日付の期間の形なので、`closedDates` や `listBusinessDays` にそのまま渡せます
+
+```ts
+closingPeriod("2026-11", 20); // { from: "2026-10-21", to: "2026-11-20" }
+closingPeriod("2026-03", 31); // { from: "2026-03-01", to: "2026-03-31" }（2 月の 31 日締めは 28 日締め）
+const { from, to } = closingPeriod("2026-11-05", 20); // "2026-11-05" が属する期間
+const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+office.listBusinessDays(from, to).length; // 22（11 月分の営業日数）
+```
 
 `dueDate` の `day` も、その月にない日（2 月 30 日など）は末日に読み替えます。繰り返しの規則（`{ day: 31 }`）はその月にない日に当てはまらないので、扱いが異なります。期日は「その月のどこか」に必ず決まる必要があるためです。
 
@@ -488,6 +497,26 @@ calendar.dayInfo("2027-01-04");
 Temporal のオブジェクトは形で判別するので、Temporal には依存しません。CI では、Temporal を備えた実行環境で、本物の Temporal のオブジェクトでも確かめています（どの環境に Temporal があったかは CI のログに出ます）。
 
 カレンダーのタイムゾーンは、`timeZone` オプション、祝日の提供元のタイムゾーン、`"UTC"` の順に決まります。
+
+**暦日と時刻から瞬間へ**: `toInstant(date, time, timeZone)` と `calendar.instantOf(date, time)`（スケジュールにもあります）は、`civilOf` の逆向きです。暦日 `"YYYY-MM-DD"` と時刻（`"HH:mm"` または `"HH:mm:ss"`）から、そのタイムゾーンでの瞬間を `Date` で返します。受け付けるのは暦日の文字列だけで（`Date` を渡すとどの日の時刻か曖昧になるため）、結果の `Date` は ISO 文字列（`.toISOString()`）にも Temporal の `Instant`（`Temporal.Instant.fromEpochMilliseconds(d.getTime())`）にも 1 行でできます。
+
+```ts
+import { toInstant } from "bizdays-toolkit";
+
+toInstant("2026-11-23", "10:00", "Asia/Tokyo").toISOString(); // "2026-11-23T01:00:00.000Z"
+const store = createCalendar({ holidays: jp, closedWeekdays: [0] });
+const opensAt = store.instantOf(store.nextBusinessDay(store.today()), "10:00"); // 次に開く瞬間（Date）
+```
+
+夏時間の切り替えでは、Temporal の既定（`disambiguation: "compatible"`）と同じです。存在しない時刻（英国の 3 月最終日曜の 01:00〜01:59）は飛んだ分だけ後ろにずらし、2 回ある時刻（10 月最終日曜の 01:00〜01:59）は先のほうです。
+
+```ts
+import { england } from "bizdays-toolkit/uk";
+
+const uk = createCalendar({ holidays: england });
+uk.instantOf("2026-03-29", "01:30").toISOString(); // "2026-03-29T01:30:00.000Z"（02:30 BST。01:30 は存在しない）
+uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"（1 回目の 01:30。まだ BST）
+```
 
 ### 他の国・地域の祝日
 

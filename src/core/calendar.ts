@@ -557,6 +557,7 @@ function buildCalendar<Kind extends string>(
     outOfRange: lookup.outOfRange,
     dateOf,
     civilOf: lookup.civilOf,
+    instantOf: lookup.instantOf,
     today: lookup.today,
     isHoliday: lookup.isHoliday,
     getHoliday: lookup.getHoliday,

@@ -237,6 +237,61 @@ export function toDateTimeParts(input: DateInput, timeZone: string): CivilDateTi
   return Object.freeze({ date: civil.date, time });
 }
 
+/**
+ * @internal 暦日と時刻（0 時からの経過分）から、タイムゾーンでの瞬間（エポックミリ秒）を求める。
+ * 夏時間の扱いは Temporal の disambiguation: "compatible" と同じ。存在しない時刻（飛び）は切り替え前のオフセットで解釈して
+ * 飛んだ分だけ後ろの瞬間に、2 回ある時刻（重複）は先のほう（切り替え前のオフセット）にする。
+ * Intl 以外に依存しないよう、前後 1 日のオフセットを候補にして、暦日に戻して一致するものを選ぶ
+ */
+export function civilToInstant(date: DateString, minutes: number, timeZone: string): number {
+  const { year, month, day } = parseDate(date);
+  const wall = Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
+  const offsetAt = (ms: number): number => {
+    const civil = instantToCivil(ms, timeZone);
+    const c = parseDate(civil.date);
+    const m = civil.minutes ?? 0; // 瞬間からの変換では時刻が必ずある
+    return Date.UTC(c.year, c.month - 1, c.day, Math.floor(m / 60), m % 60) - ms;
+  };
+  const before = offsetAt(wall - 86_400_000);
+  const after = offsetAt(wall + 86_400_000);
+  const valid = (ms: number): boolean => {
+    const civil = instantToCivil(ms, timeZone);
+    return civil.date === date && civil.minutes === minutes;
+  };
+  const candidates = before === after ? [wall - before] : [wall - before, wall - after];
+  const found = candidates.filter(valid);
+  // 重複なら先のほう（小さいミリ秒）、飛びなら切り替え前のオフセット（before）で解釈した瞬間
+  return found.length > 0 ? Math.min(...found) : wall - before;
+}
+
+/** @internal "HH:mm" または "HH:mm:ss" を 0 時からの経過秒に変換する（00:00:00〜23:59:59） */
+export function parseTimeOfDaySeconds(value: unknown): number {
+  const m = typeof value === "string" ? /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value) : null;
+  const seconds = m ? Number(m[3] ?? "0") : NaN;
+  if (!m || seconds > 59) {
+    throw rangeError(
+      "invalid-time",
+      `Invalid time of day: ${JSON.stringify(value)} (expected HH:mm or HH:mm:ss)`,
+    );
+  }
+  return wallTime(Number(m[1]), Number(m[2])) * 60 + seconds;
+}
+
+/**
+ * 暦日と時刻（"HH:mm" または "HH:mm:ss"）から、タイムゾーンでのその瞬間を Date で返す（civilOf・toDateTimeParts の逆向き）。
+ * 夏時間の切り替えで存在しない時刻は、飛んだ分だけ後ろの瞬間（英国の 3 月の 01:30 は 02:30 BST）、2 回ある時刻は先のほう
+ * （Temporal の disambiguation: "compatible" と同じ）。
+ * @public
+ */
+export function toInstant(date: DateString, time: string, timeZone: string): Date {
+  const zone = validateTimeZone(timeZone);
+  if (typeof date !== "string") throw typeError("invalid-date", `Invalid date: ${String(date)}`);
+  parseDate(date);
+  const seconds = parseTimeOfDaySeconds(time);
+  const ms = civilToInstant(date, Math.floor(seconds / 60), zone) + (seconds % 60) * 1000;
+  return new Date(ms);
+}
+
 /** @internal "HH:mm" を 0 時からの経過分に変換する（00:00〜23:59） */
 export function parseTimeOfDay(value: string): number {
   const m = /^(\d{2}):(\d{2})$/.exec(value);

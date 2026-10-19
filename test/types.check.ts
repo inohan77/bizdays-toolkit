@@ -6,6 +6,7 @@
  */
 
 import {
+  closingPeriod,
   combineCalendars,
   createCalendar,
   createCalendarFromSchedule,
@@ -13,6 +14,7 @@ import {
   isBizdaysError,
   monthOf,
   toDateTimeParts,
+  toInstant,
   type BusinessDayConvention,
   type DateInput,
   type DayInfo,
@@ -185,6 +187,21 @@ createCalendar({ closedRecurring: [{ holiday: true, dayAfterHoliday: true }] });
   const rulePath2: string | undefined = s.dayInfo("2026-10-19").rulePath;
   void rulePath;
   void rulePath2;
+}
+
+// --- 締め期間・瞬間への変換（0.14.0） ---
+{
+  const period: { readonly from: string; readonly to: string } = closingPeriod("2026-11", 20);
+  createCalendar({ closedDates: [period, closingPeriod("2026-11-05", -1)] });
+  const instant: Date = toInstant("2026-11-23", "10:00", "Asia/Tokyo");
+  const c = createCalendar({ holidays: jp });
+  const instant2: Date = c.instantOf("2026-11-23", "10:00:30");
+  void instant;
+  void instant2;
+  // @ts-expect-error -- instantOf は暦日の文字列だけを受け付ける（Date は渡せない）
+  c.instantOf(new Date(), "10:00");
+  // @ts-expect-error -- closingDay は数値
+  closingPeriod("2026-11", "20");
 }
 
 // --- スケジュールからのカレンダー（0.13.0） ---

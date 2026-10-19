@@ -28,7 +28,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **A calendar from a schedule**: `createCalendarFromSchedule` turns a schedule such as store hours into a business-day calendar, so the hours are the only configuration and business-day arithmetic works on them
 - **Combining calendars**: `combineCalendars` builds a calendar of the days on which all of several calendars are open (your company and the bank, for a remittance date) or any of them is open (any of several stores), and business-day arithmetic works on the result
 - **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
-- **Lightweight, zero dependencies**: about 9.0 KB min+gzip (about 10.8 KB with Japanese holidays, about 10.7 KB with UK bank holidays; measured for 0.13.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
+- **Lightweight, zero dependencies**: about 9.3 KB min+gzip (about 11.1 KB with Japanese holidays, about 11.1 KB with UK bank holidays; measured for 0.14.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan and the UK are bundled
 
 ## Installation
@@ -397,6 +397,15 @@ calendar.dueDate(monthOf(billing, 1), { day: -1, convention: "preceding" }); // 
 
 - `monthOf(dateOrMonth, offset?)`: the month `offset` months after (before, if negative) a date or a month `"YYYY-MM"`
 - `closingMonth(date, closingDay)`: the month a date belongs to when months are closed on `closingDay` (1–31, `-1` for the last day). The day after a closing day up to the next closing day belongs to the month of the next closing day. If the closing day does not exist in a month (closing on the 31st in February), the last day is used
+- `closingPeriod(monthOrDate, closingDay)`: the inverse: the period `{ from, to }` (both ends included) that belongs to the month, from the day after the previous closing day to the closing day. Given a date, the period that date belongs to. The result has the shape of a date range, so it can go straight into `closedDates` or `listBusinessDays`
+
+```ts
+closingPeriod("2026-11", 20); // { from: "2026-10-21", to: "2026-11-20" }
+closingPeriod("2026-03", 31); // { from: "2026-03-01", to: "2026-03-31" } (closing on the 31st in February means the 28th)
+const { from, to } = closingPeriod("2026-11-05", 20); // the period "2026-11-05" belongs to
+const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+office.listBusinessDays(from, to).length; // 22 (business days in the November period)
+```
 
 The `day` of `dueDate` also maps days that do not exist in a month (such as February 30) to the last day. Recurring rules (`{ day: 31 }`) do not match such days, so the two behave differently: a due date must always fall somewhere in its month.
 
@@ -494,6 +503,26 @@ Every method accepts the following inputs. Returned dates are always `"YYYY-MM-D
 Temporal objects are recognized by their shape, so the package does not depend on Temporal. CI also checks real Temporal objects in the runtimes that provide Temporal (the CI log shows whether each runtime had it).
 
 The calendar's time zone is the `timeZone` option, then the holiday provider's time zone, then `"UTC"`.
+
+**From a civil date and time to an instant**: `toInstant(date, time, timeZone)` and `calendar.instantOf(date, time)` (also on schedules) go the other way from `civilOf`: a civil date `"YYYY-MM-DD"` and a time `"HH:mm"` or `"HH:mm:ss"` become a `Date` for that instant in the time zone. Only a date string is accepted (a `Date` would be ambiguous about which day it means), and the result is a `Date`, which is one line from an ISO string (`.toISOString()`) or a Temporal `Instant` (`Temporal.Instant.fromEpochMilliseconds(d.getTime())`).
+
+```ts
+import { toInstant } from "bizdays-toolkit";
+
+toInstant("2026-11-23", "10:00", "Asia/Tokyo").toISOString(); // "2026-11-23T01:00:00.000Z"
+const store = createCalendar({ holidays: jp, closedWeekdays: [0] });
+const opensAt = store.instantOf(store.nextBusinessDay(store.today()), "10:00"); // the next opening, as a Date
+```
+
+Around daylight-saving changes the result follows Temporal's default (`disambiguation: "compatible"`): a time that does not exist (in the UK, 01:00–01:59 on the last Sunday of March) is moved forward by the length of the gap, and a time that occurs twice (01:00–01:59 on the last Sunday of October) is the earlier one.
+
+```ts
+import { england } from "bizdays-toolkit/uk";
+
+const uk = createCalendar({ holidays: england });
+uk.instantOf("2026-03-29", "01:30").toISOString(); // "2026-03-29T01:30:00.000Z" (02:30 BST; 01:30 does not exist)
+uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z" (the first 01:30, still BST)
+```
 
 ### Holidays of other countries and regions
 

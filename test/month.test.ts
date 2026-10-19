@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { closingMonth, createCalendar, monthOf, type BusinessDayConvention } from "../src/index.ts";
+import {
+  addDays,
+  closingMonth,
+  closingPeriod,
+  createCalendar,
+  isBizdaysError,
+  monthOf,
+  type BusinessDayConvention,
+} from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 
 const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
@@ -121,4 +129,83 @@ test("dueDate: その月にない日は末日に読み替えてから調整す�
     convention: "following",
   });
   assert.equal(pay, "2026-12-10");
+});
+
+test("closingPeriod: その月分の期間（前月の締め日の翌日からその月の締め日まで）", () => {
+  assert.deepEqual(closingPeriod("2026-11", 20), { from: "2026-10-21", to: "2026-11-20" });
+  assert.deepEqual(
+    closingPeriod("2026-10", -1),
+    { from: "2026-10-01", to: "2026-10-31" },
+    "末日締め",
+  );
+  assert.deepEqual(
+    closingPeriod("2026-03", 31),
+    { from: "2026-03-01", to: "2026-03-31" },
+    "2 月の 31 日締めは 2 月末日",
+  );
+  assert.deepEqual(closingPeriod("2026-03", 30), { from: "2026-03-01", to: "2026-03-30" });
+  assert.deepEqual(
+    closingPeriod("2024-03", 29),
+    { from: "2024-03-01", to: "2024-03-29" },
+    "うるう年の 2 月 29 日締め",
+  );
+  assert.deepEqual(
+    closingPeriod("2025-03", 29),
+    { from: "2025-03-01", to: "2025-03-29" },
+    "平年の 2 月は 28 日締め",
+  );
+  assert.deepEqual(
+    closingPeriod("2026-01", 20),
+    { from: "2025-12-21", to: "2026-01-20" },
+    "年をまたぐ",
+  );
+  // 暦日を渡すと、その日が属する期間
+  assert.deepEqual(closingPeriod("2026-11-05", 20), { from: "2026-10-21", to: "2026-11-20" });
+  assert.deepEqual(closingPeriod("2026-11-21", 20), { from: "2026-11-21", to: "2026-12-20" });
+  assert.ok(Object.isFrozen(closingPeriod("2026-11", 20)));
+  assert.equal("name" in closingPeriod("2026-11", 20), false);
+  // closedDates にそのまま渡せる
+  const cal = createCalendar({ holidays: jp, closedDates: [closingPeriod("2026-11", 20)] });
+  assert.equal(cal.isBusinessDay("2026-10-21"), false);
+  assert.equal(cal.isBusinessDay("2026-11-20"), false);
+  assert.equal(cal.isBusinessDay("2026-11-24"), true);
+  for (const [input, day, code] of [
+    ["2026-13", 20, "invalid-month"],
+    ["2026/11", 20, "invalid-month"],
+    ["2026-11", 0, "invalid-argument"],
+    ["2026-11", 32, "invalid-argument"],
+    ["2026-11", 1.5, "invalid-argument"],
+    ["2026-02-30", 20, "invalid-date"],
+  ] as const) {
+    assert.throws(
+      () => closingPeriod(input, day),
+      (e: unknown) => isBizdaysError(e) && e.code === code,
+      `${input} ${day}`,
+    );
+  }
+});
+
+test("closingPeriod: 期間は隙間も重なりもなく敷き詰められ、closingMonth と往復する", () => {
+  for (const closingDay of [...Array.from({ length: 31 }, (_, i) => i + 1), -1]) {
+    let month = "2023-01";
+    for (let k = 0; k < 40; k++) {
+      const period = closingPeriod(month, closingDay);
+      const next = closingPeriod(monthOf(month, 1), closingDay);
+      assert.equal(
+        addDays(period.to, 1),
+        next.from,
+        `${month} の締め日 ${closingDay}: 次の期間と隙間なく続く`,
+      );
+      assert.ok(period.from <= period.to);
+      for (let d = period.from; d <= period.to; d = addDays(d, 1)) {
+        assert.equal(
+          closingMonth(d, closingDay),
+          month,
+          `${d} は ${month} 分（締め日 ${closingDay}）`,
+        );
+        assert.deepEqual(closingPeriod(d, closingDay), period);
+      }
+      month = monthOf(month, 1);
+    }
+  }
 });

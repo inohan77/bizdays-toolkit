@@ -5,7 +5,7 @@
  * （月の第 n 営業日・期日）は営業日カレンダーのメソッドにある。
  */
 
-import { daysInMonth, formatDate, parseDate, type DateString } from "./date.ts";
+import { addDays, daysInMonth, formatDate, parseDate, type DateString } from "./date.ts";
 import { rangeError } from "./errors.ts";
 
 /**
@@ -90,13 +90,52 @@ export function monthOf(input: DateString | MonthString, offset = 0): MonthStrin
  * @public
  */
 export function closingMonth(date: DateString, closingDay: number): MonthString {
+  checkClosingDay(closingDay);
+  const { year, month, day } = parseDate(date);
+  return formatMonth(
+    shiftMonth({ year, month }, day <= closingDayIn({ year, month }, closingDay) ? 0 : 1),
+  );
+}
+
+function checkClosingDay(closingDay: number): void {
   if (!isDayOfMonthValue(closingDay)) {
     throw rangeError(
       "invalid-argument",
       `closingDay must be an integer from 1 to 31, or -1 (last day): ${closingDay}`,
     );
   }
-  const { year, month, day } = parseDate(date);
-  const closing = closingDay === -1 ? daysInMonth(year, month) : closingDay;
-  return formatMonth(shiftMonth({ year, month }, day <= closing ? 0 : 1));
+}
+
+/** その月の締め日（日）。-1 またはその月の日数以上なら末日（decisions.md の 16 番の読み替えはここだけで行う） */
+function closingDayIn({ year, month }: YearMonth, closingDay: number): number {
+  const last = daysInMonth(year, month);
+  return closingDay === -1 || closingDay > last ? last : closingDay;
+}
+
+/**
+ * 締め日で区切ったときの、その月分の期間（両端を含む暦日）。closingMonth の逆算。
+ *
+ * 前月の締め日の翌日から、その月の締め日まで。月の代わりに暦日を渡すと、その日が属する期間（closingMonth で求めた月の期間）。
+ * 返す値は変更できず、name は付かない（DateRange の形なので、そのまま closedDates などに渡せる）。
+ *
+ * @example
+ * closingPeriod("2026-11", 20); // { from: "2026-10-21", to: "2026-11-20" }
+ * closingPeriod("2026-10", -1); // { from: "2026-10-01", to: "2026-10-31" }（末日締め）
+ * closingPeriod("2026-03", 31); // { from: "2026-03-01", to: "2026-03-31" }（2 月の 31 日締めは 2 月末日）
+ * closingPeriod("2026-11-05", 20); // { from: "2026-10-21", to: "2026-11-20" }（この日が属する期間）
+ * @public
+ */
+export function closingPeriod(
+  input: DateString | MonthString,
+  closingDay: number,
+): { readonly from: DateString; readonly to: DateString } {
+  checkClosingDay(closingDay);
+  const month =
+    typeof input === "string" && input.split("-").length === 3
+      ? parseMonth(closingMonth(input, closingDay))
+      : parseMonth(input);
+  const previous = shiftMonth(month, -1);
+  const to = dayOfMonth(month, closingDayIn(month, closingDay));
+  const from = addDays(dayOfMonth(previous, closingDayIn(previous, closingDay)), 1);
+  return Object.freeze({ from, to });
 }

@@ -2,6 +2,7 @@
 // moduleResolution を node16・nodenext・bundler に変えて tsc で確かめる。ライブラリの型定義の検査も有効にする）。
 // 実行の前に pnpm build が必要
 import {
+  closingPeriod,
   combineCalendars,
   createCalendar,
   createCalendarFromSchedule,
@@ -40,6 +41,9 @@ createCalendar({ holidays: jp, openRecurring: [{ holiday: true, kinds: ["substit
 const fromSchedule = createCalendarFromSchedule(schedule, (v) => v > 0);
 const open: boolean = fromSchedule.isBusinessDay("2026-11-24");
 void open;
+const period: { readonly from: string; readonly to: string } = closingPeriod("2026-11", 20);
+const instant: Date = calendar.instantOf(period.from, "09:00");
+void instant;
 
 const timed = toJapanDateTime(new Date());
 expectType<Equal<typeof timed.time, string>>();

@@ -64,11 +64,12 @@ export {
   type DateString,
   type Weekday,
 } from "./core/date.ts";
-export { closingMonth, monthOf, type MonthString } from "./core/month.ts";
+export { closingMonth, closingPeriod, monthOf, type MonthString } from "./core/month.ts";
 export { isBizdaysError, type ErrorCode, type KnownErrorCode } from "./core/errors.ts";
 export {
   toDateString,
   toDateTimeParts,
+  toInstant,
   type DateInput,
   type DateTimeInput,
   type TemporalDateLike,

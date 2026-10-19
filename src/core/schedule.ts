@@ -34,6 +34,7 @@ import {
   instantToCivil,
   toCivil,
   toDateTimeParts,
+  toInstant,
   validateTimeZone,
   type CivilDateTimeParts,
   type DateInput,
@@ -365,6 +366,11 @@ export interface HolidayLookup<Kind extends string = string> {
   /** 入力をタイムゾーンでの暦日と時刻に変換する */
   civilOf(input: DateTimeInput): CivilDateTimeParts<string>;
   civilOf(input: DateInput): CivilDateTimeParts;
+  /**
+   * 暦日 "YYYY-MM-DD" と時刻（"HH:mm" または "HH:mm:ss"）から、タイムゾーンでのその瞬間を Date で返す（civilOf の逆向き）。
+   * 夏時間で存在しない時刻は飛んだ分だけ後ろに、2 回ある時刻は先のほう（toInstant と同じ）
+   */
+  instantOf(date: DateString, time: string): Date;
   /** 今日の日付（タイムゾーン） */
   today(now?: Date): DateString;
 
@@ -1135,6 +1141,7 @@ export function createHolidayLookup<Kind extends string>(
     dateOf,
     civilOf: ((input: DateInput) =>
       toDateTimeParts(input, timeZone)) as HolidayLookup<Kind>["civilOf"],
+    instantOf: (date, time) => toInstant(date, time, timeZone),
     today: (now = new Date()) => instantToCivil(now.getTime(), timeZone).date,
     isHoliday: (input) => holidayOn(dateOf(input)) !== undefined,
     getHoliday: (input) => holidayOn(dateOf(input)),
@@ -1382,7 +1389,6 @@ export function mapDays<R>(
   return Object.freeze(result);
 }
 
-/** @internal 検証済みの規則からスケジュールを作る */
 /**
  * @internal スケジュールの内部の判定（暦日の文字列を直接受け取る）。createCalendarFromSchedule が、公開メソッド
  * （入力の解析を通る）を経由せずに 1 日分の結果を得るために使う。スケジュールごとに作成時に登録する
@@ -1396,6 +1402,7 @@ export function infoOfSchedule<T, Kind extends string>(
   return internalInfo.get(schedule) as ((date: DateString) => ScheduleDay<T, Kind>) | undefined;
 }
 
+/** @internal 検証済みの規則からスケジュールを作る */
 export function buildSchedule<T, Kind extends string>(
   compiled: CompiledSchedule<T, Kind>,
 ): Schedule<T, Kind> {
@@ -1409,6 +1416,7 @@ export function buildSchedule<T, Kind extends string>(
     outOfRange: lookup.outOfRange,
     dateOf: lookup.dateOf,
     civilOf: lookup.civilOf,
+    instantOf: lookup.instantOf,
     today: lookup.today,
     isHoliday: lookup.isHoliday,
     getHoliday: lookup.getHoliday,
