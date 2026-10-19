@@ -38,6 +38,7 @@ import {
   type RecurringRuleCompiled,
   type ScheduleOptions,
 } from "./schedule.ts";
+import type { Holiday } from "./types.ts";
 
 // ------------------------------------------------------------
 // 公開する型
@@ -120,6 +121,11 @@ function closestKey(key: string, known: readonly string[]): string | undefined {
   const lower = key.toLowerCase();
   const sameCase = known.find((k) => k.toLowerCase() === lower);
   if (sameCase !== undefined) return sameCase;
+  // 既知のキーの先頭部分（"onHoliday" → "onHolidayRule"）は、短い別のキー（"holiday"）との編集距離より優先する
+  if (key.length >= 4) {
+    const prefixOf = known.find((k) => k.toLowerCase().startsWith(lower));
+    if (prefixOf !== undefined) return prefixOf;
+  }
   const limit = Math.max(1, Math.floor(key.length / 4));
   let best: string | undefined;
   let bestDistance = limit + 1;
@@ -130,9 +136,7 @@ function closestKey(key: string, known: readonly string[]): string | undefined {
       bestDistance = distance;
     }
   }
-  if (best !== undefined) return best;
-  if (key.length >= 4) return known.find((k) => k.toLowerCase().startsWith(lower));
-  return undefined;
+  return best;
 }
 
 // ------------------------------------------------------------
@@ -495,55 +499,62 @@ function analyze<T, Kind extends string>(
 
   // --- 繰り返しの規則: 当てはまる日がない・覆われている ---
   const recurringBits = recurring.map(patternBits);
-  /** 祝日の翌日の規則の判定に使う（提供元の対応年の外は祝日でないとみなす） */
-  const isHolidaySafe = (date: DateString): boolean => {
+  /** 祝日・祝日の翌日の規則の判定に使う（提供元の対応年の外は祝日でないとみなす） */
+  const holidayOfSafe = (date: DateString): Holiday<string> | undefined => {
     try {
-      return lookup.holidayOn(date) !== undefined;
+      return lookup.holidayOn(date);
     } catch {
-      return false;
+      return undefined;
     }
   };
-  /** 祝日の翌日の規則が、調べる期間と有効期間の中で 1 日でも当てはまるか（祝日は年ごとに違うので、全日を調べる） */
-  const dayAfterHolidayMatches = (rule: RecurringRuleCompiled<unknown>): boolean => {
+  /** 祝日に従属する規則（祝日・祝日の翌日）が、調べる期間と有効期間の中で 1 日でも当てはまるか（祝日は年ごとに違うので、全日を調べる） */
+  const holidayRuleMatches = (rule: RecurringRuleCompiled<unknown>): boolean => {
     if (source.providers.length === 0 || !window) return false;
     let found = false;
     eachDay(
       window,
-      (n) => (found = inPeriod(rule, n) && matchPattern(rule, fromDayNumber(n), isHolidaySafe)),
+      (n) => (found = inPeriod(rule, n) && matchPattern(rule, fromDayNumber(n), holidayOfSafe)),
     );
     return found;
   };
+  /** 集合 a（null はすべて）が集合 b（null はすべて）を含むか */
+  const setCovers = <V>(a: ReadonlySet<V> | null, b: ReadonlySet<V> | null): boolean =>
+    a === null || (b !== null && [...b].every((v) => a.has(v)));
   recurring.forEach((rule, j) => {
     const bits = recurringBits[j]!;
-    const matches = rule.dayAfterHoliday
-      ? dayAfterHolidayMatches(rule)
-      : matchesAnyDay(rule, cycle);
+    const holidayBased = rule.holiday || rule.dayAfterHoliday;
+    const matches = holidayBased ? holidayRuleMatches(rule) : matchesAnyDay(rule, cycle);
     if (!matches) {
       unused.add(rule);
       c.warning(
         "never-matches",
         rule.path,
-        rule.dayAfterHoliday
+        holidayBased
           ? source.providers.length === 0
             ? "This rule matches no day: there are no holidays without a holiday provider"
-            : "This rule matches no day: no day after a holiday within its effective period"
+            : rule.holiday
+              ? "This rule matches no day: no holiday of the selected kinds within the selected months and effective period"
+              : "This rule matches no day: no day after a holiday within its effective period"
           : rule.effectiveFrom === null && rule.effectiveTo === null
             ? "This rule matches no day (for example, a day that does not exist in the selected months)"
             : "This rule matches no day within its effective period",
       );
       return;
     }
-    // 祝日の翌日の規則は祝日次第で年ごとに変わるので、形の包含は祝日の翌日の規則どうし（月の絞り込み）だけで調べる
+    // 祝日・祝日の翌日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・月の絞り込み）だけで調べる
     const k = recurring.findIndex(
       (r, i) =>
         i < j &&
         canCover(r, rule) &&
         periodCovers(r, rule) &&
-        (rule.dayAfterHoliday
-          ? r.dayAfterHoliday &&
-            (r.months === null ||
-              (rule.months !== null && [...rule.months].every((m) => r.months!.has(m))))
-          : !r.dayAfterHoliday && intervalCovers(r, rule) && isSubset(bits, recurringBits[i]!)),
+        (rule.holiday
+          ? r.holiday && setCovers(r.kinds, rule.kinds) && setCovers(r.months, rule.months)
+          : rule.dayAfterHoliday
+            ? r.dayAfterHoliday && setCovers(r.months, rule.months)
+            : !r.holiday &&
+              !r.dayAfterHoliday &&
+              intervalCovers(r, rule) &&
+              isSubset(bits, recurringBits[i]!)),
     );
     if (k < 0) return;
     unused.add(rule);

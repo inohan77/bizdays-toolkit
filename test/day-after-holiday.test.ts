@@ -31,6 +31,7 @@ test("祝日の翌日: 連休が明けた日だけに当てはまり、その日
     businessDay: false,
     reason: "closed-recurring",
     name: "祝日の翌日休館",
+    rulePath: "closedRecurring[0]",
   });
   // 2026-02-11（水・建国記念の日）の翌日
   assert.equal(library.isBusinessDay("2026-02-12"), false);
@@ -54,6 +55,7 @@ test("祝日の翌日: 配列の順番・holidayPolicy・months・有効期間�
     reason: "closed-recurring",
     name: "月曜休館",
     shiftedFrom: "2026-11-23",
+    rulePath: "closedRecurring[0]",
   });
   const reversed = createCalendar({
     holidays: jp,

@@ -54,9 +54,23 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
             weekday: pick([1, 3, 6]),
             ...(rand() < 0.6 ? { nth: pick([1, 2, -1, [4, 5], [1, 3]]) } : {}),
           }
-        : r < 0.85
+        : r < 0.8
           ? { day: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) }
-          : { dayAfterHoliday: true as const };
+          : r < 0.9
+            ? { dayAfterHoliday: true as const }
+            : {
+                holiday: true as const,
+                ...(rand() < 0.6
+                  ? {
+                      kinds: pick([
+                        ["national"],
+                        ["substitute"],
+                        ["substitute", "citizens"],
+                        ["x"],
+                      ]),
+                    }
+                  : {}),
+              };
     // 周期（nth とは併用できない。起点は曜日に合わせる）
     const interval =
       "weekday" in base && base.nth === undefined && rand() < 0.4
@@ -69,8 +83,8 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
       ...base,
       ...interval,
       ...(rand() < 0.3 ? { months: pick([[2], [1, 2], [2, 4, 6, 9, 11]]) } : {}),
-      // 祝日の翌日の規則には onHolidayRule を付けられない
-      ...("dayAfterHoliday" in base
+      // 祝日・祝日の翌日の規則には onHolidayRule を付けられない
+      ...("dayAfterHoliday" in base || "holiday" in base
         ? {}
         : { onHolidayRule: pick(["under-holiday", "over-holiday", "after-holiday"]) }),
       ...period(),
@@ -158,11 +172,10 @@ test("性質: 使われない・取り除いても変わらないと診断した
             `${d.code} ${d.path} ${date}: ${describe()}`,
           );
         } else {
-          assert.deepEqual(
-            reduced.dayInfo(date),
-            original.dayInfo(date),
-            `${d.code} ${d.path} ${date}: ${describe()}`,
-          );
+          // 規則を取り除くと後の規則の位置（rulePath）はずれるので、位置を除いて比べる
+          const { rulePath: _r, ...reducedInfo } = reduced.dayInfo(date);
+          const { rulePath: _o, ...originalInfo } = original.dayInfo(date);
+          assert.deepEqual(reducedInfo, originalInfo, `${d.code} ${d.path} ${date}: ${describe()}`);
         }
       }
     }

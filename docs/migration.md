@@ -4,6 +4,28 @@
 
 パッチ版（0.x.y の y）は、公式データの反映と不具合の修正なので、作業は要りません。
 
+## 0.12.0
+
+動作は変わりません（繰り返しの規則の祝日の形 `{ holiday: true, kinds?, months? }` と、`dayInfo` の `rulePath` の追加。診断・CI の改善）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` の 2 つの定数が非推奨になったので、使っていれば書き換えてください（1.0.0 で削除します）。
+
+| 非推奨                                              | 移行先（同じ値）                                                                                                       |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `jp` モジュールの `dataVersion`・`confirmedThrough` | 提供元の項目 `jp.dataVersion`・`jp.confirmedThrough`                                                                   |
+| `uk` モジュールの `dataVersion`・`confirmedThrough` | 提供元の項目 `england.dataVersion`・`england.confirmedThrough` など（`scotland`・`wales`・`northernIreland` も同じ値） |
+
+```ts
+// 0.11.x
+import { confirmedThrough, dataVersion } from "bizdays-toolkit/jp";
+
+// 0.12.0 から
+import { jp } from "bizdays-toolkit/jp";
+jp.dataVersion;
+jp.confirmedThrough;
+```
+
+- 同じ値が定数と提供元の項目の 2 経路にあり、英国は 4 つの提供元に 1 組の定数という歪みがあったため、提供元の項目に集約します（decisions.md の 37 番）
+- `DayInfo`・`ScheduleDay` に省略可能な `rulePath` が加わりました。読む側には影響しません
+
 ## 0.11.0
 
 作業は要りません（繰り返しの規則の祝日の翌日の形 `{ dayAfterHoliday: true }` と、カレンダーを合成する `combineCalendars` の追加）。

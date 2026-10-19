@@ -153,8 +153,13 @@ export interface DayInfo<Kind extends string = string> {
   /** 祝日から振り替えられた繰り返しの規則で決まった場合、振替の元の日付（onHolidayRule: "after-holiday"） */
   readonly shiftedFrom?: DateString;
   /**
+   * 判定を決めた規則の設定の中の位置（規則の診断の path と同じ形。例: "closedRecurring[0]"）。
+   * 個別の日付・毎年の休業日・繰り返しの規則（振替先を含む）で決まった日にだけ付き、祝日・定休日の曜日で決まった日には付かない
+   */
+  readonly rulePath?: string;
+  /**
    * 合成したカレンダー（combineCalendars）で、判定を決めたカレンダーの番号（渡した配列の位置）。
-   * reason・name・shiftedFrom はそのカレンダーの結果。合成していないカレンダーでは付かない
+   * reason・name・shiftedFrom・rulePath はそのカレンダーの結果。合成していないカレンダーでは付かない
    */
   readonly decidedBy?: number;
 }
@@ -420,6 +425,7 @@ export function createCalendar<Kind extends string = string>(
     if (day.name !== undefined && day.reason !== "weekday") result.name = day.name;
     if (day.holiday !== undefined) result.holiday = day.holiday;
     if (day.shiftedFrom !== undefined) result.shiftedFrom = day.shiftedFrom;
+    if (day.rulePath !== undefined) result.rulePath = day.rulePath;
     return Object.freeze(result);
   }
 
@@ -612,7 +618,7 @@ const isCalendarLike = (v: unknown): v is Calendar =>
  * 作成済みの営業日カレンダーを合成する。"all" はすべてのカレンダーが営業している日、"any" はいずれかが
  * 営業している日を営業日とする。返すのは通常の営業日カレンダーで、営業日の加減算・調整・期日などが合成結果で動く。
  *
- * - dayInfo の reason・name・shiftedFrom は、合成結果と同じ判定をした最初のカレンダーの結果で、
+ * - dayInfo の reason・name・shiftedFrom・rulePath は、合成結果と同じ判定をした最初のカレンダーの結果で、
  *   その番号を decidedBy で返す。holiday・isHoliday などは、すべてのカレンダーの祝日の提供元の和集合で判定する
  * - タイムゾーンはすべてのカレンダーで同じでなければならない（time-zone-conflict）。
  *   2 つ未満、同じカレンダーを 2 回渡した場合は invalid-argument
@@ -683,6 +689,7 @@ export function combineCalendars<Kind extends string = string>(
     const holiday = lookup.holidayOn(date);
     if (holiday !== undefined) result.holiday = holiday;
     if (base.shiftedFrom !== undefined) result.shiftedFrom = base.shiftedFrom;
+    if (base.rulePath !== undefined) result.rulePath = base.rulePath;
     result.decidedBy = decidedBy;
     return Object.freeze(result);
   }

@@ -118,11 +118,13 @@ export function toJapanDateTime(input: DateInput): CivilDateTimeParts {
 
 /**
  * 反映済みの官報の年月。
+ * @deprecated 0.12.0 で非推奨。提供元の項目 jp.dataVersion（同じ値）に移行する（docs/migration.md）。1.0.0 で削除する
  * @public
  */
 export const dataVersion: string = DATA_VERSION;
 /**
  * 春分・秋分の日が官報で確定している最後の年。
+ * @deprecated 0.12.0 で非推奨。提供元の項目 jp.confirmedThrough（同じ値）に移行する（docs/migration.md）。1.0.0 で削除する
  * @public
  */
 export const confirmedThrough: number = CONFIRMED_THROUGH;

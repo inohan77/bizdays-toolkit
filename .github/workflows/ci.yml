@@ -120,6 +120,39 @@ jobs:
           "${RUNNER_TEMP}/workerd" --version
       - run: node scripts/test-workerd.ts "${RUNNER_TEMP}/workerd"
 
+  bench:
+    # 性能の退行を、公開済みの前の版（npm の latest）と同じランナー・同じ Node.js で比べて検出する（decisions.md の 37 番）。
+    # ランナーの性能は実行ごとにぶれるので、絶対値ではなく比率で判定する（どれかの計測が 2 倍より遅ければ失敗）。
+    # 絶対値は Job Summary に記録として残す。pnpm check には含めない（手元の機械に依存しないため）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - name: Fetch the published version for comparison
+        run: |
+          base="$(npm view bizdays-toolkit version)"
+          echo "BASE_VERSION=${base}" >> "${GITHUB_ENV}"
+          mkdir -p "${RUNNER_TEMP}/base"
+          cd "${RUNNER_TEMP}/base"
+          npm pack "bizdays-toolkit@${base}" --ignore-scripts --silent
+          tar -xzf "bizdays-toolkit-${base}.tgz"
+          echo "comparing with bizdays-toolkit@${base}"
+      - name: Measure both versions
+        run: |
+          node scripts/bench.ts --package "${RUNNER_TEMP}/base/package" --json "${RUNNER_TEMP}/base.json"
+          node scripts/bench.ts --package . --json "${RUNNER_TEMP}/head.json"
+      - name: Compare (fail if more than 2x slower)
+        run: |
+          node scripts/bench-compare.ts "${RUNNER_TEMP}/base.json" "${RUNNER_TEMP}/head.json" \
+            --ratio 2 --base-label "${BASE_VERSION}" --head-label "HEAD" | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${PIPESTATUS[0]}" -eq 0
+
   workflows:
     # ワークフローの構文・式・シェルスクリプトの誤りを actionlint で検出する（pnpm check はワークフローを検査しない）。
     # actionlint は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）

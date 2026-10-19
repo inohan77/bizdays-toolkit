@@ -44,6 +44,7 @@ test("判定の理由と名前", () => {
       reason: "closed-annual",
       name: "年末年始",
       holiday: undefined,
+      rulePath: "closedAnnual[0]",
     },
   );
   const sportsDay = shipping.dayInfo("2026-10-12");

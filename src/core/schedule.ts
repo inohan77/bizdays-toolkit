@@ -12,7 +12,8 @@
  * "under-holiday" の規則は、祝日の扱いが "weekday"（曜日どおり）なら祝日にも当てはまる。
  * "after-holiday" の規則は、祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）。
  * 毎年の月日・繰り返しの規則の有効期間（effectiveFrom・effectiveTo）の外では、その規則は書かれていないのと同じ。
- * 祝日の翌日の規則（dayAfterHoliday）は、前日が祝日でその日自身は祝日でない日に当てはまる（提供元の祝日だけで判定）
+ * 祝日の翌日の規則（dayAfterHoliday）は、前日が祝日でその日自身は祝日でない日に当てはまる（提供元の祝日だけで判定）。
+ * 祝日の規則（holiday: true。kinds で種別を絞れる）は、「祝日の上」の段階で判定する
  *
  * 営業日カレンダー（createCalendar）は、このスケジュールの真偽値版として作られている。
  */
@@ -148,6 +149,7 @@ export interface WeekdayPattern {
   readonly months?: readonly Month[];
   readonly day?: never;
   readonly dayAfterHoliday?: never;
+  readonly holiday?: never;
 }
 
 /**
@@ -164,6 +166,7 @@ export interface DayOfMonthPattern {
   readonly interval?: never;
   readonly anchor?: never;
   readonly dayAfterHoliday?: never;
+  readonly holiday?: never;
 }
 
 /**
@@ -180,13 +183,39 @@ export interface DayAfterHolidayPattern {
   readonly interval?: never;
   readonly anchor?: never;
   readonly day?: never;
+  readonly holiday?: never;
+}
+
+/**
+ * 祝日（提供元の祝日である日）。kinds で祝日の種別を絞れる（省略時はすべての祝日）。
+ * 「祝日の上」の段階（holidayPolicy・スケジュールの holiday より先）で判定し、祝日の既定の扱いの例外を書く
+ * （例: 「2027 年 4 月から祝日も営業」「振替休日は診療」「5 月の祝日は特別営業時間」）。
+ * 当てはまる日は祝日なので、onHolidayRule は指定できない（指定すると invalid-option）。
+ * @public
+ */
+export interface HolidayPattern {
+  readonly holiday: true;
+  /** 当てはめる祝日の種別（Holiday.kind。省略時はすべて） */
+  readonly kinds?: readonly string[];
+  /** 当てはめる月（省略時はすべての月） */
+  readonly months?: readonly Month[];
+  readonly weekday?: never;
+  readonly nth?: never;
+  readonly interval?: never;
+  readonly anchor?: never;
+  readonly day?: never;
+  readonly dayAfterHoliday?: never;
 }
 
 /**
  * 繰り返しのパターン。
  * @public
  */
-export type RecurringPattern = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern;
+export type RecurringPattern =
+  | WeekdayPattern
+  | DayOfMonthPattern
+  | DayAfterHolidayPattern
+  | HolidayPattern;
 
 /**
  * 繰り返しの規則（営業日カレンダーの closedRecurring・openRecurring）。
@@ -312,6 +341,11 @@ export interface ScheduleDay<T, Kind extends string = string> {
   readonly holiday?: Holiday<Kind>;
   /** 祝日から振り替えられた規則で値が決まった場合、振替の元の日付（onHolidayRule: "after-holiday"） */
   readonly shiftedFrom?: DateString;
+  /**
+   * 値を決めた規則の設定の中の位置（規則の診断の path と同じ形。例: "recurring[0]"）。
+   * dates・annual・recurring（振替先を含む）で決まった日にだけ付き、祝日・曜日で決まった日には付かない
+   */
+  readonly rulePath?: string;
 }
 
 /**
@@ -596,6 +630,10 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly days: ReadonlySet<number> | null;
   /** 祝日の翌日の規則か */
   readonly dayAfterHoliday: boolean;
+  /** 祝日の規則か */
+  readonly holiday: boolean;
+  /** 祝日の規則で絞る種別（null はすべての祝日） */
+  readonly kinds: ReadonlySet<string> | null;
   /** 月の集合（null はすべての月） */
   readonly months: ReadonlySet<number> | null;
   readonly onHolidayRule: OnHolidayRule;
@@ -656,14 +694,16 @@ export function compileRecurringRules<T>(
     const hasWeekday = "weekday" in entry;
     const hasDay = "day" in entry;
     const hasAfter = "dayAfterHoliday" in entry;
-    if (Number(hasWeekday) + Number(hasDay) + Number(hasAfter) !== 1) {
+    const hasHoliday = "holiday" in entry;
+    if (Number(hasWeekday) + Number(hasDay) + Number(hasAfter) + Number(hasHoliday) !== 1) {
       c.error(
         "invalid-option",
         p,
-        'must have exactly one of "weekday", "day" or "dayAfterHoliday"',
+        'must have exactly one of "weekday", "day", "dayAfterHoliday" or "holiday"',
       );
       return;
     }
+    let kinds: Set<string> | null = null;
     let ok = true;
     let weekday: Weekday | null = null;
     let nth: Set<number> | null = null;
@@ -729,19 +769,44 @@ export function compileRecurringRules<T>(
         if (set) days = set;
         else ok = false;
       } else {
-        if (entry["dayAfterHoliday"] !== true) {
-          c.error("invalid-option", `${p}.dayAfterHoliday`, "must be true");
+        const key = hasAfter ? "dayAfterHoliday" : "holiday";
+        if (entry[key] !== true) {
+          c.error("invalid-option", `${p}.${key}`, "must be true");
           ok = false;
         }
         if ("onHolidayRule" in entry) {
           c.error(
             "invalid-option",
             `${p}.onHolidayRule`,
-            'cannot be used with "dayAfterHoliday" (the day after a holiday is never a holiday)',
+            hasAfter
+              ? 'cannot be used with "dayAfterHoliday" (the day after a holiday is never a holiday)'
+              : 'cannot be used with "holiday" (the rule applies on holidays; it is judged before holidayPolicy)',
           );
           ok = false;
         }
+        if (hasHoliday && entry["kinds"] !== undefined && !Array.isArray(entry["kinds"])) {
+          c.error(
+            "invalid-option",
+            `${p}.kinds`,
+            "must be a non-empty array of holiday kinds (Holiday.kind)",
+          );
+          ok = false;
+        } else if (hasHoliday && entry["kinds"] !== undefined) {
+          const set = checkSet(
+            c,
+            `${p}.kinds`,
+            entry["kinds"],
+            (v) => typeof v === "string" && v.length > 0,
+            "a non-empty string (Holiday.kind)",
+          );
+          if (set) kinds = set as unknown as Set<string>;
+          else ok = false;
+        }
       }
+    }
+    if (!hasHoliday && "kinds" in entry) {
+      c.error("invalid-option", `${p}.kinds`, '"kinds" can be used only with "holiday"');
+      ok = false;
     }
     let months: Set<number> | null = null;
     if (entry["months"] !== undefined) {
@@ -754,7 +819,8 @@ export function compileRecurringRules<T>(
         else ok = false;
       }
     }
-    const onHoliday = entry["onHolidayRule"] ?? "under-holiday";
+    // 祝日の規則は「祝日の上」の段階で判定する（当てはまる日は祝日なので、祝日の下・振替は意味を持たない）
+    const onHoliday = entry["onHolidayRule"] ?? (hasHoliday ? "over-holiday" : "under-holiday");
     if (!ON_HOLIDAY_RULES.includes(onHoliday as OnHolidayRule)) {
       c.error(
         "invalid-option",
@@ -774,6 +840,8 @@ export function compileRecurringRules<T>(
           anchor,
           days,
           dayAfterHoliday: hasAfter,
+          holiday: hasHoliday,
+          kinds,
           months,
           onHolidayRule: onHoliday as OnHolidayRule,
           value,
@@ -786,8 +854,8 @@ export function compileRecurringRules<T>(
   return rules;
 }
 
-/** @internal 祝日かを返す関数（祝日の翌日の規則の判定に使う。提供元の対応年の外は祝日でないとみなすこと） */
-export type IsHoliday = (date: DateString) => boolean;
+/** @internal その日の祝日を返す関数（祝日・祝日の翌日の規則の判定に使う。提供元の対応年の外は祝日でないとみなすこと） */
+export type HolidayOf = (date: DateString) => Holiday<string> | undefined;
 
 /**
  * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・祝日の翌日・月）がその日に当てはまるか。
@@ -797,12 +865,20 @@ export type IsHoliday = (date: DateString) => boolean;
 export function matchPattern(
   rule: RecurringRuleCompiled<unknown>,
   date: DateString,
-  isHoliday?: IsHoliday,
+  holidayOf?: HolidayOf,
 ): boolean {
   const { year, month, day } = parseDate(date);
   if (rule.months && !rule.months.has(month)) return false;
+  if (rule.holiday) {
+    const h = holidayOf?.(date);
+    return h !== undefined && (rule.kinds === null || rule.kinds.has(h.kind));
+  }
   if (rule.dayAfterHoliday) {
-    return isHoliday !== undefined && !isHoliday(date) && isHoliday(addDays(date, -1));
+    return (
+      holidayOf !== undefined &&
+      holidayOf(date) === undefined &&
+      holidayOf(addDays(date, -1)) !== undefined
+    );
   }
   const dim = daysInMonth(year, month);
   if (rule.weekday !== null) {
@@ -819,9 +895,9 @@ export function matchPattern(
 export function matchRecurring(
   rule: RecurringRuleCompiled<unknown>,
   date: DateString,
-  isHoliday: IsHoliday,
+  holidayOf: HolidayOf,
 ): boolean {
-  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date, isHoliday);
+  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date, holidayOf);
 }
 
 /** 規則の value を取り出す（value が必須の規則用） */
@@ -1110,6 +1186,8 @@ export const RECURRING_RULE_KEYS = [
   "anchor",
   "day",
   "dayAfterHoliday",
+  "holiday",
+  "kinds",
   "months",
   "name",
   "onHolidayRule",
@@ -1203,14 +1281,15 @@ export function createResolver<T, Kind extends string>(
   const { weekly, holiday: holidayRule, annual, dates, recurring } = compiled;
   const hasShift = recurring.some((r) => r.onHolidayRule === "after-holiday");
 
-  /** 振替の判断に使う「祝日」か。提供元の対応年の外は祝日でないとみなす（振替元をさかのぼる途中で範囲を出る場合のため） */
-  function isHolidaySafe(date: DateString): boolean {
+  /** 振替・祝日の規則の判断に使う祝日。提供元の対応年の外は祝日でないとみなす（振替元をさかのぼる途中で範囲を出る場合のため） */
+  function holidayOfSafe(date: DateString): Holiday<Kind> | undefined {
     try {
-      return lookup.holidayOn(date) !== undefined;
+      return lookup.holidayOn(date);
     } catch {
-      return false;
+      return undefined;
     }
   }
+  const isHolidaySafe = (date: DateString): boolean => holidayOfSafe(date) !== undefined;
 
   /**
    * "after-holiday" の規則が、date（祝日でない日）に振り替えられてきたか。
@@ -1220,7 +1299,7 @@ export function createResolver<T, Kind extends string>(
     for (let k = 1; k <= MAX_HOLIDAY_RUN; k++) {
       const prev = addDays(date, -k);
       if (!isHolidaySafe(prev)) return undefined;
-      if (matchRecurring(rule, prev, isHolidaySafe)) return prev;
+      if (matchRecurring(rule, prev, holidayOfSafe)) return prev;
     }
     return undefined;
   }
@@ -1245,6 +1324,7 @@ export function createResolver<T, Kind extends string>(
       if (name !== undefined) result.name = name;
       if (holiday !== undefined) result.holiday = holiday;
       if (shiftedFrom !== undefined) result.shiftedFrom = shiftedFrom;
+      if (rule !== null) result.rulePath = rule.path;
       return { day: Object.freeze(result), rule };
     };
 
@@ -1255,9 +1335,9 @@ export function createResolver<T, Kind extends string>(
     if (byAnnual) return make(byAnnual.value, "annual", byAnnual, byAnnual.name);
 
     if (holiday) {
-      // 3. 祝日の上（"over-holiday"）
+      // 3. 祝日の上（"over-holiday"。祝日の規則 { holiday: true } もここ）
       const over = recurring.find(
-        (r) => r.onHolidayRule === "over-holiday" && matchRecurring(r, date, isHolidaySafe),
+        (r) => r.onHolidayRule === "over-holiday" && matchRecurring(r, date, holidayOfSafe),
       );
       if (over) return make(over.value, "recurring", over, over.name);
       // 4. 祝日
@@ -1268,7 +1348,7 @@ export function createResolver<T, Kind extends string>(
       // 祝日の扱いが「曜日どおり」なら、祝日の下（"under-holiday"）の規則も当てはまる。
       // "after-holiday" の規則は祝日には当てはめない（振り替える）
       const under = recurring.find(
-        (r) => r.onHolidayRule === "under-holiday" && matchRecurring(r, date, isHolidaySafe),
+        (r) => r.onHolidayRule === "under-holiday" && matchRecurring(r, date, holidayOfSafe),
       );
       if (under) return make(under.value, "recurring", under, under.name);
       return make(weekly[weekday] as T, "weekday", null, undefined);
@@ -1276,7 +1356,7 @@ export function createResolver<T, Kind extends string>(
 
     // 5. 繰り返しの規則（祝日でない日。配列で先に書いたものが優先）。振替先も同じ段階で判定する
     for (const rule of recurring) {
-      if (matchRecurring(rule, date, isHolidaySafe))
+      if (matchRecurring(rule, date, holidayOfSafe))
         return make(rule.value, "recurring", rule, rule.name);
       if (hasShift && rule.onHolidayRule === "after-holiday") {
         const origin = shiftedOrigin(rule, date);

@@ -111,11 +111,13 @@ export const northernIreland: HolidayProvider<UkHolidayKind> = provider(
 
 /**
  * 反映済みの GOV.UK のデータの年月。
+ * @deprecated 0.12.0 で非推奨。提供元の項目（england.dataVersion など。4 つの提供元で同じ値）に移行する（docs/migration.md）。1.0.0 で削除する
  * @public
  */
 export const dataVersion: string = DATA_VERSION;
 /**
  * GOV.UK が日付を公表している最後の年（それより後は規則による予測で confirmed: false）。
+ * @deprecated 0.12.0 で非推奨。提供元の項目（england.confirmedThrough など。4 つの提供元で同じ値）に移行する（docs/migration.md）。1.0.0 で削除する
  * @public
  */
 export const confirmedThrough: number = CONFIRMED_THROUGH;

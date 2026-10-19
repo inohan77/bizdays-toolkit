@@ -4,6 +4,36 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-20
+
+### 移行
+
+動作は変わりません（繰り返しの規則の新しい形・`dayInfo` の新しい項目の追加と、診断・CI の改善）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` の定数 `dataVersion`・`confirmedThrough` が非推奨になったので、使っていれば提供元の項目（`jp.dataVersion`・`england.confirmedThrough` など）に書き換える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- 繰り返しの規則に、祝日の形 `{ holiday: true, kinds?, months? }`（型 `HolidayPattern`）を追加した。祝日の既定の扱い（`holidayPolicy`・スケジュールの `holiday`）の例外を、「2027 年 4 月から祝日も営業」（`openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]`）、「振替休日と国民の休日は営業」（`kinds: ["substitute", "citizens"]`）、「5 月の祝日は特別営業時間」（スケジュールの `recurring`）のように書ける。`kinds` は `months` と同じ絞り込みの配列（省略時はすべての祝日）。判定は「祝日の上」の段階（`"over-holiday"` の規則と同じ）で、`holidayPolicy: "ignore"` でも当てはまる。当てはまる日は祝日なので `onHolidayRule` は指定できない（`invalid-option`）。`kinds` は `holiday` の規則でだけ使える
+- `DayInfo`・`ScheduleDay` に `rulePath`（値を決めた規則の設定の中の位置。規則の診断の `path` と同じ形。例: `"closedRecurring[0]"`）を追加した。`dates`・`annual`・`recurring`（振替先を含む）で決まった日にだけ付き、祝日・曜日で決まった日には付かない。合成したカレンダーは決めたカレンダーの `rulePath` を引き継ぐ
+
+### Deprecated
+
+- `bizdays-toolkit/jp`・`bizdays-toolkit/uk` の定数 `dataVersion`・`confirmedThrough` を非推奨にした（`@deprecated`）。提供元の項目（`jp.dataVersion`・`jp.confirmedThrough`、英国は `england.dataVersion` など 4 つの提供元で同じ値）と同じ値で、経路を 1 つにするため。1.0.0 で削除する
+
+### Changed
+
+- 規則の診断で、祝日の規則を扱えるようにした。提供元のない設定、または `kinds`・`months`・有効期間に当てはまる祝日がない規則は `never-matches`。`shadowed` は祝日の規則どうし（`kinds`・`months`・有効期間の包含）でだけ調べ、既定の扱いと同じ向きの規則は `redundant` で見つける
+- 規則の診断の `unknown-option` の候補（did you mean）で、既知のキーの先頭部分（`onHoliday` → `onHolidayRule`）を、短い別のキー（`holiday`）との編集距離より優先するようにした
+- 繰り返しの規則の形の誤りのメッセージを、`"weekday"`・`"day"`・`"dayAfterHoliday"`・`"holiday"` のうち 1 つだけを持つ、に改めた（code は `invalid-option` のまま）
+- README: 繰り返しの規則の節に祝日の規則を、`rulePath` の説明を、合成の節に祝日の提供元の和集合の意味（同じ提供元は 1 つ、包んだ提供元は別物、同じ日付は先のカレンダーの提供元）を足した。`dataVersion`・`confirmedThrough` の案内を提供元の項目に改めた。サイズの値を測り直した（ルート約 8.8KB・日本の祝日込み約 10.6KB・英国の祝日込み約 10.5KB。0.12.0 で測定）
+- `docs/decisions.md`: 4 番に「知っているキーの無効な組み合わせは例外にする」境界を、34 番に和集合の意味を足した。35 番（祝日の規則）・36 番（`rulePath`）・37 番（定数の一本化と性能の検証）を追加した
+
+### 開発
+
+- CI に `bench` ジョブを追加した。公開済みの前の版（npm の `latest`）と今回の `dist` を同じランナーで `scripts/bench.ts` にかけ、`scripts/bench-compare.ts` で比率を比べる。どれかの計測が 2 倍より遅ければ失敗し、絶対値は Job Summary に残す（`pnpm check` には含めない）。`scripts/bench.ts` に `--package <dir>`・`--json <file>` を足した
+- サイズの上限（`size-limits.json`）を上げた。ルート 19,500 → 20,500、`./jp` 22,500 → 23,500、`./diagnose` 26,000 → 27,000（gzip）。祝日の規則の検証・判定と `rulePath`（ルートで約 0.5KB）、診断の祝日の規則への対応と候補の改善（約 0.7KB）のため
+- 性質のテストに祝日の規則を加えた。規則を取り除いた結果との比較では、位置がずれる `rulePath` を除いて比べる
+- ライブラリ内のテストとスクリプトで、非推奨にした定数 `confirmedThrough` の代わりに提供元の項目を使うようにした
+
 ## [0.11.1] - 2026-10-19
 
 ライブラリのコードは 0.11.0 と同じ。
@@ -300,7 +330,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.9.1...v0.10.0

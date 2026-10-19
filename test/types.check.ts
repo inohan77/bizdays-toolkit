@@ -163,6 +163,29 @@ createCalendar({ closedRecurring: [{ dayAfterHoliday: true, weekday: 1 }] });
 // @ts-expect-error -- 個別の日付には有効期間を付けられない
 createCalendar({ closedDates: [{ date: "2026-10-19", effectiveTo: "2026-12-31" }] });
 
+// --- 祝日の規則（0.12.0）・rulePath ---
+createCalendar({
+  holidays: jp,
+  openRecurring: [
+    { holiday: true },
+    { holiday: true, kinds: ["substitute", "citizens"], months: [5], effectiveFrom: "2027-04-01" },
+  ],
+});
+// @ts-expect-error -- holiday は true だけ
+createCalendar({ closedRecurring: [{ holiday: false }] });
+// @ts-expect-error -- kinds は holiday の規則でだけ使える
+createCalendar({ closedRecurring: [{ weekday: 1, kinds: ["national"] }] });
+// @ts-expect-error -- holiday と dayAfterHoliday は同時に指定できない
+createCalendar({ closedRecurring: [{ holiday: true, dayAfterHoliday: true }] });
+{
+  const c = createCalendar({ holidays: jp });
+  const rulePath: string | undefined = c.dayInfo("2026-10-19").rulePath;
+  const s = createSchedule({ weekly: [0, 1, 1, 1, 1, 1, 1] });
+  const rulePath2: string | undefined = s.dayInfo("2026-10-19").rulePath;
+  void rulePath;
+  void rulePath2;
+}
+
 // --- カレンダーの合成（0.11.0） ---
 {
   const a = createCalendar({ holidays: jp });

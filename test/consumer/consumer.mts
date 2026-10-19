@@ -33,6 +33,9 @@ const combined = combineCalendars(
 );
 const decidedBy: number | undefined = combined.dayInfo("2026-11-24").decidedBy;
 void decidedBy;
+const rulePath: string | undefined = combined.dayInfo("2026-11-24").rulePath;
+void rulePath;
+createCalendar({ holidays: jp, openRecurring: [{ holiday: true, kinds: ["substitute"] }] });
 
 const timed = toJapanDateTime(new Date());
 expectType<Equal<typeof timed.time, string>>();

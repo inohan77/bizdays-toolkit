@@ -30,6 +30,7 @@ test("有効期間: 定休日の曜日の変更を 1 つのカレンダーで表
     businessDay: false,
     reason: "closed-recurring",
     name: "火曜定休",
+    rulePath: "closedRecurring[1]",
   });
   // 切り替え日をまたぐ計算も 1 つのカレンダーで正しい（3/31 水・4/1 木・4/2 金）
   assert.equal(shop.addBusinessDays("2027-03-30", 3), "2027-04-02");

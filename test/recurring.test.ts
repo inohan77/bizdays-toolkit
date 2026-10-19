@@ -114,6 +114,7 @@ test("祝日の後（after-holiday）: 月曜休館・祝日の場合は翌平�
       reason: "closed-recurring",
       name: "月曜休館",
       holiday: undefined,
+      rulePath: "closedRecurring[0]",
     },
   );
   // スポーツの日（月）は開館し、翌日の火曜に休館
@@ -208,9 +209,13 @@ test("入力の誤りは、コードと設定の中の位置で分かる", () =>
     [
       { weekday: 1, day: 3 },
       "invalid-option",
-      /closedRecurring\[0\]: must have exactly one of "weekday", "day" or "dayAfterHoliday"/,
+      /closedRecurring\[0\]: must have exactly one of "weekday", "day", "dayAfterHoliday" or "holiday"/,
     ],
-    [{}, "invalid-option", /must have exactly one of "weekday", "day" or "dayAfterHoliday"/],
+    [
+      {},
+      "invalid-option",
+      /must have exactly one of "weekday", "day", "dayAfterHoliday" or "holiday"/,
+    ],
     [{ weekday: 7 }, "invalid-weekday", /closedRecurring\[0\]\.weekday/],
     [{ weekday: 1, nth: 6 }, "invalid-option", /closedRecurring\[0\]\.nth/],
     [{ weekday: 1, nth: [] }, "invalid-option", /closedRecurring\[0\]\.nth/],

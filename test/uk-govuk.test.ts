@@ -2,14 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { HolidayProvider } from "../src/index.ts";
-import {
-  confirmedThrough,
-  england,
-  northernIreland,
-  scotland,
-  wales,
-  type UkHolidayKind,
-} from "../src/uk/index.ts";
+import { england, northernIreland, scotland, wales, type UkHolidayKind } from "../src/uk/index.ts";
+
+// 定数 confirmedThrough は 0.12.0 で非推奨（提供元の項目を使う。4 つの提供元で同じ値）
+const confirmedThrough = england.confirmedThrough!;
 
 interface Event {
   readonly date: string;

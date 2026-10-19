@@ -3,13 +3,38 @@
  *
  * 結果は実行する機械の性能で変わるので、pnpm check には含めない。
  * 内部の処理を変えるときに、変更の前と後を同じ機械で測って比べるために使う。
- * ソースを直接読み込んで測る（Node.js が型を取り除いて実行するので、処理は dist と同じ）。
+ * 既定ではソースを直接読み込んで測る（Node.js が型を取り除いて実行するので、処理は dist と同じ）。
+ *
+ * 引数:
+ *   --package <dir>  そのディレクトリのパッケージ（<dir>/dist/index.js と <dir>/dist/jp/index.js）を測る。
+ *                    CI で公開済みの前の版と今回の dist を同じ機械で比べるために使う（scripts/bench-compare.ts）
+ *   --json <file>    結果（計測名と 1 回あたりのミリ秒）を JSON で書き出す
  */
 
 import "./strict-warnings.ts";
+import { writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
-import { createCalendar, createSchedule } from "../src/index.ts";
-import { jp } from "../src/jp/index.ts";
+import { pathToFileURL } from "node:url";
+import { resolve } from "node:path";
+
+const args = process.argv.slice(2);
+const argValue = (name: string): string | undefined => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const packageDir = argValue("--package");
+const jsonFile = argValue("--json");
+
+type Root = typeof import("../src/index.ts");
+type Jp = typeof import("../src/jp/index.ts");
+const root: Root = packageDir
+  ? await import(pathToFileURL(resolve(packageDir, "dist/index.js")).href)
+  : await import("../src/index.ts");
+const jpModule: Jp = packageDir
+  ? await import(pathToFileURL(resolve(packageDir, "dist/jp/index.js")).href)
+  : await import("../src/jp/index.ts");
+const { createCalendar, createSchedule } = root;
+const { jp } = jpModule;
 
 interface Case {
   readonly name: string;
@@ -99,8 +124,11 @@ const format = (ms: number): string =>
       ? `${(ms * 1000).toFixed(2)} µs`
       : `${(ms * 1e6).toFixed(0)} ns`;
 
-console.log(`node ${process.version}`);
+console.log(`node ${process.version}${packageDir ? ` (${packageDir})` : ""}`);
+const results: Record<string, number> = {};
 for (const c of cases) {
   const { perOp, ops } = measure(c.run);
+  results[c.name] = perOp;
   console.log(`${c.name.padEnd(44)} ${format(perOp).padStart(12)} / 回  (${ops} 回)`);
 }
+if (jsonFile) writeFileSync(jsonFile, `${JSON.stringify(results, null, 2)}\n`);

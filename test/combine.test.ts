@@ -51,6 +51,7 @@ test("合成: dayInfo は合成結果と同じ判定をした最初のカレン�
     businessDay: false,
     reason: "closed-annual",
     name: "年末年始休業",
+    rulePath: "closedAnnual[0]",
     decidedBy: 0,
   });
   assert.deepEqual(all.dayInfo("2026-12-26"), {
@@ -94,6 +95,7 @@ test("合成: 振替の情報（shiftedFrom）も決めたカレンダーから�
     reason: "closed-recurring",
     name: "月曜休館",
     shiftedFrom: "2026-10-12",
+    rulePath: "closedRecurring[0]",
     decidedBy: 0,
   });
   assert.equal(

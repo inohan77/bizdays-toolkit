@@ -212,6 +212,7 @@ export interface DayAfterHolidayPattern {
     readonly interval?: never;
     readonly anchor?: never;
     readonly day?: never;
+    readonly holiday?: never;
 }
 ```
 
@@ -226,6 +227,7 @@ export interface DayInfo<Kind extends string = string> {
     readonly name?: string;
     readonly holiday?: Holiday<Kind>;
     readonly shiftedFrom?: DateString;
+    readonly rulePath?: string;
     readonly decidedBy?: number;
 }
 ```
@@ -247,6 +249,7 @@ export interface DayOfMonthPattern {
     readonly interval?: never;
     readonly anchor?: never;
     readonly dayAfterHoliday?: never;
+    readonly holiday?: never;
 }
 ```
 
@@ -314,6 +317,22 @@ export interface HolidayLookup<Kind extends string = string> {
     getHoliday(input: DateInput): Holiday<Kind> | undefined;
     holidaysInYear(year: number): readonly Holiday<Kind>[];
     holidaysBetween(from: DateInput, to: DateInput): readonly Holiday<Kind>[];
+}
+```
+
+### HolidayPattern (@public)
+
+```ts
+export interface HolidayPattern {
+    readonly holiday: true;
+    readonly kinds?: readonly string[];
+    readonly months?: readonly Month[];
+    readonly weekday?: never;
+    readonly nth?: never;
+    readonly interval?: never;
+    readonly anchor?: never;
+    readonly day?: never;
+    readonly dayAfterHoliday?: never;
 }
 ```
 
@@ -424,7 +443,7 @@ export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
 ### RecurringPattern (@public)
 
 ```ts
-export type RecurringPattern = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern;
+export type RecurringPattern = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern | HolidayPattern;
 ```
 
 ### RecurringRule (@public)
@@ -465,6 +484,7 @@ export interface ScheduleDay<T, Kind extends string = string> {
     readonly name?: string;
     readonly holiday?: Holiday<Kind>;
     readonly shiftedFrom?: DateString;
+    readonly rulePath?: string;
 }
 ```
 
@@ -569,18 +589,19 @@ export interface WeekdayPattern {
     readonly months?: readonly Month[];
     readonly day?: never;
     readonly dayAfterHoliday?: never;
+    readonly holiday?: never;
 }
 ```
 
 ## bizdays-toolkit/jp
 
-### confirmedThrough (@public)
+### confirmedThrough (@public, @deprecated)
 
 ```ts
 export declare const confirmedThrough: number;
 ```
 
-### dataVersion (@public)
+### dataVersion (@public, @deprecated)
 
 ```ts
 export declare const dataVersion: string;
@@ -649,13 +670,13 @@ export declare function toJapanDateTime(input: DateInput): CivilDateTimeParts;
 
 ## bizdays-toolkit/uk
 
-### confirmedThrough (@public)
+### confirmedThrough (@public, @deprecated)
 
 ```ts
 export declare const confirmedThrough: number;
 ```
 
-### dataVersion (@public)
+### dataVersion (@public, @deprecated)
 
 ```ts
 export declare const dataVersion: string;
