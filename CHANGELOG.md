@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-20
+
+ライブラリの結果は 0.14.0 と同じ（内部の改善と文書だけ）。
+
+### 開発
+
+- `createCalendar`・`createSchedule` の作成が 0.13.0 で約 30% 遅くなっていた（CI の `bench` で 1.26 倍。手元では 14.0 → 18.5µs）のを直した。原因は、`createCalendarFromSchedule` のためにスケジュールの内部の判定を `WeakMap` に登録していたこと。`Object.freeze` 済みのオブジェクトに後から印（`WeakMap` のキーのハッシュや `defineProperty` の項目）を付けると、V8 がオブジェクトを遅い形に落とす。内部の判定を Symbol の項目としてオブジェクトリテラルに最初から含める形に変え、作成のコストは 0.12.0 の水準（手元で 14.9µs）に戻った。公開 API・結果は変わらない。Symbol の項目は `Object.keys`・`JSON.stringify` に出ない
+- `docs/decisions.md`: 38 番にこの原因と「作ったあとに印を付けず、リテラルに含める」知見を追記した
+
 ## [0.14.0] - 2026-10-20
 
 ### 移行
@@ -373,7 +382,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.11.1...v0.12.0

@@ -340,6 +340,7 @@ GOV.UK の監視（govuk-watch）は、外部の cron サービス（cron-job.or
 - `dayInfo` の `reason` は、`createCalendar` の内部の変換と同じ対応（`date` → `"open-date"`/`"closed-date"` など）です。違いは `annual` だけで、`createCalendar` の `closedAnnual` が休業専用なのに対し、スケジュールの `annual` は営業の値も取れるので `"open-annual"` を足しました。既存の値に押し込むと、`"open-date"` では嘘になり、`"regular"` では規則で決まったことが消えます。`DayReason` は開いた型（2 番）で、`createCalendar` の結果は変わりません
 - 営業になる祝日（`holiday: { sameAs: 0 }` で曜日の値が営業、など）の `reason` は `"holiday"` のままです。`createCalendar` の `holidayPolicy: "open"` と同じで、`reason` は「決めた規則」、営業・休業は `businessDay`、という分担を崩しません
 - 診断の対象にはしません。スケジュールの設定を `diagnoseSchedule` で診断します
+- スケジュールの内部の判定は、スケジュールのオブジェクトリテラルに Symbol の項目（列挙されず、JSON にも出ない）として最初から含めます（0.14.1）。0.13.0 では作成後に `WeakMap` に登録していましたが、`Object.freeze` 済みのオブジェクトに後から印（`WeakMap` のキーのハッシュ、`defineProperty` の項目）を付けると V8 がオブジェクトを遅い形に落とし、`createCalendar`・`createSchedule` の作成が約 30% 遅くなっていました（CI の `bench` が 1.26 倍を検出し、37 番の仕組みが最初の版で役に立ちました）。5 番（返すものは凍結する）と組み合わさるときの一般則として、**凍結するオブジェクトには作ったあとに印を付けず、印はリテラルに含める**を守ります
 
 利用者の TypeScript の版の確認は、0.9.0 の時点で 5.0・5.5・5.8 を手作業で確かめたままになっていたので、CI に `consumer-types` ジョブを置きました。
 

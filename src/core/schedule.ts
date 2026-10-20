@@ -1393,13 +1393,15 @@ export function mapDays<R>(
  * @internal スケジュールの内部の判定（暦日の文字列を直接受け取る）。createCalendarFromSchedule が、公開メソッド
  * （入力の解析を通る）を経由せずに 1 日分の結果を得るために使う。スケジュールごとに作成時に登録する
  */
-const internalInfo = new WeakMap<object, (date: DateString) => ScheduleDay<unknown, string>>();
+const INTERNAL_INFO = Symbol("bizdays-toolkit.scheduleInfo");
 
 /** @internal スケジュールの内部の判定を取り出す（createSchedule が作ったものでなければ undefined） */
 export function infoOfSchedule<T, Kind extends string>(
   schedule: Schedule<T, Kind>,
 ): ((date: DateString) => ScheduleDay<T, Kind>) | undefined {
-  return internalInfo.get(schedule) as ((date: DateString) => ScheduleDay<T, Kind>) | undefined;
+  return (schedule as { [INTERNAL_INFO]?: (date: DateString) => ScheduleDay<T, Kind> })[
+    INTERNAL_INFO
+  ];
 }
 
 /** @internal 検証済みの規則からスケジュールを作る */
@@ -1410,7 +1412,10 @@ export function buildSchedule<T, Kind extends string>(
   const resolve = createResolver(compiled, lookup);
   const info = (date: DateString): ScheduleDay<T, Kind> => resolve(date).day;
 
-  const schedule: Schedule<T, Kind> = {
+  const schedule: Schedule<T, Kind> & { readonly [INTERNAL_INFO]: typeof info } = {
+    // 内部の判定（createCalendarFromSchedule が使う）。Symbol の項目なので列挙されず、JSON にも出ない。
+    // オブジェクトリテラルに含めるのは、あとから defineProperty や WeakMap で付けると作成が数 µs 遅くなるため
+    [INTERNAL_INFO]: info,
     timeZone: lookup.timeZone,
     providers: lookup.providers,
     outOfRange: lookup.outOfRange,
@@ -1426,9 +1431,7 @@ export function buildSchedule<T, Kind extends string>(
     dayInfo: (input) => info(lookup.dateOf(input)),
     daysBetween: (from, to) => mapDays(lookup.dateOf(from), lookup.dateOf(to), info),
   };
-  Object.freeze(schedule);
-  internalInfo.set(schedule, info as (date: DateString) => ScheduleDay<unknown, string>);
-  return schedule;
+  return Object.freeze(schedule);
 }
 
 /**
