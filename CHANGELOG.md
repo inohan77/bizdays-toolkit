@@ -4,9 +4,28 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-21
+
+### 移行
+
+`businessDayOnOrAfter` に `cutoff` を指定するときは、時刻を持つ入力（`Date`・日時の文字列・時刻を持つ Temporal の値）を渡す。時刻のない入力（暦日の文字列・`PlainDate`）との組み合わせは、これまで暦日を 0 時として扱い締め時刻を黙って無視していたが、`invalid-argument` の Error になる。ほかは動作が変わらない（規則の絞り込み・カレンダーのメソッド・型の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- 祝日の規則（`{ holiday: true }`）と祝日の翌日の規則（`{ dayAfterHoliday: true }`）に、曜日の絞り込み `weekdays`（`months`・`kinds` と同じ絞り込みの配列）を追加した。「祝日の翌日は休館（土日に当たる場合は開館）」は `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }`、「土曜の祝日は午前診療」は `{ holiday: true, weekdays: [6], value: … }`。曜日・日の規則に `weekdays` を付けると `invalid-option`。診断の `never-matches`・`shadowed` も曜日の絞り込みを扱う
+- 営業日カレンダーに、営業日を考慮した締め日 `closingMonth(input, closingDay, { convention })`・`closingPeriod(monthOrDate, closingDay, { convention })` を追加した。各月の締め日を `adjust` と同じ `convention`（必須）で営業日に調整し、日付は調整後の締め日がその日以降になる最初の月に属する。前月の締め日から当月の締め日までに営業日がない月（長期休業）は固有の期間を持たず、その日は次の月に属し、その月の `closingPeriod` は `no-business-day`。合成したカレンダー・スケジュールからのカレンダーにも付く。ルートの `closingMonth`・`closingPeriod` は暦日のまま
+- `HolidayPattern`・`RecurringPattern`・`RecurringRule`・`RecurringValue` に祝日の種別の型引数 `Kind`（既定 `string`）を追加し、`kinds` を `readonly Kind[]` にした。`holidays: jp` のカレンダー・スケジュールでは `kinds` に日本の祝日の種別の補完が効く（型は開いているので、ほかの文字列も通る）。型引数なしの利用はこれまでどおり
+
 ### Changed
 
-- README: バッジに npm のダウンロード数（直近 18 か月）を足した
+- `businessDayOnOrAfter` の `cutoff` を、時刻を持たない入力と組み合わせると `invalid-argument` にした（上の「移行」）
+- README: `businessDaysBetween` が `addBusinessDays` の逆算になるのは起点が営業日のときで、休業日の起点では `addBusinessDays` が翌営業日を 1 と数える（`+0` と `+1` が同じ日）ことを明記した。`weekdays`、営業日を考慮した締め日、`cutoff` の入力の条件、バッジに npm のダウンロード数（直近 18 か月）を足した。サイズの値を測り直した（ルート約 9.7KB・日本の祝日込み約 11.5KB・英国の祝日込み約 11.4KB。0.15.0 で測定）
+- `docs/decisions.md`: 31 番に「起点が営業日のとき」の条件と休業日の起点の定義を、37 番に「別名」と「文脈を持つ経路」の線引きを、30 番に `reason`・`rulePath`・診断の違いを足した。41 番（`weekdays`・営業日を考慮した締め日と空の月の扱い）・42 番（`kinds` の型・`cutoff` の例外）を追加した
+
+### 開発
+
+- 性質のテストに、休業日を起点にした `addBusinessDays`（`addBusinessDays(a, n) = addBusinessDays(businessDayOnOrAfter(a), n − 1)`、n ≥ 1）と、営業日を考慮した締め日（複数のカレンダー × 4 つの方法 × 締め日 1〜31・−1 で、空でない期間が敷き詰められ `closingMonth` と往復する）を足した。規則の診断の性質のテストに `weekdays` を加えた
+- サイズの上限（`size-limits.json`）を上げた。ルート 22,000 → 23,000、`./jp` 25,000 → 26,000、`./diagnose` 28,500 → 29,500（gzip）。`weekdays` の検証・判定と営業日を考慮した締め日のため
 
 ## [0.14.1] - 2026-10-20
 
@@ -386,7 +405,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.12.0...v0.13.0

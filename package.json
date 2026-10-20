@@ -1,6 +1,6 @@
 {
   "name": "bizdays-toolkit",
-  "version": "0.14.1",
+  "version": "0.15.0",
   "description": "Holidays, business-day calendar and day-by-day schedules (e.g. store hours) with time zone support. Japanese holidays verified against the Cabinet Office data; UK bank holidays (England, Wales, Scotland, Northern Ireland) verified against GOV.UK. / 祝日と営業日のカレンダー（タイムゾーン対応・日本の祝日は内閣府、英国の bank holidays は GOV.UK のデータで全日照合）",
   "keywords": [
     "bank-holidays",

@@ -105,6 +105,34 @@ property("addBusinessDays の結果は営業日で、n 進めて −n 戻ると�
   return context;
 });
 
+property(
+  "休業日を起点にした addBusinessDays は、翌営業日を 1 と数える（businessDaysBetween は起点が営業日のときだけ逆算になる）",
+  (g) => {
+    const { calendar, describe } = randomCalendar(g);
+    const day = g.date();
+    if (calendar.isBusinessDay(day)) return `${describe} ${day} は営業日（対象外）`;
+    const n = g.int(1, 20);
+    const onOrAfter = calendar.businessDayOnOrAfter(day);
+    const context = `${describe} start=${day}（休業日） n=${n}`;
+    // +0 と +1 は同じ日（翌営業日）で、n ≥ 1 は「翌営業日から n − 1 営業日後」
+    assert.equal(calendar.addBusinessDays(day, 0), onOrAfter, context);
+    assert.equal(
+      calendar.addBusinessDays(day, n),
+      calendar.addBusinessDays(onOrAfter, n - 1),
+      context,
+    );
+    // 休業日の起点は数えないので、businessDaysBetween は n − 1（decisions.md の 31 番）
+    assert.equal(
+      calendar.businessDaysBetween(day, calendar.addBusinessDays(day, n)),
+      n - 1,
+      context,
+    );
+    // 負の方向は、前営業日を −1 と数える
+    assert.equal(calendar.addBusinessDays(day, -1), calendar.previousBusinessDay(day), context);
+    return context;
+  },
+);
+
 property("nextBusinessDay との間に営業日はなく、previousBusinessDay で戻る", (g) => {
   const { calendar, describe } = randomCalendar(g);
   const day = g.date();

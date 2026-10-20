@@ -151,6 +151,8 @@ export interface WeekdayPattern {
   readonly day?: never;
   readonly dayAfterHoliday?: never;
   readonly holiday?: never;
+  readonly weekdays?: never;
+  readonly kinds?: never;
 }
 
 /**
@@ -168,6 +170,8 @@ export interface DayOfMonthPattern {
   readonly anchor?: never;
   readonly dayAfterHoliday?: never;
   readonly holiday?: never;
+  readonly weekdays?: never;
+  readonly kinds?: never;
 }
 
 /**
@@ -177,6 +181,8 @@ export interface DayOfMonthPattern {
  */
 export interface DayAfterHolidayPattern {
   readonly dayAfterHoliday: true;
+  /** 当てはめる曜日（翌日の曜日。省略時はすべての曜日。例: [1, 2, 3, 4, 5] で土日に当たる翌日は除く） */
+  readonly weekdays?: readonly Weekday[];
   /** 当てはめる月（翌日の月。省略時はすべての月） */
   readonly months?: readonly Month[];
   readonly weekday?: never;
@@ -185,6 +191,7 @@ export interface DayAfterHolidayPattern {
   readonly anchor?: never;
   readonly day?: never;
   readonly holiday?: never;
+  readonly kinds?: never;
 }
 
 /**
@@ -194,10 +201,12 @@ export interface DayAfterHolidayPattern {
  * 当てはまる日は祝日なので、onHolidayRule は指定できない（指定すると invalid-option）。
  * @public
  */
-export interface HolidayPattern {
+export interface HolidayPattern<Kind extends string = string> {
   readonly holiday: true;
-  /** 当てはめる祝日の種別（Holiday.kind。省略時はすべて） */
-  readonly kinds?: readonly string[];
+  /** 当てはめる祝日の種別（Holiday.kind。省略時はすべて）。提供元の種別の型で補完が効く（型は開いているので他の文字列も通る） */
+  readonly kinds?: readonly Kind[];
+  /** 当てはめる曜日（省略時はすべての曜日。例: [6] で土曜の祝日だけ） */
+  readonly weekdays?: readonly Weekday[];
   /** 当てはめる月（省略時はすべての月） */
   readonly months?: readonly Month[];
   readonly weekday?: never;
@@ -212,17 +221,17 @@ export interface HolidayPattern {
  * 繰り返しのパターン。
  * @public
  */
-export type RecurringPattern =
+export type RecurringPattern<Kind extends string = string> =
   | WeekdayPattern
   | DayOfMonthPattern
   | DayAfterHolidayPattern
-  | HolidayPattern;
+  | HolidayPattern<Kind>;
 
 /**
  * 繰り返しの規則（営業日カレンダーの closedRecurring・openRecurring）。
  * @public
  */
-export type RecurringRule = RecurringPattern &
+export type RecurringRule<Kind extends string = string> = RecurringPattern<Kind> &
   EffectivePeriod & {
     readonly name?: string;
     /** 祝日に当たったときの扱い（既定: "under-holiday"） */
@@ -233,7 +242,9 @@ export type RecurringRule = RecurringPattern &
  * 繰り返しの規則の値（スケジュールの recurring）。
  * @public
  */
-export type RecurringValue<T> = RecurringRule & { readonly value: T };
+export type RecurringValue<T, Kind extends string = string> = RecurringRule<Kind> & {
+  readonly value: T;
+};
 
 /**
  * 毎年の月日 "MM-DD" の値。
@@ -306,7 +317,7 @@ export interface ScheduleOptions<
   /** 祝日の値の決め方（既定: "weekday"） */
   readonly holiday?: HolidayValueRule<T>;
   /** 繰り返しの規則（毎週・毎月の第 n 曜日・毎月の日）の値 */
-  readonly recurring?: readonly RecurringValue<T>[];
+  readonly recurring?: readonly RecurringValue<T, Kind>[];
   /** 毎年の月日の値 */
   readonly annual?: readonly (AnnualValue<T> | AnnualRangeValue<T>)[];
   /** 個別の日付の値 */
@@ -640,6 +651,8 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly holiday: boolean;
   /** 祝日の規則で絞る種別（null はすべての祝日） */
   readonly kinds: ReadonlySet<string> | null;
+  /** 祝日・祝日の翌日の規則で絞る曜日（null はすべての曜日） */
+  readonly weekdays: ReadonlySet<number> | null;
   /** 月の集合（null はすべての月） */
   readonly months: ReadonlySet<number> | null;
   readonly onHolidayRule: OnHolidayRule;
@@ -814,6 +827,34 @@ export function compileRecurringRules<T>(
       c.error("invalid-option", `${p}.kinds`, '"kinds" can be used only with "holiday"');
       ok = false;
     }
+    let weekdays: Set<number> | null = null;
+    if ("weekdays" in entry) {
+      if (!hasHoliday && !hasAfter) {
+        c.error(
+          "invalid-option",
+          `${p}.weekdays`,
+          '"weekdays" can be used only with "holiday" or "dayAfterHoliday"',
+        );
+        ok = false;
+      } else if (!Array.isArray(entry["weekdays"])) {
+        c.error(
+          "invalid-option",
+          `${p}.weekdays`,
+          "must be a non-empty array of weekdays (0 = Sunday to 6 = Saturday)",
+        );
+        ok = false;
+      } else {
+        const set = checkSet(
+          c,
+          `${p}.weekdays`,
+          entry["weekdays"],
+          isWeekday,
+          "a weekday (0 = Sunday to 6 = Saturday)",
+        );
+        if (set) weekdays = set;
+        else ok = false;
+      }
+    }
     let months: Set<number> | null = null;
     if (entry["months"] !== undefined) {
       if (!Array.isArray(entry["months"])) {
@@ -848,6 +889,7 @@ export function compileRecurringRules<T>(
           dayAfterHoliday: hasAfter,
           holiday: hasHoliday,
           kinds,
+          weekdays,
           months,
           onHolidayRule: onHoliday as OnHolidayRule,
           value,
@@ -875,16 +917,14 @@ export function matchPattern(
 ): boolean {
   const { year, month, day } = parseDate(date);
   if (rule.months && !rule.months.has(month)) return false;
-  if (rule.holiday) {
-    const h = holidayOf?.(date);
-    return h !== undefined && (rule.kinds === null || rule.kinds.has(h.kind));
-  }
-  if (rule.dayAfterHoliday) {
-    return (
-      holidayOf !== undefined &&
-      holidayOf(date) === undefined &&
-      holidayOf(addDays(date, -1)) !== undefined
-    );
+  if (rule.holiday || rule.dayAfterHoliday) {
+    if (holidayOf === undefined) return false;
+    if (rule.weekdays && !rule.weekdays.has(weekdayOf(date))) return false;
+    if (rule.holiday) {
+      const h = holidayOf(date);
+      return h !== undefined && (rule.kinds === null || rule.kinds.has(h.kind));
+    }
+    return holidayOf(date) === undefined && holidayOf(addDays(date, -1)) !== undefined;
   }
   const dim = daysInMonth(year, month);
   if (rule.weekday !== null) {
@@ -1195,6 +1235,7 @@ export const RECURRING_RULE_KEYS = [
   "dayAfterHoliday",
   "holiday",
   "kinds",
+  "weekdays",
   "months",
   "name",
   "onHolidayRule",

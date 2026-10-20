@@ -42,6 +42,15 @@ const fromSchedule = createCalendarFromSchedule(schedule, (v) => v > 0);
 const open: boolean = fromSchedule.isBusinessDay("2026-11-24");
 void open;
 const period: { readonly from: string; readonly to: string } = closingPeriod("2026-11", 20);
+createCalendar({
+  holidays: jp,
+  openRecurring: [{ holiday: true, kinds: ["substitute"], weekdays: [6] }],
+  closedRecurring: [{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }],
+});
+const businessClosing: string = calendar.closingMonth("2026-09-19", 20, {
+  convention: "preceding",
+});
+void businessClosing;
 const instant: Date = calendar.instantOf(period.from, "09:00");
 void instant;
 

@@ -26,6 +26,7 @@ import {
   type KnownDayReason,
   type KnownScheduleReason,
   type ScheduleReason,
+  type RecurringRule,
 } from "../src/index.ts";
 import {
   getHoliday,
@@ -187,6 +188,38 @@ createCalendar({ closedRecurring: [{ holiday: true, dayAfterHoliday: true }] });
   const rulePath2: string | undefined = s.dayInfo("2026-10-19").rulePath;
   void rulePath;
   void rulePath2;
+}
+
+// --- weekdays の絞り込み・kinds の型・営業日を考慮した締め日（0.15.0） ---
+{
+  const c = createCalendar({
+    holidays: jp,
+    openRecurring: [
+      { holiday: true, kinds: ["substitute", "citizens"], weekdays: [6], months: [5] },
+      { dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] },
+    ],
+  });
+  // kinds は提供元の種別で補完が効く（開いた型なので、他の文字列も通る）
+  createCalendar({ holidays: jp, openRecurring: [{ holiday: true, kinds: ["anything"] }] });
+  // @ts-expect-error -- weekdays は祝日・祝日の翌日の規則でだけ使える
+  createCalendar({ closedRecurring: [{ weekday: 1, weekdays: [1] }] });
+  // @ts-expect-error -- weekdays の要素は 0〜6
+  createCalendar({ closedRecurring: [{ holiday: true, weekdays: [7] }] });
+  // @ts-expect-error -- kinds は祝日の規則でだけ使える
+  createCalendar({ closedRecurring: [{ dayAfterHoliday: true, kinds: ["national"] }] });
+  const month: string = c.closingMonth("2026-09-19", 20, { convention: "preceding" });
+  const period: { readonly from: string; readonly to: string } = c.closingPeriod("2026-10", 20, {
+    convention: "preceding",
+  });
+  void month;
+  void period;
+  // @ts-expect-error -- convention は必須
+  c.closingMonth("2026-09-19", 20);
+  // @ts-expect-error -- convention は必須
+  c.closingPeriod("2026-10", 20, {});
+  // RecurringRule を単独で使うコードは、型引数なしで今までどおり
+  const rules: RecurringRule[] = [{ holiday: true, kinds: ["x"] }, { weekday: 1 }];
+  createCalendar({ holidays: jp, closedRecurring: rules });
 }
 
 // --- 締め期間・瞬間への変換（0.14.0） ---

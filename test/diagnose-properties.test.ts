@@ -57,7 +57,10 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
         : r < 0.8
           ? { day: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) }
           : r < 0.9
-            ? { dayAfterHoliday: true as const }
+            ? {
+                dayAfterHoliday: true as const,
+                ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
+              }
             : {
                 holiday: true as const,
                 ...(rand() < 0.6
@@ -70,6 +73,7 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
                       ]),
                     }
                   : {}),
+                ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
               };
     // 周期（nth とは併用できない。起点は曜日に合わせる）
     const interval =

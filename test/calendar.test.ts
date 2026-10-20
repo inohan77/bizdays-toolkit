@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCalendar, type Holiday, type HolidayProvider } from "../src/index.ts";
+import {
+  createCalendar,
+  isBizdaysError,
+  type Holiday,
+  type HolidayProvider,
+} from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 
 /** 出荷カレンダーの例: 日曜と年末年始は出荷しない、祝日は出荷する */
@@ -30,8 +35,18 @@ test("締め時刻（14 時）をはさむ最短の出荷日", () => {
     shipping.businessDayOnOrAfter(new Date("2026-10-10T04:59:00Z"), { cutoff: "14:00" }),
     "2026-10-10",
   );
-  // 暦日だけの入力は 0 時として扱う
-  assert.equal(shipping.businessDayOnOrAfter("2026-10-10", { cutoff: "14:00" }), "2026-10-10");
+
+  // 時刻のない入力と cutoff の組み合わせは、締め時刻が黙って無視されるのを防ぐため invalid-argument（0.15.0）
+  assert.throws(
+    () => shipping.businessDayOnOrAfter("2026-10-10", { cutoff: "14:00" }),
+    (e: unknown) =>
+      isBizdaysError(e) && e.code === "invalid-argument" && /cutoff requires/.test(e.message),
+  );
+  assert.equal(
+    shipping.businessDayOnOrAfter("2026-10-10"),
+    "2026-10-10",
+    "cutoff がなければ暦日でよい",
+  );
 });
 
 test("判定の理由と名前", () => {

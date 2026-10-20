@@ -29,7 +29,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **A calendar from a schedule**: `createCalendarFromSchedule` turns a schedule such as store hours into a business-day calendar, so the hours are the only configuration and business-day arithmetic works on them
 - **Combining calendars**: `combineCalendars` builds a calendar of the days on which all of several calendars are open (your company and the bank, for a remittance date) or any of them is open (any of several stores), and business-day arithmetic works on the result
 - **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
-- **Lightweight, zero dependencies**: about 9.3 KB min+gzip (about 11.1 KB with Japanese holidays, about 11.1 KB with UK bank holidays; measured for 0.14.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
+- **Lightweight, zero dependencies**: about 9.7 KB min+gzip (about 11.5 KB with Japanese holidays, about 11.4 KB with UK bank holidays; measured for 0.15.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan and the UK are bundled
 
 ## Installation
@@ -113,14 +113,14 @@ shipping.addBusinessDays("2026-12-30", 1); // "2027-01-04"
 shipping.businessDaysBetween("2026-09-01", "2026-10-01"); // business days from (inclusive) to (exclusive)
 
 // Orders before 14:00 ship today, later orders on the next business day
-shipping.businessDayOnOrAfter(new Date(), { cutoff: "14:00" });
+shipping.businessDayOnOrAfter(new Date(), { cutoff: "14:00" }); // the input must carry a time of day
 
 shipping.dayInfo("2027-01-01");
 // { date: "2027-01-01", weekday: 5, businessDay: false, reason: "closed-annual", name: "New Year closure", holiday: {…}, rulePath: "closedAnnual[0]" }
 shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.businessDay); // [true, false, false, false, false, true]
 ```
 
-`daysBetween(from, to)` returns `dayInfo` for every day in the period (both ends included). `listBusinessDays` and `holidaysBetween` include both ends too; only `businessDaysBetween(from, to)` counts from `from` (inclusive) to `to` (exclusive), so that `businessDaysBetween(a, b) + businessDaysBetween(b, c)` equals `businessDaysBetween(a, c)` and it is the inverse of `addBusinessDays`.
+`daysBetween(from, to)` returns `dayInfo` for every day in the period (both ends included). `listBusinessDays` and `holidaysBetween` include both ends too; only `businessDaysBetween(from, to)` counts from `from` (inclusive) to `to` (exclusive), so that `businessDaysBetween(a, b) + businessDaysBetween(b, c)` equals `businessDaysBetween(a, c)` and, when `a` is a business day, `businessDaysBetween(a, addBusinessDays(a, n))` is `n` (the inverse of `addBusinessDays`). From a closed day, `addBusinessDays` counts the next business day as 1 (so `+0` and `+1` give the same day, as `n = 0` is `businessDayOnOrAfter`), while `businessDaysBetween` does not count the closed start, so the two differ by one there.
 
 `createCalendar` and `createSchedule` validate the options when they are created, so the usual pattern is to create them once and reuse them. Creating is also cheap (about 0.02 ms for a calendar and 0.04 ms for a schedule with Japanese holidays on a development machine), so creating one per request is not a problem in practice.
 
@@ -180,8 +180,8 @@ museum.isBusinessDay("2026-05-07"); // false (the day after the May 3–6 run of
 - **The nth weekday** is the nth occurrence of that weekday in the month (days 1–7 hold the 1st). It is not the weekday in the nth row of a printed calendar
 - **Days that do not exist in a month** (`nth: 5` or `day: 31` in a month without one) do not match. Use `day: -1` for the last day
 - **Every other week** (`interval: 2`) is not the same as the 1st and 3rd weekdays (`nth: [1, 3]`): a month with five Wednesdays shifts the latter by a week. `interval` is the number of weeks (an integer of 2 or more) and `anchor` is a date on the same weekday that the cycle passes through; the rule matches that date and every `interval` weeks before and after it. Stores announce "every other Wednesday from January 7", so copy that date. To start at the anchor rather than also matching earlier dates, add `effectiveFrom`. `interval` cannot be combined with `nth`
-- **Holiday rules** (`{ holiday: true }`) write exceptions to the default holiday handling: "open on holidays from April 2027" is `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]` with `holidayPolicy: "closed"` kept for the past, "open on substitute holidays and citizens' holidays" is `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`, and "special hours on the May holidays" in a schedule is `recurring: [{ holiday: true, months: [5], value: … }]`. `kinds` narrows to those `Holiday.kind` values (see the provider's list), `months` to those months; omit both for all holidays. The rule is judged at the "over the holiday" step, before `holidayPolicy` or a schedule's `holiday`, and also with `holidayPolicy: "ignore"`. Its days are holidays, so `onHolidayRule` cannot be set on it (`invalid-option`); `holiday` still shows the holiday
-- **The day after a holiday** is never itself a holiday, so `onHolidayRule` cannot be set on such a rule (it is an `invalid-option`). "Holidays" are those of the holiday provider, not annual closures. A rule of this kind matches no day without a holiday provider
+- **Holiday rules** (`{ holiday: true }`) write exceptions to the default holiday handling: "open on holidays from April 2027" is `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]` with `holidayPolicy: "closed"` kept for the past, "open on substitute holidays and citizens' holidays" is `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`, and "special hours on the May holidays" in a schedule is `recurring: [{ holiday: true, months: [5], value: … }]`. `kinds` narrows to those `Holiday.kind` values (see the provider's list; with `holidays: jp` the editor completes them), `weekdays` to those weekdays ("morning hours on a Saturday holiday" is `{ holiday: true, weekdays: [6], value: … }`), `months` to those months; omit them for all holidays. The rule is judged at the "over the holiday" step, before `holidayPolicy` or a schedule's `holiday`, and also with `holidayPolicy: "ignore"`. Its days are holidays, so `onHolidayRule` cannot be set on it (`invalid-option`); `holiday` still shows the holiday
+- **The day after a holiday** is never itself a holiday, so `onHolidayRule` cannot be set on such a rule (it is an `invalid-option`). "Holidays" are those of the holiday provider, not annual closures. A rule of this kind matches no day without a holiday provider. `weekdays` narrows it to those weekdays: a museum "closed on the day after a holiday, except when that day is a Saturday or Sunday" is `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` (opening the weekend with `openRecurring` instead would override every other weekend closure)
 - Among recurring rules, the one written first in the array wins, and `openRecurring` wins over `closedRecurring`. The day after Labor Thanksgiving Day on a Monday (2026-11-23) is both the day the Monday rule moves to and the day after a holiday; the rule written first decides, and `dayInfo` shows which
 
 **Effective periods** (`effectiveFrom`, `effectiveTo`) let one calendar represent a change of rules and still reproduce past dates. They go on recurring rules and on annual closures (`closedAnnual` in object form).
@@ -407,6 +407,18 @@ const { from, to } = closingPeriod("2026-11-05", 20); // the period "2026-11-05"
 const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
 office.listBusinessDays(from, to).length; // 22 (business days in the November period)
 ```
+
+**Closing days that move to a business day**: when the contract says "closed on the 20th, or the previous business day if the 20th is not one", use the calendar's `closingMonth(date, closingDay, { convention })` and `closingPeriod(monthOrDate, closingDay, { convention })`. Each month's closing day (the last day when it does not exist) is adjusted with the `convention` of `adjust` (required, no default), and a date belongs to the first month whose adjusted closing day is on or after it. The root functions keep closing on calendar days.
+
+```ts
+const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+// September 20, 2026 is a Sunday: with "preceding" the September closing day is Friday the 18th
+office.closingMonth("2026-09-19", 20, { convention: "preceding" }); // "2026-10" (the 19th is after the September closing)
+closingMonth("2026-09-19", 20); // "2026-09" (closing on calendar days)
+office.closingPeriod("2026-10", 20, { convention: "preceding" }); // { from: "2026-09-19", to: "2026-10-20" }
+```
+
+A month whose closing day is not preceded by any business day since the previous closing day (a long closure for renovation, say) has no period of its own: its days belong to the next month, `closingMonth` never returns that month, and `closingPeriod` for that month throws `no-business-day`. With `"following"` a closing day can move past a long closure into a later month; the period is then longer, not empty.
 
 The `day` of `dueDate` also maps days that do not exist in a month (such as February 30) to the last day. Recurring rules (`{ day: 31 }`) do not match such days, so the two behave differently: a due date must always fall somewhere in its month.
 

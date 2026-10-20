@@ -533,24 +533,29 @@ function analyze<T, Kind extends string>(
           ? source.providers.length === 0
             ? "This rule matches no day: there are no holidays without a holiday provider"
             : rule.holiday
-              ? "This rule matches no day: no holiday of the selected kinds within the selected months and effective period"
-              : "This rule matches no day: no day after a holiday within its effective period"
+              ? "This rule matches no day: no holiday of the selected kinds, weekdays and months within its effective period"
+              : "This rule matches no day: no day after a holiday on the selected weekdays and months within its effective period"
           : rule.effectiveFrom === null && rule.effectiveTo === null
             ? "This rule matches no day (for example, a day that does not exist in the selected months)"
             : "This rule matches no day within its effective period",
       );
       return;
     }
-    // 祝日・祝日の翌日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・月の絞り込み）だけで調べる
+    // 祝日・祝日の翌日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・曜日・月の絞り込み）だけで調べる
     const k = recurring.findIndex(
       (r, i) =>
         i < j &&
         canCover(r, rule) &&
         periodCovers(r, rule) &&
         (rule.holiday
-          ? r.holiday && setCovers(r.kinds, rule.kinds) && setCovers(r.months, rule.months)
+          ? r.holiday &&
+            setCovers(r.kinds, rule.kinds) &&
+            setCovers(r.weekdays, rule.weekdays) &&
+            setCovers(r.months, rule.months)
           : rule.dayAfterHoliday
-            ? r.dayAfterHoliday && setCovers(r.months, rule.months)
+            ? r.dayAfterHoliday &&
+              setCovers(r.weekdays, rule.weekdays) &&
+              setCovers(r.months, rule.months)
             : !r.holiday &&
               !r.dayAfterHoliday &&
               intervalCovers(r, rule) &&

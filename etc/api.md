@@ -92,6 +92,11 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
     firstBusinessDayOfMonth(month: MonthString): DateString;
     lastBusinessDayOfMonth(month: MonthString): DateString;
     dueDate(month: MonthString, options: DueDateOptions): DateString;
+    closingMonth(input: DateInput, closingDay: number, options: AdjustOptions): MonthString;
+    closingPeriod(input: DateInput | MonthString, closingDay: number, options: AdjustOptions): {
+        readonly from: DateString;
+        readonly to: DateString;
+    };
 }
 ```
 
@@ -103,8 +108,8 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
     readonly closedAnnual?: readonly (AnnualDate | AnnualRange)[];
     readonly closedDates?: readonly (SpecificDate | DateRange)[];
     readonly openDates?: readonly (SpecificDate | DateRange)[];
-    readonly closedRecurring?: readonly RecurringRule[];
-    readonly openRecurring?: readonly RecurringRule[];
+    readonly closedRecurring?: readonly RecurringRule<Kind>[];
+    readonly openRecurring?: readonly RecurringRule<Kind>[];
     readonly holidayPolicy?: HolidayPolicy;
     readonly maxSearchDays?: number;
 }
@@ -223,6 +228,7 @@ export interface DateValue<T> {
 ```ts
 export interface DayAfterHolidayPattern {
     readonly dayAfterHoliday: true;
+    readonly weekdays?: readonly Weekday[];
     readonly months?: readonly Month[];
     readonly weekday?: never;
     readonly nth?: never;
@@ -230,6 +236,7 @@ export interface DayAfterHolidayPattern {
     readonly anchor?: never;
     readonly day?: never;
     readonly holiday?: never;
+    readonly kinds?: never;
 }
 ```
 
@@ -267,6 +274,8 @@ export interface DayOfMonthPattern {
     readonly anchor?: never;
     readonly dayAfterHoliday?: never;
     readonly holiday?: never;
+    readonly weekdays?: never;
+    readonly kinds?: never;
 }
 ```
 
@@ -341,9 +350,10 @@ export interface HolidayLookup<Kind extends string = string> {
 ### HolidayPattern (@public)
 
 ```ts
-export interface HolidayPattern {
+export interface HolidayPattern<Kind extends string = string> {
     readonly holiday: true;
-    readonly kinds?: readonly string[];
+    readonly kinds?: readonly Kind[];
+    readonly weekdays?: readonly Weekday[];
     readonly months?: readonly Month[];
     readonly weekday?: never;
     readonly nth?: never;
@@ -461,13 +471,13 @@ export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
 ### RecurringPattern (@public)
 
 ```ts
-export type RecurringPattern = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern | HolidayPattern;
+export type RecurringPattern<Kind extends string = string> = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern | HolidayPattern<Kind>;
 ```
 
 ### RecurringRule (@public)
 
 ```ts
-export type RecurringRule = RecurringPattern & EffectivePeriod & {
+export type RecurringRule<Kind extends string = string> = RecurringPattern<Kind> & EffectivePeriod & {
     readonly name?: string;
     readonly onHolidayRule?: OnHolidayRule;
 };
@@ -476,7 +486,7 @@ export type RecurringRule = RecurringPattern & EffectivePeriod & {
 ### RecurringValue (@public)
 
 ```ts
-export type RecurringValue<T> = RecurringRule & {
+export type RecurringValue<T, Kind extends string = string> = RecurringRule<Kind> & {
     readonly value: T;
 };
 ```
@@ -520,7 +530,7 @@ export interface ScheduleOptions<T, Kind extends string = string> extends Holida
         T
     ];
     readonly holiday?: HolidayValueRule<T>;
-    readonly recurring?: readonly RecurringValue<T>[];
+    readonly recurring?: readonly RecurringValue<T, Kind>[];
     readonly annual?: readonly (AnnualValue<T> | AnnualRangeValue<T>)[];
     readonly dates?: readonly (DateValue<T> | DateRangeValue<T>)[];
 }
@@ -614,6 +624,8 @@ export interface WeekdayPattern {
     readonly day?: never;
     readonly dayAfterHoliday?: never;
     readonly holiday?: never;
+    readonly weekdays?: never;
+    readonly kinds?: never;
 }
 ```
 

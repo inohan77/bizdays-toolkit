@@ -28,7 +28,7 @@
 - **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 9.3KB（日本の祝日込みで約 11.1KB、英国の祝日込みで約 11.1KB。0.14.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
+- **軽量・依存ゼロ**: minify + gzip で約 9.7KB（日本の祝日込みで約 11.5KB、英国の祝日込みで約 11.4KB。0.15.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。日本と英国を同梱しています
 
 ## インストール
@@ -112,14 +112,14 @@ shipping.addBusinessDays("2026-12-30", 1); // "2027-01-04"
 shipping.businessDaysBetween("2026-09-01", "2026-10-01"); // from 以上 to 未満の営業日数
 
 // 14 時より前の注文は当日、それ以降は翌営業日に出荷
-shipping.businessDayOnOrAfter(new Date(), { cutoff: "14:00" });
+shipping.businessDayOnOrAfter(new Date(), { cutoff: "14:00" }); // 入力は時刻を持つもの
 
 shipping.dayInfo("2027-01-01");
 // { date: "2027-01-01", weekday: 5, businessDay: false, reason: "closed-annual", name: "年末年始", holiday: {…}, rulePath: "closedAnnual[0]" }
 shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.businessDay); // [true, false, false, false, false, true]
 ```
 
-`daysBetween(from, to)` は、期間のすべての日の `dayInfo` を返します（両端を含む）。 `listBusinessDays`・`holidaysBetween` も両端を含みます。`businessDaysBetween(from, to)` だけは `from` 以上 `to` 未満の営業日の数で、`businessDaysBetween(a, b) + businessDaysBetween(b, c)` が `businessDaysBetween(a, c)` と等しくなり、`addBusinessDays` の逆算になります。
+`daysBetween(from, to)` は、期間のすべての日の `dayInfo` を返します（両端を含む）。 `listBusinessDays`・`holidaysBetween` も両端を含みます。`businessDaysBetween(from, to)` だけは `from` 以上 `to` 未満の営業日の数で、`businessDaysBetween(a, b) + businessDaysBetween(b, c)` が `businessDaysBetween(a, c)` と等しくなり、`a` が営業日なら `businessDaysBetween(a, addBusinessDays(a, n))` が `n` になります（`addBusinessDays` の逆算）。起点が休業日のときは、`addBusinessDays` は翌営業日を 1 と数える（`n = 0` は `businessDayOnOrAfter` と同じなので `+0` と `+1` が同じ日）一方、`businessDaysBetween` は休業日の起点を数えないので、1 だけずれます。
 
 `createCalendar`・`createSchedule` は作る時点で設定を検証するので、作ったものを使い回すのが基本です。作成も軽く（開発用の機械で、日本の祝日を使う営業日カレンダーが約 0.02 ミリ秒、スケジュールが約 0.04 ミリ秒）、呼び出しのたびに作っても実用上の問題はありません。
 
@@ -174,8 +174,8 @@ museum.isBusinessDay("2026-05-07"); // false（5 月 3〜6 日の連休の翌日
 - **第 n 何曜日**は「その月で n 回目のその曜日」です（1〜7 日が第 1）。カレンダーの第 n 週の行にある曜日ではありません
 - **その月にない日**（`nth: 5` がない月、`day: 31` がない月）は当てはまりません。末日は `day: -1` で指定します
 - **隔週**（`interval: 2`）は「第 1・第 3 水曜」（`nth: [1, 3]`）とは別物です。水曜日が 5 回ある月で、後者は 1 週ずれます。`interval` は周期の週数（2 以上の整数）、`anchor` は周期が通る日付（`weekday` と同じ曜日）で、その日と、その日から `interval` 週おきの前後の日に当てはまります。店舗は「1 月 7 日から隔週水曜」のように告知するので、その日付をそのまま書きます。起点より前の日に当てはめず起点から始めるには、`effectiveFrom` を併せて指定します。`interval` は `nth` とは併用できません
-- **祝日の規則**（`{ holiday: true }`）は、祝日の既定の扱いの例外を書きます。「2027 年 4 月から祝日も営業」は `holidayPolicy: "closed"` のまま `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]`、「振替休日と国民の休日は営業」は `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`、スケジュールの「5 月の祝日は特別営業時間」は `recurring: [{ holiday: true, months: [5], value: … }]` です。`kinds` はその種別（`Holiday.kind`。種別は提供元の一覧を参照）の祝日に、`months` はその月に絞り、どちらも省略すればすべての祝日です。判定は「祝日の上」の段階で、`holidayPolicy`・スケジュールの `holiday` より先に行い、`holidayPolicy: "ignore"` でも当てはまります。当てはまる日は祝日なので、この規則に `onHolidayRule` は指定できません（`invalid-option`）。`holiday` には祝日がそのまま付きます
-- **祝日の翌日**は定義上祝日でないので、その規則に `onHolidayRule` は指定できません（`invalid-option`）。「祝日」は提供元の祝日で、毎年の休業日などは含みません。提供元のない設定では 1 日も当てはまりません
+- **祝日の規則**（`{ holiday: true }`）は、祝日の既定の扱いの例外を書きます。「2027 年 4 月から祝日も営業」は `holidayPolicy: "closed"` のまま `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]`、「振替休日と国民の休日は営業」は `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`、スケジュールの「5 月の祝日は特別営業時間」は `recurring: [{ holiday: true, months: [5], value: … }]` です。`kinds` はその種別（`Holiday.kind`。種別は提供元の一覧を参照。`holidays: jp` ならエディターで補完が効きます）の祝日に、`weekdays` はその曜日（「土曜の祝日は午前診療」は `{ holiday: true, weekdays: [6], value: … }`）に、`months` はその月に絞り、省略すればすべての祝日です。判定は「祝日の上」の段階で、`holidayPolicy`・スケジュールの `holiday` より先に行い、`holidayPolicy: "ignore"` でも当てはまります。当てはまる日は祝日なので、この規則に `onHolidayRule` は指定できません（`invalid-option`）。`holiday` には祝日がそのまま付きます
+- **祝日の翌日**は定義上祝日でないので、その規則に `onHolidayRule` は指定できません（`invalid-option`）。「祝日」は提供元の祝日で、毎年の休業日などは含みません。提供元のない設定では 1 日も当てはまりません。`weekdays` でその曜日に絞れます。美術館の「祝日の翌日は休館（土曜・日曜に当たる場合は開館）」は `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` です（代わりに `openRecurring` で土日を開けると、ほかの土日の休館まで打ち消してしまいます）
 - 繰り返しの規則どうしは配列で先に書いたものが優先で、`openRecurring` は `closedRecurring` より優先です。月曜の勤労感謝の日（2026-11-23）の翌日は、月曜の規則の振替先でもあり祝日の翌日でもあります。先に書いた規則が決め、どちらが決めたかは `dayInfo` で分かります
 
 **有効期間**（`effectiveFrom`・`effectiveTo`）を付けると、規則の変更を 1 つのカレンダーで表しながら、過去の日付の判定も変えずに再現できます。繰り返しの規則と、毎年の休業日（`closedAnnual` のオブジェクトの形）に付けられます。
@@ -401,6 +401,18 @@ const { from, to } = closingPeriod("2026-11-05", 20); // "2026-11-05" が属す�
 const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
 office.listBusinessDays(from, to).length; // 22（11 月分の営業日数）
 ```
+
+**営業日に動く締め日**: 「20 日締め、締め日が休業日なら前営業日締め」のような契約は、カレンダーの `closingMonth(date, closingDay, { convention })`・`closingPeriod(monthOrDate, closingDay, { convention })` で扱います。各月の締め日（その月にない日は末日）を `adjust` と同じ `convention`（必須、既定値なし）で営業日に調整し、日付は「調整後の締め日がその日以降になる最初の月」に属します。ルートの関数は暦日のまま区切ります。
+
+```ts
+const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+// 締め日の 2026-09-20 は日曜。"preceding" なら 9 月の締め日は金曜の 18 日
+office.closingMonth("2026-09-19", 20, { convention: "preceding" }); // "2026-10"（19 日は 9 月の締めのあと）
+closingMonth("2026-09-19", 20); // "2026-09"（暦日の締め）
+office.closingPeriod("2026-10", 20, { convention: "preceding" }); // { from: "2026-09-19", to: "2026-10-20" }
+```
+
+前月の締め日から当月の締め日までに営業日が 1 日もない月（改装などの長期休業）は、固有の期間を持ちません。その日は次の月に属し、`closingMonth` はその月を返さず、その月の `closingPeriod` は `no-business-day` を投げます。`"following"` では締め日が長期休業を越えて後の月に動くことがあり、そのときは期間が空になるのではなく長くなります。
 
 `dueDate` の `day` も、その月にない日（2 月 30 日など）は末日に読み替えます。繰り返しの規則（`{ day: 31 }`）はその月にない日に当てはまらないので、扱いが異なります。期日は「その月のどこか」に必ず決まる必要があるためです。
 

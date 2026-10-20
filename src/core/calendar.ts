@@ -30,7 +30,17 @@ import {
 } from "./date.ts";
 import { checkUnknownKeys, IssueCollector, plainError, rangeError } from "./errors.ts";
 import { parseTimeOfDay, toCivil, type DateInput } from "./input.ts";
-import { dayOfMonth, isDayOfMonthValue, parseMonth, type MonthString } from "./month.ts";
+import {
+  checkClosingDay,
+  closingDayIn,
+  closingMonth as calendarClosingMonth,
+  dayOfMonth,
+  formatMonth,
+  isDayOfMonthValue,
+  parseMonth,
+  shiftMonth,
+  type MonthString,
+} from "./month.ts";
 import {
   buildSchedule,
   compileAnnualRules,
@@ -109,9 +119,9 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
    * 祝日に当たったときの扱いは規則ごとに onHolidayRule で指定する（既定: "under-holiday"）。
    * 有効期間（effectiveFrom・effectiveTo）を付けると、期間の外では書かれていないのと同じに扱う
    */
-  readonly closedRecurring?: readonly RecurringRule[];
+  readonly closedRecurring?: readonly RecurringRule<Kind>[];
   /** 繰り返しの営業日。closedRecurring と同じ日に当たる場合はこちらが優先 */
-  readonly openRecurring?: readonly RecurringRule[];
+  readonly openRecurring?: readonly RecurringRule<Kind>[];
   /** 祝日の扱い（既定: "closed"） */
   readonly holidayPolicy?: HolidayPolicy;
   /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら Error */
@@ -189,7 +199,8 @@ export interface CombineOptions {
 export interface BusinessDayOptions {
   /**
    * 締め時刻 "HH:mm"（カレンダーのタイムゾーン）。
-   * 入力の時刻がこの時刻以降なら、その日は対象にしない。暦日だけの入力は 0 時として扱う
+   * 入力の時刻がこの時刻以降なら、その日は対象にしない。時刻を持たない入力（暦日の文字列・Temporal の PlainDate など）
+   * と組み合わせると code: "invalid-argument" の Error（締め時刻が黙って無視されるのを防ぐ。0.15.0 から）
    */
   readonly cutoff?: string;
 }
@@ -245,7 +256,10 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
   nextBusinessDay(input: DateInput): DateString;
   /** 前営業日（入力日の前日以前） */
   previousBusinessDay(input: DateInput): DateString;
-  /** 入力日が営業日ならその日、そうでなければ翌営業日。cutoff で締め時刻を指定できる */
+  /**
+   * 入力日が営業日ならその日、そうでなければ翌営業日。cutoff で締め時刻を指定できる
+   * （cutoff を指定するときの入力は、時刻を持つもの。時刻のない入力と組み合わせると invalid-argument）
+   */
   businessDayOnOrAfter(input: DateInput, options?: BusinessDayOptions): DateString;
   /** 入力日が営業日ならその日、そうでなければ前営業日 */
   businessDayOnOrBefore(input: DateInput): DateString;
@@ -277,6 +291,24 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
    * その月にない日は末日に読み替えてから調整する（例: 2 月の 30 日払いは 2 月末日）
    */
   dueDate(month: MonthString, options: DueDateOptions): DateString;
+  /**
+   * 営業日を考慮した締め日で区切ったときに、日付が属する月。
+   * 各月の締め日（締め日がその月にない場合は末日）を convention で営業日に調整した日を D(m) とし、
+   * 日付が D(m) 以下となる最小の m を返す。前月の締め日から当月の締め日までに営業日がない月（長期休業）は
+   * 固有の期間を持たず、その日は次の月に属する
+   */
+  closingMonth(input: DateInput, closingDay: number, options: AdjustOptions): MonthString;
+  /**
+   * 営業日を考慮した締め日で区切ったときの、その月分の期間（両端を含む暦日。前月の調整後の締め日の翌日から
+   * 当月の調整後の締め日まで）。暦日を渡すと、その日が属する期間（closingMonth で求めた月の期間）。
+   * 月を渡して、その月に固有の期間がない（前月の締め日から当月の締め日までに営業日がない）ときは
+   * code: "no-business-day" の Error。返す値は変更できず、name は付かない
+   */
+  closingPeriod(
+    input: DateInput | MonthString,
+    closingDay: number,
+    options: AdjustOptions,
+  ): { readonly from: DateString; readonly to: DateString };
 }
 
 const CALENDAR_OPTION_KEYS = [
@@ -484,6 +516,30 @@ function buildCalendar<Kind extends string>(
     "modified-following",
     "modified-preceding",
   ];
+  /** 月 m の、営業日に調整した締め日 D(m)（decisions.md の 41 番） */
+  function closingDate(
+    month: { year: number; month: number },
+    closingDay: number,
+    options: AdjustOptions,
+  ): DateString {
+    return adjustDate(dayOfMonth(month, closingDayIn(month, closingDay)), options);
+  }
+  /** 営業日を考慮した締め日で日付が属する月（date ≤ D(m) となる最小の m）。暦日の締めの月の前月から順に調べる */
+  function closingMonthOf(
+    date: DateString,
+    closingDay: number,
+    options: AdjustOptions,
+  ): { year: number; month: number } {
+    checkClosingDay(closingDay);
+    let month = parseMonth(calendarClosingMonth(date, closingDay));
+    // D は月とともに単調に増える（減らない）ので、暦日の締めの月から、後ろへ（following で前月の締め日が
+    // 長期休業を越えて当月以降に来た場合）、前へ（preceding で当月の締め日が date より前に来た場合）順に探す
+    while (date <= closingDate(shiftMonth(month, -1), closingDay, options)) {
+      month = shiftMonth(month, -1);
+    }
+    while (date > closingDate(month, closingDay, options)) month = shiftMonth(month, 1);
+    return month;
+  }
   function adjustDate(date: DateString, options: AdjustOptions | undefined): DateString {
     const convention = (options as { convention?: unknown } | undefined)?.convention;
     if (!CONVENTIONS.includes(convention as BusinessDayConvention)) {
@@ -574,7 +630,13 @@ function buildCalendar<Kind extends string>(
       let start = civil.date;
       if (opts.cutoff !== undefined) {
         const cutoff = parseTimeOfDay(opts.cutoff);
-        if (civil.minutes !== null && civil.minutes >= cutoff) start = addDays(start, 1);
+        if (civil.minutes === null) {
+          throw rangeError(
+            "invalid-argument",
+            "cutoff requires an input with a time of day (a Date, a date-time string or a Temporal value with a time); a date-only input would silently ignore the cutoff",
+          );
+        }
+        if (civil.minutes >= cutoff) start = addDays(start, 1);
       }
       return search(start, 1);
     },
@@ -609,6 +671,25 @@ function buildCalendar<Kind extends string>(
     nthBusinessDayOfMonth: nthOfMonth,
     firstBusinessDayOfMonth: (month) => nthOfMonth(month, 1),
     lastBusinessDayOfMonth: (month) => nthOfMonth(month, -1),
+    closingMonth: (input, closingDay, options) =>
+      formatMonth(closingMonthOf(dateOf(input), closingDay, options)),
+    closingPeriod(input, closingDay, options) {
+      checkClosingDay(closingDay);
+      // "YYYY-MM" だけを月として扱い、それ以外（暦日・日時の文字列・Date・Temporal の値）は dateOf で暦日にする
+      const isMonth = typeof input === "string" && /^\d{4}-\d{2}$/.test(input);
+      const month = isMonth
+        ? parseMonth(input)
+        : closingMonthOf(dateOf(input), closingDay, options);
+      const to = closingDate(month, closingDay, options);
+      const from = addDays(closingDate(shiftMonth(month, -1), closingDay, options), 1);
+      if (from > to) {
+        throw rangeError(
+          "no-business-day",
+          `${formatMonth(month)} has no closing period of its own: there is no business day between the previous closing day and ${to} (its days belong to the next month)`,
+        );
+      }
+      return Object.freeze({ from, to });
+    },
     dueDate(month, options) {
       const day = (options as { day?: unknown } | undefined)?.day;
       if (!isDayOfMonthValue(day)) {

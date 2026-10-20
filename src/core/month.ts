@@ -97,7 +97,8 @@ export function closingMonth(date: DateString, closingDay: number): MonthString 
   );
 }
 
-function checkClosingDay(closingDay: number): void {
+/** @internal 締め日の検証（closingMonth・closingPeriod・営業日カレンダーの締め日で共用） */
+export function checkClosingDay(closingDay: number): void {
   if (!isDayOfMonthValue(closingDay)) {
     throw rangeError(
       "invalid-argument",
@@ -106,8 +107,8 @@ function checkClosingDay(closingDay: number): void {
   }
 }
 
-/** その月の締め日（日）。-1 またはその月の日数以上なら末日（decisions.md の 16 番の読み替えはここだけで行う） */
-function closingDayIn({ year, month }: YearMonth, closingDay: number): number {
+/** @internal その月の締め日（日）。-1 またはその月の日数以上なら末日（decisions.md の 16 番の読み替えはここだけで行う） */
+export function closingDayIn({ year, month }: YearMonth, closingDay: number): number {
   const last = daysInMonth(year, month);
   return closingDay === -1 || closingDay > last ? last : closingDay;
 }

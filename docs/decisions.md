@@ -256,7 +256,7 @@ GOV.UK の監視（govuk-watch）は、外部の cron サービス（cron-job.or
 - 「2027 年 4 月から定休日を月曜から火曜に変える」は、カレンダーを 2 つ作って日付で呼び分けても、`addBusinessDays` のように切り替え日をまたいで探す計算が 1 つのカレンダーの中で完結するため正しく動きません。切り替え後の日付を個別の日付で列挙すると、件数が膨らむうえ、個別の日付は祝日より優先される（12 番）ので意味も変わります。規則そのものに期間を持たせるのが、意味を保てる唯一の形です
 - 期間の外では、その規則は書かれていないのと同じに扱い、判定の順番（12 番）には影響しません。設定に省略可能な項目が増えるだけなので、互換性の約束の範囲です
 - 項目の名前は、毎年の月日で使っている `from`・`to` と区別するため `effectiveFrom`・`effectiveTo` にしました。「有効期間」に対応する語として、業務システムで広く使われている言葉です
-- 個別の日付（`closedDates` など）と定休日の曜日（`closedWeekdays`）には付けません。個別の日付はそれ自体が期間で、定休日の曜日の変更は「期間付きの毎週の規則」で表せるためです（判定の段階は違いますが、`holidayPolicy` のどの値でも結果は同じです。`reason` は `"closed-recurring"` になります）
+- 個別の日付（`closedDates` など）と定休日の曜日（`closedWeekdays`）には付けません。個別の日付はそれ自体が期間で、定休日の曜日の変更は「期間付きの毎週の規則」で表せるためです（判定の段階は違いますが、`holidayPolicy` のどの値でも営業日の判定は同じです。`reason` は `"closed-recurring"`、`rulePath` も付き、規則の診断の `redundant` の出方も変わります）
 - 「隔週」は `{ weekday, interval, anchor }` で書きます。`interval` は 2 以上の整数で、1 は毎週と同じなので受け付けません。`anchor` は `weekday` と同じ曜日の日付で、周期の位相を決めるだけです（起点より前の日にも当てはまります）。開始日を兼ねさせなかったのは、`anchor` の意味を 1 つに保つためで、開始日は `effectiveFrom` で書けます。起点を「偶数週・奇数週」や ISO 週番号にしなかったのは、年をまたぐと週の数え方が変わり、店舗の掲示（「○月○日から隔週」）と一致しなくなるためです
 - 有効期間の診断（`never-matches`・`shadowed`・`redundant`・`out-of-range`）は 15 番に書きました。期間の中に当てはまる日がない規則は `never-matches` に含め、新しい code は足していません（message で区別します）
 
@@ -264,7 +264,8 @@ GOV.UK の監視（govuk-watch）は、外部の cron サービス（cron-job.or
 
 期間を取る API のうち、`daysBetween`・`listBusinessDays`・`holidaysBetween` は両端を含みますが、`businessDaysBetween(from, to)` は `from` 以上 `to` 未満の営業日の数です。
 
-- 半開区間だと `businessDaysBetween(a, b) + businessDaysBetween(b, c) = businessDaysBetween(a, c)` が成り立ち、`addBusinessDays(a, n)` の結果 `b` について `businessDaysBetween(a, b) = n` になります（`addBusinessDays` の逆算）。日数の差を求める `diffDays` も同じ考え方です
+- 半開区間だと `businessDaysBetween(a, b) + businessDaysBetween(b, c) = businessDaysBetween(a, c)` が成り立ち、**起点 `a` が営業日なら** `addBusinessDays(a, n)` の結果 `b` について `businessDaysBetween(a, b) = n` になります（`addBusinessDays` の逆算）。日数の差を求める `diffDays` も同じ考え方です
+- 起点が休業日のときは逆算になりません（0.15.0 で明記）。`addBusinessDays` は「翌日以降の n 個目の営業日」を返し、`n = 0` は `businessDayOnOrAfter` と同じなので、休業日からは `+0` と `+1` が同じ日（翌営業日）です。一方 `businessDaysBetween` は休業日の起点を数えないので、`businessDaysBetween(a, addBusinessDays(a, n)) = n − 1` です。これは期日計算の慣習（Excel の `WORKDAY` と同じ）で、変えると利用者の期日が変わるため挙動は変えず、`addBusinessDays(a, n) = addBusinessDays(businessDayOnOrAfter(a), n − 1)`（n ≥ 1）を性質のテストで固定し、README に書きました
 - 「期間の営業日の一覧」を返す `listBusinessDays` は両端を含むほうが自然で、数が要るなら `.length` で求められます。「Between なのに範囲の扱いが違う」という違和感はありますが、名前を変える（`countBusinessDays` など）利用者の作業に見合う利益がないので、名前は変えず、README に範囲の扱いを明記します
 
 ## 32. 国ごとの日時の変換関数（`toJapanDate`・`toJapanDateTime`）は非推奨にし、国に依らない経路に集約する
@@ -323,6 +324,7 @@ GOV.UK の監視（govuk-watch）は、外部の cron サービス（cron-job.or
 
 - 定数と提供元の項目は同じ値で、英国は 4 つの提供元に対して 1 組の定数という歪みがありました。32 番と同じ理由（1.0.0 で API を固める前に、同じ情報の経路を減らす）で一本化します。削除までは互換性の約束どおり少なくとも 1 つのマイナー版を置きます
 - `firstBusinessDayOfMonth`・`lastBusinessDayOfMonth` は `nthBusinessDayOfMonth(month, 1)`・`(month, -1)` の別名ですが、使用頻度が高く残します。別名はこれ以上足しません
+- ここでいう「別名」は、同じオブジェクトの上で引数を固定しただけの名前（`first… = nth…(…, 1)`）です。タイムゾーンや営業日のような文脈を持つオブジェクト（カレンダー・スケジュール）からの経路（`instantOf` と `toInstant`、営業日を考慮した `closingMonth` と暦日の `closingMonth`）は、結果が文脈で変わるので別名に当たりません（32 番の「国に依らない 2 経路」・40 番・41 番）。0.15.0 で明記
 
 性能については、営業日表のキャッシュ（年ごとに営業日を前計算する内部の最適化）を、明確な性能の課題が出るまで入れません。実測（1 日の判定 2.6µs、10 年の `businessDaysBetween` 8.6ms）は業務の規模で問題にならず、キャッシュは将来の非純粋な判定関数と相性が悪いためです。代わりに、課題が出たことを知る手段として CI に `bench` ジョブを置きます。
 
@@ -367,3 +369,28 @@ GOV.UK の監視（govuk-watch）は、外部の cron サービス（cron-job.or
 - `instantOf` をメソッドとしても置くのは、主な用途（次に開く瞬間）がカレンダーのタイムゾーンで完結し、`dateOf`・`civilOf`・`instantOf` と並ぶと往復の対称性が名前で分かるためです。`HolidayLookup` に置くので、合成したカレンダーとスケジュールからのカレンダーにも付きます。ルートの関数は `toDateString`・`toDateTimeParts` と対になり、32 番（国に依らない 2 経路）と同じ構成です
 - 夏時間の飛び・重複は Temporal の既定 `disambiguation: "compatible"`（飛びは切り替え前のオフセットで解釈して飛んだ分だけ後ろへ、重複は先のほう）と同じにします。Temporal・Luxon・date-fns-tz の既定と一致し、利用者が別の道具と突き合わせても食い違いません。選択肢は需要が見えるまで足しません（16 番で `nearest` を入れなかった姿勢と同じ）
 - 実装は `Intl` だけで、前後 1 日のオフセットを候補にして、暦日と時刻に戻して一致する候補を選びます（重複は小さいほうの瞬間、飛びは切り替え前のオフセット）。オフセットの差が 1 時間でないゾーン（`Australia/Lord_Howe`。30 分）と南半球（`Pacific/Auckland`）でも確かめ、英国の例はテストで固定しています
+
+## 41. 祝日・祝日の翌日の規則に曜日の絞り込み `weekdays` を足す。営業日を考慮した締め日はカレンダーのメソッドで、固有の期間がない月は次の月に併合する
+
+0.15.0 で、規則の形の拡張を 1 つと、カレンダーのメソッドを 2 つ足しました。
+
+**`weekdays`**（祝日・祝日の翌日の規則の絞り込み）
+
+- 「祝日の翌日は休館（土曜・日曜に当たる場合は開館）」「祝日は休診、土曜の祝日は午前診療」は、2 条件の AND を 1 つの規則で表す手段がなく書けませんでした。`openRecurring` で土日を開ける回避策は同じ段階のすべての休業の規則に勝つので、ほかの土日の休業まで打ち消し、意図が設定に残りません。年ごとに日付を列挙する回避策は 33 番が退けた形です
+- `months`・`kinds` と同じ「絞り込みの配列」として足し（35 番の書き方の方針）、判定の段階（12 番）と祝日の翌日・祝日の定義（33・35 番）は変えません。曜日の規則（`weekday`）と区別するため複数形にし、曜日・日の規則には付けません（複数の曜日の規則は規則を 2 つ書く。37 番）
+- 診断は、当てはまる日がなければ `never-matches`（振替休日は土日に来ないので `{ holiday: true, kinds: ["substitute"], weekdays: [0, 6] }` は日本では当てはまらない）、同じ形の規則どうしの `shadowed` に曜日の集合の包含を加えます
+
+**営業日を考慮した締め日**（`calendar.closingMonth(input, closingDay, { convention })`・`calendar.closingPeriod(…)`）
+
+- 「20 日締め、締め日が土日祝なら前営業日締め」は、前月と当月の両方の調整後の締め日と比べる必要があり、片方向の調整だけでは境界を誤ります。39 番がライブラリに閉じ込めた「期間が隙間も重なりもなく敷き詰められる」の保証も、利用者側では再演になります
+- 定義: 月 m の調整後の締め日 D(m) = adjust(その月の締め日（読み替えは 39 番の `closingDayIn`）, convention)。m の期間は D(m−1) の翌日〜D(m)。`closingMonth(date)` は date ≤ D(m) となる最小の m。`convention` は `adjust` と同じく必須で既定値なし（16 番）
+- 固有の期間がない月（D(m) = D(m−1)。前月の締め日から当月の締め日までに営業日がない、1 か月前後の長期休業）は、定義の帰結として次の月に併合されます。`closingMonth` はその月を返さず、その日は m+1 の期間に含まれます。併合の規則を別に足すと「どちらに併合するか」という業種依存の判断（16 番が `nearest` を入れなかったのと同じ種類）を背負うため、定義から自然に出る形に任せます
+- 空の月の `closingPeriod` は `no-business-day` を投げます。`from > to` の値を返すと `closedDates` などに渡した先で `invalid-range` になる罠になり、`undefined` を返すと滅多に起きない事態のために全利用者に null チェックを強いる（29 番の方針と逆向き）ためで、`nthBusinessDayOfMonth` が営業日のない月に同じ code で投げるのとそろえました。利用者がこの例外に出会うのは月を自分で列挙する場面だけで、`closingMonth` 経由では出会いません
+- `"following"` で前月の締め日が長期休業を越えて当月以降に来ることがあります。期間は空にならず長くなります。D は月とともに単調に増える（減らない）ので、`closingMonth` は暦日の締めの月から後ろ・前へ順に探せば求まります
+- 性質のテストで、複数のカレンダー × 4 つの方法 × 締め日 1〜31・−1 について、空でない期間を順に並べると敷き詰められること、期間内の日で `closingMonth` が往復すること、空は `no-business-day` でだけ表れることを確かめます。この事態は呼び出し時の組み合わせで決まるので規則の診断では検出できず、README に書きました
+- 置き場所はカレンダー（営業日が要る）で、`buildCalendar` に置くので合成したカレンダー・スケジュールからのカレンダーにも付きます。ルートの暦日の版は別の結果を返すので別名ではありません（37 番）
+
+## 42. `kinds` は提供元の種別の型で受け、`cutoff` は時刻のない入力と組み合わせたら例外にする
+
+- `HolidayPattern<Kind>.kinds` を `readonly Kind[]` にし、`RecurringRule<Kind>`・`RecurringValue<T, Kind>` を通して `CalendarOptions<Kind>`・`ScheduleOptions<T, Kind>` に型引数を流します（0.15.0）。8 番が型引数 `Kind` を残した理由（日本の祝日で種別の補完が効く）が、`kinds` には届いていませんでした。種別は開いた型（2 番）なので、提供元にない文字列も型では通り（診断で `never-matches`）、既定値付きの型引数の追加は `RecurringRule` を単独で使うコードを壊しません
+- `businessDayOnOrAfter` の `cutoff` を、時刻を持たない入力（暦日の文字列・Temporal の `PlainDate` など）と組み合わせると `invalid-argument` にします（0.15.0）。それまでは暦日を 0 時として扱い、締め時刻は黙って無視されていました。注文の受付時刻を `Date` で渡すつもりがフォームの日付文字列をそのまま渡した、という事故が、出荷が間に合わなかったあとにしか分からないためです。4 番の「知っているキーの無効な組み合わせは例外」と同じ性格で、黙って通っていた呼び出しを止める変更なので CHANGELOG の「移行」と docs/migration.md に書きました（0.x のマイナー版で行える。1.0.0 以降なら行えない）。型では区別できません（文字列は暦日も日時も `string`）
