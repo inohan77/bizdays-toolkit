@@ -136,6 +136,7 @@ test("スケジュールからのカレンダー: isOpen は値だけを受け�
     name: "仕事始め",
     rulePath: "annual[1]",
     decidedBy: 0,
+    decidedByPath: [0],
   });
   assert.equal(combined.dayInfo("2026-10-14").decidedBy, 1);
 });

@@ -5,10 +5,10 @@
  * 読み込み方は環境ごとに違うので、呼び出し側が各サブパスのモジュールを渡す。
  * 本物の Temporal がある環境では、Temporal のオブジェクトを入力にした確認も行う。
  *
- * @param {{ root: any, jp: any, uk: any, diagnose: any }} modules
+ * @param {{ root: any, jp: any, uk: any, diagnose: any, provider: any }} modules
  * @returns {{ results: { name: string, ok: boolean, error?: string }[], temporal: "native" | "absent" }}
  */
-export function smoke({ root, jp, uk, diagnose }) {
+export function smoke({ root, jp, uk, diagnose, provider }) {
   const results = [];
   const check = (name, fn) => {
     try {
@@ -77,6 +77,13 @@ export function smoke({ root, jp, uk, diagnose }) {
       code = root.isBizdaysError(e) ? e.code : "not a bizdays error";
     }
     equal(code, "invalid-date", "error code");
+  });
+
+  check("提供元の実装者向けの暦の計算（第 n 何曜日・復活祭）", () => {
+    equal(provider.nthWeekdayOfMonth(2026, 11, 4, 4), "2026-11-26", "nthWeekdayOfMonth");
+    equal(provider.nthWeekdayOfMonth(2026, 5, 1, -1), "2026-05-25", "last Monday");
+    equal(root.addDays(provider.easterSunday(2026), -2), "2026-04-03", "Good Friday");
+    equal(provider.isLeapYear(2028) && provider.daysInMonth(2028, 2) === 29, true, "leap year");
   });
 
   const T = globalThis.Temporal;

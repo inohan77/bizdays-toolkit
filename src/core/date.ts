@@ -128,3 +128,25 @@ export function nthWeekdayOfMonth(
   const offset = (weekday - weekdayOf(formatDate(year, month, 1)) + 7) % 7;
   return formatDate(year, month, 1 + offset + (n - 1) * 7);
 }
+
+/**
+ * 復活祭の日曜日（グレゴリオ暦。Anonymous Gregorian algorithm）。英国の祝日の計算に使い、提供元の実装者向けに
+ * bizdays-toolkit/provider からも公開する（入力の検証はそちらで行う）
+ */
+export function easterSunday(year: number): DateString {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return formatDate(year, month, day);
+}

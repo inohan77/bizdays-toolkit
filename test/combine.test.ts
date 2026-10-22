@@ -43,7 +43,7 @@ test("合成（all）: すべてが営業している日だけ営業日。結果
   assert.equal(remittance.daysBetween("2026-12-28", "2026-12-29").length, 2);
 });
 
-test("合成: dayInfo は合成結果と同じ判定をした最初のカレンダーの結果と、その番号（decidedBy）", () => {
+test("合成: dayInfo は合成結果と同じ判定をした最初のカレンダーの結果と、その番号（decidedBy・decidedByPath）", () => {
   const all = combineCalendars([company, bank], { businessDay: "all" });
   assert.deepEqual(all.dayInfo("2026-12-29"), {
     date: "2026-12-29",
@@ -53,6 +53,7 @@ test("合成: dayInfo は合成結果と同じ判定をした最初のカレン�
     name: "年末年始休業",
     rulePath: "closedAnnual[0]",
     decidedBy: 0,
+    decidedByPath: [0],
   });
   assert.deepEqual(all.dayInfo("2026-12-26"), {
     date: "2026-12-26",
@@ -60,6 +61,7 @@ test("合成: dayInfo は合成結果と同じ判定をした最初のカレン�
     businessDay: false,
     reason: "closed-weekday",
     decidedBy: 1,
+    decidedByPath: [1],
   });
   assert.equal(all.dayInfo("2027-01-04").decidedBy, 0, "すべて営業なら 0 番");
   assert.equal(all.dayInfo("2027-01-01").holiday?.name, "元日");
@@ -72,12 +74,15 @@ test("合成: dayInfo は合成結果と同じ判定をした最初のカレン�
     businessDay: true,
     reason: "regular",
     decidedBy: 1,
+    decidedByPath: [1],
   });
   assert.equal(any.dayInfo("2026-12-26").decidedBy, 0, "自社の臨時営業で営業");
   assert.equal(any.dayInfo("2026-12-26").reason, "open-date");
   assert.equal(any.dayInfo("2027-01-02").decidedBy, 0, "すべて休みなら 0 番");
-  // 合成していないカレンダーには decidedBy が付かない
+  // 合成していないカレンダーには decidedBy・decidedByPath が付かない
   assert.equal("decidedBy" in company.dayInfo("2026-12-29"), false);
+  assert.equal("decidedByPath" in company.dayInfo("2026-12-29"), false);
+  assert.ok(Object.isFrozen(all.dayInfo("2026-12-29").decidedByPath));
 });
 
 test("合成: 振替の情報（shiftedFrom）も決めたカレンダーから引き継ぐ", () => {
@@ -97,6 +102,7 @@ test("合成: 振替の情報（shiftedFrom）も決めたカレンダーから�
     shiftedFrom: "2026-10-12",
     rulePath: "closedRecurring[0]",
     decidedBy: 0,
+    decidedByPath: [0],
   });
   assert.equal(
     both.dayInfo("2026-10-12").reason,
@@ -160,6 +166,7 @@ test("合成: 祝日の提供元は和集合、outOfRange はどれかが throw 
     businessDay: false,
     reason: "closed-weekday",
     decidedBy: 1,
+    decidedByPath: [1],
   });
   assert.equal(
     nested.dayInfo("2026-12-29").decidedBy,
@@ -167,6 +174,19 @@ test("合成: 祝日の提供元は和集合、outOfRange はどれかが throw 
     "合成したカレンダー（0 番）の年末年始休業",
   );
   assert.equal(nested.dayInfo("2026-12-29").name, "年末年始休業");
+  // 入れ子の合成では、内側のカレンダーまでの経路が decidedByPath で分かる（rulePath は [0, 0] 番の設定の位置）
+  assert.deepEqual(nested.dayInfo("2026-12-29").decidedByPath, [0, 0]);
+  assert.equal(nested.dayInfo("2026-12-29").rulePath, "closedAnnual[0]");
+  assert.deepEqual(
+    nested.dayInfo("2026-12-26").decidedByPath,
+    [0, 1],
+    "内側の 1 番（銀行）の定休日",
+  );
+  const deeper = combineCalendars([createCalendar({ holidays: jp, closedWeekdays: [1] }), nested], {
+    businessDay: "all",
+  });
+  assert.deepEqual(deeper.dayInfo("2026-12-29").decidedByPath, [1, 0, 0], "3 段の入れ子");
+  assert.equal(deeper.dayInfo("2026-12-29").decidedBy, 1);
 });
 
 test("合成: maxSearchDays と結果の凍結", () => {

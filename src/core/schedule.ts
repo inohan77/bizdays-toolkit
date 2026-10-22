@@ -13,6 +13,7 @@
  * "after-holiday" の規則は、祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）。
  * 毎年の月日・繰り返しの規則の有効期間（effectiveFrom・effectiveTo）の外では、その規則は書かれていないのと同じ。
  * 祝日の翌日の規則（dayAfterHoliday）は、前日が祝日でその日自身は祝日でない日に当てはまる（提供元の祝日だけで判定）。
+ * 祝前日の規則（dayBeforeHoliday）は、翌日が祝日でその日自身は祝日でない日に当てはまる（同じく提供元の祝日だけ）。
  * 祝日の規則（holiday: true。kinds で種別を絞れる）は、「祝日の上」の段階で判定する
  *
  * 営業日カレンダー（createCalendar）は、このスケジュールの真偽値版として作られている。
@@ -150,6 +151,7 @@ export interface WeekdayPattern {
   readonly months?: readonly Month[];
   readonly day?: never;
   readonly dayAfterHoliday?: never;
+  readonly dayBeforeHoliday?: never;
   readonly holiday?: never;
   readonly weekdays?: never;
   readonly kinds?: never;
@@ -169,6 +171,7 @@ export interface DayOfMonthPattern {
   readonly interval?: never;
   readonly anchor?: never;
   readonly dayAfterHoliday?: never;
+  readonly dayBeforeHoliday?: never;
   readonly holiday?: never;
   readonly weekdays?: never;
   readonly kinds?: never;
@@ -190,6 +193,29 @@ export interface DayAfterHolidayPattern {
   readonly interval?: never;
   readonly anchor?: never;
   readonly day?: never;
+  readonly dayBeforeHoliday?: never;
+  readonly holiday?: never;
+  readonly kinds?: never;
+}
+
+/**
+ * 祝前日（翌日が祝日で、その日自身は祝日でない日。連休なら連休の初日の前日）。「祝日」は提供元の祝日だけ。
+ * 祝日の翌日（dayAfterHoliday）の鏡像で、祝前日料金・祝前日の営業時間の延長・締め時刻の繰り上げなどを規則として書く。
+ * 当てはまる日は祝日でないので、onHolidayRule は指定できない（指定すると invalid-option）。
+ * @public
+ */
+export interface DayBeforeHolidayPattern {
+  readonly dayBeforeHoliday: true;
+  /** 当てはめる曜日（祝前日の曜日。省略時はすべての曜日。例: [1, 2, 3, 4, 5] で土日に当たる祝前日は除く） */
+  readonly weekdays?: readonly Weekday[];
+  /** 当てはめる月（祝前日の月。省略時はすべての月） */
+  readonly months?: readonly Month[];
+  readonly weekday?: never;
+  readonly nth?: never;
+  readonly interval?: never;
+  readonly anchor?: never;
+  readonly day?: never;
+  readonly dayAfterHoliday?: never;
   readonly holiday?: never;
   readonly kinds?: never;
 }
@@ -215,6 +241,7 @@ export interface HolidayPattern<Kind extends string = string> {
   readonly anchor?: never;
   readonly day?: never;
   readonly dayAfterHoliday?: never;
+  readonly dayBeforeHoliday?: never;
 }
 
 /**
@@ -225,6 +252,7 @@ export type RecurringPattern<Kind extends string = string> =
   | WeekdayPattern
   | DayOfMonthPattern
   | DayAfterHolidayPattern
+  | DayBeforeHolidayPattern
   | HolidayPattern<Kind>;
 
 /**
@@ -647,11 +675,13 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly days: ReadonlySet<number> | null;
   /** 祝日の翌日の規則か */
   readonly dayAfterHoliday: boolean;
+  /** 祝前日の規則か */
+  readonly dayBeforeHoliday: boolean;
   /** 祝日の規則か */
   readonly holiday: boolean;
   /** 祝日の規則で絞る種別（null はすべての祝日） */
   readonly kinds: ReadonlySet<string> | null;
-  /** 祝日・祝日の翌日の規則で絞る曜日（null はすべての曜日） */
+  /** 祝日・祝日の翌日・祝前日の規則で絞る曜日（null はすべての曜日） */
   readonly weekdays: ReadonlySet<number> | null;
   /** 月の集合（null はすべての月） */
   readonly months: ReadonlySet<number> | null;
@@ -713,12 +743,20 @@ export function compileRecurringRules<T>(
     const hasWeekday = "weekday" in entry;
     const hasDay = "day" in entry;
     const hasAfter = "dayAfterHoliday" in entry;
+    const hasBefore = "dayBeforeHoliday" in entry;
     const hasHoliday = "holiday" in entry;
-    if (Number(hasWeekday) + Number(hasDay) + Number(hasAfter) + Number(hasHoliday) !== 1) {
+    if (
+      Number(hasWeekday) +
+        Number(hasDay) +
+        Number(hasAfter) +
+        Number(hasBefore) +
+        Number(hasHoliday) !==
+      1
+    ) {
       c.error(
         "invalid-option",
         p,
-        'must have exactly one of "weekday", "day", "dayAfterHoliday" or "holiday"',
+        'must have exactly one of "weekday", "day", "dayAfterHoliday", "dayBeforeHoliday" or "holiday"',
       );
       return;
     }
@@ -788,7 +826,7 @@ export function compileRecurringRules<T>(
         if (set) days = set;
         else ok = false;
       } else {
-        const key = hasAfter ? "dayAfterHoliday" : "holiday";
+        const key = hasAfter ? "dayAfterHoliday" : hasBefore ? "dayBeforeHoliday" : "holiday";
         if (entry[key] !== true) {
           c.error("invalid-option", `${p}.${key}`, "must be true");
           ok = false;
@@ -799,7 +837,9 @@ export function compileRecurringRules<T>(
             `${p}.onHolidayRule`,
             hasAfter
               ? 'cannot be used with "dayAfterHoliday" (the day after a holiday is never a holiday)'
-              : 'cannot be used with "holiday" (the rule applies on holidays; it is judged before holidayPolicy)',
+              : hasBefore
+                ? 'cannot be used with "dayBeforeHoliday" (the day before a holiday is never a holiday)'
+                : 'cannot be used with "holiday" (the rule applies on holidays; it is judged before holidayPolicy)',
           );
           ok = false;
         }
@@ -829,11 +869,11 @@ export function compileRecurringRules<T>(
     }
     let weekdays: Set<number> | null = null;
     if ("weekdays" in entry) {
-      if (!hasHoliday && !hasAfter) {
+      if (!hasHoliday && !hasAfter && !hasBefore) {
         c.error(
           "invalid-option",
           `${p}.weekdays`,
-          '"weekdays" can be used only with "holiday" or "dayAfterHoliday"',
+          '"weekdays" can be used only with "holiday", "dayAfterHoliday" or "dayBeforeHoliday"',
         );
         ok = false;
       } else if (!Array.isArray(entry["weekdays"])) {
@@ -887,6 +927,7 @@ export function compileRecurringRules<T>(
           anchor,
           days,
           dayAfterHoliday: hasAfter,
+          dayBeforeHoliday: hasBefore,
           holiday: hasHoliday,
           kinds,
           weekdays,
@@ -902,13 +943,13 @@ export function compileRecurringRules<T>(
   return rules;
 }
 
-/** @internal その日の祝日を返す関数（祝日・祝日の翌日の規則の判定に使う。提供元の対応年の外は祝日でないとみなすこと） */
+/** @internal その日の祝日を返す関数（祝日・祝日の翌日・祝前日の規則の判定に使う。提供元の対応年の外は祝日でないとみなすこと） */
 export type HolidayOf = (date: DateString) => Holiday<string> | undefined;
 
 /**
- * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・祝日の翌日・月）がその日に当てはまるか。
+ * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・祝日・祝日の翌日・祝前日・月）がその日に当てはまるか。
  * 有効期間は考えない（規則の診断で、形どうしの包含を調べるために分けている）。
- * 祝日の翌日の規則は isHoliday で判定し、isHoliday を渡さなければ当てはまらない
+ * 祝日に従属する規則は holidayOf で判定し、holidayOf を渡さなければ当てはまらない
  */
 export function matchPattern(
   rule: RecurringRuleCompiled<unknown>,
@@ -917,14 +958,16 @@ export function matchPattern(
 ): boolean {
   const { year, month, day } = parseDate(date);
   if (rule.months && !rule.months.has(month)) return false;
-  if (rule.holiday || rule.dayAfterHoliday) {
+  if (rule.holiday || rule.dayAfterHoliday || rule.dayBeforeHoliday) {
     if (holidayOf === undefined) return false;
     if (rule.weekdays && !rule.weekdays.has(weekdayOf(date))) return false;
     if (rule.holiday) {
       const h = holidayOf(date);
       return h !== undefined && (rule.kinds === null || rule.kinds.has(h.kind));
     }
-    return holidayOf(date) === undefined && holidayOf(addDays(date, -1)) !== undefined;
+    // 祝日の翌日は前日が祝日、祝前日は翌日が祝日（どちらもその日自身は祝日でない）
+    if (holidayOf(date) !== undefined) return false;
+    return holidayOf(addDays(date, rule.dayAfterHoliday ? -1 : 1)) !== undefined;
   }
   const dim = daysInMonth(year, month);
   if (rule.weekday !== null) {
@@ -1233,6 +1276,7 @@ export const RECURRING_RULE_KEYS = [
   "anchor",
   "day",
   "dayAfterHoliday",
+  "dayBeforeHoliday",
   "holiday",
   "kinds",
   "weekdays",

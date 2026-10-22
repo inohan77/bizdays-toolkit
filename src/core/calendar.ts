@@ -176,6 +176,12 @@ export interface DayInfo<Kind extends string = string> {
    * reason・name・shiftedFrom・rulePath はそのカレンダーの結果。合成していないカレンダーでは付かない
    */
   readonly decidedBy?: number;
+  /**
+   * 合成したカレンダーで、判定を決めたカレンダーまでの番号の列（外側から順）。入れ子でない合成では長さ 1 で、
+   * 先頭は decidedBy と同じ。合成したカレンダーをさらに合成したとき、rulePath がどのカレンダーの設定の位置かを
+   * 結果だけから辿れる（例: [0, 1] は 0 番のカレンダーの中の 1 番）。合成していないカレンダーでは付かない
+   */
+  readonly decidedByPath?: readonly number[];
 }
 
 /**
@@ -717,7 +723,8 @@ const isCalendarLike = (v: unknown): v is Calendar =>
  * 営業している日を営業日とする。返すのは通常の営業日カレンダーで、営業日の加減算・調整・期日などが合成結果で動く。
  *
  * - dayInfo の reason・name・shiftedFrom・rulePath は、合成結果と同じ判定をした最初のカレンダーの結果で、
- *   その番号を decidedBy で返す。holiday・isHoliday などは、すべてのカレンダーの祝日の提供元の和集合で判定する
+ *   その番号を decidedBy で返す。入れ子の合成では、内側の番号まで含めた列を decidedByPath で返す。
+ *   holiday・isHoliday などは、すべてのカレンダーの祝日の提供元の和集合で判定する
  * - タイムゾーンはすべてのカレンダーで同じでなければならない（time-zone-conflict）。
  *   2 つ未満、同じカレンダーを 2 回渡した場合は invalid-argument
  * - 合成したカレンダーをさらに合成することもできる。規則の診断（diagnoseCalendar）の対象にはならないので、
@@ -789,6 +796,8 @@ export function combineCalendars<Kind extends string = string>(
     if (base.shiftedFrom !== undefined) result.shiftedFrom = base.shiftedFrom;
     if (base.rulePath !== undefined) result.rulePath = base.rulePath;
     result.decidedBy = decidedBy;
+    // 内側が合成したカレンダーなら、その経路の前に自分の番号を付ける（入れ子でなければ長さ 1）
+    result.decidedByPath = Object.freeze([decidedBy, ...(base.decidedByPath ?? [])]);
     return Object.freeze(result);
   }
 

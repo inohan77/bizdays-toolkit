@@ -4,6 +4,32 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-23
+
+### 移行
+
+日時の文字列の区切りは `T` だけになり、空白で区切った文字列（`"2026-11-23 10:00"`）は `invalid-time` の Error になる（これまでは実行時だけ受け付けていた。型 `DateTimeInput` は以前から `T` 区切りだけ）。合成した `dayInfo` に `decidedByPath` が加わるので、`deepEqual` で比べているテストは期待値に足す。ほかは動作が変わらない（祝前日の規則・サブパス・合成の項目の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- 繰り返しの規則に祝前日の形 `{ dayBeforeHoliday: true }` を追加した（型 `DayBeforeHolidayPattern`）。翌日が提供元の祝日でその日自身は祝日でない日に当てはまり、連休なら連休の初日の前日だけ。`{ dayAfterHoliday: true }` の鏡像で、`weekdays`・`months`・有効期間を付けられ、`onHolidayRule` は `invalid-option`。宿泊の祝前日料金・飲食店の祝前日の営業時間・祝前日の出荷の締めの繰り上げを規則として書ける。診断の `never-matches`・`shadowed` も扱う
+- 祝日の提供元を実装する人向けのサブパス `bizdays-toolkit/provider` を追加した（`@beta`）。内部で使っている暦の計算 `easterSunday(year)`（グレゴリオ暦の復活祭。英国の祝日で GOV.UK のデータと照合済み）、`nthWeekdayOfMonth(year, month, weekday, n)`（`n` は 1〜5 と -1（最後））、`daysInMonth`、`isLeapYear` を、入力の検証を付けて公開する。米国の連邦祝日やドイツ・豪州の州の祝日のように、第 n 曜日と復活祭で決まる提供元が書ける
+- 合成したカレンダーの `dayInfo` に `decidedByPath`（判定を決めたカレンダーまでの番号の列。外側から順）を追加した。合成したカレンダーをさらに合成したとき、`rulePath` がどのカレンダーの設定の位置かを結果だけから辿れる。`decidedBy` は外側の番号のまま
+
+### Changed
+
+- 日時の文字列の区切りを `T` だけにし、空白で区切った文字列は `invalid-time` にした（上の「移行」）
+- README: 繰り返しの規則の節に祝前日、他の国・地域の祝日の節に `bizdays-toolkit/provider` と復活祭で決まる提供元の例、合成の節に `decidedByPath`、日付・日時の入力の節に区切りの条件、確かめている環境に Bun・Deno を足した。サイズの値を測り直した（ルート約 9.8KB・日本の祝日込み約 11.6KB・英国の祝日込み約 11.5KB。0.16.0 で測定）
+- `docs/decisions.md`: 14 番に年ごとの列挙で足りる理由、26 番に Bun・Deno、29 番に空白区切りの廃止、33 番に祝前日を足した経緯、36 番に曜日の日に `rulePath` を付けない理由の書き直し（位置は書けるが冗長）、41 番に次の月に併合する側を選んだ理由を書き、43 番（祝前日・provider・`decidedByPath`・空白区切りの廃止・Bun と Deno の確認）を追加した
+- `RELEASING.md`: 確認の表と固定する版の一覧に `bun`・`deno` ジョブを足した
+
+### 開発
+
+- CI に `bun`・`deno` ジョブを追加した。公開する `dist` を Bun 1.4.3 と Deno 2.9.7（`--unstable-temporal`。本物の Temporal も確かめる）で、`test/compat/runtime.mjs` から `smoke.mjs` を実行して確かめる。どちらも版と SHA-256 を固定した公式のリリースを取得する（workerd と同じ方式）。`smoke.mjs` に `bizdays-toolkit/provider` の確認を足した（Node.js・ブラウザー・workerd・CJS の確認も同じものを呼ぶ）
+- `easterSunday` を `src/uk/rules.ts` から `src/core/date.ts` に移した（結果は変わらない。provider のサブパスが英国のデータを引き込まないため）
+- 規則の診断の性質のテストの生成器に祝前日を加えた。`test/day-before-holiday.test.ts`・`test/provider.test.ts` を新規に足し、利用者の型チェックに祝前日・`decidedByPath`・provider を足した
+- サイズの上限（`size-limits.json`）を上げ、`./provider` のエントリーを足した。ルート 23,000 → 24,000、`./jp` 26,000 → 27,000、`./diagnose` 29,500 → 30,500（gzip）。祝前日の検証・判定・診断と `decidedByPath` のため。`./provider` は 4,500（日付とエラーの共通の実装を含む）
+
 ## [0.15.0] - 2026-10-21
 
 ### 移行
@@ -405,7 +431,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.13.0...v0.14.0

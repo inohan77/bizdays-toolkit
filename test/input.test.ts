@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCalendar, toDateString } from "../src/index.ts";
+import { createCalendar, isBizdaysError, toDateString } from "../src/index.ts";
 import { isHoliday, jp, toJapanDate } from "../src/jp/index.ts";
 
 test("瞬間は祝日の提供元のタイムゾーン（日本時間）で暦日にする", () => {
@@ -47,4 +47,20 @@ test("不正な入力", () => {
   assert.throws(() => toJapanDate(new Date(Number.NaN)), RangeError);
   assert.throws(() => toJapanDate(20261123 as unknown as string), TypeError);
   assert.throws(() => createCalendar({ timeZone: "Asia/Nowhere" }), RangeError);
+});
+
+test("日付と時刻の区切りは T だけ（空白で区切った文字列は 0.16.0 から invalid-time。型 DateTimeInput と同じ）", () => {
+  assert.equal(toDateString("2026-11-23T10:00", "Asia/Tokyo"), "2026-11-23");
+  assert.equal(
+    toDateString("2026-11-23t10:00", "Asia/Tokyo"),
+    "2026-11-23",
+    "小文字の t は ISO 8601 で許される",
+  );
+  for (const value of ["2026-11-23 10:00", "2026-11-23 10:00:00Z", "2026-11-23 10:00+09:00"]) {
+    assert.throws(
+      () => toDateString(value, "Asia/Tokyo"),
+      (e: unknown) => isBizdaysError(e) && e.code === "invalid-time",
+      value,
+    );
+  }
 });

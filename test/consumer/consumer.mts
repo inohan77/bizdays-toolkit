@@ -14,6 +14,7 @@ import {
   type ScheduleDay,
 } from "bizdays-toolkit";
 import { diagnoseCalendar, type Diagnostic } from "bizdays-toolkit/diagnose";
+import { easterSunday, nthWeekdayOfMonth } from "bizdays-toolkit/provider";
 import { jp, toJapanDateTime, type JapaneseHoliday } from "bizdays-toolkit/jp";
 import { scotland, wales, type UkHoliday } from "bizdays-toolkit/uk";
 
@@ -35,6 +36,16 @@ const combined = combineCalendars(
 );
 const decidedBy: number | undefined = combined.dayInfo("2026-11-24").decidedBy;
 void decidedBy;
+const decidedByPath: readonly number[] | undefined = combined.dayInfo("2026-11-24").decidedByPath;
+void decidedByPath;
+createCalendar({
+  holidays: jp,
+  closedRecurring: [{ dayBeforeHoliday: true, weekdays: [1, 2, 3, 4, 5], months: [5] }],
+});
+const easter: string = easterSunday(2026);
+const thanksgiving: string = nthWeekdayOfMonth(2026, 11, 4, 4);
+void easter;
+void thanksgiving;
 const rulePath: string | undefined = combined.dayInfo("2026-11-24").rulePath;
 void rulePath;
 createCalendar({ holidays: jp, openRecurring: [{ holiday: true, kinds: ["substitute"] }] });

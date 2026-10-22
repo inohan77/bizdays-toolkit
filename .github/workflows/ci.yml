@@ -120,6 +120,57 @@ jobs:
           "${RUNNER_TEMP}/workerd" --version
       - run: node scripts/test-workerd.ts "${RUNNER_TEMP}/workerd"
 
+  bun:
+    # 公開する dist を Bun で確かめる（decisions.md の 26・43 番）。workerd と同じく npm の依存にせず、
+    # 版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - name: Install Bun
+        env:
+          BUN_VERSION: "1.4.3"
+          BUN_SHA256: "3e730528d89775f03f87f05c06787c4df4099d0a37f3f252e7b829cb23816e18"
+        run: |
+          curl -fsSL -o "${RUNNER_TEMP}/bun.zip" \
+            "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"
+          echo "${BUN_SHA256}  ${RUNNER_TEMP}/bun.zip" | sha256sum -c -
+          unzip -q "${RUNNER_TEMP}/bun.zip" -d "${RUNNER_TEMP}/bun"
+          "${RUNNER_TEMP}/bun/bun-linux-x64/bun" --version
+      - name: Check dist on Bun
+        run: '"${RUNNER_TEMP}/bun/bun-linux-x64/bun" run test/compat/runtime.mjs'
+
+  deno:
+    # 公開する dist を Deno で確かめる（decisions.md の 26・43 番）。Deno の本物の Temporal でも確かめるため --unstable-temporal を付ける
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - name: Install Deno
+        env:
+          DENO_VERSION: "2.9.7"
+          DENO_SHA256: "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
+        run: |
+          curl -fsSL -o "${RUNNER_TEMP}/deno.zip" \
+            "https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip"
+          echo "${DENO_SHA256}  ${RUNNER_TEMP}/deno.zip" | sha256sum -c -
+          unzip -q "${RUNNER_TEMP}/deno.zip" -d "${RUNNER_TEMP}/deno"
+          "${RUNNER_TEMP}/deno/deno" --version
+      - name: Check dist on Deno
+        run: '"${RUNNER_TEMP}/deno/deno" run --unstable-temporal test/compat/runtime.mjs'
+
   consumer-types:
     # 公開する型定義を、利用者が使う TypeScript の複数の版で型チェックする（decisions.md の 38 番）。
     # pnpm check は開発用の版（6.0）だけなので、約束する下限（5.0）・bundler が安定した 5.5・5 系の最終（5.8）・

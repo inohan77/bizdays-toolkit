@@ -21,6 +21,7 @@ const SUBPATHS = [
   "bizdays-toolkit/jp",
   "bizdays-toolkit/uk",
   "bizdays-toolkit/diagnose",
+  "bizdays-toolkit/provider",
 ];
 
 /** ほかのブロックで定義した値を使う断片のための定義（使っていて、ブロック内で定義していないときだけ補う） */

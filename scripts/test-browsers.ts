@@ -57,9 +57,10 @@ const page = `<!doctype html>
   import * as root from "/dist/index.js";
   import * as diagnose from "/dist/diagnose/index.js";
   import * as jp from "/dist/jp/index.js";
+  import * as provider from "/dist/provider/index.js";
   import * as uk from "/dist/uk/index.js";
   import { smoke } from "/test/compat/smoke.mjs";
-  window.__results = smoke({ root, jp, uk, diagnose });
+  window.__results = smoke({ root, jp, uk, diagnose, provider });
 </script>
 `;
 

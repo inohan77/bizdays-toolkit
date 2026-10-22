@@ -85,7 +85,7 @@ test("weekdays: 入力の誤り", () => {
   const cases: [unknown, RegExp][] = [
     [
       { weekday: 1, weekdays: [1] },
-      /closedRecurring\[0\]\.weekdays: "weekdays" can be used only with "holiday" or "dayAfterHoliday"/,
+      /closedRecurring\[0\]\.weekdays: "weekdays" can be used only with "holiday", "dayAfterHoliday" or "dayBeforeHoliday"/,
     ],
     [{ day: 1, weekdays: [1] }, /\.weekdays/],
     [{ holiday: true, weekdays: [] }, /closedRecurring\[0\]\.weekdays/],

@@ -235,6 +235,25 @@ export interface DayAfterHolidayPattern {
     readonly interval?: never;
     readonly anchor?: never;
     readonly day?: never;
+    readonly dayBeforeHoliday?: never;
+    readonly holiday?: never;
+    readonly kinds?: never;
+}
+```
+
+### DayBeforeHolidayPattern (@public)
+
+```ts
+export interface DayBeforeHolidayPattern {
+    readonly dayBeforeHoliday: true;
+    readonly weekdays?: readonly Weekday[];
+    readonly months?: readonly Month[];
+    readonly weekday?: never;
+    readonly nth?: never;
+    readonly interval?: never;
+    readonly anchor?: never;
+    readonly day?: never;
+    readonly dayAfterHoliday?: never;
     readonly holiday?: never;
     readonly kinds?: never;
 }
@@ -253,6 +272,7 @@ export interface DayInfo<Kind extends string = string> {
     readonly shiftedFrom?: DateString;
     readonly rulePath?: string;
     readonly decidedBy?: number;
+    readonly decidedByPath?: readonly number[];
 }
 ```
 
@@ -273,6 +293,7 @@ export interface DayOfMonthPattern {
     readonly interval?: never;
     readonly anchor?: never;
     readonly dayAfterHoliday?: never;
+    readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
     readonly weekdays?: never;
     readonly kinds?: never;
@@ -361,6 +382,7 @@ export interface HolidayPattern<Kind extends string = string> {
     readonly anchor?: never;
     readonly day?: never;
     readonly dayAfterHoliday?: never;
+    readonly dayBeforeHoliday?: never;
 }
 ```
 
@@ -471,7 +493,7 @@ export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
 ### RecurringPattern (@public)
 
 ```ts
-export type RecurringPattern<Kind extends string = string> = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern | HolidayPattern<Kind>;
+export type RecurringPattern<Kind extends string = string> = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern | DayBeforeHolidayPattern | HolidayPattern<Kind>;
 ```
 
 ### RecurringRule (@public)
@@ -623,6 +645,7 @@ export interface WeekdayPattern {
     readonly months?: readonly Month[];
     readonly day?: never;
     readonly dayAfterHoliday?: never;
+    readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
     readonly weekdays?: never;
     readonly kinds?: never;
@@ -802,4 +825,30 @@ export type DiagnosticSeverity = "error" | "warning" | "info";
 
 ```ts
 export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "shadowed" | "never-matches" | "redundant";
+```
+
+## bizdays-toolkit/provider
+
+### daysInMonth (@beta)
+
+```ts
+export declare function daysInMonth(year: number, month: number): number;
+```
+
+### easterSunday (@beta)
+
+```ts
+export declare function easterSunday(year: number): DateString;
+```
+
+### isLeapYear (@beta)
+
+```ts
+export declare function isLeapYear(year: number): boolean;
+```
+
+### nthWeekdayOfMonth (@beta)
+
+```ts
+export declare function nthWeekdayOfMonth(year: number, month: number, weekday: Weekday, n: number): DateString;
 ```

@@ -28,7 +28,7 @@
 - **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
 - **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 9.7KB（日本の祝日込みで約 11.5KB、英国の祝日込みで約 11.4KB。0.15.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers を確認しています
+- **軽量・依存ゼロ**: minify + gzip で約 9.8KB（日本の祝日込みで約 11.6KB、英国の祝日込みで約 11.5KB。0.16.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno を確認しています
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。日本と英国を同梱しています
 
 ## インストール
@@ -37,7 +37,7 @@
 pnpm add bizdays-toolkit
 ```
 
-Node.js 22.12 以上。CI で Node.js 22.12・22・24・26、Chrome・Firefox・Edge（Linux）と Safari（macOS）、Cloudflare Workers（Workers のオープンソースの実行環境 workerd）を確認しています。ブラウザーは GitHub のランナーに入っている最新の安定版なので、ランナーの更新で版が変わります。ESM のみですが、CommonJS からも `require()` で読み込めます（これも CI で確認しています。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ますが、結果には影響しません。Node.js 26 では出ません）。ほかの実行環境（Deno・Bun・Vercel の Edge Runtime など）は確認していません。
+Node.js 22.12 以上。CI で Node.js 22.12・22・24・26、Chrome・Firefox・Edge（Linux）と Safari（macOS）、Cloudflare Workers（Workers のオープンソースの実行環境 workerd）、Bun（1.4）・Deno（2.9）を確認しています。ブラウザーは GitHub のランナーに入っている最新の安定版なので、ランナーの更新で版が変わります。ESM のみですが、CommonJS からも `require()` で読み込めます（これも CI で確認しています。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ますが、結果には影響しません。Node.js 26 では出ません）。Vercel の Edge Runtime は確認していません。
 
 型定義を同梱しています。CI で、利用者のプロジェクトとして公開する型定義を、TypeScript 5.0・5.5・5.8・6.0・7.0（ネイティブ版）のそれぞれで、`moduleResolution` を `node16`・`nodenext`・`bundler` にして型チェックし、わざと入れた型エラーが各版で報告されることも確かめています。
 
@@ -136,9 +136,9 @@ shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.businessDay); // [
 
 この順番は固定です。繰り返しの規則と祝日の関係だけは、規則ごとに `onHolidayRule` で選べます（次の節）。
 
-### 繰り返しの規則（毎週・隔週・毎月の第 n 曜日・毎月の日・祝日・祝日の翌日）
+### 繰り返しの規則（毎週・隔週・毎月の第 n 曜日・毎月の日・祝日・祝日の翌日と前日）
 
-「第 3 水曜定休」「第 2・第 4 土曜休業」「隔週水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」「振替休日は営業」「祝日の翌日は休館」のような繰り返しの休業日・営業日は、`closedRecurring`・`openRecurring` で指定します。
+「第 3 水曜定休」「第 2・第 4 土曜休業」「隔週水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」「振替休日は営業」「祝日の翌日は休館」「祝前日は夜間営業」のような繰り返しの休業日・営業日は、`closedRecurring`・`openRecurring` で指定します。
 
 ```ts
 const museum = createCalendar({
@@ -168,6 +168,7 @@ museum.isBusinessDay("2026-05-07"); // false（5 月 3〜6 日の連休の翌日
 | `{ day: 20 }`                                       | 毎月 20 日。`day` は 1〜31 と -1（末日）。配列で複数指定できる                               |
 | `{ holiday: true, kinds: ["substitute"] }`          | 祝日。`kinds` でその種別（`Holiday.kind`）に絞れる。`holidayPolicy` より先に判定する（下記） |
 | `{ dayAfterHoliday: true }`                         | 祝日の翌日。祝日（連休なら連休）が明けた最初の祝日でない日（提供元の祝日だけで判定）         |
+| `{ dayBeforeHoliday: true }`                        | 祝前日。祝日（連休なら連休）の直前の祝日でない日（提供元の祝日だけで判定）                   |
 | `months: [8, 12]`                                   | どの書き方にも付けられる、月の絞り込み                                                       |
 | `effectiveFrom: "2027-04-01"`・`effectiveTo: "…"`   | 規則の有効期間（両端を含む）。期間の外では、その規則は書かれていないのと同じになる（下記）   |
 
@@ -176,6 +177,7 @@ museum.isBusinessDay("2026-05-07"); // false（5 月 3〜6 日の連休の翌日
 - **隔週**（`interval: 2`）は「第 1・第 3 水曜」（`nth: [1, 3]`）とは別物です。水曜日が 5 回ある月で、後者は 1 週ずれます。`interval` は周期の週数（2 以上の整数）、`anchor` は周期が通る日付（`weekday` と同じ曜日）で、その日と、その日から `interval` 週おきの前後の日に当てはまります。店舗は「1 月 7 日から隔週水曜」のように告知するので、その日付をそのまま書きます。起点より前の日に当てはめず起点から始めるには、`effectiveFrom` を併せて指定します。`interval` は `nth` とは併用できません
 - **祝日の規則**（`{ holiday: true }`）は、祝日の既定の扱いの例外を書きます。「2027 年 4 月から祝日も営業」は `holidayPolicy: "closed"` のまま `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]`、「振替休日と国民の休日は営業」は `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`、スケジュールの「5 月の祝日は特別営業時間」は `recurring: [{ holiday: true, months: [5], value: … }]` です。`kinds` はその種別（`Holiday.kind`。種別は提供元の一覧を参照。`holidays: jp` ならエディターで補完が効きます）の祝日に、`weekdays` はその曜日（「土曜の祝日は午前診療」は `{ holiday: true, weekdays: [6], value: … }`）に、`months` はその月に絞り、省略すればすべての祝日です。判定は「祝日の上」の段階で、`holidayPolicy`・スケジュールの `holiday` より先に行い、`holidayPolicy: "ignore"` でも当てはまります。当てはまる日は祝日なので、この規則に `onHolidayRule` は指定できません（`invalid-option`）。`holiday` には祝日がそのまま付きます
 - **祝日の翌日**は定義上祝日でないので、その規則に `onHolidayRule` は指定できません（`invalid-option`）。「祝日」は提供元の祝日で、毎年の休業日などは含みません。提供元のない設定では 1 日も当てはまりません。`weekdays` でその曜日に絞れます。美術館の「祝日の翌日は休館（土曜・日曜に当たる場合は開館）」は `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` です（代わりに `openRecurring` で土日を開けると、ほかの土日の休館まで打ち消してしまいます）
+- **祝前日**（`{ dayBeforeHoliday: true }`）はその鏡像で、翌日が祝日でその日自身は祝日でない日です。連休の前は連休の初日の前日だけが当てはまります（2026 年 5 月なら 5 月 2 日（土）だけで、5 月 4 日・5 日は祝日なので当てはまりません）。扱いは祝日の翌日と同じです（`weekdays`・`months`・有効期間を付けられ、`onHolidayRule` は指定できず、提供元がなければ当てはまりません）。スケジュールの「祝前日料金」、「祝前日は深夜 2 時まで営業」（`weekdays: [1, 2, 3, 4, 5]` で土日に当たる祝前日は通常どおり）、「祝前日は当日出荷の受付を正午まで」（締め時刻をスケジュールの値にして `cutoffs.valueOn(date)` を `cutoff` に渡す）のように書きます
 - 繰り返しの規則どうしは配列で先に書いたものが優先で、`openRecurring` は `closedRecurring` より優先です。月曜の勤労感謝の日（2026-11-23）の翌日は、月曜の規則の振替先でもあり祝日の翌日でもあります。先に書いた規則が決め、どちらが決めたかは `dayInfo` で分かります
 
 **有効期間**（`effectiveFrom`・`effectiveTo`）を付けると、規則の変更を 1 つのカレンダーで表しながら、過去の日付の判定も変えずに再現できます。繰り返しの規則と、毎年の休業日（`closedAnnual` のオブジェクトの形）に付けられます。
@@ -223,8 +225,11 @@ const hours = createSchedule<Hours>({
   recurring: [
     { weekday: 1, value: null, name: "月曜休業", onHolidayRule: "after-holiday" },
     { day: -1, value: { open: "10:00", close: "17:00" }, name: "月末は短縮営業" },
+    { dayBeforeHoliday: true, value: { open: "10:00", close: "23:00" }, name: "祝前日は夜間営業" },
   ],
 });
+hours.valueOn("2026-05-02"); // { open: "10:00", close: "23:00" }（5 月 3〜6 日の連休の前日）
+hours.dayInfo("2026-05-04").reason; // "weekday"（連休の中の祝日は祝前日ではない）
 ```
 
 ### カレンダーの合成
@@ -250,7 +255,7 @@ const bank = createCalendar({
 const remittance = combineCalendars([company, bank], { businessDay: "all" });
 remittance.addBusinessDays("2026-12-28", 2); // "2027-01-05"
 remittance.dayInfo("2026-12-29");
-// { date: "2026-12-29", weekday: 2, businessDay: false, reason: "closed-annual", name: "年末年始休業", rulePath: "closedAnnual[0]", decidedBy: 0 }
+// { date: "2026-12-29", weekday: 2, businessDay: false, reason: "closed-annual", name: "年末年始休業", rulePath: "closedAnnual[0]", decidedBy: 0, decidedByPath: [0] }
 
 // 複数の店舗のどこかが開いている日
 const anyStore = combineCalendars([company, bank], { businessDay: "any" });
@@ -258,6 +263,7 @@ anyStore.isBusinessDay("2026-12-29"); // true
 ```
 
 - `dayInfo` の `reason`・`name`・`shiftedFrom`・`rulePath` は、合成結果と同じ判定をした最初のカレンダーの結果で、そのカレンダーの番号（渡した配列の位置）を `decidedBy` で返します（`rulePath` はそのカレンダーの設定の中の位置です）。`"all"` なら、休業日は最初に休みだったカレンダー、営業日は 0 番（すべて営業）です。`"any"` はその逆です
+- `decidedByPath` は、判定を決めたカレンダーまでの番号の列（外側から順）です。合成したカレンダーをさらに合成したとき、`rulePath` がどのカレンダーの設定の位置かを結果だけから辿れます。入れ子でない合成では `[0]` のように長さ 1 で `decidedBy` と同じ、入れ子では `[0, 1]`（0 番のカレンダーの中の 1 番）のようになります。`decidedBy` は外側の番号のままです
 - `holiday`・`isHoliday`・`holidaysInYear` などは、すべてのカレンダーの祝日の提供元の和集合で判定します。同じ提供元のオブジェクトは 1 つに数え、包んだ提供元（`jp` から一部の種別を除いたものなど）は別の提供元として残り、同じ日付に祝日のある提供元が 2 つあれば、先のカレンダーの提供元の祝日を `holiday` に付けます。そのため、包んだ `jp` のカレンダーと `jp` そのもののカレンダーを合成すると、営業日の判定は変わらないまま、除いたはずの祝日が `holiday` に付きます。`outOfRange` は、どれかのカレンダーが対応年の外で例外になるなら `"throw"` です
 - タイムゾーンはすべてのカレンダーで同じでなければなりません（違えば `time-zone-conflict`）。2 つ未満、同じカレンダーを 2 回渡すと `invalid-argument` です。`maxSearchDays`（既定 3660）をオプションで指定できます
 - 合成したカレンダーをさらに合成することもできます。設定の診断は設定に対して行うものなので、合成したカレンダーではなく、元のカレンダーの設定をそれぞれ診断してください
@@ -507,7 +513,7 @@ calendar.dayInfo("2027-01-04");
 | Temporal の `PlainDate`・`PlainDateTime`             | 暦日・日時（Temporal への依存はありません）    |
 | Temporal の `Instant`・`ZonedDateTime`               | 瞬間                                           |
 
-Temporal のオブジェクトは形で判別するので、Temporal には依存しません。CI では、Temporal を備えた実行環境で、本物の Temporal のオブジェクトでも確かめています（どの環境に Temporal があったかは CI のログに出ます）。
+日付と時刻の区切りは `T`（大文字・小文字）だけで、型 `DateTimeInput` と同じです。空白で区切った文字列（`"2026-11-23 10:00"`）は `invalid-time` の例外になります。Temporal のオブジェクトは形で判別するので、Temporal には依存しません。CI では、Temporal を備えた実行環境で、本物の Temporal のオブジェクトでも確かめています（どの環境に Temporal があったかは CI のログに出ます）。
 
 カレンダーのタイムゾーンは、`timeZone` オプション、祝日の提供元のタイムゾーン、`"UTC"` の順に決まります。
 
@@ -554,6 +560,38 @@ const myCountry: HolidayProvider = {
   ],
 };
 const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] });
+```
+
+他の国・地域の祝日の多くは「月の第 n 何曜日」（米国の連邦祝日）か「復活祭からの日数」（ヨーロッパの多くの国）で決まります。`bizdays-toolkit/provider` は、同梱の提供元が使っているこの暦の計算をそのまま公開するもので、提供元を書く人が各自に実装して検証し直す必要がなくなります。`nthWeekdayOfMonth(year, month, weekday, n)`（`n` は 1〜5 と -1（最後））、`easterSunday(year)`（グレゴリオ暦。英国の提供元で GOV.UK のデータと照合済み）、`daysInMonth(year, month)`、`isLeapYear(year)` があり、ルートの `addDays`・`weekdayOf` と組み合わせます。これらの関数は `@beta` です（使われ方が固まるまで、マイナー版で変わることがあります）。
+
+```ts
+import { addDays, createCalendar, type HolidayProvider } from "bizdays-toolkit";
+import { easterSunday, nthWeekdayOfMonth } from "bizdays-toolkit/provider";
+
+const bavaria: HolidayProvider<"public"> = {
+  id: "DE-BY",
+  timeZone: "Europe/Berlin",
+  supportedYears: { from: 2000, to: 2100 },
+  dataVersion: "example",
+  holidaysInYear: (year) => {
+    const easter = easterSunday(year);
+    const day = (date: string, name: string, nameEn: string) => ({
+      date,
+      name,
+      nameEn,
+      kind: "public" as const,
+      confirmed: true,
+    });
+    return [
+      day(addDays(easter, -2), "Karfreitag", "Good Friday"),
+      day(addDays(easter, 1), "Ostermontag", "Easter Monday"),
+      day(addDays(easter, 60), "Fronleichnam", "Corpus Christi"),
+    ];
+  },
+};
+createCalendar({ holidays: bavaria }).isHoliday("2026-06-04"); // true（Fronleichnam）
+nthWeekdayOfMonth(2026, 11, 4, 4); // "2026-11-26"（11 月第 4 木曜: 米国の Thanksgiving Day）
+nthWeekdayOfMonth(2026, 5, 1, -1); // "2026-05-25"（5 月最終月曜: 米国の Memorial Day）
 ```
 
 祝日には、ほかの言語の名称を `names` で付けられます。キーは BCP 47 の言語タグの正規の形（`"zh-Hant"`・`"ko"` など）です。同梱の日本の祝日は `names` を持ちません（公式の出典がある日本語・英語だけを同梱しています）。英国では Wales だけがウェールズ語の名称を持ちます。必要な場合は、提供元を包んで付けます。

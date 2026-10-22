@@ -29,7 +29,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **A calendar from a schedule**: `createCalendarFromSchedule` turns a schedule such as store hours into a business-day calendar, so the hours are the only configuration and business-day arithmetic works on them
 - **Combining calendars**: `combineCalendars` builds a calendar of the days on which all of several calendars are open (your company and the bank, for a remittance date) or any of them is open (any of several stores), and business-day arithmetic works on the result
 - **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
-- **Lightweight, zero dependencies**: about 9.7 KB min+gzip (about 11.5 KB with Japanese holidays, about 11.4 KB with UK bank holidays; measured for 0.15.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari and Cloudflare Workers
+- **Lightweight, zero dependencies**: about 9.8 KB min+gzip (about 11.6 KB with Japanese holidays, about 11.5 KB with UK bank holidays; measured for 0.16.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan and the UK are bundled
 
 ## Installation
@@ -38,7 +38,7 @@ A business-day calendar that combines public holidays with company or store clos
 pnpm add bizdays-toolkit
 ```
 
-Node.js 22.12 or later. CI tests the package on Node.js 22.12, 22, 24 and 26, on Chrome, Firefox and Edge (Linux) and Safari (macOS), and on Cloudflare Workers (workerd, the open-source Workers runtime). The browsers are the latest stable versions on GitHub's runners, so their versions change as the runners are updated. The package is ESM only, but it can also be loaded from CommonJS with `require()` (tested in CI as well; on Node.js 22.12, `require()` prints an experimental-feature warning, which does not affect the result, and Node.js 26 prints none). Other runtimes (such as Deno, Bun or Vercel's Edge Runtime) are not tested.
+Node.js 22.12 or later. CI tests the package on Node.js 22.12, 22, 24 and 26, on Chrome, Firefox and Edge (Linux) and Safari (macOS), on Cloudflare Workers (workerd, the open-source Workers runtime), and on Bun (1.4) and Deno (2.9). The browsers are the latest stable versions on GitHub's runners, so their versions change as the runners are updated. The package is ESM only, but it can also be loaded from CommonJS with `require()` (tested in CI as well; on Node.js 22.12, `require()` prints an experimental-feature warning, which does not affect the result, and Node.js 26 prints none). Vercel's Edge Runtime is not tested.
 
 Types are bundled. CI type-checks a consumer project against the published type definitions with TypeScript 5.0, 5.5, 5.8, 6.0 and 7.0 (the native compiler), each with `moduleResolution` set to `node16`, `nodenext` and `bundler`, and confirms that an intentional type error is reported by each.
 
@@ -137,9 +137,9 @@ Each day is decided in this order of priority (top first).
 
 This order is fixed. Only the relation between a recurring rule and holidays can be chosen per rule with `onHolidayRule` (next section).
 
-### Recurring rules (weekly, every other week, nth weekday, day of month, holidays, day after a holiday)
+### Recurring rules (weekly, every other week, nth weekday, day of month, holidays, day after or before a holiday)
 
-Recurring closed and open days such as "closed on the 3rd Wednesday", "closed on the 2nd and 4th Saturdays", "closed every other Wednesday", "stocktaking on the last day of the month", "closed on Mondays (on the next weekday if Monday is a holiday)", "open on substitute holidays" or "closed on the day after a holiday" go in `closedRecurring` and `openRecurring`.
+Recurring closed and open days such as "closed on the 3rd Wednesday", "closed on the 2nd and 4th Saturdays", "closed every other Wednesday", "stocktaking on the last day of the month", "closed on Mondays (on the next weekday if Monday is a holiday)", "open on substitute holidays", "closed on the day after a holiday" or "late opening on the day before a holiday" go in `closedRecurring` and `openRecurring`.
 
 ```ts
 const museum = createCalendar({
@@ -174,6 +174,7 @@ museum.isBusinessDay("2026-05-07"); // false (the day after the May 3–6 run of
 | `{ day: 20 }`                                       | The 20th of every month. `day` is 1–31 or -1 (last day); an array gives several                                      |
 | `{ holiday: true, kinds: ["substitute"] }`          | Holidays, optionally narrowed to the given kinds (`Holiday.kind`); judged before `holidayPolicy` (see below)         |
 | `{ dayAfterHoliday: true }`                         | The day after a holiday: the first non-holiday after a holiday or a run of holidays (holidays of the provider only)  |
+| `{ dayBeforeHoliday: true }`                        | The day before a holiday: the non-holiday just before a holiday or a run of holidays (holidays of the provider only) |
 | `months: [8, 12]`                                   | Narrows any pattern to these months                                                                                  |
 | `effectiveFrom: "2027-04-01"`, `effectiveTo: "…"`   | The period the rule is in effect (both ends included). Outside it, the rule is as if it were not written (see below) |
 
@@ -182,6 +183,7 @@ museum.isBusinessDay("2026-05-07"); // false (the day after the May 3–6 run of
 - **Every other week** (`interval: 2`) is not the same as the 1st and 3rd weekdays (`nth: [1, 3]`): a month with five Wednesdays shifts the latter by a week. `interval` is the number of weeks (an integer of 2 or more) and `anchor` is a date on the same weekday that the cycle passes through; the rule matches that date and every `interval` weeks before and after it. Stores announce "every other Wednesday from January 7", so copy that date. To start at the anchor rather than also matching earlier dates, add `effectiveFrom`. `interval` cannot be combined with `nth`
 - **Holiday rules** (`{ holiday: true }`) write exceptions to the default holiday handling: "open on holidays from April 2027" is `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]` with `holidayPolicy: "closed"` kept for the past, "open on substitute holidays and citizens' holidays" is `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`, and "special hours on the May holidays" in a schedule is `recurring: [{ holiday: true, months: [5], value: … }]`. `kinds` narrows to those `Holiday.kind` values (see the provider's list; with `holidays: jp` the editor completes them), `weekdays` to those weekdays ("morning hours on a Saturday holiday" is `{ holiday: true, weekdays: [6], value: … }`), `months` to those months; omit them for all holidays. The rule is judged at the "over the holiday" step, before `holidayPolicy` or a schedule's `holiday`, and also with `holidayPolicy: "ignore"`. Its days are holidays, so `onHolidayRule` cannot be set on it (`invalid-option`); `holiday` still shows the holiday
 - **The day after a holiday** is never itself a holiday, so `onHolidayRule` cannot be set on such a rule (it is an `invalid-option`). "Holidays" are those of the holiday provider, not annual closures. A rule of this kind matches no day without a holiday provider. `weekdays` narrows it to those weekdays: a museum "closed on the day after a holiday, except when that day is a Saturday or Sunday" is `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` (opening the weekend with `openRecurring` instead would override every other weekend closure)
+- **The day before a holiday** (`{ dayBeforeHoliday: true }`) is the mirror image: the day whose next day is a holiday and which is not a holiday itself, so before a run of holidays it is only the day before the run (in May 2026 it is Saturday May 2; May 4 and 5 are holidays themselves). The same rules apply (`weekdays`, `months`, effective periods, no `onHolidayRule`, no match without a provider). It writes "eve-of-holiday rates" in a schedule, "open until 2 a.m. on the day before a holiday" (`weekdays: [1, 2, 3, 4, 5]` keeps weekends as usual), or an earlier shipping cutoff on the day before a holiday (put the cutoff time in a schedule and pass `cutoffs.valueOn(date)` as `cutoff`)
 - Among recurring rules, the one written first in the array wins, and `openRecurring` wins over `closedRecurring`. The day after Labor Thanksgiving Day on a Monday (2026-11-23) is both the day the Monday rule moves to and the day after a holiday; the rule written first decides, and `dayInfo` shows which
 
 **Effective periods** (`effectiveFrom`, `effectiveTo`) let one calendar represent a change of rules and still reproduce past dates. They go on recurring rules and on annual closures (`closedAnnual` in object form).
@@ -229,8 +231,15 @@ const hours = createSchedule<Hours>({
   recurring: [
     { weekday: 1, value: null, name: "Closed on Mondays", onHolidayRule: "after-holiday" },
     { day: -1, value: { open: "10:00", close: "17:00" }, name: "Short hours at month end" },
+    {
+      dayBeforeHoliday: true,
+      value: { open: "10:00", close: "23:00" },
+      name: "Late on the eve of a holiday",
+    },
   ],
 });
+hours.valueOn("2026-05-02"); // { open: "10:00", close: "23:00" } (the day before the May 3–6 holidays)
+hours.dayInfo("2026-05-04").reason; // "weekday" (a holiday in the run is not the day before a holiday)
 ```
 
 ### Combining calendars
@@ -256,7 +265,7 @@ const bank = createCalendar({
 const remittance = combineCalendars([company, bank], { businessDay: "all" });
 remittance.addBusinessDays("2026-12-28", 2); // "2027-01-05"
 remittance.dayInfo("2026-12-29");
-// { date: "2026-12-29", weekday: 2, businessDay: false, reason: "closed-annual", name: "New Year closure", rulePath: "closedAnnual[0]", decidedBy: 0 }
+// { date: "2026-12-29", weekday: 2, businessDay: false, reason: "closed-annual", name: "New Year closure", rulePath: "closedAnnual[0]", decidedBy: 0, decidedByPath: [0] }
 
 // Any of several stores is open
 const anyStore = combineCalendars([company, bank], { businessDay: "any" });
@@ -264,6 +273,7 @@ anyStore.isBusinessDay("2026-12-29"); // true
 ```
 
 - `dayInfo` reports `reason`, `name`, `shiftedFrom` and `rulePath` from the first calendar whose result equals the combined result, and the index of that calendar in `decidedBy` (`rulePath` is a position in that calendar's options). With `"all"`, a closed day is explained by the first calendar that is closed, and an open day by calendar 0 (all are open). With `"any"` it is the other way round
+- `decidedByPath` is the list of indexes down to the calendar that decided, outermost first, so that `rulePath` can be traced from the result alone when combined calendars are combined again: `[0]` for a plain combination (the same as `decidedBy`), `[0, 1]` for calendar 1 inside calendar 0. `decidedBy` stays the outer index
 - `holiday`, `isHoliday`, `holidaysInYear` and so on use the union of the calendars' holiday providers: the same provider object counts once, a wrapped provider (such as `jp` with some kinds filtered out) counts as a different one, and when two providers have a holiday on the same date, the provider of the earlier calendar decides the holiday shown. Combining a calendar with a wrapped `jp` and one with `jp` itself therefore keeps the business-day results but still shows the filtered-out holidays in `holiday`. `outOfRange` is `"throw"` if any calendar throws outside its supported years
 - All calendars must share a time zone (`time-zone-conflict` otherwise). Passing fewer than two calendars, or the same calendar twice, is an `invalid-argument`. `maxSearchDays` (default 3660) can be given in the options
 - A combined calendar can be combined again. Option diagnostics work on options, not on calendars, so diagnose each calendar's options separately
@@ -513,7 +523,7 @@ Every method accepts the following inputs. Returned dates are always `"YYYY-MM-D
 | Temporal `PlainDate`, `PlainDateTime`                | A civil date or date and time (no dependency on Temporal)         |
 | Temporal `Instant`, `ZonedDateTime`                  | An instant                                                        |
 
-Temporal objects are recognized by their shape, so the package does not depend on Temporal. CI also checks real Temporal objects in the runtimes that provide Temporal (the CI log shows whether each runtime had it).
+The separator between the date and the time is `T` (upper or lower case), as in the `DateTimeInput` type; a space (`"2026-11-23 10:00"`) is an `invalid-time` error. Temporal objects are recognized by their shape, so the package does not depend on Temporal. CI also checks real Temporal objects in the runtimes that provide Temporal (the CI log shows whether each runtime had it).
 
 The calendar's time zone is the `timeZone` option, then the holiday provider's time zone, then `"UTC"`.
 
@@ -560,6 +570,38 @@ const myCountry: HolidayProvider = {
   ],
 };
 const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] });
+```
+
+Most holidays of other countries are an nth weekday of a month (the US federal holidays) or a fixed number of days from Easter Sunday (much of Europe). `bizdays-toolkit/provider` exposes the calendar arithmetic the bundled providers use for these, so a provider does not have to reimplement and verify it: `nthWeekdayOfMonth(year, month, weekday, n)` (`n` is 1–5 or -1 for the last), `easterSunday(year)` (Gregorian; verified against GOV.UK for the UK providers), `daysInMonth(year, month)` and `isLeapYear(year)`. Combine them with `addDays` and `weekdayOf` from the root. These functions are `@beta` (they may change in a minor version while their use settles).
+
+```ts
+import { addDays, createCalendar, type HolidayProvider } from "bizdays-toolkit";
+import { easterSunday, nthWeekdayOfMonth } from "bizdays-toolkit/provider";
+
+const bavaria: HolidayProvider<"public"> = {
+  id: "DE-BY",
+  timeZone: "Europe/Berlin",
+  supportedYears: { from: 2000, to: 2100 },
+  dataVersion: "example",
+  holidaysInYear: (year) => {
+    const easter = easterSunday(year);
+    const day = (date: string, name: string, nameEn: string) => ({
+      date,
+      name,
+      nameEn,
+      kind: "public" as const,
+      confirmed: true,
+    });
+    return [
+      day(addDays(easter, -2), "Karfreitag", "Good Friday"),
+      day(addDays(easter, 1), "Ostermontag", "Easter Monday"),
+      day(addDays(easter, 60), "Fronleichnam", "Corpus Christi"),
+    ];
+  },
+};
+createCalendar({ holidays: bavaria }).isHoliday("2026-06-04"); // true (Corpus Christi)
+nthWeekdayOfMonth(2026, 11, 4, 4); // "2026-11-26" (the 4th Thursday of November: Thanksgiving Day)
+nthWeekdayOfMonth(2026, 5, 1, -1); // "2026-05-25" (the last Monday of May: Memorial Day)
 ```
 
 Holidays can carry names in other languages in `names`. The keys are canonical BCP 47 language tags (`"zh-Hant"`, `"ko"` and so on). The bundled Japanese holidays have no `names` (only the officially sourced Japanese and English names are bundled); among the UK providers, only Wales has Welsh names. If you need more, wrap the provider.

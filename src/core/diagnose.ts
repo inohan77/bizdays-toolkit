@@ -8,7 +8,7 @@
  * - warning … 作れるが、意図と違う可能性が高いもの
  *     unknown-option … 知らないキー（作成時は無視される）。近い既知のキーがあれば message に候補を挙げる
  *     shadowed       … 同じ種類の先の規則に完全に覆われ、決して使われない（relatedPath に先の規則）
- *     never-matches  … 当てはまる日がない繰り返しの規則（2 月 30 日、有効期間の中に第 5 水曜日がない、提供元のない設定の祝日の翌日、など）
+ *     never-matches  … 当てはまる日がない繰り返しの規則（2 月 30 日、有効期間の中に第 5 水曜日がない、提供元のない設定の祝日の翌日・祝前日、など）
  *     out-of-range   … 個別の日付、または規則の有効期間が祝日の提供元の対応年の外にある（relatedPath に提供元）
  *     no-business-day … 営業日が 1 日もない設定（営業日カレンダーのみ）
  * - info    … redundant: 取り除いても結果が変わらない規則
@@ -499,7 +499,7 @@ function analyze<T, Kind extends string>(
 
   // --- 繰り返しの規則: 当てはまる日がない・覆われている ---
   const recurringBits = recurring.map(patternBits);
-  /** 祝日・祝日の翌日の規則の判定に使う（提供元の対応年の外は祝日でないとみなす） */
+  /** 祝日・祝日の翌日・祝前日の規則の判定に使う（提供元の対応年の外は祝日でないとみなす） */
   const holidayOfSafe = (date: DateString): Holiday<string> | undefined => {
     try {
       return lookup.holidayOn(date);
@@ -507,7 +507,7 @@ function analyze<T, Kind extends string>(
       return undefined;
     }
   };
-  /** 祝日に従属する規則（祝日・祝日の翌日）が、調べる期間と有効期間の中で 1 日でも当てはまるか（祝日は年ごとに違うので、全日を調べる） */
+  /** 祝日に従属する規則（祝日・祝日の翌日・祝前日）が、調べる期間と有効期間の中で 1 日でも当てはまるか（祝日は年ごとに違うので、全日を調べる） */
   const holidayRuleMatches = (rule: RecurringRuleCompiled<unknown>): boolean => {
     if (source.providers.length === 0 || !window) return false;
     let found = false;
@@ -522,7 +522,7 @@ function analyze<T, Kind extends string>(
     a === null || (b !== null && [...b].every((v) => a.has(v)));
   recurring.forEach((rule, j) => {
     const bits = recurringBits[j]!;
-    const holidayBased = rule.holiday || rule.dayAfterHoliday;
+    const holidayBased = rule.holiday || rule.dayAfterHoliday || rule.dayBeforeHoliday;
     const matches = holidayBased ? holidayRuleMatches(rule) : matchesAnyDay(rule, cycle);
     if (!matches) {
       unused.add(rule);
@@ -534,14 +534,16 @@ function analyze<T, Kind extends string>(
             ? "This rule matches no day: there are no holidays without a holiday provider"
             : rule.holiday
               ? "This rule matches no day: no holiday of the selected kinds, weekdays and months within its effective period"
-              : "This rule matches no day: no day after a holiday on the selected weekdays and months within its effective period"
+              : rule.dayAfterHoliday
+                ? "This rule matches no day: no day after a holiday on the selected weekdays and months within its effective period"
+                : "This rule matches no day: no day before a holiday on the selected weekdays and months within its effective period"
           : rule.effectiveFrom === null && rule.effectiveTo === null
             ? "This rule matches no day (for example, a day that does not exist in the selected months)"
             : "This rule matches no day within its effective period",
       );
       return;
     }
-    // 祝日・祝日の翌日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・曜日・月の絞り込み）だけで調べる
+    // 祝日・祝日の翌日・祝前日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・曜日・月の絞り込み）だけで調べる
     const k = recurring.findIndex(
       (r, i) =>
         i < j &&
@@ -552,12 +554,14 @@ function analyze<T, Kind extends string>(
             setCovers(r.kinds, rule.kinds) &&
             setCovers(r.weekdays, rule.weekdays) &&
             setCovers(r.months, rule.months)
-          : rule.dayAfterHoliday
-            ? r.dayAfterHoliday &&
+          : rule.dayAfterHoliday || rule.dayBeforeHoliday
+            ? r.dayAfterHoliday === rule.dayAfterHoliday &&
+              r.dayBeforeHoliday === rule.dayBeforeHoliday &&
               setCovers(r.weekdays, rule.weekdays) &&
               setCovers(r.months, rule.months)
             : !r.holiday &&
               !r.dayAfterHoliday &&
+              !r.dayBeforeHoliday &&
               intervalCovers(r, rule) &&
               isSubset(bits, recurringBits[i]!)),
     );

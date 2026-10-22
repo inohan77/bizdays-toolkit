@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, isBizdaysError } from "../src/index.ts";
-import { easterSunday } from "../src/uk/rules.ts";
+import { easterSunday } from "../src/core/date.ts";
 import { england, northernIreland, scotland, wales } from "../src/uk/index.ts";
 
 test("復活祭の日曜日", () => {

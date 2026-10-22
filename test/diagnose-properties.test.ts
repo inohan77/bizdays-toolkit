@@ -56,25 +56,30 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
           }
         : r < 0.8
           ? { day: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) }
-          : r < 0.9
+          : r < 0.86
             ? {
                 dayAfterHoliday: true as const,
                 ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
               }
-            : {
-                holiday: true as const,
-                ...(rand() < 0.6
-                  ? {
-                      kinds: pick([
-                        ["national"],
-                        ["substitute"],
-                        ["substitute", "citizens"],
-                        ["x"],
-                      ]),
-                    }
-                  : {}),
-                ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
-              };
+            : r < 0.9
+              ? {
+                  dayBeforeHoliday: true as const,
+                  ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
+                }
+              : {
+                  holiday: true as const,
+                  ...(rand() < 0.6
+                    ? {
+                        kinds: pick([
+                          ["national"],
+                          ["substitute"],
+                          ["substitute", "citizens"],
+                          ["x"],
+                        ]),
+                      }
+                    : {}),
+                  ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
+                };
     // 周期（nth とは併用できない。起点は曜日に合わせる）
     const interval =
       "weekday" in base && base.nth === undefined && rand() < 0.4
@@ -87,8 +92,8 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
       ...base,
       ...interval,
       ...(rand() < 0.3 ? { months: pick([[2], [1, 2], [2, 4, 6, 9, 11]]) } : {}),
-      // 祝日・祝日の翌日の規則には onHolidayRule を付けられない
-      ...("dayAfterHoliday" in base || "holiday" in base
+      // 祝日・祝日の翌日・祝前日の規則には onHolidayRule を付けられない
+      ...("dayAfterHoliday" in base || "dayBeforeHoliday" in base || "holiday" in base
         ? {}
         : { onHolidayRule: pick(["under-holiday", "over-holiday", "after-holiday"]) }),
       ...period(),

@@ -2,11 +2,12 @@
 import * as root from "../../dist/index.js";
 import * as diagnose from "../../dist/diagnose/index.js";
 import * as jp from "../../dist/jp/index.js";
+import * as provider from "../../dist/provider/index.js";
 import * as uk from "../../dist/uk/index.js";
 import { smoke } from "./smoke.mjs";
 
 export default {
   fetch() {
-    return Response.json(smoke({ root, jp, uk, diagnose }));
+    return Response.json(smoke({ root, jp, uk, diagnose, provider }));
   },
 };

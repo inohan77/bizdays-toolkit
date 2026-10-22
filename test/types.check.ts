@@ -181,6 +181,30 @@ createCalendar({ closedRecurring: [{ holiday: false }] });
 createCalendar({ closedRecurring: [{ weekday: 1, kinds: ["national"] }] });
 // @ts-expect-error -- holiday と dayAfterHoliday は同時に指定できない
 createCalendar({ closedRecurring: [{ holiday: true, dayAfterHoliday: true }] });
+
+// --- 祝前日（0.16.0）・decidedByPath ---
+createCalendar({
+  holidays: jp,
+  closedRecurring: [
+    { dayBeforeHoliday: true },
+    { dayBeforeHoliday: true, weekdays: [1, 2, 3, 4, 5], months: [5], effectiveFrom: "2027-01-01" },
+  ],
+});
+// @ts-expect-error -- dayBeforeHoliday は true だけ
+createCalendar({ closedRecurring: [{ dayBeforeHoliday: false }] });
+// @ts-expect-error -- dayBeforeHoliday と dayAfterHoliday は同時に指定できない
+createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, dayAfterHoliday: true }] });
+// @ts-expect-error -- dayBeforeHoliday と weekday は同時に指定できない
+createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, weekday: 1 }] });
+// @ts-expect-error -- kinds は祝日の規則でだけ使える
+createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, kinds: ["national"] }] });
+{
+  const c = combineCalendars([createCalendar({}), createCalendar({ closedWeekdays: [0] })], {
+    businessDay: "all",
+  });
+  const path: readonly number[] | undefined = c.dayInfo("2026-10-19").decidedByPath;
+  void path;
+}
 {
   const c = createCalendar({ holidays: jp });
   const rulePath: string | undefined = c.dayInfo("2026-10-19").rulePath;

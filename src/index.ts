@@ -36,6 +36,7 @@ export {
   type DateRangeValue,
   type DateValue,
   type DayAfterHolidayPattern,
+  type DayBeforeHolidayPattern,
   type DayOfMonth,
   type DayOfMonthPattern,
   type EffectivePeriod,
