@@ -187,25 +187,60 @@ museum.dayInfo("2026-02-12").name; // "Closed on the day after a holiday" (Natio
 museum.isBusinessDay("2026-05-07"); // false (the day after the May 3–6 run of holidays)
 ```
 
-| Pattern                                             | Meaning                                                                                                                                      |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `{ weekday: 1 }`                                    | Every Monday                                                                                                                                 |
-| `{ weekday: 3, nth: 3 }`                            | The 3rd Wednesday. `nth` is 1–5 or -1 (last); an array such as `[2, 4]` gives several                                                        |
-| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }` | Every other Wednesday: the Wednesdays an even number of weeks from `anchor` (2 or more weeks; see below)                                     |
-| `{ day: 20 }`                                       | The 20th of every month. `day` is 1–31 or -1 (last day); an array gives several                                                              |
-| `{ holiday: true, kinds: ["substitute"] }`          | Holidays, optionally narrowed to the given kinds (`Holiday.kind`) or keys (`keys`, `Holiday.key`); judged before `holidayPolicy` (see below) |
-| `{ dayAfterHoliday: true }`                         | The day after a holiday: the first non-holiday after a holiday or a run of holidays (holidays of the provider only)                          |
-| `{ dayBeforeHoliday: true }`                        | The day before a holiday: the non-holiday just before a holiday or a run of holidays (holidays of the provider only)                         |
-| `months: [8, 12]`                                   | Narrows any pattern to these months                                                                                                          |
-| `effectiveFrom: "2027-04-01"`, `effectiveTo: "…"`   | The period the rule is in effect (both ends included). Outside it, the rule is as if it were not written (see below)                         |
+| Pattern                                                | Meaning                                                                                                                                          |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `{ weekday: 1 }`                                       | Every Monday                                                                                                                                     |
+| `{ weekday: 3, nth: 3 }`                               | The 3rd Wednesday. `nth` is 1–5 or -1 (last); an array such as `[2, 4]` gives several                                                            |
+| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`    | Every other Wednesday: the Wednesdays an even number of weeks from `anchor` (2 or more weeks; see below)                                         |
+| `{ day: 20 }`                                          | The 20th of every month. `day` is 1–31 or -1 (last day); an array gives several                                                                  |
+| `{ businessDayOfMonth: -1 }`                           | The nth business day of the month (1–31, -1 the last, -2 the one before, …; an array gives several), counted without recurring rules (see below) |
+| `{ holiday: true, kinds: ["substitute"] }`             | Holidays, optionally narrowed to the given kinds (`Holiday.kind`) or keys (`keys`, `Holiday.key`); judged before `holidayPolicy` (see below)     |
+| `{ dayAfterHoliday: true }`                            | The day after a holiday: the first non-holiday after a holiday or a run of holidays (holidays of the provider only)                              |
+| `{ dayBeforeHoliday: true }`                           | The day before a holiday: the non-holiday just before a holiday or a run of holidays (holidays of the provider only)                             |
+| `months: [8, 12]`                                      | Narrows any pattern to these months                                                                                                              |
+| `effectiveFrom: "2027-04-01"`, `effectiveTo: "…"`      | The period the rule is in effect (both ends included). Outside it, the rule is as if it were not written (see below)                             |
+| `onHolidayRule: "after-holiday", skipWeekdays: [0, 6]` | Moves the rule past the given weekdays as well as holidays: "June 15, or the next weekday when it falls on a weekend or holiday" (see below)     |
 
 - **The nth weekday** is the nth occurrence of that weekday in the month (days 1–7 hold the 1st). It is not the weekday in the nth row of a printed calendar
 - **Days that do not exist in a month** (`nth: 5` or `day: 31` in a month without one) do not match. Use `day: -1` for the last day
 - **Every other week** (`interval: 2`) is not the same as the 1st and 3rd weekdays (`nth: [1, 3]`): a month with five Wednesdays shifts the latter by a week. `interval` is the number of weeks (an integer of 2 or more) and `anchor` is a date on the same weekday that the cycle passes through; the rule matches that date and every `interval` weeks before and after it. Stores announce "every other Wednesday from January 7", so copy that date. To start at the anchor rather than also matching earlier dates, add `effectiveFrom`. `interval` cannot be combined with `nth`
 - **Holiday rules** (`{ holiday: true }`) write exceptions to the default holiday handling: "open on holidays from April 2027" is `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]` with `holidayPolicy: "closed"` kept for the past, "open on substitute holidays and citizens' holidays" is `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`, and "special hours on the May holidays" in a schedule is `recurring: [{ holiday: true, months: [5], value: … }]`. `kinds` narrows to those `Holiday.kind` values (see the provider's list; with `holidays: jp` the editor completes them), `keys` to individual holidays by their `Holiday.key` ("open on the equinox days" is `{ holiday: true, keys: ["vernal-equinox", "autumnal-equinox"] }`; see [Holiday keys](#holiday-keys)), `weekdays` to those weekdays ("morning hours on a Saturday holiday" is `{ holiday: true, weekdays: [6], value: … }`), `months` to those months; omit them for all holidays. The rule is judged at the "over the holiday" step, before `holidayPolicy` or a schedule's `holiday`, and also with `holidayPolicy: "ignore"`. Its days are holidays, so `onHolidayRule` cannot be set on it (`invalid-option`); `holiday` still shows the holiday
 - **The day after a holiday** is never itself a holiday, so `onHolidayRule` cannot be set on such a rule (it is an `invalid-option`). "Holidays" are those of the holiday provider, not annual closures. A rule of this kind matches no day without a holiday provider. `weekdays` narrows it to those weekdays: a museum "closed on the day after a holiday, except when that day is a Saturday or Sunday" is `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` (opening the weekend with `openRecurring` instead would override every other weekend closure)
+- **The nth business day of the month** (`{ businessDayOfMonth: n }`) writes "closed for stocktaking on the last business day of the month", "no appointments on the 1st and 5th business days of a quarter" or, in a schedule, "shorter hours on the last business day" as a rule, where `{ day: -1 }` (the calendar's last day) or `{ weekday: 5, nth: -1 }` (the last Friday) would be days off by several days. Business days are counted on the calendar's options **without its recurring rules**: specific dates, annual closures, holidays (as `holidayPolicy` treats them) and `closedWeekdays`, so a year-end closure such as `closedAnnual: [{ from: "12-31", to: "01-03" }]` makes December 30 the last business day of December 2026, and a Saturday 31st makes October 30. Recurring rules are left out of the count because the rule itself is one of them (counting them would make the definition circular), so a closed weekday written as `{ weekday: 0 }` in `closedRecurring` is still counted; write regular closed weekdays as `closedWeekdays`, and the diagnostics report such a setup as `counting-basis`. The methods `nthBusinessDayOfMonth` and `lastBusinessDayOfMonth` return the actual business days after all rules, so with `{ businessDayOfMonth: -1 }` closed, `lastBusinessDayOfMonth` is the day before. The rule matches no day in a month with fewer business days than `n` (`never-matches` for an `n` no month reaches). `onHolidayRule` is `"under-holiday"` by default or `"over-holiday"`; `"after-holiday"` is an `invalid-option`. With `holidayPolicy: "open"`, holidays are counted and an nth business day can be a holiday: by default the holiday step decides that day first (as for a weekday rule), so "closed on the first business day even when it is a holiday" is written with `onHolidayRule: "over-holiday"`, which does nothing (and is reported as `redundant`) when holidays are closed. In a schedule there is no notion of a business day, so the rule names the calendar to count on: `{ businessDayOfMonth: -1, calendar: branch, value: … }` (required, same time zone as the schedule, counted on that calendar's actual business days; in a calendar, `calendar` is an `invalid-option`)
+- **Skipping weekdays when moving a rule** (`skipWeekdays`, only with `onHolidayRule: "after-holiday"` on a weekday or day-of-month rule) adds weekdays to the days the rule moves past. Without it, "closed on Mondays, or the next weekday when Monday is a holiday" can land on a Saturday after a run of holidays, and "the company anniversary on June 15, or the next business day when it falls on a weekend or holiday" cannot be written at all (a Saturday June 15 is already closed, and the rule does not move). With `skipWeekdays: [0, 6]`, a rule whose day is a holiday or one of those weekdays moves to the first later day that is neither; `shiftedFrom` is the original day, and the effective period is judged on the original day. The rule's own weekday cannot be in `skipWeekdays`
 - **The day before a holiday** (`{ dayBeforeHoliday: true }`) is the mirror image: the day whose next day is a holiday and which is not a holiday itself, so before a run of holidays it is only the day before the run (in May 2026 it is Saturday May 2; May 4 and 5 are holidays themselves). The same rules apply (`weekdays`, `months`, effective periods, no `onHolidayRule`, no match without a provider). It writes "eve-of-holiday rates" in a schedule, "open until 2 a.m. on the day before a holiday" (`weekdays: [1, 2, 3, 4, 5]` keeps weekends as usual), or an earlier shipping cutoff on the day before a holiday (put the cutoff time in a schedule and pass `cutoffs.valueOn(date)` as `cutoff`)
 - Among recurring rules, the one written first in the array wins, and `openRecurring` wins over `closedRecurring`. The day after Labor Thanksgiving Day on a Monday (2026-11-23) is both the day the Monday rule moves to and the day after a holiday; the rule written first decides, and `dayInfo` shows which
+
+```ts
+// A bank branch: no appointments on the last business day of the month; a company anniversary moved past weekends
+const branch = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedAnnual: [{ from: "12-31", to: "01-03" }],
+  closedRecurring: [
+    { businessDayOfMonth: -1, name: "No appointments on the last business day" },
+    {
+      day: 15,
+      months: [6],
+      name: "Company anniversary",
+      onHolidayRule: "after-holiday",
+      skipWeekdays: [0, 6],
+    },
+  ],
+});
+branch.isBusinessDay("2026-10-30"); // false (October 31 is a Saturday, so the 30th is the last business day)
+branch.isBusinessDay("2026-12-30"); // false (closed from December 31, so the 30th is the last business day)
+branch.lastBusinessDayOfMonth("2026-10"); // "2026-10-29" (the actual last business day, after the rule)
+branch.dayInfo("2030-06-17").shiftedFrom; // "2030-06-15" (June 15, 2030 is a Saturday)
+
+// A schedule counts on a calendar you name
+const hours = createSchedule({
+  holidays: jp,
+  weekly: [null, "9-17", "9-17", "9-17", "9-17", "9-17", null],
+  recurring: [{ businessDayOfMonth: -1, calendar: branch, value: "9-15", name: "Closing work" }],
+});
+hours.valueOn("2026-10-29"); // "9-15" (the branch's last business day of October)
+```
 
 **Effective periods** (`effectiveFrom`, `effectiveTo`) let one calendar represent a change of rules and still reproduce past dates. They go on recurring rules and on annual closures (`closedAnnual` in object form).
 

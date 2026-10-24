@@ -182,25 +182,60 @@ museum.dayInfo("2026-02-12").name; // "祝日の翌日休館"（2 月 11 日は�
 museum.isBusinessDay("2026-05-07"); // false（5 月 3〜6 日の連休の翌日）
 ```
 
-| 書き方                                              | 意味                                                                                                                                 |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `{ weekday: 1 }`                                    | 毎週月曜日                                                                                                                           |
-| `{ weekday: 3, nth: 3 }`                            | 第 3 水曜日。`nth` は 1〜5 と -1（最終）。`[2, 4]` のように配列で複数指定できる                                                      |
-| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }` | 隔週水曜日。`anchor` から偶数週の水曜日（周期は 2 週以上。下記）                                                                     |
-| `{ day: 20 }`                                       | 毎月 20 日。`day` は 1〜31 と -1（末日）。配列で複数指定できる                                                                       |
-| `{ holiday: true, kinds: ["substitute"] }`          | 祝日。`kinds` でその種別（`Holiday.kind`）に、`keys` で個別の祝日（`Holiday.key`）に絞れる。`holidayPolicy` より先に判定する（下記） |
-| `{ dayAfterHoliday: true }`                         | 祝日の翌日。祝日（連休なら連休）が明けた最初の祝日でない日（提供元の祝日だけで判定）                                                 |
-| `{ dayBeforeHoliday: true }`                        | 祝前日。祝日（連休なら連休）の直前の祝日でない日（提供元の祝日だけで判定）                                                           |
-| `months: [8, 12]`                                   | どの書き方にも付けられる、月の絞り込み                                                                                               |
-| `effectiveFrom: "2027-04-01"`・`effectiveTo: "…"`   | 規則の有効期間（両端を含む）。期間の外では、その規則は書かれていないのと同じになる（下記）                                           |
+| 書き方                                                   | 意味                                                                                                                                 |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `{ weekday: 1 }`                                         | 毎週月曜日                                                                                                                           |
+| `{ weekday: 3, nth: 3 }`                                 | 第 3 水曜日。`nth` は 1〜5 と -1（最終）。`[2, 4]` のように配列で複数指定できる                                                      |
+| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`      | 隔週水曜日。`anchor` から偶数週の水曜日（周期は 2 週以上。下記）                                                                     |
+| `{ day: 20 }`                                            | 毎月 20 日。`day` は 1〜31 と -1（末日）。配列で複数指定できる                                                                       |
+| `{ businessDayOfMonth: -1 }`                             | 月の第 n 営業日（1〜31、-1 は最後、-2 はその前、…。配列で複数指定できる）。繰り返しの規則を除いた判定で数える（下記）                |
+| `{ holiday: true, kinds: ["substitute"] }`               | 祝日。`kinds` でその種別（`Holiday.kind`）に、`keys` で個別の祝日（`Holiday.key`）に絞れる。`holidayPolicy` より先に判定する（下記） |
+| `{ dayAfterHoliday: true }`                              | 祝日の翌日。祝日（連休なら連休）が明けた最初の祝日でない日（提供元の祝日だけで判定）                                                 |
+| `{ dayBeforeHoliday: true }`                             | 祝前日。祝日（連休なら連休）の直前の祝日でない日（提供元の祝日だけで判定）                                                           |
+| `months: [8, 12]`                                        | どの書き方にも付けられる、月の絞り込み                                                                                               |
+| `effectiveFrom: "2027-04-01"`・`effectiveTo: "…"`        | 規則の有効期間（両端を含む）。期間の外では、その規則は書かれていないのと同じになる（下記）                                           |
+| `onHolidayRule: "after-holiday"`・`skipWeekdays: [0, 6]` | 振替で祝日に加えてその曜日も飛ばす。「6 月 15 日。土日祝なら翌営業日」（下記）                                                       |
 
 - **第 n 何曜日**は「その月で n 回目のその曜日」です（1〜7 日が第 1）。カレンダーの第 n 週の行にある曜日ではありません
 - **その月にない日**（`nth: 5` がない月、`day: 31` がない月）は当てはまりません。末日は `day: -1` で指定します
 - **隔週**（`interval: 2`）は「第 1・第 3 水曜」（`nth: [1, 3]`）とは別物です。水曜日が 5 回ある月で、後者は 1 週ずれます。`interval` は周期の週数（2 以上の整数）、`anchor` は周期が通る日付（`weekday` と同じ曜日）で、その日と、その日から `interval` 週おきの前後の日に当てはまります。店舗は「1 月 7 日から隔週水曜」のように告知するので、その日付をそのまま書きます。起点より前の日に当てはめず起点から始めるには、`effectiveFrom` を併せて指定します。`interval` は `nth` とは併用できません
 - **祝日の規則**（`{ holiday: true }`）は、祝日の既定の扱いの例外を書きます。「2027 年 4 月から祝日も営業」は `holidayPolicy: "closed"` のまま `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]`、「振替休日と国民の休日は営業」は `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`、スケジュールの「5 月の祝日は特別営業時間」は `recurring: [{ holiday: true, months: [5], value: … }]` です。`kinds` はその種別（`Holiday.kind`。種別は提供元の一覧を参照。`holidays: jp` ならエディターで補完が効きます）の祝日に、`keys` は個別の祝日（`Holiday.key`。「春分の日・秋分の日は営業」は `{ holiday: true, keys: ["vernal-equinox", "autumnal-equinox"] }`。[祝日の識別子](#祝日の識別子)）に、`weekdays` はその曜日（「土曜の祝日は午前診療」は `{ holiday: true, weekdays: [6], value: … }`）に、`months` はその月に絞り、省略すればすべての祝日です。判定は「祝日の上」の段階で、`holidayPolicy`・スケジュールの `holiday` より先に行い、`holidayPolicy: "ignore"` でも当てはまります。当てはまる日は祝日なので、この規則に `onHolidayRule` は指定できません（`invalid-option`）。`holiday` には祝日がそのまま付きます
 - **祝日の翌日**は定義上祝日でないので、その規則に `onHolidayRule` は指定できません（`invalid-option`）。「祝日」は提供元の祝日で、毎年の休業日などは含みません。提供元のない設定では 1 日も当てはまりません。`weekdays` でその曜日に絞れます。美術館の「祝日の翌日は休館（土曜・日曜に当たる場合は開館）」は `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` です（代わりに `openRecurring` で土日を開けると、ほかの土日の休館まで打ち消してしまいます）
+- **月の第 n 営業日**（`{ businessDayOfMonth: n }`）は、「月末最終営業日は棚卸しで休業」「四半期初の第 1・第 5 営業日は予約を止める」、スケジュールなら「最終営業日は短縮営業」を規則として書くためのものです。`{ day: -1 }`（暦の末日）や `{ weekday: 5, nth: -1 }`（最終金曜日）では数日ずれます。営業日を数える基準は、そのカレンダーの**繰り返しの規則をすべて除いた判定**（個別の日付・毎年の休業日・祝日（`holidayPolicy` の扱いどおり）・`closedWeekdays`）です。`closedAnnual: [{ from: "12-31", to: "01-03" }]` の年末年始休業があれば 2026 年 12 月の最終営業日は 30 日、31 日が土曜日の 10 月は 30 日です。繰り返しの規則を基準に入れないのは、この規則自身が繰り返しの規則で、入れると定義が循環するためです。そのため `closedRecurring` の `{ weekday: 0 }` で書いた定休日は営業日として数えられます。定休日は `closedWeekdays` で書いてください（そのような設定は診断が `counting-basis` で知らせます）。メソッドの `nthBusinessDayOfMonth`・`lastBusinessDayOfMonth` は規則を適用した後の実際の営業日を返すので、`{ businessDayOfMonth: -1 }` を休業にすると `lastBusinessDayOfMonth` はその前日になります。営業日が n 日に満たない月には当てはまりません（どの月にもない n は `never-matches`）。`onHolidayRule` は既定の `"under-holiday"` と `"over-holiday"` を受け、`"after-holiday"` は `invalid-option` です。`holidayPolicy: "open"` では祝日も営業日として数えるので第 n 営業日が祝日に当たることがあり、既定ではその日は祝日の段階が先に決めます（曜日の規則と同じ優先順位）。「第 1 営業日は祝日でも休業」は `onHolidayRule: "over-holiday"` で書きます（祝日が休業の設定では結果を変えず、診断が `redundant` で知らせます）。スケジュールには営業・休業の概念がないので、数える基準のカレンダーを `calendar` で指定します: `{ businessDayOfMonth: -1, calendar: branch, value: … }`（必須。タイムゾーンはスケジュールと同じ。そのカレンダーの実際の営業日で数える。カレンダーの側に `calendar` を書くと `invalid-option`）
+- **振替で曜日も飛ばす**（`skipWeekdays`。曜日・日の規則の `onHolidayRule: "after-holiday"` と組でだけ）は、振替で飛ばす日に祝日のほかその曜日を足します。これがないと、「月曜休館（祝日なら翌平日）」は祝日が続いた後に土曜日に落ちることがあり、「6 月 15 日は創立記念日。土日祝なら翌営業日」はそもそも書けません（土曜日の 6 月 15 日はもともと休みで、規則は振り替わらない）。`skipWeekdays: [0, 6]` を付けると、本来の日が祝日かその曜日なら、その日以降で最初の「祝日でもその曜日でもない日」に当てはまります。`shiftedFrom` は本来の日で、有効期間も本来の日で判定します。規則自身の曜日は `skipWeekdays` に含められません
 - **祝前日**（`{ dayBeforeHoliday: true }`）はその鏡像で、翌日が祝日でその日自身は祝日でない日です。連休の前は連休の初日の前日だけが当てはまります（2026 年 5 月なら 5 月 2 日（土）だけで、5 月 4 日・5 日は祝日なので当てはまりません）。扱いは祝日の翌日と同じです（`weekdays`・`months`・有効期間を付けられ、`onHolidayRule` は指定できず、提供元がなければ当てはまりません）。スケジュールの「祝前日料金」、「祝前日は深夜 2 時まで営業」（`weekdays: [1, 2, 3, 4, 5]` で土日に当たる祝前日は通常どおり）、「祝前日は当日出荷の受付を正午まで」（締め時刻をスケジュールの値にして `cutoffs.valueOn(date)` を `cutoff` に渡す）のように書きます
 - 繰り返しの規則どうしは配列で先に書いたものが優先で、`openRecurring` は `closedRecurring` より優先です。月曜の勤労感謝の日（2026-11-23）の翌日は、月曜の規則の振替先でもあり祝日の翌日でもあります。先に書いた規則が決め、どちらが決めたかは `dayInfo` で分かります
+
+```ts
+// 銀行の支店: 月末最終営業日は来店予約を止める。創立記念日は土日祝なら翌営業日
+const branch = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedAnnual: [{ from: "12-31", to: "01-03" }],
+  closedRecurring: [
+    { businessDayOfMonth: -1, name: "月末最終営業日は来店予約を停止" },
+    {
+      day: 15,
+      months: [6],
+      name: "創立記念日",
+      onHolidayRule: "after-holiday",
+      skipWeekdays: [0, 6],
+    },
+  ],
+});
+branch.isBusinessDay("2026-10-30"); // false（10 月 31 日は土曜日なので、30 日が最終営業日）
+branch.isBusinessDay("2026-12-30"); // false（12 月 31 日から休業なので、30 日が最終営業日）
+branch.lastBusinessDayOfMonth("2026-10"); // "2026-10-29"（規則を適用した後の実際の最終営業日）
+branch.dayInfo("2030-06-17").shiftedFrom; // "2030-06-15"（2030 年 6 月 15 日は土曜日）
+
+// スケジュールは、数える基準のカレンダーを指定する
+const hours = createSchedule({
+  holidays: jp,
+  weekly: [null, "9-17", "9-17", "9-17", "9-17", "9-17", null],
+  recurring: [{ businessDayOfMonth: -1, calendar: branch, value: "9-15", name: "締め作業で短縮" }],
+});
+hours.valueOn("2026-10-29"); // "9-15"（支店の 10 月の最終営業日）
+```
 
 **有効期間**（`effectiveFrom`・`effectiveTo`）を付けると、規則の変更を 1 つのカレンダーで表しながら、過去の日付の判定も変えずに再現できます。繰り返しの規則と、毎年の休業日（`closedAnnual` のオブジェクトの形）に付けられます。
 

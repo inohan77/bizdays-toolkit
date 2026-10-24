@@ -16,6 +16,7 @@ import {
   toDateTimeParts,
   toInstant,
   type BusinessDayConvention,
+  type BusinessDayOfMonthPattern,
   type DateInput,
   type DayInfo,
   type ScheduleDay,
@@ -439,4 +440,33 @@ void withoutNames;
   void substituted;
   // @ts-expect-error -- 向きは "next" か "previous"
   substituteDays([], { rules: { 0: "nearest" }, kind: "substitute" });
+}
+
+// ------------------------------------------------------------
+// 第 n 営業日の規則 businessDayOfMonth と、振替で飛ばす曜日 skipWeekdays（0.19.0）
+// ------------------------------------------------------------
+{
+  const branch = createCalendar({
+    holidays: jp,
+    closedWeekdays: [0, 6],
+    closedRecurring: [
+      { businessDayOfMonth: -1, name: "最終営業日" },
+      { businessDayOfMonth: [1, 5], months: [1, 4, 7, 10] },
+      { day: 15, months: [6], onHolidayRule: "after-holiday", skipWeekdays: [0, 6] },
+      { weekday: 1, onHolidayRule: "after-holiday", skipWeekdays: [6] },
+    ],
+  });
+  createSchedule({
+    holidays: jp,
+    weekly: [0, 1, 1, 1, 1, 1, 0],
+    recurring: [{ businessDayOfMonth: -1, calendar: branch, value: 2 }],
+  });
+  const pattern: BusinessDayOfMonthPattern = { businessDayOfMonth: -2 };
+  void pattern;
+  // onHolidayRule は型では制限しない（"after-holiday" は実行時に invalid-option）
+  createCalendar({ closedRecurring: [{ businessDayOfMonth: -1, onHolidayRule: "over-holiday" }] });
+  // @ts-expect-error -- skipWeekdays は曜日・日の規則でだけ使える
+  createCalendar({ closedRecurring: [{ holiday: true, skipWeekdays: [6] }] });
+  // @ts-expect-error -- 曜日の規則と第 n 営業日の規則は同時に書けない
+  createCalendar({ closedRecurring: [{ weekday: 1, businessDayOfMonth: 1 }] });
 }

@@ -66,6 +66,19 @@ const equinox: KnownJapaneseHolidayKey = "vernal-equinox";
 createCalendar({ holidays: jp, openRecurring: [{ holiday: true, keys: [equinox] }] });
 const key: string | undefined = jp.holidaysInYear(2026)[0]?.key;
 void key;
+const monthEnd = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedRecurring: [
+    { businessDayOfMonth: -1 },
+    { day: 15, months: [6], onHolidayRule: "after-holiday", skipWeekdays: [0, 6] },
+  ],
+});
+createSchedule({
+  holidays: jp,
+  weekly: [0, 1, 1, 1, 1, 1, 0],
+  recurring: [{ businessDayOfMonth: -1, calendar: monthEnd, value: 2 }],
+});
 const observed = substituteDays(
   [
     {

@@ -13,6 +13,8 @@
  *     no-business-day … 営業日が 1 日もない設定（営業日カレンダーのみ）
  * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidays: "throw" を含む）
  *             expired: 第 2 引数の asOf より前に終わった規則・日付（asOf を渡したときだけ）
+ *             counting-basis: 第 n 営業日の規則（businessDayOfMonth）の数える基準は繰り返しの規則を除くので、
+ *                             同じ設定の毎週の曜日の規則（{ weekday }）の曜日は営業日として数えられる（relatedPath にその規則）
  *
  * 未確定の祝日の扱い（unconfirmedHolidays）は診断では常に "accept" で評価する。診断は設定の形を調べるもので、
  * 祝日が確定しているかどうかは関係がなく、"throw" のまま評価すると例外を握りつぶして「当てはまらない」と誤判定するため
@@ -36,6 +38,7 @@ import { compileCalendarOptions, type CalendarOptions } from "./calendar.ts";
 import { IssueCollector, rangeError, type KnownErrorCode } from "./errors.ts";
 import {
   compileScheduleOptions,
+  createBasis,
   createHolidayLookup,
   createResolver,
   inPeriod,
@@ -81,7 +84,9 @@ export type KnownDiagnosticCode =
   /** 取り除いても結果が変わらない */
   | "redundant"
   /** 基準日（asOf）より前に終わった規則・日付（整理の候補） */
-  | "expired";
+  | "expired"
+  /** 第 n 営業日の規則の数える基準に、同じ設定の曜日の規則が入らない（その曜日を営業日として数える） */
+  | "counting-basis";
 
 /**
  * 診断コード。将来の版で値が増えることがあるので、分岐では「その他」も扱うこと。
@@ -438,6 +443,7 @@ function analyze<T, Kind extends string>(
   const { source, dates, annual, recurring } = compiled;
   if (!checkProviderData(c, source as HolidaySource<string>)) return;
   const lookup = createHolidayLookup({ ...source, unconfirmedHolidays: "accept" });
+  const basis = createBasis(compiled, lookup);
   const cycle = patternCycle(recurring);
   const window = scanWindow(source as HolidaySource<string>, [...annual, ...recurring], cycle);
   /** 使われないことが分かった規則（redundant を重ねて出さない） */
@@ -530,13 +536,43 @@ function analyze<T, Kind extends string>(
     );
     return found;
   };
+  /** 第 n 営業日の規則が、調べる期間と有効期間の中で 1 日でも当てはまるか（基準は祝日次第で年ごとに違うので、全日を調べる。対応年の外は当てはまらないとみなす） */
+  const businessDayRuleMatches = (rule: RecurringRuleCompiled<unknown>): boolean => {
+    if (!window) return false;
+    let found = false;
+    eachDay(window, (n) => {
+      if (!inPeriod(rule, n)) return false;
+      try {
+        found = matchPattern(rule, fromDayNumber(n), holidayOfSafe, basis);
+      } catch {
+        found = false;
+      }
+      return found;
+    });
+    return found;
+  };
   /** 集合 a（null はすべて）が集合 b（null はすべて）を含むか */
   const setCovers = <V>(a: ReadonlySet<V> | null, b: ReadonlySet<V> | null): boolean =>
     a === null || (b !== null && [...b].every((v) => a.has(v)));
+  /** 振替で飛ばす曜日が同じか（違えば当てはまる日が違うので覆わない） */
+  const sameSkip = (
+    a: RecurringRuleCompiled<unknown>,
+    b: RecurringRuleCompiled<unknown>,
+  ): boolean =>
+    a.skipWeekdays === null
+      ? b.skipWeekdays === null
+      : b.skipWeekdays !== null &&
+        a.skipWeekdays.size === b.skipWeekdays.size &&
+        [...a.skipWeekdays].every((w) => b.skipWeekdays!.has(w));
   recurring.forEach((rule, j) => {
     const bits = recurringBits[j]!;
     const holidayBased = rule.holiday || rule.dayAfterHoliday || rule.dayBeforeHoliday;
-    const matches = holidayBased ? holidayRuleMatches(rule) : matchesAnyDay(rule, cycle);
+    const businessDayBased = rule.businessDays !== null;
+    const matches = holidayBased
+      ? holidayRuleMatches(rule)
+      : businessDayBased
+        ? businessDayRuleMatches(rule)
+        : matchesAnyDay(rule, cycle);
     if (!matches) {
       unused.add(rule);
       c.warning(
@@ -550,11 +586,43 @@ function analyze<T, Kind extends string>(
               : rule.dayAfterHoliday
                 ? "This rule matches no day: no day after a holiday on the selected weekdays and months within its effective period"
                 : "This rule matches no day: no day before a holiday on the selected weekdays and months within its effective period"
-          : rule.effectiveFrom === null && rule.effectiveTo === null
-            ? "This rule matches no day (for example, a day that does not exist in the selected months)"
-            : "This rule matches no day within its effective period",
+          : businessDayBased
+            ? "This rule matches no day: no month has that many business days of the counting basis in the selected months within its effective period"
+            : rule.effectiveFrom === null && rule.effectiveTo === null
+              ? "This rule matches no day (for example, a day that does not exist in the selected months)"
+              : "This rule matches no day within its effective period",
       );
       return;
+    }
+    // 第 n 営業日の規則の "over-holiday" は、祝日が基準の営業日にならない設定（holidayPolicy: "closed"）では結果を変えない
+    if (
+      businessDayBased &&
+      rule.basis === null &&
+      rule.onHolidayRule === "over-holiday" &&
+      typeof compiled.holiday === "object" &&
+      "value" in compiled.holiday &&
+      compiled.holiday.value === false
+    ) {
+      c.info(
+        "redundant",
+        `${rule.path}.onHolidayRule`,
+        'This option does not change the result: holidays are closed (holidayPolicy: "closed"), so an nth business day is never a holiday',
+      );
+    }
+    // 第 n 営業日の規則の数える基準は繰り返しの規則を除くので、同じ設定の毎週の曜日の規則があれば知らせる（定休日を曜日の規則で書いた設定）
+    if (businessDayBased && rule.basis === null) {
+      const weekly = recurring.find(
+        (r) => r.weekday !== null && r.nth === null && r.interval === null && r.months === null,
+      );
+      if (weekly) {
+        c.info(
+          "counting-basis",
+          rule.path,
+          `The business days are counted without recurring rules, so the weekday rule ${weekly.path} does not reduce the count; ` +
+            "write regular closed weekdays as closedWeekdays if they should not be counted",
+          weekly.path,
+        );
+      }
     }
     // 祝日・祝日の翌日・祝前日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・識別子・曜日・月の絞り込み）だけで調べる
     const k = recurring.findIndex(
@@ -562,6 +630,7 @@ function analyze<T, Kind extends string>(
         i < j &&
         canCover(r, rule) &&
         periodCovers(r, rule) &&
+        sameSkip(r, rule) &&
         (rule.holiday
           ? r.holiday &&
             setCovers(r.kinds, rule.kinds) &&
@@ -573,11 +642,17 @@ function analyze<T, Kind extends string>(
               r.dayBeforeHoliday === rule.dayBeforeHoliday &&
               setCovers(r.weekdays, rule.weekdays) &&
               setCovers(r.months, rule.months)
-            : !r.holiday &&
-              !r.dayAfterHoliday &&
-              !r.dayBeforeHoliday &&
-              intervalCovers(r, rule) &&
-              isSubset(bits, recurringBits[i]!)),
+            : rule.businessDays !== null
+              ? r.businessDays !== null &&
+                r.calendar === rule.calendar &&
+                setCovers(r.businessDays, rule.businessDays) &&
+                setCovers(r.months, rule.months)
+              : !r.holiday &&
+                !r.dayAfterHoliday &&
+                !r.dayBeforeHoliday &&
+                r.businessDays === null &&
+                intervalCovers(r, rule) &&
+                isSubset(bits, recurringBits[i]!)),
     );
     if (k < 0) return;
     unused.add(rule);

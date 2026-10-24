@@ -4,6 +4,30 @@
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-25
+
+### 移行
+
+動作が変わる既存の API はない（`"after-holiday"` の規則に `skipWeekdays` を付けなければ振替先はこれまでどおり）。繰り返しの規則の形 `{ businessDayOfMonth }` と項目 `skipWeekdays`・`calendar`、診断コード `counting-basis` が増える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- 繰り返しの規則に月の第 n 営業日の形 `{ businessDayOfMonth: n }` を追加した（型 `BusinessDayOfMonthPattern`・`BusinessDayOfMonth`。n は 1〜31 と -1（最後）〜-31、配列可、`months` で絞れる）。「月末最終営業日は棚卸しで休業」「四半期初の第 1・第 5 営業日は予約を止める」を規則として書ける。数える基準はそのカレンダーの繰り返しの規則をすべて除いた判定（個別の日付・毎年の休業日・祝日・定休日の曜日）で、`nthBusinessDayOfMonth`・`lastBusinessDayOfMonth` は規則を適用した後の実際の営業日を返す。`onHolidayRule` は `"under-holiday"`（既定）と `"over-holiday"`（`holidayPolicy: "open"` で第 n 営業日が祝日に当たるときも適用する）を受け、`"after-holiday"` は `invalid-option`。スケジュールでは数える基準のカレンダーを `calendar` で指定する（必須。タイムゾーンが違えば `time-zone-conflict`。カレンダーの側に書くと `invalid-option`）
+- `"after-holiday"` の曜日・日の規則に `skipWeekdays` を追加した。本来の日が祝日かその曜日なら、以降で最初の「祝日でもその曜日でもない日」に振り替える（「6 月 15 日は創立記念日。土日祝なら翌営業日」は `{ day: 15, months: [6], onHolidayRule: "after-holiday", skipWeekdays: [0, 6] }`、「月曜定休。祝日なら翌平日（土曜日には落とさない）」は `{ weekday: 1, onHolidayRule: "after-holiday", skipWeekdays: [6] }`）。`"after-holiday"` 以外の規則や規則自身の曜日に付けると `invalid-option`
+- 診断コード `counting-basis`（info）を追加した。`businessDayOfMonth` の規則と、同じ設定の毎週の曜日の規則（`{ weekday }`）が同居する設定で、その曜日が営業日として数えられることを知らせる。`businessDayOfMonth` の規則は `never-matches`（その月にない回）・`shadowed`（n・months・基準のカレンダーの包含）・`redundant` の対象。`holidayPolicy: "closed"` の `businessDayOfMonth` の規則の `"over-holiday"` は `redundant`（info）。`skipWeekdays` が違う規則どうしは `shadowed` にしない
+
+### Changed
+
+- `docs/guide.md`・`docs/guide.ja.md`: 繰り返しの規則の表と本文に第 n 営業日と `skipWeekdays` を足し、コード例（銀行の支店とスケジュール）を足した
+- README: 規則の表に `businessDayOfMonth`・`skipWeekdays` を足した
+- `docs/decisions.md`: 47 番（第 n 営業日の規則・`skipWeekdays`・監視の報告書の日付）を追加し、14 番に `skipWeekdays` の追記をした
+
+### 開発
+
+- 監視の照合スクリプト（`scripts/verify-govuk.ts`・`verify-datagovsg.ts`・`verify-cao.ts`）の「確認した日付」を UTC から日本時間に揃えた（issue のコメントの日付と同じ基準）
+- テスト: `test/business-day-of-month.test.ts`・`test/skip-weekdays.test.ts` を追加し、`test/types.check.ts`・利用者の型チェックに新しい規則を足した
+- サイズの上限（`size-limits.json`）を上げた。ルート 25,000 → 26,500（測定 25,100）、`./jp` 28,000 → 29,500（測定 28,128）、`./diagnose` 33,000 → 35,500（測定 34,038）（gzip）。第 n 営業日の規則の判定・基準のキャッシュ・検証と、`skipWeekdays` の振替、診断の追加のため
+
 ## [0.18.0] - 2026-10-25
 
 ### 移行
@@ -494,7 +518,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.16.0...v0.17.0

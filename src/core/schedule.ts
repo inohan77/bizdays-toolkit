@@ -22,6 +22,7 @@
 import {
   addDays,
   daysInMonth,
+  formatDate,
   fromDayNumber,
   isValidDate,
   parseDate,
@@ -44,6 +45,7 @@ import {
 
 export type { CivilDateTimeParts } from "./input.ts";
 import { HOLIDAY_KEY_PATTERN, type Holiday, type HolidayProvider } from "./types.ts";
+import type { Calendar } from "./calendar.ts";
 
 // ------------------------------------------------------------
 // 公開する型
@@ -106,6 +108,12 @@ export type DayOfMonth =
   | -1;
 
 /**
+ * 月の第 n 営業日（1〜31。-1 は最後、-2 はその前、… -31 まで。0 は不可）。
+ * @public
+ */
+export type BusinessDayOfMonth = number;
+
+/**
  * 月（1〜12）。
  * @public
  */
@@ -149,7 +157,16 @@ export interface WeekdayPattern {
   readonly anchor?: DateString;
   /** 当てはめる月（省略時はすべての月） */
   readonly months?: readonly Month[];
+  /**
+   * onHolidayRule: "after-holiday" と組で、祝日に加えて飛ばす曜日（0 = 日曜日〜6 = 土曜日）。
+   * 本来の日が祝日かこの曜日なら、その日以降で最初の、祝日でもこの曜日でもない日に振り替える
+   * （例: 月曜定休で、月曜が祝日なら翌平日（土曜日には落とさない）は { weekday: 1, onHolidayRule: "after-holiday", skipWeekdays: [6] }）。
+   * weekday 自身は含められない。"after-holiday" 以外と組にすると invalid-option
+   */
+  readonly skipWeekdays?: readonly Weekday[];
   readonly day?: never;
+  readonly businessDayOfMonth?: never;
+  readonly calendar?: never;
   readonly dayAfterHoliday?: never;
   readonly dayBeforeHoliday?: never;
   readonly holiday?: never;
@@ -167,16 +184,62 @@ export interface DayOfMonthPattern {
   readonly day: DayOfMonth | readonly DayOfMonth[];
   /** 当てはめる月（省略時はすべての月） */
   readonly months?: readonly Month[];
+  /**
+   * onHolidayRule: "after-holiday" と組で、祝日に加えて飛ばす曜日。本来の日が祝日かこの曜日なら、その日以降で最初の、
+   * 祝日でもこの曜日でもない日に振り替える（例: 「6 月 15 日は創立記念日。土日祝なら翌営業日」は
+   * { day: 15, months: [6], onHolidayRule: "after-holiday", skipWeekdays: [0, 6] }）。"after-holiday" 以外と組にすると invalid-option
+   */
+  readonly skipWeekdays?: readonly Weekday[];
   readonly weekday?: never;
   readonly nth?: never;
   readonly interval?: never;
   readonly anchor?: never;
+  readonly businessDayOfMonth?: never;
+  readonly calendar?: never;
   readonly dayAfterHoliday?: never;
   readonly dayBeforeHoliday?: never;
   readonly holiday?: never;
   readonly weekdays?: never;
   readonly kinds?: never;
   readonly keys?: never;
+}
+
+/**
+ * 月の第 n 営業日（例: 月末最終営業日、第 5 営業日）。n は 1〜31、-1 は最後、-2 はその前。その月にない回は当てはまらない。
+ *
+ * 数える基準はこの規則を書いたカレンダーの「繰り返しの規則をすべて除いた判定」（個別の日付 → 毎年の月日 → 祝日 → 定休日の曜日）で、
+ * 定休日の曜日・祝日・年末年始休業（closedAnnual）・臨時休業日は数えに入らない。繰り返しの規則（定休日を closedRecurring の
+ * 曜日の規則で書いたものを含む）は基準に入らない。nthBusinessDayOfMonth・lastBusinessDayOfMonth はこの規則を適用した後の
+ * 実際の営業日を返すので、{ businessDayOfMonth: -1 } を休業にすると lastBusinessDayOfMonth はその前日になる。
+ * onHolidayRule は "under-holiday"（既定）と "over-holiday" を受け、"after-holiday" は invalid-option（第 n 営業日をずらす意味がない）。
+ * holidayPolicy: "open" のカレンダーでは祝日も営業日として数えるので第 n 営業日が祝日に当たることがあり、既定ではその日は
+ * 祝日の段階が先に決めてこの規則は当てはまらない（曜日の規則と同じ優先順位）。「第 1 営業日は祝日でも休業」は "over-holiday" で書く。
+ * holidayPolicy: "closed" では祝日が基準の営業日にならないので "over-holiday" は結果を変えない（診断が info で知らせる）。
+ *
+ * スケジュール（createSchedule の recurring）では、スケジュール自身に営業・休業の概念がないので、数える基準にする作成済みの
+ * カレンダーを calendar で指定する（必須。タイムゾーンはスケジュールと同じであること）。カレンダー（closedRecurring・openRecurring）
+ * では calendar は指定できない（invalid-option。基準は自分の設定で決まる）。
+ * @public
+ */
+export interface BusinessDayOfMonthPattern {
+  /** 月の第 n 営業日（1〜31、-1 は最後、-2 はその前、… -31 まで）。配列で複数指定できる */
+  readonly businessDayOfMonth: BusinessDayOfMonth | readonly BusinessDayOfMonth[];
+  /** 当てはめる月（省略時はすべての月） */
+  readonly months?: readonly Month[];
+  /** 営業日を数える基準のカレンダー（スケジュールでは必須。カレンダーでは指定できない） */
+  readonly calendar?: Calendar;
+  readonly weekday?: never;
+  readonly nth?: never;
+  readonly interval?: never;
+  readonly anchor?: never;
+  readonly day?: never;
+  readonly dayAfterHoliday?: never;
+  readonly dayBeforeHoliday?: never;
+  readonly holiday?: never;
+  readonly weekdays?: never;
+  readonly kinds?: never;
+  readonly keys?: never;
+  readonly skipWeekdays?: never;
 }
 
 /**
@@ -195,10 +258,13 @@ export interface DayAfterHolidayPattern {
   readonly interval?: never;
   readonly anchor?: never;
   readonly day?: never;
+  readonly businessDayOfMonth?: never;
+  readonly calendar?: never;
   readonly dayBeforeHoliday?: never;
   readonly holiday?: never;
   readonly kinds?: never;
   readonly keys?: never;
+  readonly skipWeekdays?: never;
 }
 
 /**
@@ -218,10 +284,13 @@ export interface DayBeforeHolidayPattern {
   readonly interval?: never;
   readonly anchor?: never;
   readonly day?: never;
+  readonly businessDayOfMonth?: never;
+  readonly calendar?: never;
   readonly dayAfterHoliday?: never;
   readonly holiday?: never;
   readonly kinds?: never;
   readonly keys?: never;
+  readonly skipWeekdays?: never;
 }
 
 /**
@@ -252,8 +321,11 @@ export interface HolidayPattern<Kind extends string = string> {
   readonly interval?: never;
   readonly anchor?: never;
   readonly day?: never;
+  readonly businessDayOfMonth?: never;
+  readonly calendar?: never;
   readonly dayAfterHoliday?: never;
   readonly dayBeforeHoliday?: never;
+  readonly skipWeekdays?: never;
 }
 
 /**
@@ -263,6 +335,7 @@ export interface HolidayPattern<Kind extends string = string> {
 export type RecurringPattern<Kind extends string = string> =
   | WeekdayPattern
   | DayOfMonthPattern
+  | BusinessDayOfMonthPattern
   | DayAfterHolidayPattern
   | DayBeforeHolidayPattern
   | HolidayPattern<Kind>;
@@ -695,6 +768,14 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly anchor: number | null;
   /** 日の集合（曜日の規則では null） */
   readonly days: ReadonlySet<number> | null;
+  /** 第 n 営業日の集合（第 n 営業日の規則以外では null） */
+  readonly businessDays: ReadonlySet<number> | null;
+  /** 営業日を数える基準（スケジュールの第 n 営業日の規則の calendar から。null なら自分の設定の「繰り返しの規則を除いた判定」） */
+  readonly basis: BasisOfMonth | null;
+  /** basis の元のカレンダー（診断で同じ基準かを比べるため。basis が null なら null） */
+  readonly calendar: Calendar | null;
+  /** "after-holiday" の振替で、祝日に加えて飛ばす曜日（null はなし） */
+  readonly skipWeekdays: ReadonlySet<number> | null;
   /** 祝日の翌日の規則か */
   readonly dayAfterHoliday: boolean;
   /** 祝前日の規則か */
@@ -715,6 +796,36 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
 }
 
 const NTH_VALUES = [1, 2, 3, 4, 5, -1];
+const isBusinessDayOfMonth = (v: unknown): boolean =>
+  Number.isInteger(v) && v !== 0 && (v as number) >= -31 && (v as number) <= 31;
+
+/**
+ * @internal 営業日を数える基準。年と月を受け取り、その月の基準で営業日である日（1〜31）を日付順に返す。
+ * 第 n 営業日の規則（businessDayOfMonth）の判定に使う
+ */
+export type BasisOfMonth = (year: number, month: number) => readonly number[];
+
+/** @internal カレンダーの判定関数から、月ごとに結果をキャッシュする基準を作る */
+export function basisFromPredicate(isOpen: (date: DateString) => boolean): BasisOfMonth {
+  const cache = new Map<number, readonly number[]>();
+  return (year, month) => {
+    const key = year * 12 + month;
+    let days = cache.get(key);
+    if (days === undefined) {
+      const list: number[] = [];
+      const dim = daysInMonth(year, month);
+      for (let d = 1; d <= dim; d++) if (isOpen(formatDate(year, month, d))) list.push(d);
+      days = Object.freeze(list);
+      if (cache.size >= 240) cache.clear();
+      cache.set(key, days);
+    }
+    return days;
+  };
+}
+
+/** 作成済みのカレンダーか（createCalendar の結果の形。isBusinessDay と timeZone を持つ） */
+const isCalendarLike = (v: unknown): v is Calendar =>
+  isObject(v) && typeof v["isBusinessDay"] === "function" && typeof v["timeZone"] === "string";
 const ON_HOLIDAY_RULES: readonly OnHolidayRule[] = [
   "under-holiday",
   "over-holiday",
@@ -748,6 +859,7 @@ export function compileRecurringRules<T>(
   entries: unknown,
   valueOf: (entry: Record<string, unknown>, path: string) => T | undefined,
   keys: readonly string[],
+  context: "calendar" | "schedule",
 ): RecurringRuleCompiled<T>[] {
   if (entries === undefined) return [];
   if (!Array.isArray(entries)) {
@@ -769,9 +881,11 @@ export function compileRecurringRules<T>(
     const hasAfter = "dayAfterHoliday" in entry;
     const hasBefore = "dayBeforeHoliday" in entry;
     const hasHoliday = "holiday" in entry;
+    const hasBusinessDay = "businessDayOfMonth" in entry;
     if (
       Number(hasWeekday) +
         Number(hasDay) +
+        Number(hasBusinessDay) +
         Number(hasAfter) +
         Number(hasBefore) +
         Number(hasHoliday) !==
@@ -780,7 +894,7 @@ export function compileRecurringRules<T>(
       c.error(
         "invalid-option",
         p,
-        'must have exactly one of "weekday", "day", "dayAfterHoliday", "dayBeforeHoliday" or "holiday"',
+        'must have exactly one of "weekday", "day", "businessDayOfMonth", "dayAfterHoliday", "dayBeforeHoliday" or "holiday"',
       );
       return;
     }
@@ -789,6 +903,9 @@ export function compileRecurringRules<T>(
     let weekday: Weekday | null = null;
     let nth: Set<number> | null = null;
     let days: Set<number> | null = null;
+    let businessDays: Set<number> | null = null;
+    let basis: BasisOfMonth | null = null;
+    let basisCalendar: Calendar | null = null;
     let interval: number | null = null;
     let anchor: number | null = null;
     const hasInterval = "interval" in entry;
@@ -849,6 +966,45 @@ export function compileRecurringRules<T>(
         const set = checkSet(c, `${p}.day`, entry["day"], isDayOfMonth, "1-31 or -1 (last day)");
         if (set) days = set;
         else ok = false;
+      } else if (hasBusinessDay) {
+        const set = checkSet(
+          c,
+          `${p}.businessDayOfMonth`,
+          entry["businessDayOfMonth"],
+          isBusinessDayOfMonth,
+          "1-31 or -1 (last business day) to -31",
+        );
+        if (set) businessDays = set;
+        else ok = false;
+        if (entry["onHolidayRule"] === "after-holiday") {
+          c.error(
+            "invalid-option",
+            `${p}.onHolidayRule`,
+            '"after-holiday" cannot be used with "businessDayOfMonth" (shifting the nth business day has no meaning; use "under-holiday" or "over-holiday")',
+          );
+          ok = false;
+        }
+        if (context === "calendar") {
+          if ("calendar" in entry) {
+            c.error(
+              "invalid-option",
+              `${p}.calendar`,
+              '"calendar" cannot be used in a calendar (the counting basis is the calendar\'s own options without recurring rules)',
+            );
+            ok = false;
+          }
+        } else if (!isCalendarLike(entry["calendar"])) {
+          c.error(
+            "invalid-option",
+            `${p}.calendar`,
+            "must be a calendar made with createCalendar (the basis for counting business days; required in a schedule)",
+          );
+          ok = false;
+        } else {
+          const calendar = entry["calendar"];
+          basisCalendar = calendar;
+          basis = basisFromPredicate((date) => calendar.isBusinessDay(date));
+        }
       } else {
         const key = hasAfter ? "dayAfterHoliday" : hasBefore ? "dayBeforeHoliday" : "holiday";
         if (entry[key] !== true) {
@@ -886,6 +1042,14 @@ export function compileRecurringRules<T>(
           else ok = false;
         }
       }
+    }
+    if (!hasBusinessDay && "calendar" in entry) {
+      c.error(
+        "invalid-option",
+        `${p}.calendar`,
+        '"calendar" can be used only with "businessDayOfMonth"',
+      );
+      ok = false;
     }
     if (!hasHoliday && "kinds" in entry) {
       c.error("invalid-option", `${p}.kinds`, '"kinds" can be used only with "holiday"');
@@ -964,6 +1128,41 @@ export function compileRecurringRules<T>(
       );
       ok = false;
     }
+    let skipWeekdays: Set<number> | null = null;
+    if ("skipWeekdays" in entry) {
+      if (entry["onHolidayRule"] !== "after-holiday" || !(hasWeekday || hasDay)) {
+        c.error(
+          "invalid-option",
+          `${p}.skipWeekdays`,
+          '"skipWeekdays" can be used only with onHolidayRule: "after-holiday" on a "weekday" or "day" rule',
+        );
+        ok = false;
+      } else if (!Array.isArray(entry["skipWeekdays"])) {
+        c.error(
+          "invalid-option",
+          `${p}.skipWeekdays`,
+          "must be a non-empty array of weekdays (0 = Sunday to 6 = Saturday)",
+        );
+        ok = false;
+      } else {
+        const set = checkSet(
+          c,
+          `${p}.skipWeekdays`,
+          entry["skipWeekdays"],
+          isWeekday,
+          "a weekday (0 = Sunday to 6 = Saturday)",
+        );
+        if (set === undefined) ok = false;
+        else if (weekday !== null && set.has(weekday)) {
+          c.error(
+            "invalid-option",
+            `${p}.skipWeekdays`,
+            `cannot include the rule's own weekday ${weekday} (the rule would be shifted every time)`,
+          );
+          ok = false;
+        } else skipWeekdays = set;
+      }
+    }
     const period = checkPeriod(c, p, entry);
     if (ok && period && value !== undefined) {
       rules.push(
@@ -974,6 +1173,10 @@ export function compileRecurringRules<T>(
           interval,
           anchor,
           days,
+          businessDays,
+          basis,
+          calendar: basisCalendar,
+          skipWeekdays,
           dayAfterHoliday: hasAfter,
           dayBeforeHoliday: hasBefore,
           holiday: hasHoliday,
@@ -996,17 +1199,28 @@ export function compileRecurringRules<T>(
 export type HolidayOf = (date: DateString) => Holiday<string> | undefined;
 
 /**
- * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・祝日・祝日の翌日・祝前日・月）がその日に当てはまるか。
+ * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・第 n 営業日・祝日・祝日の翌日・祝前日・月）がその日に当てはまるか。
  * 有効期間は考えない（規則の診断で、形どうしの包含を調べるために分けている）。
- * 祝日に従属する規則は holidayOf で判定し、holidayOf を渡さなければ当てはまらない
+ * 祝日に従属する規則は holidayOf で判定し、holidayOf を渡さなければ当てはまらない。
+ * 第 n 営業日の規則は、規則自身の基準（スケジュールの calendar）か basis で数え、どちらもなければ当てはまらない
  */
 export function matchPattern(
   rule: RecurringRuleCompiled<unknown>,
   date: DateString,
   holidayOf?: HolidayOf,
+  basis?: BasisOfMonth,
 ): boolean {
   const { year, month, day } = parseDate(date);
   if (rule.months && !rule.months.has(month)) return false;
+  if (rule.businessDays) {
+    // 第 n 営業日: 規則自身の基準（スケジュールの calendar）か、呼び出し側の基準（カレンダーの「繰り返しの規則を除いた判定」）で数える
+    const b = rule.basis ?? basis;
+    if (b === undefined) return false;
+    const days = b(year, month);
+    const index = days.indexOf(day);
+    if (index < 0) return false;
+    return rule.businessDays.has(index + 1) || rule.businessDays.has(index - days.length);
+  }
   if (rule.holiday || rule.dayAfterHoliday || rule.dayBeforeHoliday) {
     if (holidayOf === undefined) return false;
     if (rule.weekdays && !rule.weekdays.has(weekdayOf(date))) return false;
@@ -1038,8 +1252,23 @@ export function matchRecurring(
   rule: RecurringRuleCompiled<unknown>,
   date: DateString,
   holidayOf: HolidayOf,
+  basis?: BasisOfMonth,
 ): boolean {
-  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date, holidayOf);
+  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date, holidayOf, basis);
+}
+
+/**
+ * @internal 第 n 営業日の規則が自分の設定を基準にする場合の基準を作る（繰り返しの規則をすべて除いた判定で営業日か）。
+ * 基準が要らない設定（第 n 営業日の規則がない、またはすべて calendar を持つ）では undefined
+ */
+export function createBasis<T, Kind extends string>(
+  compiled: CompiledSchedule<T, Kind>,
+  lookup: HolidayLookupInternal<Kind>,
+): BasisOfMonth | undefined {
+  if (!compiled.recurring.some((r) => r.businessDays !== null && r.basis === null))
+    return undefined;
+  const resolve = createResolver({ ...compiled, recurring: [] }, lookup);
+  return basisFromPredicate((date) => resolve(date).day.value === true);
 }
 
 /** 規則の value を取り出す（value が必須の規則用） */
@@ -1373,6 +1602,9 @@ export const RECURRING_RULE_KEYS = [
   "keys",
   "weekdays",
   "months",
+  "businessDayOfMonth",
+  "calendar",
+  "skipWeekdays",
   "name",
   "onHolidayRule",
   ...PERIOD_KEYS,
@@ -1424,7 +1656,23 @@ export function compileScheduleOptions<T, Kind extends string>(
     options["recurring"],
     requiredValue<T>(c),
     [...RECURRING_RULE_KEYS, "value"],
+    "schedule",
   );
+  // 第 n 営業日の規則の基準のカレンダーは、スケジュールと同じタイムゾーンであること（合成と同じ理由。瞬間の暦日が食い違うため）
+  for (const rule of recurring) {
+    if (rule.businessDays === null) continue;
+    const entry = (options["recurring"] as Record<string, unknown>[])[
+      Number(/\[(\d+)\]$/.exec(rule.path)![1])
+    ]!;
+    const tz = (entry["calendar"] as Calendar).timeZone;
+    if (tz !== source.timeZone) {
+      c.error(
+        "time-zone-conflict",
+        `${rule.path}.calendar`,
+        `the calendar's time zone ${tz} differs from the schedule's ${source.timeZone}`,
+      );
+    }
+  }
   return { source, weekly, holiday, annual, dates, recurring };
 }
 
@@ -1464,6 +1712,7 @@ export function createResolver<T, Kind extends string>(
 ): (date: DateString) => Resolution<T, Kind> {
   const { weekly, holiday: holidayRule, annual, dates, recurring } = compiled;
   const hasShift = recurring.some((r) => r.onHolidayRule === "after-holiday");
+  const basis = createBasis(compiled, lookup);
 
   /** 振替・祝日の規則の判断に使う祝日。提供元の対応年の外は祝日でないとみなす（振替元をさかのぼる途中で範囲を出る場合のため） */
   function holidayOfSafe(date: DateString): Holiday<Kind> | undefined {
@@ -1484,7 +1733,8 @@ export function createResolver<T, Kind extends string>(
   function shiftedOrigin(rule: RecurringRuleCompiled<T>, date: DateString): DateString | undefined {
     for (let k = 1; k <= MAX_HOLIDAY_RUN; k++) {
       const prev = addDays(date, -k);
-      if (!isHolidaySafe(prev)) return undefined;
+      // 飛ばす日は祝日と、skipWeekdays の曜日。それ以外の日に達したら、振替元はない
+      if (!isHolidaySafe(prev) && !rule.skipWeekdays?.has(weekdayOf(prev))) return undefined;
       if (matchRecurring(rule, prev, holidayOfSafe)) return prev;
     }
     return undefined;
@@ -1523,7 +1773,7 @@ export function createResolver<T, Kind extends string>(
     if (holiday) {
       // 3. 祝日の上（"over-holiday"。祝日の規則 { holiday: true } もここ）
       const over = recurring.find(
-        (r) => r.onHolidayRule === "over-holiday" && matchRecurring(r, date, holidayOfSafe),
+        (r) => r.onHolidayRule === "over-holiday" && matchRecurring(r, date, holidayOfSafe, basis),
       );
       if (over) return make(over.value, "recurring", over, over.name);
       // 4. 祝日
@@ -1534,7 +1784,7 @@ export function createResolver<T, Kind extends string>(
       // 祝日の扱いが「曜日どおり」なら、祝日の下（"under-holiday"）の規則も当てはまる。
       // "after-holiday" の規則は祝日には当てはめない（振り替える）
       const under = recurring.find(
-        (r) => r.onHolidayRule === "under-holiday" && matchRecurring(r, date, holidayOfSafe),
+        (r) => r.onHolidayRule === "under-holiday" && matchRecurring(r, date, holidayOfSafe, basis),
       );
       if (under) return make(under.value, "recurring", under, under.name);
       return make(weekly[weekday] as T, "weekday", null, undefined);
@@ -1542,7 +1792,9 @@ export function createResolver<T, Kind extends string>(
 
     // 5. 繰り返しの規則（祝日でない日。配列で先に書いたものが優先）。振替先も同じ段階で判定する
     for (const rule of recurring) {
-      if (matchRecurring(rule, date, holidayOfSafe))
+      // skipWeekdays の曜日には当てはめない（祝日と同じく振り替える）
+      if (rule.skipWeekdays?.has(weekday)) continue;
+      if (matchRecurring(rule, date, holidayOfSafe, basis))
         return make(rule.value, "recurring", rule, rule.name);
       if (hasShift && rule.onHolidayRule === "after-holiday") {
         const origin = shiftedOrigin(rule, date);

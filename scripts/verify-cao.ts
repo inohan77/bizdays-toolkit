@@ -38,7 +38,8 @@ const report = option("--report");
 const write = args.includes("--write");
 const simulate = args.includes("--simulate");
 if (simulate && write) throw new Error("--simulate cannot be combined with --write");
-const today = new Date().toISOString().slice(0, 10);
+/** 今日の日付（日本時間。報告書・フィクスチャの「取得」の日付。issue のコメントの日付と同じ基準） */
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
 
 /** 一時的な失敗で監視が issue を立てないよう、3 回まで試す */
 async function fetchBytes(url: string): Promise<Uint8Array> {

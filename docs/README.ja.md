@@ -74,15 +74,17 @@ calendar.dueDate("2026-11", { day: 23, convention: "following" }); // "2026-11-2
 
 カレンダーは、祝日の提供元と、`closedWeekdays`（定休日の曜日）・`closedAnnual`（毎年の月日の期間。年またぎも可）・`closedDates`・`openDates`（臨時休業・臨時営業）・`closedRecurring` / `openRecurring`（繰り返しの規則）から作ります:
 
-| 規則                                                      | 意味                                                             |
-| --------------------------------------------------------- | ---------------------------------------------------------------- |
-| `{ weekday: 3, nth: 3 }`                                  | 第 3 水曜日（`nth` は 1〜5 と -1（最終）。配列で複数指定できる） |
-| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`       | 隔週水曜日（`anchor` から数える）                                |
-| `{ day: 20 }`・`{ day: -1 }`                              | 毎月 20 日・毎月末日                                             |
-| `{ holiday: true, kinds: ["substitute"] }`                | 祝日（種別や識別子 `keys: ["vernal-equinox"]` で絞れる）         |
-| `{ dayAfterHoliday: true }`・`{ dayBeforeHoliday: true }` | 祝日（連休）の翌日・前日                                         |
-| `onHolidayRule: "after-holiday"`                          | 「月曜休館（祝日の場合は翌平日）」のような振替                   |
-| `effectiveFrom`・`effectiveTo`                            | 規則の有効期間                                                   |
+| 規則                                                      | 意味                                                                   |
+| --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `{ weekday: 3, nth: 3 }`                                  | 第 3 水曜日（`nth` は 1〜5 と -1（最終）。配列で複数指定できる）       |
+| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`       | 隔週水曜日（`anchor` から数える）                                      |
+| `{ day: 20 }`・`{ day: -1 }`                              | 毎月 20 日・毎月末日                                                   |
+| `{ businessDayOfMonth: -1 }`・`{ businessDayOfMonth: 5 }` | 月末最終営業日・第 5 営業日                                            |
+| `{ holiday: true, kinds: ["substitute"] }`                | 祝日（種別や識別子 `keys: ["vernal-equinox"]` で絞れる）               |
+| `{ dayAfterHoliday: true }`・`{ dayBeforeHoliday: true }` | 祝日（連休）の翌日・前日                                               |
+| `onHolidayRule: "after-holiday"`                          | 「月曜休館（祝日の場合は翌平日）」のような振替                         |
+| `skipWeekdays: [0, 6]`                                    | `"after-holiday"` で土日も飛ばす（「6 月 15 日。土日祝なら翌営業日」） |
+| `effectiveFrom`・`effectiveTo`                            | 規則の有効期間                                                         |
 
 `dayInfo` で、その日が営業か休業かの理由（`reason`・`name`・`rulePath`）が分かります。同梱の毎年繰り返す祝日には安定した識別子 `key`（`vernal-equinox`・`good-friday`・`hari-raya-puasa` など）が付いていて、月日や曜日では書けない祝日を規則から個別に指せます。詳しくは[営業日カレンダー](./guide.ja.md#営業日カレンダー)・[繰り返しの規則](./guide.ja.md#繰り返しの規則)・[祝日の識別子](./guide.ja.md#祝日の識別子)・[よくある設定の例](./guide.ja.md#よくある設定の例)。
 

@@ -65,6 +65,34 @@ export interface AnnualValue<T> extends EffectivePeriod {
 export type BusinessDayConvention = "following" | "preceding" | "modified-following" | "modified-preceding";
 ```
 
+### BusinessDayOfMonth (@public)
+
+```ts
+export type BusinessDayOfMonth = number;
+```
+
+### BusinessDayOfMonthPattern (@public)
+
+```ts
+export interface BusinessDayOfMonthPattern {
+    readonly businessDayOfMonth: BusinessDayOfMonth | readonly BusinessDayOfMonth[];
+    readonly months?: readonly Month[];
+    readonly calendar?: Calendar;
+    readonly weekday?: never;
+    readonly nth?: never;
+    readonly interval?: never;
+    readonly anchor?: never;
+    readonly day?: never;
+    readonly dayAfterHoliday?: never;
+    readonly dayBeforeHoliday?: never;
+    readonly holiday?: never;
+    readonly weekdays?: never;
+    readonly kinds?: never;
+    readonly keys?: never;
+    readonly skipWeekdays?: never;
+}
+```
+
 ### BusinessDayOptions (@public)
 
 ```ts
@@ -235,10 +263,13 @@ export interface DayAfterHolidayPattern {
     readonly interval?: never;
     readonly anchor?: never;
     readonly day?: never;
+    readonly businessDayOfMonth?: never;
+    readonly calendar?: never;
     readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
     readonly kinds?: never;
     readonly keys?: never;
+    readonly skipWeekdays?: never;
 }
 ```
 
@@ -254,10 +285,13 @@ export interface DayBeforeHolidayPattern {
     readonly interval?: never;
     readonly anchor?: never;
     readonly day?: never;
+    readonly businessDayOfMonth?: never;
+    readonly calendar?: never;
     readonly dayAfterHoliday?: never;
     readonly holiday?: never;
     readonly kinds?: never;
     readonly keys?: never;
+    readonly skipWeekdays?: never;
 }
 ```
 
@@ -290,10 +324,13 @@ export type DayOfMonth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
 export interface DayOfMonthPattern {
     readonly day: DayOfMonth | readonly DayOfMonth[];
     readonly months?: readonly Month[];
+    readonly skipWeekdays?: readonly Weekday[];
     readonly weekday?: never;
     readonly nth?: never;
     readonly interval?: never;
     readonly anchor?: never;
+    readonly businessDayOfMonth?: never;
+    readonly calendar?: never;
     readonly dayAfterHoliday?: never;
     readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
@@ -387,8 +424,11 @@ export interface HolidayPattern<Kind extends string = string> {
     readonly interval?: never;
     readonly anchor?: never;
     readonly day?: never;
+    readonly businessDayOfMonth?: never;
+    readonly calendar?: never;
     readonly dayAfterHoliday?: never;
     readonly dayBeforeHoliday?: never;
+    readonly skipWeekdays?: never;
 }
 ```
 
@@ -500,7 +540,7 @@ export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
 ### RecurringPattern (@public)
 
 ```ts
-export type RecurringPattern<Kind extends string = string> = WeekdayPattern | DayOfMonthPattern | DayAfterHolidayPattern | DayBeforeHolidayPattern | HolidayPattern<Kind>;
+export type RecurringPattern<Kind extends string = string> = WeekdayPattern | DayOfMonthPattern | BusinessDayOfMonthPattern | DayAfterHolidayPattern | DayBeforeHolidayPattern | HolidayPattern<Kind>;
 ```
 
 ### RecurringRule (@public)
@@ -650,7 +690,10 @@ export interface WeekdayPattern {
     readonly interval?: number;
     readonly anchor?: DateString;
     readonly months?: readonly Month[];
+    readonly skipWeekdays?: readonly Weekday[];
     readonly day?: never;
+    readonly businessDayOfMonth?: never;
+    readonly calendar?: never;
     readonly dayAfterHoliday?: never;
     readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
@@ -884,7 +927,7 @@ export type DiagnosticSeverity = "error" | "warning" | "info";
 ### KnownDiagnosticCode (@public)
 
 ```ts
-export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "shadowed" | "never-matches" | "redundant" | "expired";
+export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "shadowed" | "never-matches" | "redundant" | "expired" | "counting-basis";
 ```
 
 ## bizdays-toolkit/provider

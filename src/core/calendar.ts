@@ -392,6 +392,7 @@ export function compileCalendarOptions<Kind extends string>(
     o["openRecurring"],
     () => true,
     RECURRING_RULE_KEYS,
+    "calendar",
   );
   const closedRecurring = compileRecurringRules<boolean>(
     c,
@@ -399,6 +400,7 @@ export function compileCalendarOptions<Kind extends string>(
     o["closedRecurring"],
     () => false,
     RECURRING_RULE_KEYS,
+    "calendar",
   );
 
   return {

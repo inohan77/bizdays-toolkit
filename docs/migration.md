@@ -4,6 +4,33 @@
 
 パッチ版（0.x.y の y）は、公式データの反映と不具合の修正なので、作業は要りません。
 
+## 0.19.0
+
+動作が変わる既存の API はありません（月の第 n 営業日の規則 `businessDayOfMonth`、振替で曜日も飛ばす `skipWeekdays`、診断コード `counting-basis` の追加）。
+
+| 変更                                                                      | 対応                                                                                                |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 年ごとに `closedDates` で列挙していた「月末最終営業日」「第 n 営業日」    | 任意: `{ businessDayOfMonth: -1 }` などに書き換えると年ごとの更新が要らなくなる                     |
+| 年ごとに `closedDates` で列挙していた「創立記念日（土日祝なら翌営業日）」 | 任意: `{ day: 15, months: [6], onHolidayRule: "after-holiday", skipWeekdays: [0, 6] }` に書き換える |
+| 診断のコードで分岐しているコード                                          | `counting-basis`（info）が増える。「その他」を扱う分岐なら変更不要                                  |
+
+```ts
+const branch = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  closedRecurring: [
+    { businessDayOfMonth: -1, name: "月末最終営業日は来店予約を停止" },
+    {
+      day: 15,
+      months: [6],
+      name: "創立記念日",
+      onHolidayRule: "after-holiday",
+      skipWeekdays: [0, 6],
+    },
+  ],
+});
+```
+
 ## 0.18.0
 
 動作が変わる既存の API はありません（祝日の識別子 `key` と規則の `keys`、`bizdays-toolkit/provider` の `substituteDays` の追加）。

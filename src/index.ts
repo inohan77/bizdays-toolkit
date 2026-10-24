@@ -32,6 +32,8 @@ export {
   createSchedule,
   type AnnualRangeValue,
   type AnnualValue,
+  type BusinessDayOfMonth,
+  type BusinessDayOfMonthPattern,
   type CivilDateTimeParts,
   type DateRangeValue,
   type DateValue,

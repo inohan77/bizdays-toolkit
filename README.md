@@ -74,15 +74,17 @@ Each holiday carries its date, name (and English name), `kind` (national, substi
 
 A calendar is built from the holiday provider and your closures: `closedWeekdays`, `closedAnnual` (month-day ranges, across the new year too), `closedDates` and `openDates`, and recurring rules in `closedRecurring` / `openRecurring`:
 
-| Rule                                                      | Meaning                                                                         |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `{ weekday: 3, nth: 3 }`                                  | The 3rd Wednesday (`nth` is 1–5 or -1 for the last; an array for several)       |
-| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`       | Every other Wednesday, counted from the anchor                                  |
-| `{ day: 20 }`, `{ day: -1 }`                              | The 20th, the last day of the month                                             |
-| `{ holiday: true, kinds: ["substitute"] }`                | Holidays, optionally narrowed by kind or by key (`keys: ["vernal-equinox"]`)    |
-| `{ dayAfterHoliday: true }`, `{ dayBeforeHoliday: true }` | The day after (or before) a holiday or a run of holidays                        |
-| `onHolidayRule: "after-holiday"`                          | "Closed on Mondays, or the next weekday when Monday is a holiday" (museum rule) |
-| `effectiveFrom`, `effectiveTo`                            | The period the rule is in effect                                                |
+| Rule                                                      | Meaning                                                                          |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `{ weekday: 3, nth: 3 }`                                  | The 3rd Wednesday (`nth` is 1–5 or -1 for the last; an array for several)        |
+| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`       | Every other Wednesday, counted from the anchor                                   |
+| `{ day: 20 }`, `{ day: -1 }`                              | The 20th, the last day of the month                                              |
+| `{ businessDayOfMonth: -1 }`, `{ businessDayOfMonth: 5 }` | The last business day of the month, the 5th business day                         |
+| `{ holiday: true, kinds: ["substitute"] }`                | Holidays, optionally narrowed by kind or by key (`keys: ["vernal-equinox"]`)     |
+| `{ dayAfterHoliday: true }`, `{ dayBeforeHoliday: true }` | The day after (or before) a holiday or a run of holidays                         |
+| `onHolidayRule: "after-holiday"`                          | "Closed on Mondays, or the next weekday when Monday is a holiday" (museum rule)  |
+| `skipWeekdays: [0, 6]`                                    | With `"after-holiday"`: also skip weekends ("June 15, or the next business day") |
+| `effectiveFrom`, `effectiveTo`                            | The period the rule is in effect                                                 |
 
 `dayInfo` tells you why a day is open or closed (`reason`, `name`, `rulePath`). Every bundled holiday that recurs each year has a stable `key` (`vernal-equinox`, `good-friday`, `hari-raya-puasa`, …), so a rule can select individual holidays that no date pattern can express. Details: [Business-day calendars](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#business-day-calendars), [Recurring rules](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#recurring-rules), [Holiday keys](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#holiday-keys), [Common recipes](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#common-recipes).
 
