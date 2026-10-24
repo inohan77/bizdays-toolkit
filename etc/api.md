@@ -238,6 +238,7 @@ export interface DayAfterHolidayPattern {
     readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
     readonly kinds?: never;
+    readonly keys?: never;
 }
 ```
 
@@ -256,6 +257,7 @@ export interface DayBeforeHolidayPattern {
     readonly dayAfterHoliday?: never;
     readonly holiday?: never;
     readonly kinds?: never;
+    readonly keys?: never;
 }
 ```
 
@@ -297,6 +299,7 @@ export interface DayOfMonthPattern {
     readonly holiday?: never;
     readonly weekdays?: never;
     readonly kinds?: never;
+    readonly keys?: never;
 }
 ```
 
@@ -345,6 +348,7 @@ export interface Holiday<Kind extends string = string> {
     readonly nameEn: string;
     readonly names?: Readonly<Record<string, string>>;
     readonly kind: Kind;
+    readonly key?: string;
     readonly confirmed: boolean;
 }
 ```
@@ -375,6 +379,7 @@ export interface HolidayLookup<Kind extends string = string> {
 export interface HolidayPattern<Kind extends string = string> {
     readonly holiday: true;
     readonly kinds?: readonly Kind[];
+    readonly keys?: readonly string[];
     readonly weekdays?: readonly Weekday[];
     readonly months?: readonly Month[];
     readonly weekday?: never;
@@ -651,6 +656,7 @@ export interface WeekdayPattern {
     readonly holiday?: never;
     readonly weekdays?: never;
     readonly kinds?: never;
+    readonly keys?: never;
 }
 ```
 
@@ -710,6 +716,12 @@ export type JapaneseHolidayKind = KnownJapaneseHolidayKind | (string & {});
 export declare const jp: HolidayProvider<JapaneseHolidayKind>;
 ```
 
+### KnownJapaneseHolidayKey (@beta)
+
+```ts
+export type KnownJapaneseHolidayKey = "new-year" | "coming-of-age" | "national-foundation" | "emperors-birthday" | "vernal-equinox" | "showa" | "constitution-memorial" | "greenery" | "childrens" | "marine" | "mountain" | "respect-for-the-aged" | "autumnal-equinox" | "sports" | "culture" | "labor-thanksgiving";
+```
+
 ### KnownJapaneseHolidayKind (@public)
 
 ```ts
@@ -749,6 +761,12 @@ export declare const dataVersion: string;
 export declare const england: HolidayProvider<UkHolidayKind>;
 ```
 
+### KnownUkHolidayKey (@beta)
+
+```ts
+export type KnownUkHolidayKey = "new-year" | "2nd-january" | "st-patricks" | "good-friday" | "easter-monday" | "early-may" | "spring" | "battle-of-the-boyne" | "summer" | "st-andrews" | "christmas" | "boxing-day";
+```
+
 ### KnownUkHolidayKind (@public)
 
 ```ts
@@ -786,6 +804,12 @@ export declare const wales: HolidayProvider<UkHolidayKind>;
 ```
 
 ## bizdays-toolkit/sg
+
+### KnownSgHolidayKey (@beta)
+
+```ts
+export type KnownSgHolidayKey = "new-year" | "chinese-new-year" | "good-friday" | "labour-day" | "hari-raya-puasa" | "vesak" | "hari-raya-haji" | "national-day" | "deepavali" | "christmas";
+```
 
 ### KnownSgHolidayKind (@public)
 
@@ -887,4 +911,30 @@ export declare function isLeapYear(year: number): boolean;
 
 ```ts
 export declare function nthWeekdayOfMonth(year: number, month: number, weekday: Weekday, n: number): DateString;
+```
+
+### substituteDays (@beta)
+
+```ts
+export declare function substituteDays<Kind extends string>(holidays: readonly Holiday<Kind>[], options: SubstituteDaysOptions<Kind>): Holiday<Kind>[];
+```
+
+### SubstituteDaysOptions (@beta)
+
+```ts
+export interface SubstituteDaysOptions<Kind extends string> {
+    readonly rules: Readonly<Partial<Record<Weekday, SubstituteDirection>>>;
+    readonly kind: Kind;
+    readonly name?: (holiday: Holiday<Kind>) => {
+        readonly name: string;
+        readonly nameEn: string;
+    };
+    readonly original?: "keep" | "drop";
+}
+```
+
+### SubstituteDirection (@beta)
+
+```ts
+export type SubstituteDirection = "next" | "previous";
 ```

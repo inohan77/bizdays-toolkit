@@ -14,8 +14,13 @@ import {
   type ScheduleDay,
 } from "bizdays-toolkit";
 import { diagnoseCalendar, type Diagnostic } from "bizdays-toolkit/diagnose";
-import { easterSunday, nthWeekdayOfMonth } from "bizdays-toolkit/provider";
-import { jp, toJapanDateTime, type JapaneseHoliday } from "bizdays-toolkit/jp";
+import { easterSunday, nthWeekdayOfMonth, substituteDays } from "bizdays-toolkit/provider";
+import {
+  jp,
+  toJapanDateTime,
+  type JapaneseHoliday,
+  type KnownJapaneseHolidayKey,
+} from "bizdays-toolkit/jp";
 import { sg, type SgHoliday } from "bizdays-toolkit/sg";
 import { scotland, wales, type UkHoliday } from "bizdays-toolkit/uk";
 
@@ -57,6 +62,23 @@ void thanksgiving;
 const rulePath: string | undefined = combined.dayInfo("2026-11-24").rulePath;
 void rulePath;
 createCalendar({ holidays: jp, openRecurring: [{ holiday: true, kinds: ["substitute"] }] });
+const equinox: KnownJapaneseHolidayKey = "vernal-equinox";
+createCalendar({ holidays: jp, openRecurring: [{ holiday: true, keys: [equinox] }] });
+const key: string | undefined = jp.holidaysInYear(2026)[0]?.key;
+void key;
+const observed = substituteDays(
+  [
+    {
+      date: "2026-07-04",
+      name: "Independence Day",
+      nameEn: "Independence Day",
+      kind: "federal",
+      confirmed: true,
+    },
+  ],
+  { rules: { 6: "previous", 0: "next" }, kind: "observed" },
+);
+void observed;
 const fromSchedule = createCalendarFromSchedule(schedule, (v) => v > 0);
 const open: boolean = fromSchedule.isBusinessDay("2026-11-24");
 void open;

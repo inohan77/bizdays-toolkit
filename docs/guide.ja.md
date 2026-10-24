@@ -49,7 +49,7 @@ edinburgh.isBusinessDay("2026-01-02"); // false（2nd January）
 edinburgh.addBusinessDays("2026-06-12", 1); // "2026-06-16"（6/15 は World Cup bank holiday）
 
 scotland.holidaysInYear(2026)[0];
-// { date: "2026-01-01", name: "New Year’s Day", nameEn: "New Year’s Day", kind: "regular", confirmed: true }
+// { date: "2026-01-01", name: "New Year’s Day", nameEn: "New Year’s Day", kind: "regular", confirmed: true, key: "new-year" }
 wales.holidaysInYear(2026)[0]?.names; // { cy: "Dydd Calan" }
 
 // 複数の地域にまたがる場合は和集合（いずれかの地域の祝日を祝日とする）
@@ -79,12 +79,40 @@ const singapore = createCalendar({ holidays: sg, closedWeekdays: [0, 6] });
 singapore.isBusinessDay("2026-08-10"); // false（National Day が日曜日に当たり、翌月曜日が振替）
 singapore.addBusinessDays("2026-02-16", 1); // "2026-02-19"（2 月 17・18 日は旧正月）
 sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
-// { date: "2026-06-01", name: "Vesak Day", nameEn: "Vesak Day", kind: "substitute", confirmed: true }
+// { date: "2026-06-01", name: "Vesak Day", nameEn: "Vesak Day", kind: "substitute", confirmed: true, key: "vesak" }
 ```
 
 - 提供元は `sg`（ID `SG`、タイムゾーン `Asia/Singapore`）の 1 つで、地域ごとの祝日はありません。`kind` は `regular`（毎年の祝日）・`substitute`（日曜日に当たった祝日の翌日。Holidays Act により祝日になり、名称は元の祝日と同じ）・`special`（政府が告示する臨時の祝日。Polling Day など）です。土曜日に当たった祝日は振り替えません
 - 旧正月・Hari Raya Puasa・Hari Raya Haji・Vesak Day・Deepavali は太陰暦・イスラム暦・ヒンドゥー暦で決まるため、規則では計算できません。日付は MOM（Ministry of Manpower）が年ごとに告示したもので、振替は Holidays Act の規則で計算します。対応年は MOM が告示した年（現在は 2020〜2027 年。`confirmedThrough` は対応年の最後の年と同じ）で、それより後の年は予測せず対応年の外（`out-of-range`）です。`sg` が `confirmed: false` を返すことはありません
 - 日付は data.gov.sg の「Singapore Public Holidays」コレクション（MOM）と照合しています。そのデータが告示と食い違う箇所（2022 年の Hari Raya の改定後の日付と、振替 2 日の欠落）は告示に従います。data.gov.sg との差分を毎日監視し、見つけたらパッチ版で反映します
+
+### 祝日の識別子
+
+同梱の、毎年繰り返す祝日には安定した識別子 `key` が付いています。規則の `{ holiday: true, keys: [...] }` で祝日を個別に指すためのもので（[繰り返しの規則](#繰り返しの規則)）、公式データに従ってパッチ版で変わりうる名称に依存せずに済みます。`key` は祝日の日付や公式の名称が変わっても変わりません（天皇誕生日は 4 月 29 日・12 月 23 日・2 月 23 日とも `emperors-birthday`、体育の日とスポーツの日はどちらも `sports`）。振替日は元の祝日の `key` を持つので、`keys: ["coming-of-age"]` は成人の日とその振替休日を指します。当日だけなら `kinds: ["national"]` を併せて指定します。一度きりの祝日（皇室行事の休日、英国の布告による臨時の bank holiday、シンガポールの Polling Day）と日本の国民の休日は `key` を持たないので、`kinds` か `dates` で指します。
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { jp } from "bizdays-toolkit/jp";
+
+// 花屋: 祝日は定休だが、春分の日・秋分の日（彼岸の中日）だけは営業
+const florist = createCalendar({
+  holidays: jp,
+  openRecurring: [
+    { holiday: true, keys: ["vernal-equinox", "autumnal-equinox"], name: "彼岸は営業" },
+  ],
+});
+florist.isBusinessDay("2026-03-20"); // true（春分の日）
+florist.isBusinessDay("2026-05-04"); // false（みどりの日）
+jp.holidaysInYear(2020).find((h) => h.date === "2020-02-24")?.key; // "emperors-birthday"（振替休日）
+```
+
+| 提供元                 | 識別子                                                                                                                                                                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jp`                   | `new-year`、`coming-of-age`、`national-foundation`、`emperors-birthday`、`vernal-equinox`、`showa`、`constitution-memorial`、`greenery`、`childrens`、`marine`、`mountain`、`respect-for-the-aged`、`autumnal-equinox`、`sports`、`culture`、`labor-thanksgiving` |
+| `england` ほか（英国） | `new-year`、`2nd-january`、`st-patricks`、`good-friday`、`easter-monday`、`early-may`、`spring`、`battle-of-the-boyne`、`summer`、`st-andrews`、`christmas`、`boxing-day`                                                                                         |
+| `sg`                   | `new-year`、`chinese-new-year`、`good-friday`、`labour-day`、`hari-raya-puasa`、`vesak`、`hari-raya-haji`、`national-day`、`deepavali`、`christmas`                                                                                                               |
+
+型 `KnownJapaneseHolidayKey`・`KnownUkHolidayKey`・`KnownSgHolidayKey` がこの一覧を持ち、エディターの補完に使えます（`@beta`）。識別子は英語名から 1 度だけ導いたもので（小文字にし、空白をハイフンに、アポストロフィを除き、末尾の "Day" を落とす）、綴りは提供元の英語名に従います（日本は `labor-thanksgiving`、シンガポールは `labour-day`）。自作の提供元にも `key` を付けられます（[他の国・地域の祝日](./providers.ja.md)）。
 
 ## 営業日カレンダー
 
@@ -154,22 +182,22 @@ museum.dayInfo("2026-02-12").name; // "祝日の翌日休館"（2 月 11 日は�
 museum.isBusinessDay("2026-05-07"); // false（5 月 3〜6 日の連休の翌日）
 ```
 
-| 書き方                                              | 意味                                                                                         |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `{ weekday: 1 }`                                    | 毎週月曜日                                                                                   |
-| `{ weekday: 3, nth: 3 }`                            | 第 3 水曜日。`nth` は 1〜5 と -1（最終）。`[2, 4]` のように配列で複数指定できる              |
-| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }` | 隔週水曜日。`anchor` から偶数週の水曜日（周期は 2 週以上。下記）                             |
-| `{ day: 20 }`                                       | 毎月 20 日。`day` は 1〜31 と -1（末日）。配列で複数指定できる                               |
-| `{ holiday: true, kinds: ["substitute"] }`          | 祝日。`kinds` でその種別（`Holiday.kind`）に絞れる。`holidayPolicy` より先に判定する（下記） |
-| `{ dayAfterHoliday: true }`                         | 祝日の翌日。祝日（連休なら連休）が明けた最初の祝日でない日（提供元の祝日だけで判定）         |
-| `{ dayBeforeHoliday: true }`                        | 祝前日。祝日（連休なら連休）の直前の祝日でない日（提供元の祝日だけで判定）                   |
-| `months: [8, 12]`                                   | どの書き方にも付けられる、月の絞り込み                                                       |
-| `effectiveFrom: "2027-04-01"`・`effectiveTo: "…"`   | 規則の有効期間（両端を含む）。期間の外では、その規則は書かれていないのと同じになる（下記）   |
+| 書き方                                              | 意味                                                                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `{ weekday: 1 }`                                    | 毎週月曜日                                                                                                                           |
+| `{ weekday: 3, nth: 3 }`                            | 第 3 水曜日。`nth` は 1〜5 と -1（最終）。`[2, 4]` のように配列で複数指定できる                                                      |
+| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }` | 隔週水曜日。`anchor` から偶数週の水曜日（周期は 2 週以上。下記）                                                                     |
+| `{ day: 20 }`                                       | 毎月 20 日。`day` は 1〜31 と -1（末日）。配列で複数指定できる                                                                       |
+| `{ holiday: true, kinds: ["substitute"] }`          | 祝日。`kinds` でその種別（`Holiday.kind`）に、`keys` で個別の祝日（`Holiday.key`）に絞れる。`holidayPolicy` より先に判定する（下記） |
+| `{ dayAfterHoliday: true }`                         | 祝日の翌日。祝日（連休なら連休）が明けた最初の祝日でない日（提供元の祝日だけで判定）                                                 |
+| `{ dayBeforeHoliday: true }`                        | 祝前日。祝日（連休なら連休）の直前の祝日でない日（提供元の祝日だけで判定）                                                           |
+| `months: [8, 12]`                                   | どの書き方にも付けられる、月の絞り込み                                                                                               |
+| `effectiveFrom: "2027-04-01"`・`effectiveTo: "…"`   | 規則の有効期間（両端を含む）。期間の外では、その規則は書かれていないのと同じになる（下記）                                           |
 
 - **第 n 何曜日**は「その月で n 回目のその曜日」です（1〜7 日が第 1）。カレンダーの第 n 週の行にある曜日ではありません
 - **その月にない日**（`nth: 5` がない月、`day: 31` がない月）は当てはまりません。末日は `day: -1` で指定します
 - **隔週**（`interval: 2`）は「第 1・第 3 水曜」（`nth: [1, 3]`）とは別物です。水曜日が 5 回ある月で、後者は 1 週ずれます。`interval` は周期の週数（2 以上の整数）、`anchor` は周期が通る日付（`weekday` と同じ曜日）で、その日と、その日から `interval` 週おきの前後の日に当てはまります。店舗は「1 月 7 日から隔週水曜」のように告知するので、その日付をそのまま書きます。起点より前の日に当てはめず起点から始めるには、`effectiveFrom` を併せて指定します。`interval` は `nth` とは併用できません
-- **祝日の規則**（`{ holiday: true }`）は、祝日の既定の扱いの例外を書きます。「2027 年 4 月から祝日も営業」は `holidayPolicy: "closed"` のまま `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]`、「振替休日と国民の休日は営業」は `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`、スケジュールの「5 月の祝日は特別営業時間」は `recurring: [{ holiday: true, months: [5], value: … }]` です。`kinds` はその種別（`Holiday.kind`。種別は提供元の一覧を参照。`holidays: jp` ならエディターで補完が効きます）の祝日に、`weekdays` はその曜日（「土曜の祝日は午前診療」は `{ holiday: true, weekdays: [6], value: … }`）に、`months` はその月に絞り、省略すればすべての祝日です。判定は「祝日の上」の段階で、`holidayPolicy`・スケジュールの `holiday` より先に行い、`holidayPolicy: "ignore"` でも当てはまります。当てはまる日は祝日なので、この規則に `onHolidayRule` は指定できません（`invalid-option`）。`holiday` には祝日がそのまま付きます
+- **祝日の規則**（`{ holiday: true }`）は、祝日の既定の扱いの例外を書きます。「2027 年 4 月から祝日も営業」は `holidayPolicy: "closed"` のまま `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]`、「振替休日と国民の休日は営業」は `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`、スケジュールの「5 月の祝日は特別営業時間」は `recurring: [{ holiday: true, months: [5], value: … }]` です。`kinds` はその種別（`Holiday.kind`。種別は提供元の一覧を参照。`holidays: jp` ならエディターで補完が効きます）の祝日に、`keys` は個別の祝日（`Holiday.key`。「春分の日・秋分の日は営業」は `{ holiday: true, keys: ["vernal-equinox", "autumnal-equinox"] }`。[祝日の識別子](#祝日の識別子)）に、`weekdays` はその曜日（「土曜の祝日は午前診療」は `{ holiday: true, weekdays: [6], value: … }`）に、`months` はその月に絞り、省略すればすべての祝日です。判定は「祝日の上」の段階で、`holidayPolicy`・スケジュールの `holiday` より先に行い、`holidayPolicy: "ignore"` でも当てはまります。当てはまる日は祝日なので、この規則に `onHolidayRule` は指定できません（`invalid-option`）。`holiday` には祝日がそのまま付きます
 - **祝日の翌日**は定義上祝日でないので、その規則に `onHolidayRule` は指定できません（`invalid-option`）。「祝日」は提供元の祝日で、毎年の休業日などは含みません。提供元のない設定では 1 日も当てはまりません。`weekdays` でその曜日に絞れます。美術館の「祝日の翌日は休館（土曜・日曜に当たる場合は開館）」は `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` です（代わりに `openRecurring` で土日を開けると、ほかの土日の休館まで打ち消してしまいます）
 - **祝前日**（`{ dayBeforeHoliday: true }`）はその鏡像で、翌日が祝日でその日自身は祝日でない日です。連休の前は連休の初日の前日だけが当てはまります（2026 年 5 月なら 5 月 2 日（土）だけで、5 月 4 日・5 日は祝日なので当てはまりません）。扱いは祝日の翌日と同じです（`weekdays`・`months`・有効期間を付けられ、`onHolidayRule` は指定できず、提供元がなければ当てはまりません）。スケジュールの「祝前日料金」、「祝前日は深夜 2 時まで営業」（`weekdays: [1, 2, 3, 4, 5]` で土日に当たる祝前日は通常どおり）、「祝前日は当日出荷の受付を正午まで」（締め時刻をスケジュールの値にして `cutoffs.valueOn(date)` を `cutoff` に渡す）のように書きます
 - 繰り返しの規則どうしは配列で先に書いたものが優先で、`openRecurring` は `closedRecurring` より優先です。月曜の勤労感謝の日（2026-11-23）の翌日は、月曜の規則の振替先でもあり祝日の翌日でもあります。先に書いた規則が決め、どちらが決めたかは `dayInfo` で分かります

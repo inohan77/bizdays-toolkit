@@ -1,12 +1,15 @@
-name: Watch holiday data (GOV.UK and data.gov.sg)
+name: Watch holiday data (GOV.UK, data.gov.sg and the Cabinet Office)
 
 # 公式の祝日データを毎日取得し、ライブラリ・フィクスチャと食い違えば issue を立てる。
 # - 英国: GOV.UK の bank holidays。照合は scripts/verify-govuk.ts（pnpm verify:govuk と同じ）。ラベル govuk-data。
 #   臨時の祝日（国葬など）は 10 日ほど前に発表されることがあるため、毎日確かめる
 # - シンガポール: data.gov.sg のコレクション 691（MOM）。照合は scripts/verify-datagovsg.ts（pnpm verify:datagovsg と同じ）。ラベル datagovsg-data。
 #   翌年の祝日は 4〜7 月ごろに公開され、Hari Raya の日付があとから改定されることがある
-# 差分を見つけたら、フィクスチャと src/uk/rules.ts または src/sg/rules.ts を 1 つのコミットで直してパッチ版を出す（RELEASING.md）。
-# 2 つの照合は 1 回の起動で順に行い、両方が動いたときだけハートビートを知らせる（0.17.0 で govuk-watch.yml から改名）。
+# - 日本: 内閣府「国民の祝日」CSV。照合は scripts/verify-cao.ts（pnpm verify:cao と同じ）。ラベル cao-data。
+#   翌年の春分・秋分の日は 2 月ごろに公表される（New years published が毎年の作業の引き金）。法改正による祝日の新設・移動と、
+#   CSV の形式の変更（解析の失敗）も、2 月の作業を待たずに見つける（0.18.0 で追加）
+# 差分を見つけたら、フィクスチャと src/uk/rules.ts・src/sg/rules.ts・src/jp/rules.ts を 1 つのコミットで直してパッチ版を出す（RELEASING.md）。
+# 3 つの照合は 1 回の起動で順に行い、すべてが動いたときだけハートビートを知らせる（0.17.0 で govuk-watch.yml から改名）。
 #
 # 起動のしかた（decisions.md の 28 番）:
 # - 主: 外部の cron サービス（cron-job.org）が、毎日 06:00（日本時間）に workflow_dispatch を API で呼ぶ。
@@ -21,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       simulate:
-        description: "Add a fictitious holiday to test the issue path (opens govuk-data-simulation and datagovsg-data-simulation issues)"
+        description: "Add a fictitious holiday to test the issue path (opens govuk-data-simulation, datagovsg-data-simulation and cao-data-simulation issues)"
         type: boolean
         default: false
 
@@ -46,6 +49,8 @@ jobs:
       TITLE: ${{ inputs.simulate && '[Simulation] ' || '' }}GOV.UK bank holidays differ from the bundled data
       SG_LABEL: ${{ inputs.simulate && 'datagovsg-data-simulation' || 'datagovsg-data' }}
       SG_TITLE: ${{ inputs.simulate && '[Simulation] ' || '' }}data.gov.sg public holidays differ from the bundled data
+      JP_LABEL: ${{ inputs.simulate && 'cao-data-simulation' || 'cao-data' }}
+      JP_TITLE: ${{ inputs.simulate && '[Simulation] ' || '' }}Cabinet Office holidays (Japan) differ from the bundled data
       SIMULATE: ${{ inputs.simulate && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -60,6 +65,7 @@ jobs:
         run: |
           echo "REPORT=${RUNNER_TEMP}/govuk-report.md" >> "${GITHUB_ENV}"
           echo "SG_REPORT=${RUNNER_TEMP}/datagovsg-report.md" >> "${GITHUB_ENV}"
+          echo "JP_REPORT=${RUNNER_TEMP}/cao-report.md" >> "${GITHUB_ENV}"
 
       - name: Compare with GOV.UK
         id: verify
@@ -138,11 +144,43 @@ jobs:
               --body "The differences changed on $(TZ=Asia/Tokyo date +%F). See the updated description."
           fi
 
+      - name: Compare with the Cabinet Office CSV
+        id: verify_jp
+        continue-on-error: true
+        run: |
+          args=(--report "${JP_REPORT}")
+          if [ "${SIMULATE}" = "true" ]; then args+=(--simulate); fi
+          set +e
+          node scripts/verify-cao.ts "${args[@]}"
+          code=$?
+          set -e
+          echo "code=${code}" >> "${GITHUB_OUTPUT}"
+          exit "${code}"
+
+      - name: Open or update the Cabinet Office issue
+        if: steps.verify_jp.outcome == 'failure'
+        run: |
+          gh label create "${JP_LABEL}" --repo "${GITHUB_REPOSITORY}" --color D93F0B \
+            --description "Cabinet Office holidays (Japan) differ from the bundled data" --force
+          number="$(gh issue list --repo "${GITHUB_REPOSITORY}" --label "${JP_LABEL}" --state open \
+            --json number --jq '.[0].number // empty')"
+          if [ -z "${number}" ]; then
+            gh issue create --repo "${GITHUB_REPOSITORY}" --label "${JP_LABEL}" \
+              --title "${JP_TITLE}" --body-file "${JP_REPORT}"
+            exit 0
+          fi
+          current="$(gh issue view "${number}" --repo "${GITHUB_REPOSITORY}" --json body --jq .body | tail -n +2)"
+          if [ "${current}" != "$(tail -n +2 "${JP_REPORT}")" ]; then
+            gh issue edit "${number}" --repo "${GITHUB_REPOSITORY}" --body-file "${JP_REPORT}"
+            gh issue comment "${number}" --repo "${GITHUB_REPOSITORY}" \
+              --body "The differences changed on $(TZ=Asia/Tokyo date +%F). See the updated description."
+          fi
+
       - name: Keep the schedule enabled
         if: always()
         run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/data-watch.yml/enable"
 
-      # 両方の照合まで動いたら（一致・差分あり）成功を、どちらかの照合そのものが失敗したら /fail を知らせる。
+      # 3 つの照合まで動いたら（一致・差分あり）成功を、どれかの照合そのものが失敗したら /fail を知らせる。
       # 知らせ先の URL は Secrets（HEALTHCHECKS_PING_URL）に置く。未設定なら知らせずに通知だけ出す
       - name: Send the heartbeat
         if: always()
@@ -150,20 +188,21 @@ jobs:
           PING_URL: ${{ secrets.HEALTHCHECKS_PING_URL }}
           CODE: ${{ steps.verify.outputs.code }}
           SG_CODE: ${{ steps.verify_sg.outputs.code }}
+          JP_CODE: ${{ steps.verify_jp.outputs.code }}
         run: |
           if [ -z "${PING_URL}" ]; then
             echo "::notice::HEALTHCHECKS_PING_URL is not set; no heartbeat sent"
             exit 0
           fi
           url="${PING_URL}"
-          for code in "${CODE}" "${SG_CODE}"; do
+          for code in "${CODE}" "${SG_CODE}" "${JP_CODE}"; do
             if [ "${code}" != "0" ] && [ "${code}" != "1" ]; then url="${PING_URL}/fail"; fi
           done
           curl -fsS -m 10 --retry 3 -o /dev/null "${url}" \
             || echo "::warning::could not send the heartbeat (healthchecks.io will alert if pings stop)"
 
-      - name: Fail when GOV.UK or data.gov.sg differs
-        if: steps.verify.outcome == 'failure' || steps.verify_sg.outcome == 'failure'
+      - name: Fail when GOV.UK, data.gov.sg or the Cabinet Office CSV differs
+        if: steps.verify.outcome == 'failure' || steps.verify_sg.outcome == 'failure' || steps.verify_jp.outcome == 'failure'
         run: |
           if [ "${GOVUK_FAILED}" = "true" ]; then
             echo "::error::GOV.UK bank holidays differ from the bundled data (see the ${LABEL} issue)" >&2
@@ -171,7 +210,11 @@ jobs:
           if [ "${SG_FAILED}" = "true" ]; then
             echo "::error::data.gov.sg public holidays differ from the bundled data (see the ${SG_LABEL} issue)" >&2
           fi
+          if [ "${JP_FAILED}" = "true" ]; then
+            echo "::error::Cabinet Office holidays (Japan) differ from the bundled data (see the ${JP_LABEL} issue)" >&2
+          fi
           exit 1
         env:
           GOVUK_FAILED: ${{ steps.verify.outcome == 'failure' }}
           SG_FAILED: ${{ steps.verify_sg.outcome == 'failure' }}
+          JP_FAILED: ${{ steps.verify_jp.outcome == 'failure' }}

@@ -5,6 +5,7 @@
  *   （England and Wales・Northern Ireland の Good Friday と Christmas Day は慣習法上の休日だが、GOV.UK の一覧と同じく含める）
  * - 振替: 土曜日・日曜日に当たる固定日の祝日は、その後で最も近い、祝日でない平日に振り替える（日付順に割り当てる）
  * - 臨時の祝日・移動: 布告ごとの日付をテーブルで持つ
+ * - 識別子（key）: 毎年の祝日に GOV.UK の区分名から 1 つ（KnownUkHolidayKey）。振替日は元の祝日の key、臨時の祝日は持たない
  *
  * 対応年のすべての日付と名称が GOV.UK のデータと一致することを、テスト用フィクスチャ
  * （test/fixtures/govuk-bank-holidays.json）で検証している。CONFIRMED_THROUGH より後の年は、
@@ -42,6 +43,26 @@ export type KnownUkHolidayKind =
  */
 export type UkHolidayKind = KnownUkHolidayKind | (string & {});
 
+/**
+ * 英国の毎年の bank holiday の識別子（Holiday.key。既知の値）。GOV.UK の区分名から付け、布告で日付が移った年も同じ値。
+ * 振替日は元の祝日の key を持ち、臨時の祝日（special）は key を持たない。
+ * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * @beta
+ */
+export type KnownUkHolidayKey =
+  | "new-year"
+  | "2nd-january"
+  | "st-patricks"
+  | "good-friday"
+  | "easter-monday"
+  | "early-may"
+  | "spring"
+  | "battle-of-the-boyne"
+  | "summer"
+  | "st-andrews"
+  | "christmas"
+  | "boxing-day";
+
 /** @internal GOV.UK の区分 */
 export type UkDivision = "england-and-wales" | "scotland" | "northern-ireland";
 
@@ -56,6 +77,8 @@ interface Entry {
   readonly date: DateString;
   readonly name: string;
   readonly kind: KnownUkHolidayKind;
+  /** 観測している祝日の識別子（振替日は元の祝日のもの。臨時の祝日は持たない） */
+  readonly key?: KnownUkHolidayKey;
 }
 
 /** 固定日の祝日（土曜日・日曜日なら振り替える） */
@@ -63,6 +86,7 @@ interface FixedDay {
   readonly month: number;
   readonly day: number;
   readonly name: string;
+  readonly key: KnownUkHolidayKey;
 }
 
 const NEW_YEAR = "New Year’s Day";
@@ -123,9 +147,16 @@ const RENAMED: readonly {
   readonly date: DateString;
   readonly name: string;
   readonly kind: KnownUkHolidayKind;
+  readonly key: KnownUkHolidayKey;
 }[] = [
-  { division: "scotland", date: "2023-01-02", name: NEW_YEAR, kind: "substitute" },
-  { division: "scotland", date: "2023-01-03", name: SECOND_JANUARY, kind: "substitute" },
+  { division: "scotland", date: "2023-01-02", name: NEW_YEAR, kind: "substitute", key: "new-year" },
+  {
+    division: "scotland",
+    date: "2023-01-03",
+    name: SECOND_JANUARY,
+    kind: "substitute",
+    key: "2nd-january",
+  },
 ];
 
 function lastMonday(year: number, month: number): DateString {
@@ -149,30 +180,41 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
   const scotland = division === "scotland";
   const ni = division === "northern-ireland";
 
-  const fixed: FixedDay[] = [{ month: 1, day: 1, name: NEW_YEAR }];
-  if (scotland) fixed.push({ month: 1, day: 2, name: SECOND_JANUARY });
-  if (ni) fixed.push({ month: 3, day: 17, name: ST_PATRICK });
-  if (ni) fixed.push({ month: 7, day: 12, name: BOYNE });
-  if (scotland) fixed.push({ month: 11, day: 30, name: ST_ANDREW });
-  fixed.push({ month: 12, day: 25, name: CHRISTMAS }, { month: 12, day: 26, name: BOXING });
+  const fixed: FixedDay[] = [{ month: 1, day: 1, name: NEW_YEAR, key: "new-year" }];
+  if (scotland) fixed.push({ month: 1, day: 2, name: SECOND_JANUARY, key: "2nd-january" });
+  if (ni) fixed.push({ month: 3, day: 17, name: ST_PATRICK, key: "st-patricks" });
+  if (ni) fixed.push({ month: 7, day: 12, name: BOYNE, key: "battle-of-the-boyne" });
+  if (scotland) fixed.push({ month: 11, day: 30, name: ST_ANDREW, key: "st-andrews" });
+  fixed.push(
+    { month: 12, day: 25, name: CHRISTMAS, key: "christmas" },
+    { month: 12, day: 26, name: BOXING, key: "boxing-day" },
+  );
 
   const easter = easterSunday(year);
   const movable: Entry[] = [
-    { date: addDays(easter, -2), name: GOOD_FRIDAY, kind: "regular" },
-    { date: nthWeekdayOfMonth(year, 5, 1, 1), name: EARLY_MAY, kind: "regular" },
-    { date: lastMonday(year, 5), name: SPRING, kind: "regular" },
+    { date: addDays(easter, -2), name: GOOD_FRIDAY, kind: "regular", key: "good-friday" },
+    { date: nthWeekdayOfMonth(year, 5, 1, 1), name: EARLY_MAY, kind: "regular", key: "early-may" },
+    { date: lastMonday(year, 5), name: SPRING, kind: "regular", key: "spring" },
     {
       date: scotland ? nthWeekdayOfMonth(year, 8, 1, 1) : lastMonday(year, 8),
       name: SUMMER,
       kind: "regular",
+      key: "summer",
     },
   ];
-  if (!scotland) movable.push({ date: addDays(easter, 1), name: EASTER_MONDAY, kind: "regular" });
+  if (!scotland) {
+    movable.push({
+      date: addDays(easter, 1),
+      name: EASTER_MONDAY,
+      kind: "regular",
+      key: "easter-monday",
+    });
+  }
 
   const entries: Entry[] = [];
   for (const e of movable) {
     const moved = MOVED.find((m) => m.year === year && m.from === e.name);
-    entries.push(moved ? { date: moved.date, name: moved.name ?? e.name, kind: e.kind } : e);
+    entries.push(moved ? { ...e, date: moved.date, name: moved.name ?? e.name } : e);
   }
   for (const s of SPECIAL_DAYS) {
     if (s.date.startsWith(`${year}-`) && s.divisions.includes(division)) {
@@ -182,10 +224,14 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
 
   // 平日に当たる固定日の祝日を先に置き、土曜日・日曜日に当たるものを日付順に振り替える
   const taken = new Set<DateString>(entries.map((e) => e.date));
-  const fixedDates = fixed.map((f) => ({ date: formatDate(year, f.month, f.day), name: f.name }));
+  const fixedDates = fixed.map((f) => ({
+    date: formatDate(year, f.month, f.day),
+    name: f.name,
+    key: f.key,
+  }));
   for (const f of fixedDates) {
     if (!isWeekend(f.date)) {
-      entries.push({ date: f.date, name: f.name, kind: "regular" });
+      entries.push({ date: f.date, name: f.name, kind: "regular", key: f.key });
       taken.add(f.date);
     }
   }
@@ -193,14 +239,14 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
     if (!isWeekend(f.date)) continue;
     let day = addDays(f.date, 1);
     while (isWeekend(day) || taken.has(day)) day = addDays(day, 1);
-    entries.push({ date: day, name: f.name, kind: "substitute" });
+    entries.push({ date: day, name: f.name, kind: "substitute", key: f.key });
     taken.add(day);
   }
 
   for (const r of RENAMED) {
     if (r.division !== division || !r.date.startsWith(`${year}-`)) continue;
     const i = entries.findIndex((e) => e.date === r.date);
-    if (i >= 0) entries[i] = { date: r.date, name: r.name, kind: r.kind };
+    if (i >= 0) entries[i] = { date: r.date, name: r.name, kind: r.kind, key: r.key };
   }
 
   return entries
@@ -212,6 +258,7 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
         nameEn: e.name,
         kind: e.kind,
         confirmed: year <= CONFIRMED_THROUGH,
+        ...(e.key === undefined ? {} : { key: e.key }),
       }),
     );
 }

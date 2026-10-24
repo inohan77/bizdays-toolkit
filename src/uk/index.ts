@@ -20,7 +20,7 @@ import {
   type UkHolidayKind,
 } from "./rules.ts";
 
-export type { KnownUkHolidayKind, UkHolidayKind } from "./rules.ts";
+export type { KnownUkHolidayKey, KnownUkHolidayKind, UkHolidayKind } from "./rules.ts";
 
 /**
  * 英国の祝日。

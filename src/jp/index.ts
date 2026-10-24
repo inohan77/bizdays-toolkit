@@ -23,7 +23,11 @@ import {
   type JapaneseHolidayKind,
 } from "./rules.ts";
 
-export type { JapaneseHolidayKind, KnownJapaneseHolidayKind } from "./rules.ts";
+export type {
+  JapaneseHolidayKind,
+  KnownJapaneseHolidayKey,
+  KnownJapaneseHolidayKind,
+} from "./rules.ts";
 
 /**
  * 日本の祝日。

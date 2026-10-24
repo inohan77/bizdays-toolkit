@@ -14,7 +14,7 @@
  * 毎年の月日・繰り返しの規則の有効期間（effectiveFrom・effectiveTo）の外では、その規則は書かれていないのと同じ。
  * 祝日の翌日の規則（dayAfterHoliday）は、前日が祝日でその日自身は祝日でない日に当てはまる（提供元の祝日だけで判定）。
  * 祝前日の規則（dayBeforeHoliday）は、翌日が祝日でその日自身は祝日でない日に当てはまる（同じく提供元の祝日だけ）。
- * 祝日の規則（holiday: true。kinds で種別を絞れる）は、「祝日の上」の段階で判定する
+ * 祝日の規則（holiday: true。kinds で種別を、keys で個別の祝日を絞れる）は、「祝日の上」の段階で判定する
  *
  * 営業日カレンダー（createCalendar）は、このスケジュールの真偽値版として作られている。
  */
@@ -43,7 +43,7 @@ import {
 } from "./input.ts";
 
 export type { CivilDateTimeParts } from "./input.ts";
-import type { Holiday, HolidayProvider } from "./types.ts";
+import { HOLIDAY_KEY_PATTERN, type Holiday, type HolidayProvider } from "./types.ts";
 
 // ------------------------------------------------------------
 // 公開する型
@@ -155,6 +155,7 @@ export interface WeekdayPattern {
   readonly holiday?: never;
   readonly weekdays?: never;
   readonly kinds?: never;
+  readonly keys?: never;
 }
 
 /**
@@ -175,6 +176,7 @@ export interface DayOfMonthPattern {
   readonly holiday?: never;
   readonly weekdays?: never;
   readonly kinds?: never;
+  readonly keys?: never;
 }
 
 /**
@@ -196,6 +198,7 @@ export interface DayAfterHolidayPattern {
   readonly dayBeforeHoliday?: never;
   readonly holiday?: never;
   readonly kinds?: never;
+  readonly keys?: never;
 }
 
 /**
@@ -218,10 +221,11 @@ export interface DayBeforeHolidayPattern {
   readonly dayAfterHoliday?: never;
   readonly holiday?: never;
   readonly kinds?: never;
+  readonly keys?: never;
 }
 
 /**
- * 祝日（提供元の祝日である日）。kinds で祝日の種別を絞れる（省略時はすべての祝日）。
+ * 祝日（提供元の祝日である日）。kinds で祝日の種別を、keys で個別の祝日を絞れる（省略時はすべての祝日）。
  * 「祝日の上」の段階（holidayPolicy・スケジュールの holiday より先）で判定し、祝日の既定の扱いの例外を書く
  * （例: 「2027 年 4 月から祝日も営業」「振替休日は診療」「5 月の祝日は特別営業時間」）。
  * 当てはまる日は祝日なので、onHolidayRule は指定できない（指定すると invalid-option）。
@@ -231,6 +235,14 @@ export interface HolidayPattern<Kind extends string = string> {
   readonly holiday: true;
   /** 当てはめる祝日の種別（Holiday.kind。省略時はすべて）。提供元の種別の型で補完が効く（型は開いているので他の文字列も通る） */
   readonly kinds?: readonly Kind[];
+  /**
+   * 当てはめる祝日の識別子（Holiday.key。省略時はすべて）。kinds・weekdays・months との AND。
+   * 春分の日・復活祭に連動する日・太陰暦の祝日のように月日や第 n 曜日では書けない祝日を個別に指す
+   * （例: 「春分の日・秋分の日は営業」は { holiday: true, keys: ["vernal-equinox", "autumnal-equinox"] }）。
+   * 振替日は元の祝日の key を持つので「成人の日とその振替」を指せる。当日だけなら kinds を併せて指定する。
+   * key を持たない祝日（国民の休日・臨時の祝日）には当てはまらない
+   */
+  readonly keys?: readonly string[];
   /** 当てはめる曜日（省略時はすべての曜日。例: [6] で土曜の祝日だけ） */
   readonly weekdays?: readonly Weekday[];
   /** 当てはめる月（省略時はすべての月） */
@@ -691,6 +703,8 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly holiday: boolean;
   /** 祝日の規則で絞る種別（null はすべての祝日） */
   readonly kinds: ReadonlySet<string> | null;
+  /** 祝日の規則で絞る識別子（null はすべての祝日） */
+  readonly keys: ReadonlySet<string> | null;
   /** 祝日・祝日の翌日・祝前日の規則で絞る曜日（null はすべての曜日） */
   readonly weekdays: ReadonlySet<number> | null;
   /** 月の集合（null はすべての月） */
@@ -877,6 +891,30 @@ export function compileRecurringRules<T>(
       c.error("invalid-option", `${p}.kinds`, '"kinds" can be used only with "holiday"');
       ok = false;
     }
+    let holidayKeys: Set<string> | null = null;
+    if ("keys" in entry) {
+      if (!hasHoliday) {
+        c.error("invalid-option", `${p}.keys`, '"keys" can be used only with "holiday"');
+        ok = false;
+      } else if (!Array.isArray(entry["keys"])) {
+        c.error(
+          "invalid-option",
+          `${p}.keys`,
+          "must be a non-empty array of holiday keys (Holiday.key)",
+        );
+        ok = false;
+      } else {
+        const set = checkSet(
+          c,
+          `${p}.keys`,
+          entry["keys"],
+          (v) => typeof v === "string" && HOLIDAY_KEY_PATTERN.test(v),
+          "a holiday key (Holiday.key: lowercase letters, digits and hyphens)",
+        );
+        if (set) holidayKeys = set as unknown as Set<string>;
+        else ok = false;
+      }
+    }
     let weekdays: Set<number> | null = null;
     if ("weekdays" in entry) {
       if (!hasHoliday && !hasAfter && !hasBefore) {
@@ -940,6 +978,7 @@ export function compileRecurringRules<T>(
           dayBeforeHoliday: hasBefore,
           holiday: hasHoliday,
           kinds,
+          keys: holidayKeys,
           weekdays,
           months,
           onHolidayRule: onHoliday as OnHolidayRule,
@@ -973,7 +1012,11 @@ export function matchPattern(
     if (rule.weekdays && !rule.weekdays.has(weekdayOf(date))) return false;
     if (rule.holiday) {
       const h = holidayOf(date);
-      return h !== undefined && (rule.kinds === null || rule.kinds.has(h.kind));
+      return (
+        h !== undefined &&
+        (rule.kinds === null || rule.kinds.has(h.kind)) &&
+        (rule.keys === null || (h.key !== undefined && rule.keys.has(h.key)))
+      );
     }
     // 祝日の翌日は前日が祝日、祝前日は翌日が祝日（どちらもその日自身は祝日でない）
     if (holidayOf(date) !== undefined) return false;
@@ -1158,6 +1201,16 @@ function loadProviderYear<Kind extends string>(
       if (problem) throw providerDataError(provider, year, `item ${i} (${date}) names: ${problem}`);
       holiday.names = Object.freeze(Object.fromEntries(Object.entries(h["names"] as object)));
     }
+    if (h["key"] !== undefined) {
+      if (typeof h["key"] !== "string" || !HOLIDAY_KEY_PATTERN.test(h["key"])) {
+        throw providerDataError(
+          provider,
+          year,
+          `item ${i} (${date}) key must match ${String(HOLIDAY_KEY_PATTERN)}: ${JSON.stringify(h["key"])}`,
+        );
+      }
+      holiday.key = h["key"];
+    }
     return Object.freeze(holiday);
   });
 }
@@ -1317,6 +1370,7 @@ export const RECURRING_RULE_KEYS = [
   "dayBeforeHoliday",
   "holiday",
   "kinds",
+  "keys",
   "weekdays",
   "months",
   "name",

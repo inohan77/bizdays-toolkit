@@ -6,6 +6,7 @@
  * 振替だけは Holidays Act（1998 年版）第 4 条の規則「日曜日に当たる祝日は、その翌日のうちそれ自体が祝日でない
  * 最初の日を祝日とする」で計算し、表には書かない。土曜日に当たる祝日は振替にならない（雇用主が休みか手当を与える）。
  *
+ * 識別子（key）は 11 の祝日に 1 つずつ（KnownSgHolidayKey）。振替日は元の祝日の key、Polling Day は持たない。
  * 名称は MOM の報道発表の綴り（アポストロフィは ’）。data.gov.sg のコレクション 691（MOM）のデータで
  * 全日照合している（test/fixtures/datagovsg-public-holidays.json）。data.gov.sg の 2022 年分は MOM の改定後の告示と
  * 食い違う（scripts/verify-datagovsg.ts の KNOWN_DIFFERENCES）ため、告示を正としている。
@@ -34,6 +35,24 @@ export type KnownSgHolidayKind =
  */
 export type SgHolidayKind = KnownSgHolidayKind | (string & {});
 
+/**
+ * シンガポールの毎年の祝日の識別子（Holiday.key。既知の値）。11 の祝日に 1 つずつ。
+ * 振替日は元の祝日の key を持ち、臨時の祝日（Polling Day）は key を持たない。
+ * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * @beta
+ */
+export type KnownSgHolidayKey =
+  | "new-year"
+  | "chinese-new-year"
+  | "good-friday"
+  | "labour-day"
+  | "hari-raya-puasa"
+  | "vesak"
+  | "hari-raya-haji"
+  | "national-day"
+  | "deepavali"
+  | "christmas";
+
 /** @internal 対応年（表のある年。それより後は予測できないので out-of-range） */
 export const SUPPORTED_YEARS = Object.freeze({ from: 2020, to: 2027 });
 /** @internal MOM が日付を告示している最後の年（対応年の終わりと同じ。表の年はすべて確定） */
@@ -52,6 +71,20 @@ const NATIONAL = "National Day";
 const DEEPAVALI = "Deepavali";
 const CHRISTMAS = "Christmas Day";
 const POLLING = "Polling Day";
+
+/** 名称から識別子へ（Polling Day は持たない） */
+const KEY_OF: Readonly<Record<string, KnownSgHolidayKey>> = {
+  [NEW_YEAR]: "new-year",
+  [CNY]: "chinese-new-year",
+  [GOOD_FRIDAY]: "good-friday",
+  [LABOUR]: "labour-day",
+  [PUASA]: "hari-raya-puasa",
+  [VESAK]: "vesak",
+  [HAJI]: "hari-raya-haji",
+  [NATIONAL]: "national-day",
+  [DEEPAVALI]: "deepavali",
+  [CHRISTMAS]: "christmas",
+};
 
 /** 年ごとに動く祝日（月日と名前）。固定日の祝日（1/1・5/1・8/9・12/25）は表に書かず、下で足す */
 const MOVABLE: Readonly<Record<number, readonly (readonly [string, string])[]>> = {
@@ -187,7 +220,15 @@ export function computeSgHolidays(year: number): Holiday<SgHolidayKind>[] {
   }
   return entries
     .sort((a, b) => (a.date < b.date ? -1 : 1))
-    .map((e) =>
-      Object.freeze({ date: e.date, name: e.name, nameEn: e.name, kind: e.kind, confirmed: true }),
-    );
+    .map((e) => {
+      const key = KEY_OF[e.name];
+      return Object.freeze({
+        date: e.date,
+        name: e.name,
+        nameEn: e.name,
+        kind: e.kind,
+        confirmed: true,
+        ...(key === undefined ? {} : { key }),
+      });
+    });
 }

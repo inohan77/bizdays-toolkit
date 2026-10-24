@@ -49,7 +49,7 @@ edinburgh.isBusinessDay("2026-01-02"); // false (2nd January)
 edinburgh.addBusinessDays("2026-06-12", 1); // "2026-06-16" (June 15 is the World Cup bank holiday)
 
 scotland.holidaysInYear(2026)[0];
-// { date: "2026-01-01", name: "New Year’s Day", nameEn: "New Year’s Day", kind: "regular", confirmed: true }
+// { date: "2026-01-01", name: "New Year’s Day", nameEn: "New Year’s Day", kind: "regular", confirmed: true, key: "new-year" }
 wales.holidaysInYear(2026)[0]?.names; // { cy: "Dydd Calan" }
 
 // Across several regions, use the union (a holiday in any of them is a holiday)
@@ -79,12 +79,40 @@ const singapore = createCalendar({ holidays: sg, closedWeekdays: [0, 6] });
 singapore.isBusinessDay("2026-08-10"); // false (National Day falls on a Sunday; Monday is the holiday in lieu)
 singapore.addBusinessDays("2026-02-16", 1); // "2026-02-19" (Chinese New Year on February 17 and 18)
 sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
-// { date: "2026-06-01", name: "Vesak Day", nameEn: "Vesak Day", kind: "substitute", confirmed: true }
+// { date: "2026-06-01", name: "Vesak Day", nameEn: "Vesak Day", kind: "substitute", confirmed: true, key: "vesak" }
 ```
 
 - `sg` (ID `SG`, time zone `Asia/Singapore`) is one provider; Singapore has no regional holidays. `kind` is `regular` (an annual public holiday), `substitute` (the day after a public holiday that falls on a Sunday, which the Holidays Act makes a public holiday; it has the name of the original holiday) or `special` (a one-off holiday declared by the Government, such as Polling Day). A public holiday on a Saturday has no substitute day
 - Chinese New Year, Hari Raya Puasa, Hari Raya Haji, Vesak Day and Deepavali follow the lunar, Islamic and Hindu calendars, so they cannot be computed from rules. The dates are the ones gazetted by the Ministry of Manpower (MOM), year by year, and the substitute days follow the rule of the Holidays Act. Supported years are the years MOM has gazetted (currently 2020–2027; `confirmedThrough` is the same as the last supported year). Later years are not predicted and are outside the supported years (`out-of-range`), so `sg` never returns `confirmed: false`
 - The dates are verified against the "Singapore Public Holidays" collection on data.gov.sg (MOM). Where that data differs from the gazetted dates (2022: the revised Hari Raya dates and two missing substitute days), the gazetted dates are used. Differences from data.gov.sg are watched daily and released as patch versions
+
+### Holiday keys
+
+Each bundled holiday that recurs every year has a stable identifier in `key`, so that a rule can select individual holidays with `{ holiday: true, keys: [...] }` (see [Recurring rules](#recurring-rules)) without depending on the official name, which follows the source data and may change in a patch version. A key never changes, even when the holiday's date or official name does (the Emperor's Birthday is `emperors-birthday` on April 29, December 23 and February 23 alike; Health and Sports Day and Sports Day are both `sports`). A substitute day carries the key of the original holiday, so `keys: ["coming-of-age"]` selects Coming of Age Day and its substitute; add `kinds: ["national"]` for the day itself only. One-off holidays (imperial ceremonies, proclaimed UK bank holidays, Singapore's Polling Day) and Japan's citizens' holidays have no key; select them with `kinds` or `dates`.
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { jp } from "bizdays-toolkit/jp";
+
+// A florist: closed on holidays, except the two equinox days (the middle of the higan weeks)
+const florist = createCalendar({
+  holidays: jp,
+  openRecurring: [
+    { holiday: true, keys: ["vernal-equinox", "autumnal-equinox"], name: "彼岸は営業" },
+  ],
+});
+florist.isBusinessDay("2026-03-20"); // true (Vernal Equinox Day)
+florist.isBusinessDay("2026-05-04"); // false (Greenery Day)
+jp.holidaysInYear(2020).find((h) => h.date === "2020-02-24")?.key; // "emperors-birthday" (a substitute holiday)
+```
+
+| Provider         | Keys                                                                                                                                                                                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jp`             | `new-year`, `coming-of-age`, `national-foundation`, `emperors-birthday`, `vernal-equinox`, `showa`, `constitution-memorial`, `greenery`, `childrens`, `marine`, `mountain`, `respect-for-the-aged`, `autumnal-equinox`, `sports`, `culture`, `labor-thanksgiving` |
+| `england` … (UK) | `new-year`, `2nd-january`, `st-patricks`, `good-friday`, `easter-monday`, `early-may`, `spring`, `battle-of-the-boyne`, `summer`, `st-andrews`, `christmas`, `boxing-day`                                                                                         |
+| `sg`             | `new-year`, `chinese-new-year`, `good-friday`, `labour-day`, `hari-raya-puasa`, `vesak`, `hari-raya-haji`, `national-day`, `deepavali`, `christmas`                                                                                                               |
+
+The types `KnownJapaneseHolidayKey`, `KnownUkHolidayKey` and `KnownSgHolidayKey` list them for editor completion (`@beta`). Keys are derived once from the English name (lowercase, hyphens, no apostrophes, the trailing "Day" dropped) and spelled as the provider spells it (`labor-thanksgiving` in Japan, `labour-day` in Singapore). A provider you write can give its holidays keys too (see [Holidays of other countries and regions](./providers.md)).
 
 ## Business-day calendars
 
@@ -159,22 +187,22 @@ museum.dayInfo("2026-02-12").name; // "Closed on the day after a holiday" (Natio
 museum.isBusinessDay("2026-05-07"); // false (the day after the May 3–6 run of holidays)
 ```
 
-| Pattern                                             | Meaning                                                                                                              |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `{ weekday: 1 }`                                    | Every Monday                                                                                                         |
-| `{ weekday: 3, nth: 3 }`                            | The 3rd Wednesday. `nth` is 1–5 or -1 (last); an array such as `[2, 4]` gives several                                |
-| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }` | Every other Wednesday: the Wednesdays an even number of weeks from `anchor` (2 or more weeks; see below)             |
-| `{ day: 20 }`                                       | The 20th of every month. `day` is 1–31 or -1 (last day); an array gives several                                      |
-| `{ holiday: true, kinds: ["substitute"] }`          | Holidays, optionally narrowed to the given kinds (`Holiday.kind`); judged before `holidayPolicy` (see below)         |
-| `{ dayAfterHoliday: true }`                         | The day after a holiday: the first non-holiday after a holiday or a run of holidays (holidays of the provider only)  |
-| `{ dayBeforeHoliday: true }`                        | The day before a holiday: the non-holiday just before a holiday or a run of holidays (holidays of the provider only) |
-| `months: [8, 12]`                                   | Narrows any pattern to these months                                                                                  |
-| `effectiveFrom: "2027-04-01"`, `effectiveTo: "…"`   | The period the rule is in effect (both ends included). Outside it, the rule is as if it were not written (see below) |
+| Pattern                                             | Meaning                                                                                                                                      |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ weekday: 1 }`                                    | Every Monday                                                                                                                                 |
+| `{ weekday: 3, nth: 3 }`                            | The 3rd Wednesday. `nth` is 1–5 or -1 (last); an array such as `[2, 4]` gives several                                                        |
+| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }` | Every other Wednesday: the Wednesdays an even number of weeks from `anchor` (2 or more weeks; see below)                                     |
+| `{ day: 20 }`                                       | The 20th of every month. `day` is 1–31 or -1 (last day); an array gives several                                                              |
+| `{ holiday: true, kinds: ["substitute"] }`          | Holidays, optionally narrowed to the given kinds (`Holiday.kind`) or keys (`keys`, `Holiday.key`); judged before `holidayPolicy` (see below) |
+| `{ dayAfterHoliday: true }`                         | The day after a holiday: the first non-holiday after a holiday or a run of holidays (holidays of the provider only)                          |
+| `{ dayBeforeHoliday: true }`                        | The day before a holiday: the non-holiday just before a holiday or a run of holidays (holidays of the provider only)                         |
+| `months: [8, 12]`                                   | Narrows any pattern to these months                                                                                                          |
+| `effectiveFrom: "2027-04-01"`, `effectiveTo: "…"`   | The period the rule is in effect (both ends included). Outside it, the rule is as if it were not written (see below)                         |
 
 - **The nth weekday** is the nth occurrence of that weekday in the month (days 1–7 hold the 1st). It is not the weekday in the nth row of a printed calendar
 - **Days that do not exist in a month** (`nth: 5` or `day: 31` in a month without one) do not match. Use `day: -1` for the last day
 - **Every other week** (`interval: 2`) is not the same as the 1st and 3rd weekdays (`nth: [1, 3]`): a month with five Wednesdays shifts the latter by a week. `interval` is the number of weeks (an integer of 2 or more) and `anchor` is a date on the same weekday that the cycle passes through; the rule matches that date and every `interval` weeks before and after it. Stores announce "every other Wednesday from January 7", so copy that date. To start at the anchor rather than also matching earlier dates, add `effectiveFrom`. `interval` cannot be combined with `nth`
-- **Holiday rules** (`{ holiday: true }`) write exceptions to the default holiday handling: "open on holidays from April 2027" is `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]` with `holidayPolicy: "closed"` kept for the past, "open on substitute holidays and citizens' holidays" is `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`, and "special hours on the May holidays" in a schedule is `recurring: [{ holiday: true, months: [5], value: … }]`. `kinds` narrows to those `Holiday.kind` values (see the provider's list; with `holidays: jp` the editor completes them), `weekdays` to those weekdays ("morning hours on a Saturday holiday" is `{ holiday: true, weekdays: [6], value: … }`), `months` to those months; omit them for all holidays. The rule is judged at the "over the holiday" step, before `holidayPolicy` or a schedule's `holiday`, and also with `holidayPolicy: "ignore"`. Its days are holidays, so `onHolidayRule` cannot be set on it (`invalid-option`); `holiday` still shows the holiday
+- **Holiday rules** (`{ holiday: true }`) write exceptions to the default holiday handling: "open on holidays from April 2027" is `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]` with `holidayPolicy: "closed"` kept for the past, "open on substitute holidays and citizens' holidays" is `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`, and "special hours on the May holidays" in a schedule is `recurring: [{ holiday: true, months: [5], value: … }]`. `kinds` narrows to those `Holiday.kind` values (see the provider's list; with `holidays: jp` the editor completes them), `keys` to individual holidays by their `Holiday.key` ("open on the equinox days" is `{ holiday: true, keys: ["vernal-equinox", "autumnal-equinox"] }`; see [Holiday keys](#holiday-keys)), `weekdays` to those weekdays ("morning hours on a Saturday holiday" is `{ holiday: true, weekdays: [6], value: … }`), `months` to those months; omit them for all holidays. The rule is judged at the "over the holiday" step, before `holidayPolicy` or a schedule's `holiday`, and also with `holidayPolicy: "ignore"`. Its days are holidays, so `onHolidayRule` cannot be set on it (`invalid-option`); `holiday` still shows the holiday
 - **The day after a holiday** is never itself a holiday, so `onHolidayRule` cannot be set on such a rule (it is an `invalid-option`). "Holidays" are those of the holiday provider, not annual closures. A rule of this kind matches no day without a holiday provider. `weekdays` narrows it to those weekdays: a museum "closed on the day after a holiday, except when that day is a Saturday or Sunday" is `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` (opening the weekend with `openRecurring` instead would override every other weekend closure)
 - **The day before a holiday** (`{ dayBeforeHoliday: true }`) is the mirror image: the day whose next day is a holiday and which is not a holiday itself, so before a run of holidays it is only the day before the run (in May 2026 it is Saturday May 2; May 4 and 5 are holidays themselves). The same rules apply (`weekdays`, `months`, effective periods, no `onHolidayRule`, no match without a provider). It writes "eve-of-holiday rates" in a schedule, "open until 2 a.m. on the day before a holiday" (`weekdays: [1, 2, 3, 4, 5]` keeps weekends as usual), or an earlier shipping cutoff on the day before a holiday (put the cutoff time in a schedule and pass `cutoffs.valueOn(date)` as `cutoff`)
 - Among recurring rules, the one written first in the array wins, and `openRecurring` wins over `closedRecurring`. The day after Labor Thanksgiving Day on a Monday (2026-11-23) is both the day the Monday rule moves to and the day after a holiday; the rule written first decides, and `dayInfo` shows which

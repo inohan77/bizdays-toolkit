@@ -546,7 +546,7 @@ function analyze<T, Kind extends string>(
           ? source.providers.length === 0
             ? "This rule matches no day: there are no holidays without a holiday provider"
             : rule.holiday
-              ? "This rule matches no day: no holiday of the selected kinds, weekdays and months within its effective period"
+              ? "This rule matches no day: no holiday of the selected kinds, keys, weekdays and months within its effective period"
               : rule.dayAfterHoliday
                 ? "This rule matches no day: no day after a holiday on the selected weekdays and months within its effective period"
                 : "This rule matches no day: no day before a holiday on the selected weekdays and months within its effective period"
@@ -556,7 +556,7 @@ function analyze<T, Kind extends string>(
       );
       return;
     }
-    // 祝日・祝日の翌日・祝前日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・曜日・月の絞り込み）だけで調べる
+    // 祝日・祝日の翌日・祝前日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・識別子・曜日・月の絞り込み）だけで調べる
     const k = recurring.findIndex(
       (r, i) =>
         i < j &&
@@ -565,6 +565,7 @@ function analyze<T, Kind extends string>(
         (rule.holiday
           ? r.holiday &&
             setCovers(r.kinds, rule.kinds) &&
+            setCovers(r.keys, rule.keys) &&
             setCovers(r.weekdays, rule.weekdays) &&
             setCovers(r.months, rule.months)
           : rule.dayAfterHoliday || rule.dayBeforeHoliday

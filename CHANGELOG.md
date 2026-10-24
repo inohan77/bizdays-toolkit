@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-25
+
+### 移行
+
+動作が変わる既存の API はない。同梱の提供元が返す祝日に省略可能な項目 `key` が加わるので、`dayInfo` の結果や `holidaysInYear` の要素を `deepEqual` で比べているテストは期待値に足す（国民の休日・臨時の祝日には付かない）。祝日の規則に省略可能な `keys` が加わる。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- 祝日の識別子 `Holiday.key`（省略可能。`/^[a-z0-9][a-z0-9-]*$/`）と、祝日の規則の絞り込み `{ holiday: true, keys: [...] }`（`kinds`・`weekdays`・`months` との AND）を追加した。春分の日・復活祭に連動する日・太陰暦の祝日のように月日や曜日では書けない祝日を、名称に依存せず個別に指せる。同梱の提供元は毎年繰り返す祝日に `key` を付け（日本 16・英国 12・シンガポール 10。`docs/guide.md` の「Holiday keys」）、振替日は元の祝日の `key` を持ち、国民の休日・一度きりの祝日は持たない。`key` は日付の移動や公式の改名があっても変えない。補完用の型 `KnownJapaneseHolidayKey`・`KnownUkHolidayKey`・`KnownSgHolidayKey` を追加した（`@beta`）。利用者の提供元が付けた `key` は形式だけ検証し、複製・凍結して返す。診断は対応年に現れない `key` を `never-matches`、`key` の集合の包含を `shadowed` で扱う
+- `bizdays-toolkit/provider` に、週末に当たった祝日の振替日を計算する `substituteDays(holidays, { rules, kind, name?, original? })` を追加した（`@beta`。型 `SubstituteDaysOptions`・`SubstituteDirection`）。`rules` は曜日ごとの向き（`"next"`・`"previous"`）で、振替先は「入力の祝日でも、決めた振替日でも、`rules` の曜日でもない最初の日」。振替日は元の祝日の `key`・`names`・`confirmed` を引き継ぐ。日本（2007 年以降）・英国・シンガポールの同梱の提供元の振替日を再現することをテストで確かめている（内部の実装は置き換えていない）
+
+### Changed
+
+- `docs/guide.md`・`docs/guide.ja.md`: 「Holiday keys」（祝日の識別子）の節と、繰り返しの規則の `keys` を足した。コード例の結果に `key` が増えた
+- `docs/providers.md`・`docs/providers.ja.md`: `substituteDays` と、自作の提供元に `key` を付ける方法を足した
+- README: 規則の表と機能の箇条書きに `key`・振替の計算を足し、クイックスタートのコメントの "Labour Thanksgiving Day" を `nameEn` の綴り "Labor Thanksgiving Day" に直した
+- `RELEASING.md`: 区分の表で「対応年の拡大」を規則で計算する提供元（日本・英国）に限り、年ごとの表で持つ提供元（シンガポール）に告示済みの新しい年を足すことはパッチに置く、と線を引いた（これまでは 2 つの行が同時に当てはまる状態だった）。「毎年の作業（日本）」を「日本のデータの更新」に改め、監視の差分の種類と対応の表を足した
+- `docs/decisions.md`: 46 番（祝日の識別子と絞り込み、`substituteDays`、内閣府 CSV の毎日の照合、区分の線引き）を追加し、37 番の理由（存在しない「将来の非純粋な判定関数」を前提にしていた）と 44 番の `asOf` の理由（`Date` を断る理由としてタイムゾーンは成り立たなかった）を改めた
+
+### 開発
+
+- 監視のワークフロー `data-watch.yml` に内閣府「国民の祝日」CSV の照合を足した（issue のラベル `cao-data`。ハートビートは 3 つの照合がすべて動いたときだけ）。`scripts/verify-cao.ts` を英国・シンガポールと同じ形（`--report`・`--simulate`、終了コード 0・1・2、取得の再試行、「New years published」・フィクスチャの差分の節）にした。翌年の春分・秋分の日の公表が issue で届くので、2 月の作業を記憶に頼らない
+- テスト: `test/holiday-key.test.ts` を追加し、`test/provider.test.ts` に `substituteDays`（同梱の 3 か国との同値・向き・名称・入力の検証）を足した。`test/types.check.ts`・利用者の型チェックに `keys`・既知の `key` の型・`substituteDays` を足した
+- サイズの上限（`size-limits.json`）を上げた。`./provider` 4,500 → 6,500（`substituteDays` と入力の検証のため。測定 6,019）、`./diagnose` 32,000 → 33,000（`keys` の判定と診断のため。測定 31,645）（gzip）
+
 ## [0.17.1] - 2026-10-25
 
 ### Changed
@@ -469,7 +494,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.15.0...v0.16.0

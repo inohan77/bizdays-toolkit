@@ -16,7 +16,7 @@ import {
   type SgHolidayKind,
 } from "./rules.ts";
 
-export type { KnownSgHolidayKind, SgHolidayKind } from "./rules.ts";
+export type { KnownSgHolidayKey, KnownSgHolidayKind, SgHolidayKind } from "./rules.ts";
 
 /**
  * シンガポールの祝日。

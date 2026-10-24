@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { addDays, createCalendar, isBizdaysError, weekdayOf } from "../src/index.ts";
-import { daysInMonth, easterSunday, isLeapYear, nthWeekdayOfMonth } from "../src/provider/index.ts";
-import { england } from "../src/uk/index.ts";
+import {
+  daysInMonth,
+  easterSunday,
+  isLeapYear,
+  nthWeekdayOfMonth,
+  substituteDays,
+} from "../src/provider/index.ts";
+import { jp } from "../src/jp/index.ts";
+import { england, northernIreland, scotland, wales } from "../src/uk/index.ts";
+import { sg } from "../src/sg/index.ts";
 import type { Holiday, HolidayProvider } from "../src/index.ts";
 
 test("provider: 第 n 何曜日（1〜5 と -1）", () => {
@@ -107,4 +115,211 @@ test("provider: 提供元を書く例（米国の連邦祝日の一部）がカ�
   assert.equal(calendar.isHoliday("2026-11-26"), true);
   assert.equal(calendar.addBusinessDays("2026-11-25", 1), "2026-11-27");
   assert.equal(calendar.dayInfo("2026-05-25").holiday?.name, "Memorial Day");
+});
+
+const label = (h: Holiday) => `${h.date} ${h.name} ${h.kind} ${h.key ?? "-"} ${h.confirmed}`;
+
+test("provider: substituteDays は日本の振替休日（2007 年以降の祝日法）を再現する", () => {
+  for (let y = 2007; y <= 2099; y++) {
+    const all = jp.holidaysInYear(y);
+    const base = all.filter((h) => h.kind !== "substitute" && h.kind !== "citizens");
+    const result = substituteDays(base, {
+      rules: { 0: "next" },
+      kind: "substitute",
+      name: () => ({ name: "振替休日", nameEn: "Substitute Holiday" }),
+    });
+    assert.deepEqual(
+      result.map(label),
+      all.filter((h) => h.kind !== "citizens").map(label),
+      String(y),
+    );
+  }
+  // 連鎖: 2020 年は 5 月 3 日（日）の振替が 4 日・5 日を飛ばして 6 日になる
+  const may = substituteDays(
+    jp.holidaysInYear(2020).filter((h) => h.kind === "national" && h.date.startsWith("2020-05")),
+    { rules: { 0: "next" }, kind: "substitute" },
+  );
+  assert.deepEqual(
+    may.map((h) => `${h.date} ${h.kind}`),
+    ["2020-05-03 national", "2020-05-04 national", "2020-05-05 national", "2020-05-06 substitute"],
+  );
+  assert.equal(may[3]!.key, "constitution-memorial", "振替日は元の祝日の key を引き継ぐ");
+  assert.equal(may[3]!.name, "憲法記念日", "name を省略すると元の祝日の名称");
+});
+
+test("provider: substituteDays はシンガポールの振替（Holidays Act 第 4 条）を再現する", () => {
+  for (let y = sg.supportedYears.from; y <= sg.supportedYears.to; y++) {
+    const all = sg.holidaysInYear(y);
+    const result = substituteDays(
+      all.filter((h) => h.kind !== "substitute"),
+      { rules: { 0: "next" }, kind: "substitute" },
+    );
+    assert.deepEqual(result.map(label), all.map(label), String(y));
+  }
+});
+
+test("provider: substituteDays は英国の振替（土日に当たる固定日の祝日。GOV.UK の一覧は週末の日を載せない）を再現する", () => {
+  const FIXED: Record<string, string> = {
+    "new-year": "01-01",
+    "2nd-january": "01-02",
+    "st-patricks": "03-17",
+    "battle-of-the-boyne": "07-12",
+    "st-andrews": "11-30",
+    christmas: "12-25",
+    "boxing-day": "12-26",
+  };
+  // 2023 年の Scotland は振替の割り当てだけ GOV.UK に合わせている（1/2 が New Year’s Day、1/3 が 2nd January）ので、
+  // 附則どおりの計算（1/2 は 2nd January の当日、1/3 が New Year’s Day の振替）と名前・種別・key が入れ替わる。日付は同じ
+  const renamed = (h: Holiday) => `${h.date} ${h.confirmed}`;
+  for (const provider of [england, wales, scotland, northernIreland]) {
+    for (let y = 2012; y <= 2099; y++) {
+      const all = provider.holidaysInYear(y);
+      // 振替日を元の固定日に戻した「振替前の一覧」を作る
+      const before = all.map((h) =>
+        h.kind === "substitute" ? { ...h, date: `${y}-${FIXED[h.key!]!}`, kind: "regular" } : h,
+      ) as Holiday[];
+      const result = substituteDays(before, {
+        rules: { 6: "next", 0: "next" },
+        kind: "substitute",
+        original: "drop",
+      });
+      const compare = provider === scotland && y === 2023 ? renamed : label;
+      assert.deepEqual(result.map(compare), all.map(compare), `${provider.id} ${y}`);
+    }
+  }
+  assert.equal(
+    wales.holidaysInYear(2021).find((h) => h.date === "2021-12-27")?.names?.cy,
+    "Dydd Nadolig",
+  );
+  // 振替日は元の祝日の names も引き継ぐ
+  const [first] = substituteDays(
+    [
+      {
+        date: "2021-12-25",
+        name: "Christmas Day",
+        nameEn: "Christmas Day",
+        names: { cy: "Dydd Nadolig" },
+        kind: "regular",
+        confirmed: true,
+        key: "christmas",
+      },
+    ],
+    { rules: { 6: "next", 0: "next" }, kind: "substitute", original: "drop" },
+  );
+  assert.deepEqual(first, {
+    date: "2021-12-27",
+    name: "Christmas Day",
+    nameEn: "Christmas Day",
+    names: { cy: "Dydd Nadolig" },
+    kind: "substitute",
+    confirmed: true,
+    key: "christmas",
+  });
+  assert.ok(Object.isFrozen(first));
+});
+
+test("provider: substituteDays の向き（米国式: 土曜日は前日、日曜日は翌日）と名称の関数", () => {
+  const federal: Holiday[] = [
+    {
+      date: "2026-07-04",
+      name: "Independence Day",
+      nameEn: "Independence Day",
+      kind: "federal",
+      confirmed: true,
+    },
+    {
+      date: "2027-12-25",
+      name: "Christmas Day",
+      nameEn: "Christmas Day",
+      kind: "federal",
+      confirmed: true,
+    },
+  ];
+  const observed = (list: Holiday[]) =>
+    substituteDays(list, {
+      rules: { 6: "previous", 0: "next" },
+      kind: "observed",
+      name: (h) => ({ name: `${h.name} (observed)`, nameEn: `${h.nameEn} (observed)` }),
+    });
+  assert.deepEqual(
+    observed([federal[0]!]).map((h) => `${h.date} ${h.name} ${h.kind}`),
+    ["2026-07-03 Independence Day (observed) observed", "2026-07-04 Independence Day federal"],
+    "土曜日は前の金曜日。元の祝日は既定で残る",
+  );
+  assert.deepEqual(
+    observed([federal[1]!]).map((h) => `${h.date} ${h.kind}`),
+    ["2027-12-24 observed", "2027-12-25 federal"],
+  );
+  // 日曜日は次の月曜日。振替日自身は別の振替の対象にならず、年をまたぐことがある
+  const dec = substituteDays(
+    [{ date: "2028-12-31", name: "X", nameEn: "X", kind: "regular", confirmed: false }],
+    { rules: { 0: "next" }, kind: "substitute" },
+  );
+  assert.deepEqual(
+    dec.map((h) => `${h.date} ${h.kind} ${h.confirmed}`),
+    ["2028-12-31 regular false", "2029-01-01 substitute false"],
+    "confirmed も引き継ぐ",
+  );
+});
+
+test("provider: substituteDays の入力の誤りは code 付きの例外", () => {
+  const code = (fn: () => unknown) => {
+    try {
+      fn();
+      return undefined;
+    } catch (e) {
+      return isBizdaysError(e) ? e.code : `not a bizdays error: ${String(e)}`;
+    }
+  };
+  const h = (date: string): Holiday => ({
+    date,
+    name: "X",
+    nameEn: "X",
+    kind: "regular",
+    confirmed: true,
+  });
+  const opts = { rules: { 0: "next" as const }, kind: "substitute" };
+  assert.equal(
+    code(() => substituteDays("x" as never, opts)),
+    "invalid-argument",
+  );
+  assert.equal(
+    code(() => substituteDays([h("2026-13-01")], opts)),
+    "invalid-date",
+  );
+  assert.equal(
+    code(() => substituteDays([h("2026-01-01"), h("2027-01-01")], opts)),
+    "invalid-argument",
+    "同じ年",
+  );
+  assert.equal(
+    code(() => substituteDays([h("2026-01-01"), h("2026-01-01")], opts)),
+    "invalid-argument",
+    "重複",
+  );
+  assert.equal(
+    code(() => substituteDays([{ ...h("2026-01-01"), key: "Bad" } as never], opts)),
+    "invalid-argument",
+  );
+  assert.equal(
+    code(() => substituteDays([], { ...opts, rules: { 7: "next" } as never })),
+    "invalid-weekday",
+  );
+  assert.equal(
+    code(() => substituteDays([], { ...opts, rules: { 0: "nearest" } as never })),
+    "invalid-argument",
+  );
+  assert.equal(
+    code(() => substituteDays([], { ...opts, kind: "" })),
+    "invalid-argument",
+  );
+  assert.equal(
+    code(() => substituteDays([], { ...opts, original: "omit" as never })),
+    "invalid-argument",
+  );
+  assert.equal(
+    code(() => substituteDays([], { ...opts, name: "x" as never })),
+    "invalid-argument",
+  );
+  assert.deepEqual(substituteDays([], opts), [], "空の入力は空");
 });

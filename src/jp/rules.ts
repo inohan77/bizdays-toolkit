@@ -5,6 +5,7 @@
  * - 皇室行事による休日: 特例法ごとの日付をテーブルで持つ
  * - 振替休日: 1973-04-12 以降。2007 年からは「その日後で最も近い国民の祝日でない日」
  * - 国民の休日: 1985-12-27 以降。前日と翌日が国民の祝日である日
+ * - 識別子（key）: 祝日法の各祝日に 1 つ（KnownJapaneseHolidayKey）。振替休日は元の祝日の key、国民の休日・特例の休日は持たない
  * - 春分・秋分の日: 天文計算による近似式。官報公表済みの年（CONFIRMED_THROUGH）までは確定値と一致することを
  *   内閣府の CSV で検証している。それより後の年は confirmed: false
  */
@@ -40,6 +41,31 @@ export type KnownJapaneseHolidayKind =
  */
 export type JapaneseHolidayKind = KnownJapaneseHolidayKind | (string & {});
 
+/**
+ * 日本の国民の祝日の識別子（Holiday.key。既知の値）。祝日法の各祝日に 1 つで、日付の移動や改名があっても同じ祝日なら同じ値
+ * （天皇誕生日は 4/29・12/23・2/23 とも "emperors-birthday"、体育の日とスポーツの日は "sports"）。
+ * 振替休日は元の祝日の key を持ち、国民の休日と特例の休日は key を持たない。
+ * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * @beta
+ */
+export type KnownJapaneseHolidayKey =
+  | "new-year"
+  | "coming-of-age"
+  | "national-foundation"
+  | "emperors-birthday"
+  | "vernal-equinox"
+  | "showa"
+  | "constitution-memorial"
+  | "greenery"
+  | "childrens"
+  | "marine"
+  | "mountain"
+  | "respect-for-the-aged"
+  | "autumnal-equinox"
+  | "sports"
+  | "culture"
+  | "labor-thanksgiving";
+
 /** @internal 対応年 */
 export const SUPPORTED_YEARS = Object.freeze({ from: 1955, to: 2099 });
 /** @internal 春分・秋分の日が官報で確定している最後の年 */
@@ -58,6 +84,8 @@ interface Entry {
   readonly kind: KnownJapaneseHolidayKind;
   /** 春分・秋分の日、またはそれに由来する休日 */
   readonly equinox: boolean;
+  /** 観測している祝日の識別子（振替休日は元の祝日のもの。国民の休日・特例の休日は持たない） */
+  readonly key?: KnownJapaneseHolidayKey;
 }
 
 /** 皇室行事などによる特例の休日（それぞれの特例法による） */
@@ -100,50 +128,59 @@ export function autumnalEquinoxDay(year: number): number {
 /** 国民の祝日と特例の休日（振替休日・国民の休日を除く） */
 function baseHolidays(y: number): Entry[] {
   const list: Entry[] = [];
-  const add = (date: DateString, name: string, nameEn: string, equinox = false): void => {
-    list.push({ date, name, nameEn, kind: "national", equinox });
+  const add = (
+    date: DateString,
+    name: string,
+    nameEn: string,
+    key: KnownJapaneseHolidayKey,
+    equinox = false,
+  ): void => {
+    list.push({ date, name, nameEn, kind: "national", equinox, key });
   };
   const md = (month: number, day: number): DateString => formatDate(y, month, day);
   const monday = (month: number, n: number): DateString => nthWeekdayOfMonth(y, month, 1, n);
 
-  add(md(1, 1), "元日", "New Year's Day");
-  add(y <= 1999 ? md(1, 15) : monday(1, 2), "成人の日", "Coming of Age Day");
-  if (y >= 1967) add(md(2, 11), "建国記念の日", "National Foundation Day");
-  if (y >= 2020) add(md(2, 23), "天皇誕生日", "The Emperor's Birthday");
-  add(md(3, vernalEquinoxDay(y)), "春分の日", "Vernal Equinox Day", true);
-  if (y <= 1988) add(md(4, 29), "天皇誕生日", "The Emperor's Birthday");
-  else if (y <= 2006) add(md(4, 29), "みどりの日", "Greenery Day");
-  else add(md(4, 29), "昭和の日", "Showa Day");
-  add(md(5, 3), "憲法記念日", "Constitution Memorial Day");
-  if (y >= 2007) add(md(5, 4), "みどりの日", "Greenery Day");
-  add(md(5, 5), "こどもの日", "Children's Day");
+  add(md(1, 1), "元日", "New Year's Day", "new-year");
+  add(y <= 1999 ? md(1, 15) : monday(1, 2), "成人の日", "Coming of Age Day", "coming-of-age");
+  if (y >= 1967) add(md(2, 11), "建国記念の日", "National Foundation Day", "national-foundation");
+  if (y >= 2020) add(md(2, 23), "天皇誕生日", "The Emperor's Birthday", "emperors-birthday");
+  add(md(3, vernalEquinoxDay(y)), "春分の日", "Vernal Equinox Day", "vernal-equinox", true);
+  if (y <= 1988) add(md(4, 29), "天皇誕生日", "The Emperor's Birthday", "emperors-birthday");
+  else if (y <= 2006) add(md(4, 29), "みどりの日", "Greenery Day", "greenery");
+  else add(md(4, 29), "昭和の日", "Showa Day", "showa");
+  add(md(5, 3), "憲法記念日", "Constitution Memorial Day", "constitution-memorial");
+  if (y >= 2007) add(md(5, 4), "みどりの日", "Greenery Day", "greenery");
+  add(md(5, 5), "こどもの日", "Children's Day", "childrens");
 
   // 海の日（1996〜）。2020・2021 年は五輪特措法による移動
-  if (y === 2020) add(md(7, 23), "海の日", "Marine Day");
-  else if (y === 2021) add(md(7, 22), "海の日", "Marine Day");
-  else if (y >= 2003) add(monday(7, 3), "海の日", "Marine Day");
-  else if (y >= 1996) add(md(7, 20), "海の日", "Marine Day");
+  if (y === 2020) add(md(7, 23), "海の日", "Marine Day", "marine");
+  else if (y === 2021) add(md(7, 22), "海の日", "Marine Day", "marine");
+  else if (y >= 2003) add(monday(7, 3), "海の日", "Marine Day", "marine");
+  else if (y >= 1996) add(md(7, 20), "海の日", "Marine Day", "marine");
 
   // スポーツの日（2020〜）。2020・2021 年は五輪特措法による移動
-  if (y === 2020) add(md(7, 24), "スポーツの日", "Sports Day");
-  else if (y === 2021) add(md(7, 23), "スポーツの日", "Sports Day");
+  if (y === 2020) add(md(7, 24), "スポーツの日", "Sports Day", "sports");
+  else if (y === 2021) add(md(7, 23), "スポーツの日", "Sports Day", "sports");
 
   // 山の日（2016〜）。2020・2021 年は五輪特措法による移動
-  if (y === 2020) add(md(8, 10), "山の日", "Mountain Day");
-  else if (y === 2021) add(md(8, 8), "山の日", "Mountain Day");
-  else if (y >= 2016) add(md(8, 11), "山の日", "Mountain Day");
+  if (y === 2020) add(md(8, 10), "山の日", "Mountain Day", "mountain");
+  else if (y === 2021) add(md(8, 8), "山の日", "Mountain Day", "mountain");
+  else if (y >= 2016) add(md(8, 11), "山の日", "Mountain Day", "mountain");
 
-  if (y >= 2003) add(monday(9, 3), "敬老の日", "Respect for the Aged Day");
-  else if (y >= 1966) add(md(9, 15), "敬老の日", "Respect for the Aged Day");
-  add(md(9, autumnalEquinoxDay(y)), "秋分の日", "Autumnal Equinox Day", true);
+  if (y >= 2003) add(monday(9, 3), "敬老の日", "Respect for the Aged Day", "respect-for-the-aged");
+  else if (y >= 1966)
+    add(md(9, 15), "敬老の日", "Respect for the Aged Day", "respect-for-the-aged");
+  add(md(9, autumnalEquinoxDay(y)), "秋分の日", "Autumnal Equinox Day", "autumnal-equinox", true);
 
-  if (y >= 2022) add(monday(10, 2), "スポーツの日", "Sports Day");
-  else if (y >= 2000 && y <= 2019) add(monday(10, 2), "体育の日", "Health and Sports Day");
-  else if (y >= 1966 && y <= 1999) add(md(10, 10), "体育の日", "Health and Sports Day");
+  if (y >= 2022) add(monday(10, 2), "スポーツの日", "Sports Day", "sports");
+  else if (y >= 2000 && y <= 2019)
+    add(monday(10, 2), "体育の日", "Health and Sports Day", "sports");
+  else if (y >= 1966 && y <= 1999) add(md(10, 10), "体育の日", "Health and Sports Day", "sports");
 
-  add(md(11, 3), "文化の日", "Culture Day");
-  add(md(11, 23), "勤労感謝の日", "Labor Thanksgiving Day");
-  if (y >= 1989 && y <= 2018) add(md(12, 23), "天皇誕生日", "The Emperor's Birthday");
+  add(md(11, 3), "文化の日", "Culture Day", "culture");
+  add(md(11, 23), "勤労感謝の日", "Labor Thanksgiving Day", "labor-thanksgiving");
+  if (y >= 1989 && y <= 2018)
+    add(md(12, 23), "天皇誕生日", "The Emperor's Birthday", "emperors-birthday");
 
   for (const s of SPECIAL_DAYS) {
     if (s.date.startsWith(`${y}-`)) list.push({ ...s, kind: "special", equinox: false });
@@ -180,6 +217,7 @@ export function computeJapaneseHolidays(year: number): Holiday<JapaneseHolidayKi
       nameEn: "Substitute Holiday",
       kind: "substitute",
       equinox: h.equinox,
+      ...(h.key === undefined ? {} : { key: h.key }),
     });
   }
 
@@ -211,6 +249,7 @@ export function computeJapaneseHolidays(year: number): Holiday<JapaneseHolidayKi
         nameEn: e.nameEn,
         kind: e.kind,
         confirmed: year <= CONFIRMED_THROUGH || !e.equinox,
+        ...(e.key === undefined ? {} : { key: e.key }),
       }),
     );
 }

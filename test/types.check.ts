@@ -19,6 +19,7 @@ import {
   type DateInput,
   type DayInfo,
   type ScheduleDay,
+  type Holiday,
   type HolidayProvider,
   type HolidayValueRule,
   type DayReason,
@@ -33,8 +34,12 @@ import {
   jp,
   toJapanDateTime,
   type JapaneseHolidayKind,
+  type KnownJapaneseHolidayKey,
   type KnownJapaneseHolidayKind,
 } from "../src/jp/index.ts";
+import { england, type KnownUkHolidayKey } from "../src/uk/index.ts";
+import { sg, type KnownSgHolidayKey } from "../src/sg/index.ts";
+import { substituteDays } from "../src/provider/index.ts";
 import {
   diagnoseCalendar,
   diagnoseSchedule,
@@ -397,4 +402,41 @@ void withoutNames;
   expectType<Equal<ReturnType<typeof cal.daysBetween>, readonly DayInfo[]>>();
   const sched = createSchedule({ weekly: [0, 1, 1, 1, 1, 1, 0] });
   expectType<Equal<ReturnType<typeof sched.daysBetween>, readonly ScheduleDay<number>[]>>();
+}
+
+// ------------------------------------------------------------
+// 祝日の識別子 key と絞り込み keys（0.18.0）
+// ------------------------------------------------------------
+{
+  const h = jp.holidaysInYear(2026)[0];
+  expectType<Equal<NonNullable<typeof h>["key"], string | undefined>>();
+  const jpKey: KnownJapaneseHolidayKey = "vernal-equinox";
+  const ukKey: KnownUkHolidayKey = "good-friday";
+  const sgKey: KnownSgHolidayKey = "hari-raya-puasa";
+  createCalendar({
+    holidays: jp,
+    openRecurring: [{ holiday: true, keys: [jpKey, "autumnal-equinox"], kinds: ["national"] }],
+  });
+  createCalendar({ holidays: england, closedRecurring: [{ holiday: true, keys: [ukKey] }] });
+  createSchedule({
+    holidays: sg,
+    weekly: [0, 1, 1, 1, 1, 1, 0],
+    recurring: [{ holiday: true, keys: [sgKey], value: 2 }],
+  });
+  // keys は string の配列（Kind のような型引数は増やさない）
+  createCalendar({ holidays: jp, openRecurring: [{ holiday: true, keys: ["anything"] }] });
+  // @ts-expect-error -- keys は祝日の規則でだけ使える
+  createCalendar({ closedRecurring: [{ weekday: 1, keys: ["sports"] }] });
+  // @ts-expect-error -- keys は祝日の規則でだけ使える
+  createCalendar({ closedRecurring: [{ dayAfterHoliday: true, keys: ["sports"] }] });
+  // @ts-expect-error -- 既知の値の型なので、知らない文字列は誤り
+  const badKey: KnownJapaneseHolidayKey = "golden-week";
+  void badKey;
+  const substituted: Holiday<"regular" | "substitute">[] = substituteDays(
+    [{ date: "2026-01-01", name: "X", nameEn: "X", kind: "regular", confirmed: true }],
+    { rules: { 0: "next" }, kind: "substitute", original: "drop" },
+  );
+  void substituted;
+  // @ts-expect-error -- 向きは "next" か "previous"
+  substituteDays([], { rules: { 0: "nearest" }, kind: "substitute" });
 }

@@ -25,7 +25,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **Day-by-day values and combined calendars**: store hours that change by weekday, holiday and date; a business-day calendar made from such a schedule; and the days on which all (or any) of several calendars are open
 - **Option diagnostics**: `bizdays-toolkit/diagnose` lists rules that never apply, rules that are shadowed or redundant, rules that have ended, typos in option names and options with no business day at all, without throwing. One line in a test keeps options honest
 - **Lightweight, zero dependencies, time-zone safe**: about 10.0 KB min+gzip (about 11.8 KB with Japanese holidays, about 11.7 KB with UK bank holidays, about 10.9 KB with Singapore holidays; measured for 0.17.0). Standard JavaScript and `Intl` only, ESM with bundled types; tested on Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno. Instants such as `Date` are converted to a civil date in the calendar's time zone before evaluation
-- **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface, and `bizdays-toolkit/provider` exposes the calendar arithmetic (nth weekday of a month, Easter) that most countries' holidays are built from
+- **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface, and `bizdays-toolkit/provider` exposes the calendar arithmetic (nth weekday of a month, Easter, substitute days for holidays on a weekend) that most countries' holidays are built from
 
 ## Installation
 
@@ -43,7 +43,7 @@ Types are bundled. CI type-checks a consumer project against the published type 
 import { createCalendar } from "bizdays-toolkit";
 import { isHoliday, jp } from "bizdays-toolkit/jp";
 
-isHoliday("2026-11-23"); // true (Labour Thanksgiving Day)
+isHoliday("2026-11-23"); // true (Labor Thanksgiving Day)
 
 const calendar = createCalendar({
   holidays: jp,
@@ -79,12 +79,12 @@ A calendar is built from the holiday provider and your closures: `closedWeekdays
 | `{ weekday: 3, nth: 3 }`                                  | The 3rd Wednesday (`nth` is 1–5 or -1 for the last; an array for several)       |
 | `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`       | Every other Wednesday, counted from the anchor                                  |
 | `{ day: 20 }`, `{ day: -1 }`                              | The 20th, the last day of the month                                             |
-| `{ holiday: true, kinds: ["substitute"] }`                | Holidays, optionally narrowed by kind                                           |
+| `{ holiday: true, kinds: ["substitute"] }`                | Holidays, optionally narrowed by kind or by key (`keys: ["vernal-equinox"]`)    |
 | `{ dayAfterHoliday: true }`, `{ dayBeforeHoliday: true }` | The day after (or before) a holiday or a run of holidays                        |
 | `onHolidayRule: "after-holiday"`                          | "Closed on Mondays, or the next weekday when Monday is a holiday" (museum rule) |
 | `effectiveFrom`, `effectiveTo`                            | The period the rule is in effect                                                |
 
-`dayInfo` tells you why a day is open or closed (`reason`, `name`, `rulePath`). Details: [Business-day calendars](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#business-day-calendars), [Recurring rules](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#recurring-rules), [Common recipes](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#common-recipes).
+`dayInfo` tells you why a day is open or closed (`reason`, `name`, `rulePath`). Every bundled holiday that recurs each year has a stable `key` (`vernal-equinox`, `good-friday`, `hari-raya-puasa`, …), so a rule can select individual holidays that no date pattern can express. Details: [Business-day calendars](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#business-day-calendars), [Recurring rules](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#recurring-rules), [Holiday keys](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#holiday-keys), [Common recipes](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#common-recipes).
 
 ### Due dates, schedules and combined calendars
 

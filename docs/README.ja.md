@@ -25,7 +25,7 @@
 - **日ごとの値と合成**: 曜日・祝日・特定日で変わる営業時間のようなスケジュール、そこから作る営業日カレンダー、複数のカレンダーがすべて（またはどれか）営業している日の合成
 - **設定の診断**: `bizdays-toolkit/diagnose` が、決して使われない規則・覆われた規則・取り除いても結果が変わらない規則・終わった規則・キーの打ち間違い・営業日が 1 日もない設定を、例外を投げずに一覧で返します。テストに 1 行足すだけで設定を守れます
 - **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 10.0KB（日本の祝日込みで約 11.8KB、英国の祝日込みで約 11.7KB、シンガポールの祝日込みで約 10.9KB。0.17.0 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
-- **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられ、多くの国の祝日の元になる暦の計算（月の第 n 何曜日・復活祭）を `bizdays-toolkit/provider` が公開します
+- **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられ、多くの国の祝日の元になる暦の計算（月の第 n 何曜日・復活祭・週末に当たった祝日の振替）を `bizdays-toolkit/provider` が公開します
 
 ## インストール
 
@@ -79,12 +79,12 @@ calendar.dueDate("2026-11", { day: 23, convention: "following" }); // "2026-11-2
 | `{ weekday: 3, nth: 3 }`                                  | 第 3 水曜日（`nth` は 1〜5 と -1（最終）。配列で複数指定できる） |
 | `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`       | 隔週水曜日（`anchor` から数える）                                |
 | `{ day: 20 }`・`{ day: -1 }`                              | 毎月 20 日・毎月末日                                             |
-| `{ holiday: true, kinds: ["substitute"] }`                | 祝日（種別で絞れる）                                             |
+| `{ holiday: true, kinds: ["substitute"] }`                | 祝日（種別や識別子 `keys: ["vernal-equinox"]` で絞れる）         |
 | `{ dayAfterHoliday: true }`・`{ dayBeforeHoliday: true }` | 祝日（連休）の翌日・前日                                         |
 | `onHolidayRule: "after-holiday"`                          | 「月曜休館（祝日の場合は翌平日）」のような振替                   |
 | `effectiveFrom`・`effectiveTo`                            | 規則の有効期間                                                   |
 
-`dayInfo` で、その日が営業か休業かの理由（`reason`・`name`・`rulePath`）が分かります。詳しくは[営業日カレンダー](./guide.ja.md#営業日カレンダー)・[繰り返しの規則](./guide.ja.md#繰り返しの規則)・[よくある設定の例](./guide.ja.md#よくある設定の例)。
+`dayInfo` で、その日が営業か休業かの理由（`reason`・`name`・`rulePath`）が分かります。同梱の毎年繰り返す祝日には安定した識別子 `key`（`vernal-equinox`・`good-friday`・`hari-raya-puasa` など）が付いていて、月日や曜日では書けない祝日を規則から個別に指せます。詳しくは[営業日カレンダー](./guide.ja.md#営業日カレンダー)・[繰り返しの規則](./guide.ja.md#繰り返しの規則)・[祝日の識別子](./guide.ja.md#祝日の識別子)・[よくある設定の例](./guide.ja.md#よくある設定の例)。
 
 ### 期日・スケジュール・合成
 
