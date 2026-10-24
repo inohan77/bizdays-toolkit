@@ -1,0 +1,575 @@
+{
+  "source": "https://data.gov.sg/collections/691/view (Ministry of Manpower, datasets \"Public Holidays for <year>\")",
+  "collection": "691",
+  "retrieved": "2026-10-23",
+  "years": {
+    "2020": [
+      {
+        "date": "2020-01-01",
+        "day": "Wednesday",
+        "holiday": "New Year's Day"
+      },
+      {
+        "date": "2020-01-25",
+        "day": "Saturday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2020-01-26",
+        "day": "Sunday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2020-01-27",
+        "day": "Monday",
+        "holiday": "Chinese New Year (Observed)"
+      },
+      {
+        "date": "2020-04-10",
+        "day": "Friday",
+        "holiday": "Good Friday"
+      },
+      {
+        "date": "2020-05-01",
+        "day": "Friday",
+        "holiday": "Labour Day"
+      },
+      {
+        "date": "2020-05-07",
+        "day": "Thursday",
+        "holiday": "Vesak Day"
+      },
+      {
+        "date": "2020-05-24",
+        "day": "Sunday",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2020-05-25",
+        "day": "Monday",
+        "holiday": "Hari Raya Puasa (Observed)"
+      },
+      {
+        "date": "2020-07-10",
+        "day": "Friday",
+        "holiday": "Polling Day"
+      },
+      {
+        "date": "2020-07-31",
+        "day": "Friday",
+        "holiday": "Hari Raya Haji"
+      },
+      {
+        "date": "2020-08-09",
+        "day": "Sunday",
+        "holiday": "National Day"
+      },
+      {
+        "date": "2020-08-10",
+        "day": "Monday",
+        "holiday": "National Day (Observed)"
+      },
+      {
+        "date": "2020-11-14",
+        "day": "Saturday",
+        "holiday": "Deepavali"
+      },
+      {
+        "date": "2020-12-25",
+        "day": "Friday",
+        "holiday": "Christmas Day"
+      }
+    ],
+    "2021": [
+      {
+        "date": "2021-01-01",
+        "day": "Friday",
+        "holiday": "New Year's Day"
+      },
+      {
+        "date": "2021-02-12",
+        "day": "Friday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2021-02-13",
+        "day": "Saturday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2021-04-02",
+        "day": "Friday",
+        "holiday": "Good Friday"
+      },
+      {
+        "date": "2021-05-01",
+        "day": "Saturday",
+        "holiday": "Labour Day"
+      },
+      {
+        "date": "2021-05-13",
+        "day": "Thursday",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2021-05-26",
+        "day": "Wednesday",
+        "holiday": "Vesak Day"
+      },
+      {
+        "date": "2021-07-20",
+        "day": "Tuesday",
+        "holiday": "Hari Raya Haji"
+      },
+      {
+        "date": "2021-08-09",
+        "day": "Monday",
+        "holiday": "National Day"
+      },
+      {
+        "date": "2021-11-04",
+        "day": "Thursday",
+        "holiday": "Deepavali"
+      },
+      {
+        "date": "2021-12-25",
+        "day": "Saturday",
+        "holiday": "Christmas Day"
+      }
+    ],
+    "2022": [
+      {
+        "date": "2022-01-01",
+        "day": "Saturday",
+        "holiday": "New Year's Day"
+      },
+      {
+        "date": "2022-02-01",
+        "day": "Tuesday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2022-02-02",
+        "day": "Wednesday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2022-04-15",
+        "day": "Friday",
+        "holiday": "Good Friday"
+      },
+      {
+        "date": "2022-05-01",
+        "day": "Sunday",
+        "holiday": "Labour Day"
+      },
+      {
+        "date": "2022-05-02",
+        "day": "Monday",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2022-05-03",
+        "day": "Tuesday",
+        "holiday": "Labour Day (Observed)"
+      },
+      {
+        "date": "2022-05-15",
+        "day": "Sunday",
+        "holiday": "Vesak Day"
+      },
+      {
+        "date": "2022-07-10",
+        "day": "Sunday",
+        "holiday": "Hari Raya Haji"
+      },
+      {
+        "date": "2022-08-09",
+        "day": "Tuesday",
+        "holiday": "National Day"
+      },
+      {
+        "date": "2022-10-24",
+        "day": "Monday",
+        "holiday": "Deepavali"
+      },
+      {
+        "date": "2022-12-25",
+        "day": "Sunday",
+        "holiday": "Christmas Day"
+      },
+      {
+        "date": "2022-12-26",
+        "day": "Monday",
+        "holiday": "Christmas Day (Observed)"
+      }
+    ],
+    "2023": [
+      {
+        "date": "2023-01-01",
+        "day": "Sunday",
+        "holiday": "New Year's Day"
+      },
+      {
+        "date": "2023-01-02",
+        "day": "Monday",
+        "holiday": "New Year's Day (Observed)"
+      },
+      {
+        "date": "2023-01-22",
+        "day": "Sunday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2023-01-23",
+        "day": "Monday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2023-01-24",
+        "day": "Tuesday",
+        "holiday": "Chinese New Year (Observed)"
+      },
+      {
+        "date": "2023-04-07",
+        "day": "Friday",
+        "holiday": "Good Friday"
+      },
+      {
+        "date": "2023-04-22",
+        "day": "Saturday",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2023-05-01",
+        "day": "Monday",
+        "holiday": "Labour Day"
+      },
+      {
+        "date": "2023-06-02",
+        "day": "Friday",
+        "holiday": "Vesak Day"
+      },
+      {
+        "date": "2023-06-29",
+        "day": "Thursday",
+        "holiday": "Hari Raya Haji"
+      },
+      {
+        "date": "2023-08-09",
+        "day": "Wednesday",
+        "holiday": "National Day"
+      },
+      {
+        "date": "2023-09-01",
+        "day": "Friday",
+        "holiday": "Polling Day"
+      },
+      {
+        "date": "2023-11-12",
+        "day": "Sunday",
+        "holiday": "Deepavali"
+      },
+      {
+        "date": "2023-11-13",
+        "day": "Monday",
+        "holiday": "Deepavali (Observed)"
+      },
+      {
+        "date": "2023-12-25",
+        "day": "Monday",
+        "holiday": "Christmas Day"
+      }
+    ],
+    "2024": [
+      {
+        "date": "2024-01-01",
+        "day": "Monday",
+        "holiday": "New Year's Day"
+      },
+      {
+        "date": "2024-02-10",
+        "day": "Saturday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2024-02-11",
+        "day": "Sunday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2024-02-12",
+        "day": "Monday",
+        "holiday": "Chinese New Year (Observed)"
+      },
+      {
+        "date": "2024-03-29",
+        "day": "Friday",
+        "holiday": "Good Friday"
+      },
+      {
+        "date": "2024-04-10",
+        "day": "Wednesday",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2024-05-01",
+        "day": "Wednesday",
+        "holiday": "Labour Day"
+      },
+      {
+        "date": "2024-05-22",
+        "day": "Wednesday",
+        "holiday": "Vesak Day"
+      },
+      {
+        "date": "2024-06-17",
+        "day": "Monday",
+        "holiday": "Hari Raya Haji"
+      },
+      {
+        "date": "2024-08-09",
+        "day": "Friday",
+        "holiday": "National Day"
+      },
+      {
+        "date": "2024-10-31",
+        "day": "Thursday",
+        "holiday": "Deepavali"
+      },
+      {
+        "date": "2024-12-25",
+        "day": "Wednesday",
+        "holiday": "Christmas Day"
+      }
+    ],
+    "2025": [
+      {
+        "date": "2025-01-01",
+        "day": "Wednesday",
+        "holiday": "New Year's Day"
+      },
+      {
+        "date": "2025-01-29",
+        "day": "Wednesday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2025-01-30",
+        "day": "Thursday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2025-03-31",
+        "day": "Monday",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2025-04-18",
+        "day": "Friday",
+        "holiday": "Good Friday"
+      },
+      {
+        "date": "2025-05-01",
+        "day": "Thursday",
+        "holiday": "Labour Day"
+      },
+      {
+        "date": "2025-05-03",
+        "day": "Saturday",
+        "holiday": "Polling Day"
+      },
+      {
+        "date": "2025-05-12",
+        "day": "Monday",
+        "holiday": "Vesak Day"
+      },
+      {
+        "date": "2025-06-07",
+        "day": "Saturday",
+        "holiday": "Hari Raya Haji"
+      },
+      {
+        "date": "2025-08-09",
+        "day": "Saturday",
+        "holiday": "National Day"
+      },
+      {
+        "date": "2025-10-20",
+        "day": "Monday",
+        "holiday": "Deepavali"
+      },
+      {
+        "date": "2025-12-25",
+        "day": "Thursday",
+        "holiday": "Christmas Day"
+      }
+    ],
+    "2026": [
+      {
+        "date": "2026-01-01",
+        "day": "Thursday",
+        "holiday": "New Year’s Day"
+      },
+      {
+        "date": "2026-02-17",
+        "day": "Tuesday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2026-02-18",
+        "day": "Wednesday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2026-03-21",
+        "day": "Saturday",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2026-04-03",
+        "day": "Friday",
+        "holiday": "Good Friday"
+      },
+      {
+        "date": "2026-05-01",
+        "day": "Friday",
+        "holiday": "Labour Day"
+      },
+      {
+        "date": "2026-05-27",
+        "day": "Wednesday",
+        "holiday": "Hari Raya Haji"
+      },
+      {
+        "date": "2026-05-31",
+        "day": "Sunday",
+        "holiday": "Vesak Day"
+      },
+      {
+        "date": "2026-06-01",
+        "day": "Monday",
+        "holiday": "Vesak Day (Observed)"
+      },
+      {
+        "date": "2026-08-09",
+        "day": "Sunday",
+        "holiday": "National Day"
+      },
+      {
+        "date": "2026-08-10",
+        "day": "Monday",
+        "holiday": "National Day (Observed)"
+      },
+      {
+        "date": "2026-11-08",
+        "day": "Sunday",
+        "holiday": "Deepavali"
+      },
+      {
+        "date": "2026-11-09",
+        "day": "Monday",
+        "holiday": "Deepavali (Observed)"
+      },
+      {
+        "date": "2026-12-25",
+        "day": "Friday",
+        "holiday": "Christmas Day"
+      }
+    ],
+    "2027": [
+      {
+        "date": "2027-01-01",
+        "day": "Friday",
+        "holiday": "New Year’s Day"
+      },
+      {
+        "date": "2027-02-06",
+        "day": "Saturday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2027-02-07",
+        "day": "Sunday",
+        "holiday": "Chinese New Year"
+      },
+      {
+        "date": "2027-02-08",
+        "day": "Monday",
+        "holiday": "Chinese New Year (Observed)"
+      },
+      {
+        "date": "2027-03-10",
+        "day": "Wednesday",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2027-03-26",
+        "day": "Friday",
+        "holiday": "Good Friday"
+      },
+      {
+        "date": "2027-05-01",
+        "day": "Saturday",
+        "holiday": "Labour Day"
+      },
+      {
+        "date": "2027-05-17",
+        "day": "Monday",
+        "holiday": "Hari Raya Haji"
+      },
+      {
+        "date": "2027-05-20",
+        "day": "Thursday",
+        "holiday": "Vesak Day"
+      },
+      {
+        "date": "2027-08-09",
+        "day": "Monday",
+        "holiday": "National Day"
+      },
+      {
+        "date": "2027-10-28",
+        "day": "Thursday",
+        "holiday": "Deepavali"
+      },
+      {
+        "date": "2027-12-25",
+        "day": "Saturday",
+        "holiday": "Christmas Day"
+      }
+    ]
+  },
+  "knownDifferences": {
+    "note": "data.gov.sg の 2022 年分が、MOM の改定後の告示（2021-10-21 の報道発表。Hari Raya Puasa を 5/3、Hari Raya Haji を 7/10 に改定し、日曜日の祝日は翌月曜日を祝日とする）と食い違う箇所。ライブラリは告示を正とし、照合ではこの差分だけを許す",
+    "source": "https://www.mom.gov.sg/newsroom/press-releases/2021/1021-revised-dates-for-hari-raya-puasa-and--hari-raya-haji-public-holidays-in-2022",
+    "libraryOnly": [
+      {
+        "date": "2022-05-02",
+        "holiday": "Labour Day (Observed)"
+      },
+      {
+        "date": "2022-05-03",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2022-05-16",
+        "holiday": "Vesak Day (Observed)"
+      },
+      {
+        "date": "2022-07-11",
+        "holiday": "Hari Raya Haji (Observed)"
+      }
+    ],
+    "dataOnly": [
+      {
+        "date": "2022-05-02",
+        "holiday": "Hari Raya Puasa"
+      },
+      {
+        "date": "2022-05-03",
+        "holiday": "Labour Day (Observed)"
+      }
+    ]
+  }
+}

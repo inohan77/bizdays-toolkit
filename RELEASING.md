@@ -6,11 +6,11 @@
 
 ### 区分
 
-| 区分     | 対象                                                                                                                                                                                                                                      |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| メジャー | 関数・オプション・エクスポートの削除や改名、戻り値の形の変更、既定値の変更（既定のタイムゾーン・`holidayPolicy` など）、営業日判定の優先順位の変更、対応年の範囲の縮小、サポートする Node.js の打ち切り、コンパイルが通らなくなる型の変更 |
-| マイナー | 機能の追加（国・地域の提供元、オプション、関数）、対応年の拡大                                                                                                                                                                            |
-| パッチ   | 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表）、法令・公式データと食い違っていた計算の誤りの修正、ドキュメント、性能の改善                                   |
+| 区分     | 対象                                                                                                                                                                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| メジャー | 関数・オプション・エクスポートの削除や改名、戻り値の形の変更、既定値の変更（既定のタイムゾーン・`holidayPolicy` など）、営業日判定の優先順位の変更、対応年の範囲の縮小、サポートする Node.js の打ち切り、コンパイルが通らなくなる型の変更         |
+| マイナー | 機能の追加（国・地域の提供元、オプション、関数）、対応年の拡大                                                                                                                                                                                    |
+| パッチ   | 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表、シンガポールの新しい年の告示・日付の改定）、法令・公式データと食い違っていた計算の誤りの修正、ドキュメント、性能の改善 |
 
 - **公式データの反映はパッチ**とします。API は変わらなくても出力は変わりますが、`^`・`~` のどちらの指定の利用者にも自動で届けるためです。0.x の期間は `^0.8.0` が 0.9.0 を受け取らないので、マイナーにすると、臨時の祝日がまさに必要な利用者に届きません（メジャーにすると、古い祝日のまま動き続ける利用者が出ます）。出力を固定したい利用者には、版の完全一致での固定を README で案内しています
 - 公式データの反映と同時に API を足す場合は、マイナーにします（データの反映だけを急ぐ場合は、先にパッチで出します）
@@ -50,7 +50,7 @@
 
 ### dataVersion
 
-国ごとの提供元が `dataVersion`（日本は反映済みの官報の年月、英国は反映済みの GOV.UK のデータの年月。例: `"2026-02"`）と `confirmedThrough`（公式に確定している最後の年）を公開します。データを更新したら CHANGELOG の **Data** 区分にも記載します。
+国ごとの提供元が `dataVersion`（日本は反映済みの官報の年月、英国・シンガポールは反映済みの GOV.UK・data.gov.sg のデータの年月。例: `"2026-02"`）と `confirmedThrough`（公式に確定している最後の年）を公開します。データを更新したら CHANGELOG の **Data** 区分にも記載します。
 
 ## 毎年の作業（日本）
 
@@ -64,11 +64,11 @@
 
 ## README のサイズの値
 
-README の minify + gzip のサイズは、手で測った値です（測った版を README に添えています）。マイナー版を出すときと、`src` を大きく変えたときに測り直します。測り方は、ルートのすべてと国の提供元（`jp`、または英国の 4 つ）を読み込む入口を esbuild で bundle・minify して gzip で測ります。esbuild はリポジトリの依存にしないため、熟成ゲートを通る手元の環境で一時的に使います。
+README の minify + gzip のサイズは、手で測った値です（測った版を README に添えています）。マイナー版を出すときと、`src` を大きく変えたときに測り直します。測り方は、ルートのすべてと国の提供元（`jp`、英国の 4 つ、または `sg`）を読み込む入口を esbuild で bundle・minify して gzip で測ります。esbuild はリポジトリの依存にしないため、熟成ゲートを通る手元の環境で一時的に使います。
 
 ## 英国のデータの更新
 
-英国の bank holidays は、布告による臨時の祝日が 10 日ほど前に発表されることがあり、日本のように時期が決まっていません。そのため、GitHub Actions（`.github/workflows/govuk-watch.yml`）が毎日 GOV.UK と照合し、差分があればラベル `govuk-data` の issue を立てます（Actions の実行も失敗になります）。issue の本文には、`pnpm verify:govuk` の結果と、GOV.UK の公式リポジトリ（alphagov/frontend）の該当ファイルの最新のコミット（変更の理由の手がかり）が入ります。
+英国の bank holidays は、布告による臨時の祝日が 10 日ほど前に発表されることがあり、日本のように時期が決まっていません。そのため、GitHub Actions（`.github/workflows/data-watch.yml`。0.17.0 で `govuk-watch.yml` から改名し、シンガポールの照合も同じ起動で行う）が毎日 GOV.UK と照合し、差分があればラベル `govuk-data` の issue を立てます（Actions の実行も失敗になります）。issue の本文には、`pnpm verify:govuk` の結果と、GOV.UK の公式リポジトリ（alphagov/frontend）の該当ファイルの最新のコミット（変更の理由の手がかり）が入ります。
 
 | 差分の種類                       | 対応                                                                                                     |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -84,7 +84,25 @@ README の minify + gzip のサイズは、手で測った値です（測った�
 4. 1 つのコミットにまとめ、CHANGELOG の **Data** に記載して、パッチ版として公開する
 5. 公開したら issue を閉じる
 
-差分があったときの経路（issue の作成・更新・コメント）を確かめるには、Actions の「Run workflow」で **simulate** に印を付けて実行します。GOV.UK のデータに架空の祝日を 1 件足して照合するので、ラベル `govuk-data-simulation`・題名に `[Simulation]` の付いた issue が作られ、実行は失敗になります（想定どおり）。もう一度実行すると、内容が同じなので issue は更新されません。確かめたら issue を閉じてください。監視の仕組み（`scripts/verify-govuk.ts` やワークフロー）を変えたときにも行います。
+差分があったときの経路（issue の作成・更新・コメント）を確かめるには、Actions の「Run workflow」で **simulate** に印を付けて実行します。GOV.UK と data.gov.sg のデータにそれぞれ架空の祝日を 1 件足して照合するので、ラベル `govuk-data-simulation`・`datagovsg-data-simulation`、題名に `[Simulation]` の付いた issue が 2 つ作られ、実行は失敗になります（想定どおり）。もう一度実行すると、内容が同じなので issue は更新されません。確かめたら issue を閉じてください。監視の仕組み（`scripts/verify-govuk.ts`・`scripts/verify-datagovsg.ts` やワークフロー）を変えたときにも行います。
+
+## シンガポールのデータの更新
+
+シンガポールの祝日は規則で計算できないので（旧正月・Hari Raya・Vesak Day・Deepavali）、MOM（Ministry of Manpower）が年ごとに告示する日付を `src/sg/rules.ts` の表で持ちます。翌年の祝日は 4〜7 月ごろに告示され、Hari Raya の日付はあとから改定されることがあります。同じワークフロー（`data-watch.yml`）が毎日 data.gov.sg のコレクション 691（MOM）と照合し、差分があればラベル `datagovsg-data` の issue を立てます。照合は data.gov.sg を使いますが、**正は MOM の告示（報道発表）**です。data.gov.sg の 2022 年分は改定後の告示と食い違っており（フィクスチャの `knownDifferences`。出典付き）、照合ではその差分だけを許します。
+
+| 差分の種類                                            | 対応                                                                                                                                                                                                                         |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New years published on data.gov.sg                    | 新しい年が載った。MOM の報道発表で日付を確かめ、`MOVABLE`（動く祝日）・`SPECIAL_DAYS`（Polling Day など）に足し、`SUPPORTED_YEARS.to`・`CONFIRMED_THROUGH`・`DATA_VERSION` を上げる                                          |
+| Library does not match data.gov.sg                    | 日付の改定など。MOM の報道発表で確かめ、告示どおりなら表を直してパッチ版を出す。data.gov.sg の側の誤りなら `knownDifferences` に出典付きで足す。既知の差分が消えた（data.gov.sg が直った）ときは `knownDifferences` から外す |
+| Consolidated dataset differs from the yearly datasets | data.gov.sg の複数年のデータセットと年ごとのデータセットの不一致。data.gov.sg 側の問題なので、年ごとのデータセットを正として様子を見る                                                                                       |
+| Fixture differs from data.gov.sg                      | フィクスチャの更新が必要。上と同じコミットで更新する                                                                                                                                                                         |
+| ERROR（The check itself failed）                      | 取得・解析の失敗（API の形式の変更など）。監視が機能していないので、`scripts/verify-datagovsg.ts` を直す                                                                                                                     |
+
+1. `pnpm verify:datagovsg` で手元でも差分を確かめる
+2. MOM の報道発表（<https://www.mom.gov.sg/newsroom/press-releases>）で日付を確かめ、`src/sg/rules.ts` を直す（振替は規則で計算するので表に書かない）
+3. `pnpm verify:datagovsg` が合格したら、`pnpm verify:datagovsg --write` でフィクスチャを更新する
+4. 1 つのコミットにまとめ、CHANGELOG の **Data** に記載して、パッチ版として公開する
+5. 公開したら issue を閉じる
 
 ### 監視の起動とハートビート
 
@@ -93,25 +111,25 @@ GitHub の schedule は高負荷時に遅れたり落ちたりし、このリポ
 | 仕組み             | 役割                                                                           | 設定の場所                                                       |
 | ------------------ | ------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
 | cron-job.org       | 主の起動。毎日 06:00（日本時間）に `workflow_dispatch` を API で呼ぶ           | cron-job.org のジョブ（下記）                                    |
-| GitHub の schedule | 予備の起動。毎日 18:17（日本時間）                                             | `govuk-watch.yml` の `cron`                                      |
+| GitHub の schedule | 予備の起動。毎日 18:17（日本時間）                                             | `data-watch.yml` の `cron`                                       |
 | healthchecks.io    | 監視が動いたことの確認。最後のステップで知らせ、知らせが途絶えたらメールが届く | healthchecks.io のチェックと、Secrets の `HEALTHCHECKS_PING_URL` |
 
 ハートビートは、照合まで動いたとき（一致・差分あり）は成功を、照合そのものが失敗したとき（取得の失敗など）やそれより前で止まったときは `/fail` を知らせます。差分は、これまでどおり GitHub の失敗の通知と issue で知らせます。
 
 **cron-job.org のジョブ**
 
-- URL: `https://api.github.com/repos/inohan77/bizdays-toolkit/actions/workflows/govuk-watch.yml/dispatches`（POST）
+- URL: `https://api.github.com/repos/inohan77/bizdays-toolkit/actions/workflows/data-watch.yml/dispatches`（POST。0.17.0 で `govuk-watch.yml` から改名したので、cron-job.org の URL も直す）
 - ヘッダー: `Accept: application/vnd.github+json`、`Authorization: Bearer <トークン>`、`Content-Type: application/json`、`X-GitHub-Api-Version: 2026-03-10`（REST API の版。指定しないと 2022-11-28 版になり、その版は 2028 年 3 月 10 日に提供が終わる。出典: https://docs.github.com/en/rest/about-the-rest-api/api-versions の Supported API versions）
 - 本文: `{"ref":"main"}`
 - 時刻: 毎日 06:00（タイムゾーン Asia/Tokyo）。失敗したときのメール通知を有効にする
-- トークン: Fine-grained のトークンを、このリポジトリだけ・**Actions の Read and write だけ**で作る（Contents は不要）。このトークンで起動できるのは `workflow_dispatch` のある govuk-watch だけで、コードの変更や npm への公開はできない。期限を設け（1 年など）、切れる前に作り直して cron-job.org のヘッダーを差し替える（切れると呼び出しが 401 で失敗し、cron-job.org の失敗の通知と、healthchecks.io の知らせの途絶の両方で分かる）
+- トークン: Fine-grained のトークンを、このリポジトリだけ・**Actions の Read and write だけ**で作る（Contents は不要）。このトークンで起動できるのは `workflow_dispatch` のある data-watch だけで、コードの変更や npm への公開はできない。期限を設け（1 年など）、切れる前に作り直して cron-job.org のヘッダーを差し替える（切れると呼び出しが 401 で失敗し、cron-job.org の失敗の通知と、healthchecks.io の知らせの途絶の両方で分かる）
 
 **healthchecks.io のチェック**
 
 - 種類は Simple、Period は 1 day、Grace は 6 hours（最後の知らせから 30 時間来なければメールが届く）
 - チェックの Ping URL を、リポジトリの Secrets に `HEALTHCHECKS_PING_URL` として登録する（URL を知っていれば誰でも知らせを送れるため、公開しない）
 
-監視の仕組みを変えたときや、トークンを作り直したときは、cron-job.org の Test Run で govuk-watch が起動し、healthchecks.io に知らせが届くことを確かめてください。2026-03-10 版では、成功すると `200` と起動した実行の ID（`workflow_run_id`）が返ります（2022-11-28 版では本文のない `204`）。応答のヘッダーに `Deprecation`・`Sunset` があれば、指定している API の版の提供の終わりが決まっているので、トークンを作り直すときなどに、GitHub の API の版のページで新しい版を確かめて `X-GitHub-Api-Version` を更新します。
+監視の仕組みを変えたときや、トークンを作り直したときは、cron-job.org の Test Run で data-watch が起動し、healthchecks.io に知らせが届くことを確かめてください。2026-03-10 版では、成功すると `200` と起動した実行の ID（`workflow_run_id`）が返ります（2022-11-28 版では本文のない `204`）。応答のヘッダーに `Deprecation`・`Sunset` があれば、指定している API の版の提供の終わりが決まっているので、トークンを作り直すときなどに、GitHub の API の版のページで新しい版を確かめて `X-GitHub-Api-Version` を更新します。
 
 監視のワークフローは、リポジトリに 60 日間動きがないと GitHub が定期実行を止めるのを防ぐため、実行のたびに自分を有効化し直します（予備の schedule のため）。
 
@@ -142,7 +160,7 @@ GitHub の schedule は高負荷時に遅れたり落ちたりし、このリポ
 Node.js・npm・pnpm は、手元の開発環境と CI で同じ版を使います。CI の版は次の 2 か所で管理しています。
 
 - `.github/actions/setup-toolchain/action.yml`: npm と pnpm の版
-- `.github/workflows/ci.yml`・`release.yml`・`govuk-watch.yml`: Node.js の版とランナー（`ubuntu-24.04`）
+- `.github/workflows/ci.yml`・`release.yml`・`data-watch.yml`: Node.js の版とランナー（`ubuntu-24.04`）
 - `.github/workflows/ci.yml` の `compat` ジョブ: 公開物を確かめる Node.js の版（engines の下限と、LTS の系列・LTS 入りを控えた系列のうち `check` で使わないもの。decisions.md の 23 番）
 - `.github/workflows/ci.yml` の `workerd` ジョブ: workerd の版と SHA-256（公式のリリースの `workerd-linux-64.gz` を取得して計算する。熟成ゲートを過ぎた版を指定する）。`safari` ジョブの macOS のランナーの版（`macos-15`）
 - `.github/workflows/ci.yml` の `bun`・`deno` ジョブ: Bun の版と SHA-256（公式のリリースの `SHASUMS256.txt` の `bun-linux-x64.zip` の行）、Deno の版と SHA-256（公式のリリースの `deno-x86_64-unknown-linux-gnu.zip.sha256sum`）。どちらも熟成ゲートを過ぎた版を指定する

@@ -10,12 +10,14 @@ test("すべてのサブパスを require() で読み込める", () => {
   const uk = require("bizdays-toolkit/uk");
   const diagnose = require("bizdays-toolkit/diagnose");
   const provider = require("bizdays-toolkit/provider");
+  const sg = require("bizdays-toolkit/sg");
 
   const calendar = root.createCalendar({ holidays: jp.jp, closedWeekdays: [0, 6] });
   assert.equal(calendar.isBusinessDay("2026-11-23"), false);
   assert.equal(uk.scotland.holidaysInYear(2026).length, 10);
   assert.deepEqual(diagnose.diagnoseCalendar({ holidays: jp.jp }), []);
   assert.equal(provider.easterSunday(2026), "2026-04-05");
+  assert.equal(sg.sg.holidaysInYear(2026).length, 14);
 });
 
 test("require() と import は同じモジュールを返す（二重に読み込まれない）", async () => {

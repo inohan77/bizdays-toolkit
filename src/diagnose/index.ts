@@ -8,6 +8,7 @@
 export {
   diagnoseCalendar,
   diagnoseSchedule,
+  type DiagnoseOptions,
   type Diagnostic,
   type DiagnosticCode,
   type DiagnosticSeverity,

@@ -330,6 +330,14 @@ export interface HolidaySourceOptions<Kind extends string = string> {
   readonly timeZone?: string;
   /** 祝日の提供元の対応年を外れた日付の扱い（既定: "throw"） */
   readonly outOfRange?: "throw" | "ignore";
+  /**
+   * 判定が未確定の祝日（提供元の confirmed: false。日本の春分の日・秋分の日の予測など）に触れたときの扱い（既定: "accept"）。
+   * "throw" にすると、dayInfo・isBusinessDay に限らず、営業日の探索・調整・期日の計算の途中で評価した日や、祝日の翌日・祝前日の
+   * 規則が見る隣の日を含め、祝日を引いた日が未確定の祝日なら unconfirmed-holiday の RangeError を投げる。
+   * holidaysInYear・holidaysBetween は投げないので、影響する日の列挙に使える。
+   * 判定に祝日を使う設定（holidayPolicy が "ignore" でない、または祝日に従属する規則がある）でだけ意味がある
+   */
+  readonly unconfirmedHolidays?: "accept" | "throw";
 }
 
 /**
@@ -399,6 +407,8 @@ export interface HolidayLookup<Kind extends string = string> {
   readonly providers: readonly HolidayProvider<Kind>[];
   /** 祝日の提供元の対応年を外れた日付の扱い（設定の outOfRange） */
   readonly outOfRange: "throw" | "ignore";
+  /** 未確定の祝日に触れたときの扱い（設定の unconfirmedHolidays） */
+  readonly unconfirmedHolidays: "accept" | "throw";
 
   /** 入力をタイムゾーンでの暦日に変換する */
   dateOf(input: DateInput): DateString;
@@ -1039,6 +1049,7 @@ export interface HolidaySource<Kind extends string> {
   readonly providers: readonly HolidayProvider<Kind>[];
   readonly timeZone: string;
   readonly outOfRange: "throw" | "ignore";
+  readonly unconfirmedHolidays: "accept" | "throw";
 }
 
 /** @internal 祝日の提供元とタイムゾーンの設定を検証する */
@@ -1081,10 +1092,15 @@ export function compileHolidaySource<Kind extends string>(
   if (outOfRange !== "throw" && outOfRange !== "ignore") {
     c.error("invalid-option", "outOfRange", 'must be "throw" or "ignore"');
   }
+  const unconfirmed = options["unconfirmedHolidays"] ?? "accept";
+  if (unconfirmed !== "accept" && unconfirmed !== "throw") {
+    c.error("invalid-option", "unconfirmedHolidays", 'must be "accept" or "throw"');
+  }
   return {
     providers: Object.freeze(providers),
     timeZone,
     outOfRange: outOfRange === "ignore" ? "ignore" : "throw",
+    unconfirmedHolidays: unconfirmed === "throw" ? "throw" : "accept",
   };
 }
 
@@ -1174,7 +1190,7 @@ function checkNames(names: unknown): string | undefined {
 export function createHolidayLookup<Kind extends string>(
   source: HolidaySource<Kind>,
 ): HolidayLookup<Kind> & { holidayOn(date: DateString): Holiday<Kind> | undefined } {
-  const { providers, timeZone, outOfRange } = source;
+  const { providers, timeZone, outOfRange, unconfirmedHolidays } = source;
   const yearCache = new Map<number, Map<DateString, Holiday<Kind>>>();
 
   function holidayMap(year: number): Map<DateString, Holiday<Kind>> {
@@ -1202,7 +1218,27 @@ export function createHolidayLookup<Kind extends string>(
 
   function holidayOn(date: DateString): Holiday<Kind> | undefined {
     if (providers.length === 0) return undefined;
-    return holidayMap(parseDate(date).year).get(date);
+    const h = holidayMap(parseDate(date).year).get(date);
+    // 判定に使う祝日が未確定なら止める（holidaysInYear・holidaysBetween はこの経路を通らないので投げない）
+    if (h !== undefined && unconfirmedHolidays === "throw" && !h.confirmed) {
+      // どの提供元の予測かを添える（提供元の confirmedThrough は、利用者が再計算の時期を知る手がかり）
+      const year = parseDate(date).year;
+      const provider = providers.find(
+        (p) =>
+          year >= p.supportedYears.from &&
+          year <= p.supportedYears.to &&
+          loadProviderYear(p, year).some((x) => x.date === date && !x.confirmed),
+      );
+      const through =
+        provider?.confirmedThrough === undefined
+          ? ""
+          : ` (${provider.id} is confirmed through ${provider.confirmedThrough})`;
+      throw rangeError(
+        "unconfirmed-holiday",
+        `${date} ${h.name} is not yet confirmed${through}; the result would depend on a predicted holiday`,
+      );
+    }
+    return h;
   }
 
   const dateOf = (input: DateInput): DateString => toCivil(input, timeZone).date;
@@ -1220,6 +1256,7 @@ export function createHolidayLookup<Kind extends string>(
     timeZone,
     providers,
     outOfRange,
+    unconfirmedHolidays,
     holidayOn,
     dateOf,
     civilOf: ((input: DateInput) =>
@@ -1260,6 +1297,7 @@ const SCHEDULE_OPTION_KEYS = [
   "holidays",
   "timeZone",
   "outOfRange",
+  "unconfirmedHolidays",
   "weekly",
   "holiday",
   "annual",
@@ -1377,8 +1415,10 @@ export function createResolver<T, Kind extends string>(
   function holidayOfSafe(date: DateString): Holiday<Kind> | undefined {
     try {
       return lookup.holidayOn(date);
-    } catch {
-      return undefined;
+    } catch (error) {
+      // 飲み込むのは対応年の外だけ。未確定の祝日（unconfirmed-holiday）などはそのまま投げる
+      if ((error as { code?: unknown } | null)?.code === "out-of-range") return undefined;
+      throw error;
     }
   }
   const isHolidaySafe = (date: DateString): boolean => holidayOfSafe(date) !== undefined;
@@ -1504,6 +1544,7 @@ export function buildSchedule<T, Kind extends string>(
     timeZone: lookup.timeZone,
     providers: lookup.providers,
     outOfRange: lookup.outOfRange,
+    unconfirmedHolidays: lookup.unconfirmedHolidays,
     dateOf: lookup.dateOf,
     civilOf: lookup.civilOf,
     instantOf: lookup.instantOf,

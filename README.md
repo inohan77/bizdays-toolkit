@@ -21,6 +21,7 @@ A business-day calendar that combines public holidays with company or store clos
 
 - **Japanese holidays verified day by day against the Cabinet Office data**: from 1955 through the latest year announced in the Official Gazette, every date in the Cabinet Office "National Holidays" CSV is checked in the tests (substitute holidays, citizens' holidays, holidays for imperial ceremonies and the Olympic moves included)
 - **UK bank holidays verified day by day against GOV.UK**: choose England, Wales, Scotland or Northern Ireland. From 2012 through the last year GOV.UK has published, every date and name is checked against the GOV.UK data in the tests, and differences are watched daily
+- **Singapore public holidays verified day by day against data.gov.sg**: the dates gazetted by the Ministry of Manpower (2020 through the last year gazetted), with the days in lieu for holidays on a Sunday, are checked against the MOM collection on data.gov.sg in the tests, and differences are watched daily
 - **Recurring rules**: rules such as "closed on the 3rd Wednesday", "closed every other Wednesday", "stocktaking on the last day of the month", "closed on Mondays (on the next weekday if Monday is a holiday)" or "closed on the day after a holiday", together with what happens when they fall on a holiday (follow the holiday, apply anyway, or move to the next day). Rules can have an effective period, so "closed on Tuesdays instead of Mondays from April 2027" is one calendar
 - **Day-by-day values (e.g. store hours)**: values that change by weekday, holiday and specific date, such as "closed on Tuesdays, Sunday hours on holidays, closed on New Year's Day, short hours on New Year's Eve", are looked up with the same rules
 - **Option diagnostics**: `diagnoseCalendar` and `diagnoseSchedule` from `bizdays-toolkit/diagnose` list rules that can never apply, rules whose removal changes nothing, typos in option keys, calendars with no business day and more, without throwing. One line in your tests keeps a change of settings from silently killing a rule
@@ -28,9 +29,9 @@ A business-day calendar that combines public holidays with company or store clos
 - **Business-day arithmetic**: closed weekdays, annual closures (including ranges across the new year), specific closed and open dates, and holidays combine to compute "N business days later", "next business day after the cut-off time" and more
 - **A calendar from a schedule**: `createCalendarFromSchedule` turns a schedule such as store hours into a business-day calendar, so the hours are the only configuration and business-day arithmetic works on them
 - **Combining calendars**: `combineCalendars` builds a calendar of the days on which all of several calendars are open (your company and the bank, for a remittance date) or any of them is open (any of several stores), and business-day arithmetic works on the result
-- **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
-- **Lightweight, zero dependencies**: about 9.8 KB min+gzip (about 11.6 KB with Japanese holidays, about 11.5 KB with UK bank holidays; measured for 0.16.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno
-- **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan and the UK are bundled
+- **Time-zone safe**: instants such as `Date` are converted to a civil date in the calendar's time zone (`Asia/Tokyo` for Japan, `Europe/London` for the UK, `Asia/Singapore` for Singapore) before evaluation. A server running in UTC does not treat 00:00–09:00 in Japan as the previous day
+- **Lightweight, zero dependencies**: about 10.0 KB min+gzip (about 11.8 KB with Japanese holidays, about 11.7 KB with UK bank holidays, about 10.9 KB with Singapore holidays; measured for 0.17.0). ESM, bundled types and `sideEffects: false`. Written in standard JavaScript and `Intl` only (no Node.js APIs); CI tests it on Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno
+- **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface. Japan, the UK and Singapore are bundled
 
 ## Installation
 
@@ -92,6 +93,23 @@ const ukWide = createCalendar({ holidays: [england, scotland, northernIreland] }
 - Supported years are 2012–2099. Years after the last year GOV.UK has published (`confirmedThrough`, currently 2028) are predictions from the rules (`confirmed: false`). One-off bank holidays are unknown until announced, so predicted years never contain them
 - Local holidays set by Scottish councils are not included. Whether a bank holiday is a day off depends on the employment contract and similar arrangements
 - One-off bank holidays may be announced only about ten days ahead. Differences from GOV.UK are watched daily and released as patch versions
+
+### Singapore public holidays
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { sg } from "bizdays-toolkit/sg";
+
+const singapore = createCalendar({ holidays: sg, closedWeekdays: [0, 6] });
+singapore.isBusinessDay("2026-08-10"); // false (National Day falls on a Sunday; Monday is the holiday in lieu)
+singapore.addBusinessDays("2026-02-16", 1); // "2026-02-19" (Chinese New Year on February 17 and 18)
+sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
+// { date: "2026-06-01", name: "Vesak Day", nameEn: "Vesak Day", kind: "substitute", confirmed: true }
+```
+
+- `sg` (ID `SG`, time zone `Asia/Singapore`) is one provider; Singapore has no regional holidays. `kind` is `regular` (an annual public holiday), `substitute` (the day after a public holiday that falls on a Sunday, which the Holidays Act makes a public holiday; it has the name of the original holiday) or `special` (a one-off holiday declared by the Government, such as Polling Day). A public holiday on a Saturday has no substitute day
+- Chinese New Year, Hari Raya Puasa, Hari Raya Haji, Vesak Day and Deepavali follow the lunar, Islamic and Hindu calendars, so they cannot be computed from rules. The dates are the ones gazetted by the Ministry of Manpower (MOM), year by year, and the substitute days follow the rule of the Holidays Act. Supported years are the years MOM has gazetted (currently 2020–2027; `confirmedThrough` is the same as the last supported year). Later years are not predicted and are outside the supported years (`out-of-range`), so `sg` never returns `confirmed: false`
+- The dates are verified against the "Singapore Public Holidays" collection on data.gov.sg (MOM). Where that data differs from the gazetted dates (2022: the revised Hari Raya dates and two missing substitute days), the gazetted dates are used. Differences from data.gov.sg are watched daily and released as patch versions
 
 ### Business-day calendars
 
@@ -623,7 +641,37 @@ createCalendar({ holidays: jpWithNames }).getHoliday("2026-01-01")?.names; // { 
 
 ### Outside the supported years
 
-Evaluating a date outside the holiday provider's supported years (1955–2099 for Japan, 2012–2099 for the UK) throws a `RangeError`. To treat such dates as having no holidays, set `outOfRange: "ignore"`.
+Evaluating a date outside the holiday provider's supported years (1955–2099 for Japan, 2012–2099 for the UK, 2020–2027 for Singapore) throws a `RangeError`. To treat such dates as having no holidays, set `outOfRange: "ignore"`.
+
+### Unconfirmed holidays
+
+Years after the provider's `confirmedThrough` may contain predicted holidays (`confirmed: false`): the Japanese equinox days, whose dates are published in the Official Gazette every February for the next year, and UK bank holidays after the last year GOV.UK has published. By default the predictions are used. With `unconfirmedHolidays: "throw"` (next to `outOfRange`, on calendars and schedules), any evaluation that looks up an unconfirmed holiday throws a `RangeError` with `code: "unconfirmed-holiday"`, so that a result which would depend on a prediction, such as a due date in a five-year repayment schedule or a date written into a contract, is never produced silently. "Any evaluation" includes the days a search passes through (`addBusinessDays`, `adjust`, `dueDate`, `closingMonth` and so on) and the neighbouring day a `dayAfterHoliday` or `dayBeforeHoliday` rule looks at, not only the day asked about. `holidaysInYear` and `holidaysBetween` never throw, so they are the way out: after catching the error, list the days that are affected.
+
+```ts
+import { createCalendar, isBizdaysError } from "bizdays-toolkit";
+import { jp } from "bizdays-toolkit/jp";
+
+const strict = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  unconfirmedHolidays: "throw",
+});
+try {
+  strict.dueDate("2028-03", { day: 20, convention: "following" });
+} catch (e) {
+  if (isBizdaysError(e) && e.code === "unconfirmed-holiday") {
+    // Recompute after the Official Gazette of February 2028; these are the days involved
+    strict
+      .holidaysBetween("2028-01-01", "2028-12-31")
+      .filter((h) => !h.confirmed)
+      .map((h) => h.date); // ["2028-03-20", "2028-09-22"]
+  }
+}
+```
+
+- It matters only when the results depend on holidays. With `holidayPolicy: "ignore"` (or `holiday: "weekday"` in a schedule) and no holiday-based rule (`holiday`, `dayAfterHoliday`, `dayBeforeHoliday`, `"after-holiday"`), the results do not change, but `dayInfo` still looks up the holiday it reports and throws. Option diagnostics flag such options as `redundant`
+- Combined calendars throw if any of their calendars throws; a calendar made from a schedule follows the schedule
+- The option catches holidays that are predicted, not holidays that are unknown: a one-off UK bank holiday announced later is absent from the predictions, and Singapore has no predictions at all (later years are `out-of-range`)
 
 ### Errors
 
@@ -645,7 +693,7 @@ Main codes: `invalid-date`, `invalid-input`, `invalid-month`, `invalid-month-day
 
 ### Option diagnostics
 
-`diagnoseCalendar` and `diagnoseSchedule` from `bizdays-toolkit/diagnose` examine options and return a list of problems. They never throw (an empty array means no problems).
+`diagnoseCalendar` and `diagnoseSchedule` from `bizdays-toolkit/diagnose` examine options and return a list of problems. They never throw for a problem in the options (an empty array means no problems); only a wrong second argument (see `asOf` below) throws.
 
 ```ts
 import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
@@ -670,16 +718,17 @@ diagnoseCalendar({
 // ]
 ```
 
-| `severity` | `code`                       | Meaning                                                                                                                                                                            |
-| ---------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `error`    | The same codes as exceptions | Errors that make `createCalendar` or `createSchedule` throw. Creation stops at the first one; diagnostics return them all                                                          |
-| `error`    | `invalid-provider-data`      | Errors in the data returned by a holiday provider. Creation checks only the years used; diagnostics check every supported year                                                     |
-| `warning`  | `unknown-option`             | Unknown keys (ignored at creation). If a close known key exists, `message` suggests it                                                                                             |
-| `warning`  | `shadowed`                   | A rule fully covered by an earlier rule of the same type (`relatedPath`) and never used                                                                                            |
-| `warning`  | `never-matches`              | A recurring rule that matches no day (such as `{ day: 30, months: [2] }`, a 5th Wednesday with an effective period that has none, or `dayAfterHoliday` without a holiday provider) |
-| `warning`  | `out-of-range`               | A specific date, or the effective period of a rule, outside the supported years of the holiday provider (`relatedPath`)                                                            |
-| `warning`  | `no-business-day`            | No business day at all (calendars only; searching for a business day throws)                                                                                                       |
-| `info`     | `redundant`                  | A rule whose removal changes nothing (covered by a combination of earlier rules, same as a closed weekday, the same value as the weekday in a schedule, and so on)                 |
+| `severity` | `code`                       | Meaning                                                                                                                                                                                                                                            |
+| ---------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error`    | The same codes as exceptions | Errors that make `createCalendar` or `createSchedule` throw. Creation stops at the first one; diagnostics return them all                                                                                                                          |
+| `error`    | `invalid-provider-data`      | Errors in the data returned by a holiday provider. Creation checks only the years used; diagnostics check every supported year                                                                                                                     |
+| `warning`  | `unknown-option`             | Unknown keys (ignored at creation). If a close known key exists, `message` suggests it                                                                                                                                                             |
+| `warning`  | `shadowed`                   | A rule fully covered by an earlier rule of the same type (`relatedPath`) and never used                                                                                                                                                            |
+| `warning`  | `never-matches`              | A recurring rule that matches no day (such as `{ day: 30, months: [2] }`, a 5th Wednesday with an effective period that has none, or `dayAfterHoliday` without a holiday provider)                                                                 |
+| `warning`  | `out-of-range`               | A specific date, or the effective period of a rule, outside the supported years of the holiday provider (`relatedPath`)                                                                                                                            |
+| `warning`  | `no-business-day`            | No business day at all (calendars only; searching for a business day throws)                                                                                                                                                                       |
+| `info`     | `redundant`                  | A rule whose removal changes nothing (covered by a combination of earlier rules, same as a closed weekday, the same value as the weekday in a schedule, and so on), or `unconfirmedHolidays: "throw"` in options whose results do not use holidays |
+| `info`     | `expired`                    | Only with `asOf` (below): a rule or date that ended before the given day                                                                                                                                                                           |
 
 - Branch on `code`. `message` is in English and its wording may change. Future versions may add codes
 - When there is an `error`, the rule relation checks (`shadowed`, `redundant` and so on) are skipped
@@ -689,6 +738,25 @@ diagnoseCalendar({
 - `shadowed` for rules with effective periods also requires the earlier rule's period to contain the later rule's period, and for `interval` rules the earlier rule's cycle to contain the later one (a weekly rule covers an every-other-week rule; two every-other-week rules with opposite phases do not cover each other)
 - `redundant` compares the results with and without the rule day by day. Specific dates are checked over their range; annual dates and recurring rules are checked, with specific dates removed, over the holiday provider's supported years (1955–2099 for Japan), or 2001–2028 without a provider (28 years cover every combination of weekday and date; with `interval` rules the range is extended to the length of their cycle, such as 56 years for every other week). Effective periods outside that range are checked as well (with `outOfRange: "throw"`, only within the supported years). `message` names the years checked. Schedule values are compared by content for arrays and plain objects, and by identity otherwise (such as `Date`)
 - With Japanese holidays, checking every day takes a few hundred milliseconds. Use it in tests or at startup, not per request. As a development and test tool, it lives in a subpath so it stays out of your app's main bundle
+
+**Finding rules that have ended** (`asOf`): options accumulate over the years, for example in a multi-store service that stores each store's options as JSON. Pass `{ asOf: "YYYY-MM-DD" }` as the second argument and every rule with an `effectiveTo` before that day, and every specific date or range that ends before it, is returned as `info` with code `expired` (independent of `redundant`: these rules did affect the past). Without `asOf` nothing is returned as `expired`, so a test such as `assert.deepEqual(diagnoseCalendar(options), [])` does not drift with the date. `asOf` takes only a date string (a `Date` would need a time zone); other values throw `invalid-date`, a second argument that is not an object throws `invalid-argument`, and unknown keys in it are ignored.
+
+```ts
+import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
+import { jp } from "bizdays-toolkit/jp";
+
+diagnoseCalendar(
+  {
+    holidays: jp,
+    closedRecurring: [
+      { weekday: 1, name: "Closed on Mondays", effectiveTo: "2027-03-31" },
+      { weekday: 2, name: "Closed on Tuesdays", effectiveFrom: "2027-04-01" },
+    ],
+    closedDates: ["2026-02-10"],
+  },
+  { asOf: "2028-01-01" },
+).map((d) => [d.code, d.path]); // [["expired", "closedDates[0]"], ["expired", "closedRecurring[0]"]]
+```
 
 Keeping options safe with a test:
 
@@ -707,9 +775,9 @@ test("the shipping calendar options have no problems", () => {
 
 Versioning follows [Semantic Versioning](https://semver.org/). See [RELEASING.md](https://github.com/inohan77/bizdays-toolkit/blob/main/RELEASING.md) (Japanese) for details.
 
-- Official data updates (new, moved and one-off holidays by law, Official Gazette or proclamation, fixed equinox days in Japan, newly published years on GOV.UK) are released as **patch** versions, so they reach you with either `^` or `~`
+- Official data updates (new, moved and one-off holidays by law, Official Gazette or proclamation, fixed equinox days in Japan, newly published years on GOV.UK, newly gazetted years and revised dates in Singapore) are released as **patch** versions, so they reach you with either `^` or `~`
 - To freeze the holiday results, pin an exact version (for example `"bizdays-toolkit": "0.8.0"`)
-- The reflected data is shown by the provider's `dataVersion` (for Japan, the year and month of the Official Gazette reflected; for the UK, the year and month of the GOV.UK data reflected) and `confirmedThrough` (`jp.dataVersion`, `england.confirmedThrough` and so on). The module-level constants `dataVersion` and `confirmedThrough` in `bizdays-toolkit/jp` and `bizdays-toolkit/uk` are deprecated since 0.12.0 and will be removed in 1.0.0
+- The reflected data is shown by the provider's `dataVersion` (for Japan, the year and month of the Official Gazette reflected; for the UK and Singapore, the year and month of the GOV.UK or data.gov.sg data reflected) and `confirmedThrough` (`jp.dataVersion`, `england.confirmedThrough` and so on). The module-level constants `dataVersion` and `confirmedThrough` in `bizdays-toolkit/jp` and `bizdays-toolkit/uk` are deprecated since 0.12.0 and will be removed in 1.0.0
 - Before 1.0.0, minor versions may contain breaking changes. What you need to change when moving between minor versions is listed in the [migration guide](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/migration.md) (Japanese) and in the "移行" (migration) part of each version in the CHANGELOG
 - Decision reasons (`reason`), holiday kinds (`kind`), error codes and diagnostic codes may gain values in future versions. When you branch on their values, handle "anything else" too (see "互換性の約束", the compatibility promise, in [RELEASING.md](https://github.com/inohan77/bizdays-toolkit/blob/main/RELEASING.md))
 
@@ -719,7 +787,9 @@ Japanese holidays are verified with the "National Holidays" CSV published on the
 
 UK bank holidays are verified with the GOV.UK bank holidays data (<https://www.gov.uk/bank-holidays.json>, and for earlier years the history of the official GOV.UK repositories [alphagov/calendars](https://github.com/alphagov/calendars) and [alphagov/frontend](https://github.com/alphagov/frontend)), and the Welsh names of the Wales holidays with the Welsh version of GOV.UK (the verification data is a test fixture only; not included in the package).
 
-Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+Singapore public holidays are verified with the "Singapore Public Holidays" collection published by the Ministry of Manpower on data.gov.sg (<https://data.gov.sg/collections/691/view>), with the Ministry's press releases as the authority where the two differ (the verification data is a test fixture only; not included in the package).
+
+Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), and data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence).
 
 ## License
 

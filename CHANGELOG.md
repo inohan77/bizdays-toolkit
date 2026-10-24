@@ -4,6 +4,33 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-25
+
+### 移行
+
+動作が変わる既存の API はない（既定値はこれまでどおり）。`Calendar`・`Schedule`・`HolidayLookup` に項目 `unconfirmedHolidays` が加わり、`createCalendar`・`createSchedule` の設定と `diagnoseCalendar`・`diagnoseSchedule` の第 2 引数が増える。監視のワークフローの改名（`govuk-watch.yml` → `data-watch.yml`）により、cron-job.org の URL を直す（RELEASING.md）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- 未確定の祝日のガード `unconfirmedHolidays: "accept" | "throw"`（カレンダー・スケジュール共通。既定 `"accept"`）を追加した。`"throw"` では、評価した日（探索が途中で通る日、祝日の翌日・祝前日の規則が見る隣の日を含む）が未確定の祝日（`confirmed: false`）なら `code: "unconfirmed-holiday"` の `RangeError` を投げる。`holidaysInYear`・`holidaysBetween` は投げないので、影響する日を列挙できる。合成はどれかが `"throw"` なら `"throw"`。エラーコードに `unconfirmed-holiday` を追加した
+- 診断の第 2 引数 `{ asOf: "YYYY-MM-DD" }`（型 `DiagnoseOptions`）を追加した。基準日より前に終わった規則・個別の日付を `info` の `expired` で返す。省略時の結果は変わらない。診断コードに `expired` を追加した
+- シンガポールの祝日 `bizdays-toolkit/sg`（提供元 `sg`。ID `SG`、`Asia/Singapore`、種別 `regular`・`substitute`・`special`、型 `SgHoliday`・`SgHolidayKind`・`KnownSgHolidayKind`）を追加した。MOM が告示した 2020〜2027 年の日付を表で持ち、日曜日に当たった祝日の振替を Holidays Act の規則で計算する。それより後の年は予測せず `out-of-range`。data.gov.sg のコレクション 691（MOM）で全日照合し、2022 年の既知の差分（改定後の告示との食い違い）はフィクスチャに出典付きで記録した
+
+### Changed
+
+- 診断: 判定に祝日を使わない設定（提供元がない、または `holidayPolicy: "ignore"` / `holiday: "weekday"` で祝日に従属する規則もない）の `unconfirmedHolidays: "throw"` を `info` の `redundant` にする。診断は未確定の祝日を `"accept"` で評価する
+- 診断: 第 2 引数がオブジェクトでなければ `invalid-argument`、`asOf` が暦日の文字列でなければ `invalid-date` の例外を投げる（設定の誤りは診断結果で返す現状のまま）
+- 振替元をさかのぼるときに祝日の例外を飲み込む範囲を `out-of-range` だけにした（`unconfirmed-holiday` などは投げ直す。これまでは提供元の例外も飲み込んでいた）
+- README: シンガポールの節、「未確定の祝日」の節（レシピ付き）、診断の `asOf` と `expired`、出典にシンガポールと Singapore Open Data Licence を足した。サイズの値を測り直した（ルート約 10.0KB・日本の祝日込み約 11.8KB・英国の祝日込み約 11.7KB・シンガポールの祝日込み約 10.9KB。0.17.0 で測定）
+- `RELEASING.md`: 「シンガポールのデータの更新」の節を足し、監視のワークフローの改名と cron-job.org の URL の修正を書いた
+- `docs/decisions.md`: 44 番（未確定の祝日のガード・診断の基準日・シンガポールの祝日）を追加し、15・28 番に監視のワークフローの改名を書いた
+
+### 開発
+
+- 監視のワークフローを `govuk-watch.yml` から `data-watch.yml` に改名し、英国とシンガポールの照合を 1 回の起動で順に行う（issue のラベルは `govuk-data`・`datagovsg-data`。ハートビートは両方が動いたときだけ）。`scripts/verify-datagovsg.ts`（`pnpm verify:datagovsg`。`--file`・`--write`・`--report`・`--simulate`）とフィクスチャ `test/fixtures/datagovsg-public-holidays.json`（既知の差分を含む）を追加した
+- テスト: `test/unconfirmed-holidays.test.ts`・`test/diagnose-as-of.test.ts`・`test/sg-rules.test.ts`・`test/sg-datagovsg.test.ts` を追加し、`smoke.mjs`・CJS・利用者の型チェックにシンガポールと新しい設定を足した
+- サイズの上限（`size-limits.json`）を上げ、`./sg` のエントリーを足した。ルート 24,000 → 25,000、`./jp` 27,000 → 28,000、`./uk` 6,700 → 7,500、`./diagnose` 30,500 → 32,000（gzip）。未確定の祝日のガードと診断の基準日のため。`./sg` は 6,000（日付とエラーの共通の実装を含む）
+
 ## [0.16.0] - 2026-10-23
 
 ### 移行
@@ -431,7 +458,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.0...v0.14.1

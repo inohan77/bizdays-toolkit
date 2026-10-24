@@ -16,6 +16,7 @@ import {
 import { diagnoseCalendar, type Diagnostic } from "bizdays-toolkit/diagnose";
 import { easterSunday, nthWeekdayOfMonth } from "bizdays-toolkit/provider";
 import { jp, toJapanDateTime, type JapaneseHoliday } from "bizdays-toolkit/jp";
+import { sg, type SgHoliday } from "bizdays-toolkit/sg";
 import { scotland, wales, type UkHoliday } from "bizdays-toolkit/uk";
 
 type Equal<A, B> =
@@ -42,6 +43,13 @@ createCalendar({
   holidays: jp,
   closedRecurring: [{ dayBeforeHoliday: true, weekdays: [1, 2, 3, 4, 5], months: [5] }],
 });
+const sgHoliday: SgHoliday | undefined = sg.holidaysInYear(2026)[0];
+void sgHoliday;
+const strict = createCalendar({ holidays: jp, unconfirmedHolidays: "throw" });
+const mode: "accept" | "throw" = strict.unconfirmedHolidays;
+void mode;
+const expired: readonly Diagnostic[] = diagnoseCalendar({ holidays: jp }, { asOf: "2026-10-23" });
+void expired;
 const easter: string = easterSunday(2026);
 const thanksgiving: string = nthWeekdayOfMonth(2026, 11, 4, 4);
 void easter;

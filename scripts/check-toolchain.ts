@@ -16,7 +16,7 @@ const read = (path: string): string => readFileSync(path, "utf8");
 const ci = read(".github/workflows/ci.yml");
 const others: [string, string][] = [
   [".github/workflows/release.yml", read(".github/workflows/release.yml")],
-  [".github/workflows/govuk-watch.yml", read(".github/workflows/govuk-watch.yml")],
+  [".github/workflows/data-watch.yml", read(".github/workflows/data-watch.yml")],
 ];
 const action = read(".github/actions/setup-toolchain/action.yml");
 const pkg = JSON.parse(read("package.json")) as { engines: { node: string } };

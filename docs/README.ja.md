@@ -21,15 +21,16 @@
 
 - **日本の祝日を内閣府のデータで全日照合**: 1955 年〜官報公表済みの年まで、内閣府「国民の祝日」CSV のすべての日付と一致することをテストで確かめています（振替休日・国民の休日・皇室行事による休日・五輪特措法による移動を含む）
 - **英国の bank holidays を GOV.UK のデータで全日照合**: England・Wales・Scotland・Northern Ireland を地域ごとに選べます。2012 年から GOV.UK が公表している最後の年まで、すべての日付と名称が GOV.UK のデータと一致することをテストで確かめ、差分は毎日監視しています
+- **シンガポールの祝日を data.gov.sg のデータで全日照合**: MOM（Ministry of Manpower）が告示した日付（2020 年〜告示済みの最後の年）と、日曜日に当たった祝日の振替が、data.gov.sg の MOM のコレクションと一致することをテストで確かめ、差分を毎日監視しています
 - **繰り返しの規則**: 「第 3 水曜定休」「隔週水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」「祝日の翌日は休館」のような規則を、祝日に当たったときの扱い（祝日に従う・祝日でも当てはめる・翌日に振り替える）とあわせて指定できます。規則には有効期間を付けられるので、「2027 年 4 月から定休日を月曜から火曜に変更」も 1 つのカレンダーで表せます
 - **日ごとの値（営業時間など）**: 「火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業」のように、曜日・祝日・特定日で変わる値を同じ規則で引けます
 - **スケジュールからのカレンダー**: `createCalendarFromSchedule` で、営業時間表のようなスケジュールから営業日カレンダーを作れます。営業時間表が唯一の設定になり、そのまま営業日の計算ができます
 - **設定の診断**: `bizdays-toolkit/diagnose` の `diagnoseCalendar`・`diagnoseSchedule` が、決して使われない規則・取り除いても結果が変わらない規則・キーの打ち間違い・営業日が 1 日もない設定などを、例外を投げずに一覧で返します。テストに 1 行足せば、設定の変更で規則が死んでいないかを確かめられます
 - **月の期日**: 「20 日締め翌月 10 日払い（休業日なら翌営業日）」「月末の最終営業日」のような期日を、金融で使われる 4 つの調整方法（following・preceding・modified-following・modified-preceding）で計算します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」などを計算します
-- **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
-- **軽量・依存ゼロ**: minify + gzip で約 9.8KB（日本の祝日込みで約 11.6KB、英国の祝日込みで約 11.5KB。0.16.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno を確認しています
-- **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。日本と英国を同梱しています
+- **タイムゾーンを間違えない**: `Date` などの瞬間は、カレンダーのタイムゾーン（日本は `Asia/Tokyo`、英国は `Europe/London`、シンガポールは `Asia/Singapore`）で暦日に変換してから判定します。UTC で動くサーバーでも、日本時間 0〜9 時が前日扱いになりません
+- **軽量・依存ゼロ**: minify + gzip で約 10.0KB（日本の祝日込みで約 11.8KB、英国の祝日込みで約 11.7KB、シンガポールの祝日込みで約 10.9KB。0.17.0 で測定）。ESM・型定義同梱・`sideEffects: false`。標準の JavaScript と `Intl` だけで書かれていて（Node.js の API は使わない）、CI で Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno を確認しています
+- **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられます。日本・英国・シンガポールを同梱しています
 
 ## インストール
 
@@ -91,6 +92,23 @@ const ukWide = createCalendar({ holidays: [england, scotland, northernIreland] }
 - 対応年は 2012〜2099 年です。GOV.UK が日付を公表している年（`confirmedThrough`、現在は 2028 年）より後は、規則による予測（`confirmed: false`）です。臨時の祝日は発表されるまで分からないため、予測の年には含まれません
 - Scotland の地域（council）ごとの休日は含みません。また、bank holiday に休むかどうかは雇用契約などによります
 - 臨時の祝日は 10 日ほど前に発表されることがあります。GOV.UK との差分を毎日監視し、見つけたらパッチ版で反映します
+
+### シンガポールの祝日
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { sg } from "bizdays-toolkit/sg";
+
+const singapore = createCalendar({ holidays: sg, closedWeekdays: [0, 6] });
+singapore.isBusinessDay("2026-08-10"); // false（National Day が日曜日に当たり、翌月曜日が振替）
+singapore.addBusinessDays("2026-02-16", 1); // "2026-02-19"（2 月 17・18 日は旧正月）
+sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
+// { date: "2026-06-01", name: "Vesak Day", nameEn: "Vesak Day", kind: "substitute", confirmed: true }
+```
+
+- 提供元は `sg`（ID `SG`、タイムゾーン `Asia/Singapore`）の 1 つで、地域ごとの祝日はありません。`kind` は `regular`（毎年の祝日）・`substitute`（日曜日に当たった祝日の翌日。Holidays Act により祝日になり、名称は元の祝日と同じ）・`special`（政府が告示する臨時の祝日。Polling Day など）です。土曜日に当たった祝日は振り替えません
+- 旧正月・Hari Raya Puasa・Hari Raya Haji・Vesak Day・Deepavali は太陰暦・イスラム暦・ヒンドゥー暦で決まるため、規則では計算できません。日付は MOM（Ministry of Manpower）が年ごとに告示したもので、振替は Holidays Act の規則で計算します。対応年は MOM が告示した年（現在は 2020〜2027 年。`confirmedThrough` は対応年の最後の年と同じ）で、それより後の年は予測せず対応年の外（`out-of-range`）です。`sg` が `confirmed: false` を返すことはありません
+- 日付は data.gov.sg の「Singapore Public Holidays」コレクション（MOM）と照合しています。そのデータが告示と食い違う箇所（2022 年の Hari Raya の改定後の日付と、振替 2 日の欠落）は告示に従います。data.gov.sg との差分を毎日監視し、見つけたらパッチ版で反映します
 
 ### 営業日カレンダー
 
@@ -613,7 +631,37 @@ createCalendar({ holidays: jpWithNames }).getHoliday("2026-01-01")?.names; // { 
 
 ### 対応年の外
 
-祝日の提供元の対応年（日本は 1955〜2099 年、英国は 2012〜2099 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRange: "ignore"` を指定してください。
+祝日の提供元の対応年（日本は 1955〜2099 年、英国は 2012〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRange: "ignore"` を指定してください。
+
+### 未確定の祝日
+
+提供元の `confirmedThrough` より後の年には、予測の祝日（`confirmed: false`）が含まれることがあります。日本の春分の日・秋分の日（翌年分が毎年 2 月の官報で公表される）と、GOV.UK が公表している最後の年より後の英国の bank holidays です。既定では予測をそのまま使います。`unconfirmedHolidays: "throw"`（`outOfRange` と同じ場所。カレンダー・スケジュール共通）にすると、未確定の祝日を引いた判定は `code: "unconfirmed-holiday"` の `RangeError` になり、5 年の返済予定の期日や契約書に書く日付のように、予測に依存した結果が黙って出ることがなくなります。「引いた判定」には、求めた日だけでなく、探索が途中で通る日（`addBusinessDays`・`adjust`・`dueDate`・`closingMonth` など）や、`dayAfterHoliday`・`dayBeforeHoliday` の規則が見る隣の日も含みます。`holidaysInYear`・`holidaysBetween` は投げないので、例外を受けたあとに影響する日を列挙する逃げ道になります。
+
+```ts
+import { createCalendar, isBizdaysError } from "bizdays-toolkit";
+import { jp } from "bizdays-toolkit/jp";
+
+const strict = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  unconfirmedHolidays: "throw",
+});
+try {
+  strict.dueDate("2028-03", { day: 20, convention: "following" });
+} catch (e) {
+  if (isBizdaysError(e) && e.code === "unconfirmed-holiday") {
+    // 2028 年 2 月の官報公表後に計算し直す。影響する日はこれ
+    strict
+      .holidaysBetween("2028-01-01", "2028-12-31")
+      .filter((h) => !h.confirmed)
+      .map((h) => h.date); // ["2028-03-20", "2028-09-22"]
+  }
+}
+```
+
+- 意味があるのは、判定に祝日を使う設定だけです。`holidayPolicy: "ignore"`（スケジュールなら `holiday: "weekday"`）で祝日に従属する規則（`holiday`・`dayAfterHoliday`・`dayBeforeHoliday`・`"after-holiday"`）もない設定では結果は変わりませんが、`dayInfo` は `holiday` を付けるために祝日を引くので投げます。設定の診断はそのような設定を `redundant` にします
+- 合成したカレンダーは、どれかのカレンダーが投げるなら投げます。スケジュールから作ったカレンダーはスケジュールに従います
+- 捕まえるのは「予測された祝日」で、「まだ知らない祝日」ではありません。あとから発表される英国の臨時の祝日は予測に含まれず、シンガポールには予測がありません（後の年は `out-of-range`）
 
 ### エラー
 
@@ -635,7 +683,7 @@ try {
 
 ### 設定の診断
 
-`bizdays-toolkit/diagnose` の `diagnoseCalendar`・`diagnoseSchedule` は、設定を調べて問題を一覧で返します。例外は投げません（問題がなければ空の配列）。
+`bizdays-toolkit/diagnose` の `diagnoseCalendar`・`diagnoseSchedule` は、設定を調べて問題を一覧で返します。設定の問題では例外を投げません（問題がなければ空の配列）。例外になるのは第 2 引数の誤り（下記の `asOf`）だけです。
 
 ```ts
 import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
@@ -660,16 +708,17 @@ diagnoseCalendar({
 // ]
 ```
 
-| 重さ（`severity`） | `code`                  | 内容                                                                                                                                        |
-| ------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `error`            | 例外と同じコード        | `createCalendar`・`createSchedule` で例外になる誤り。作成時は最初の 1 件で止まりますが、診断ではすべて返します                              |
-| `error`            | `invalid-provider-data` | 祝日の提供元が返したデータの誤り。作成時は使った年だけを調べますが、診断では対応年のすべての年を調べます                                    |
-| `warning`          | `unknown-option`        | 知らないキー（作成時は無視されます）。近い既知のキーがあれば `message` に候補を挙げます                                                     |
-| `warning`          | `shadowed`              | 同じ種類の先の規則（`relatedPath`）に完全に含まれ、決して使われない規則                                                                     |
-| `warning`          | `never-matches`         | 当てはまる日がない繰り返しの規則（`{ day: 30, months: [2] }`、有効期間の中に第 5 水曜日がない、提供元のない設定の `dayAfterHoliday`、など） |
-| `warning`          | `out-of-range`          | 個別の日付、または規則の有効期間が、祝日の提供元（`relatedPath`）の対応年の外                                                               |
-| `warning`          | `no-business-day`       | 営業日が 1 日もない設定（営業日カレンダーのみ。営業日を探すと例外になります）                                                               |
-| `info`             | `redundant`             | 取り除いても結果が変わらない規則（先の規則の組み合わせに覆われる、定休日の曜日と同じ、スケジュールで曜日の値と同じ値など）                  |
+| 重さ（`severity`） | `code`                  | 内容                                                                                                                                                                                        |
+| ------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error`            | 例外と同じコード        | `createCalendar`・`createSchedule` で例外になる誤り。作成時は最初の 1 件で止まりますが、診断ではすべて返します                                                                              |
+| `error`            | `invalid-provider-data` | 祝日の提供元が返したデータの誤り。作成時は使った年だけを調べますが、診断では対応年のすべての年を調べます                                                                                    |
+| `warning`          | `unknown-option`        | 知らないキー（作成時は無視されます）。近い既知のキーがあれば `message` に候補を挙げます                                                                                                     |
+| `warning`          | `shadowed`              | 同じ種類の先の規則（`relatedPath`）に完全に含まれ、決して使われない規則                                                                                                                     |
+| `warning`          | `never-matches`         | 当てはまる日がない繰り返しの規則（`{ day: 30, months: [2] }`、有効期間の中に第 5 水曜日がない、提供元のない設定の `dayAfterHoliday`、など）                                                 |
+| `warning`          | `out-of-range`          | 個別の日付、または規則の有効期間が、祝日の提供元（`relatedPath`）の対応年の外                                                                                                               |
+| `warning`          | `no-business-day`       | 営業日が 1 日もない設定（営業日カレンダーのみ。営業日を探すと例外になります）                                                                                                               |
+| `info`             | `redundant`             | 取り除いても結果が変わらない規則（先の規則の組み合わせに覆われる、定休日の曜日と同じ、スケジュールで曜日の値と同じ値など）、または判定に祝日を使わない設定の `unconfirmedHolidays: "throw"` |
+| `info`             | `expired`               | `asOf`（下記）を渡したときだけ。基準日より前に終わった規則・日付                                                                                                                            |
 
 - 判定には `code` を使ってください。`message` は英語で、文言は変わることがあります。`code` は将来の版で増えることがあります
 - `error` があるときは、規則どうしの診断（`shadowed`・`redundant` など）は行いません
@@ -679,6 +728,25 @@ diagnoseCalendar({
 - 有効期間のある規則の `shadowed` は、先の規則の期間が後の規則の期間を含むことも条件です。周期（`interval`）のある規則は、先の規則の周期が後の規則を含むことも条件です（毎週は隔週を覆う。位相の違う隔週どうしは互いを覆わない）
 - `redundant` は、規則を取り除いた結果と 1 日ずつ比べます。個別の日付はその期間を、毎年の月日と繰り返しの規則は個別の日付を除いた設定で、祝日の提供元の対応年（日本は 1955〜2099 年）を、提供元がなければ 2001〜2028 年（曜日と月日の組み合わせが一巡する 28 年。周期のある規則があれば、その周期がそろう長さ。隔週なら 56 年）を調べます。その範囲の外にある有効期間も調べます（`outOfRange: "throw"` では対応年の中だけ）。調べた年は `message` に書かれます。スケジュールの値は、配列と普通のオブジェクトなら中身で、それ以外（`Date` など）は同じものかで比べます
 - 日本の祝日を使う設定では、全日を調べるため数百ミリ秒かかります。リクエストごとではなく、テストや起動時の確認で使ってください。開発・テスト用の道具なので、アプリの本体のバンドルに入らないようサブパスに分けています
+
+**終わった規則を見つける**（`asOf`）: 店舗ごとの設定を JSON で持つ多店舗のサービスなどでは、設定が年を追って溜まります。第 2 引数に `{ asOf: "YYYY-MM-DD" }` を渡すと、`effectiveTo` がその日より前の規則と、その日より前に終わる個別の日付・期間を、`info` の `expired` で返します（`redundant` とは独立です。過去には効いていた規則なので）。`asOf` を渡さなければ `expired` は返さないので、`assert.deepEqual(diagnoseCalendar(options), [])` のようなテストが日付で変わることはありません。`asOf` は暦日の文字列だけを受け付けます（`Date` だとタイムゾーンが要るため）。それ以外の値は `invalid-date`、第 2 引数がオブジェクトでなければ `invalid-argument` の例外になり、知らないキーは無視します。
+
+```ts
+import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
+import { jp } from "bizdays-toolkit/jp";
+
+diagnoseCalendar(
+  {
+    holidays: jp,
+    closedRecurring: [
+      { weekday: 1, name: "月曜定休", effectiveTo: "2027-03-31" },
+      { weekday: 2, name: "火曜定休", effectiveFrom: "2027-04-01" },
+    ],
+    closedDates: ["2026-02-10"],
+  },
+  { asOf: "2028-01-01" },
+).map((d) => [d.code, d.path]); // [["expired", "closedDates[0]"], ["expired", "closedRecurring[0]"]]
+```
 
 テストで設定を守る例:
 
@@ -697,9 +765,9 @@ test("出荷カレンダーの設定に問題がない", () => {
 
 [Semantic Versioning](https://semver.org/lang/ja/) に従います。詳しくは [RELEASING.md](../RELEASING.md) を参照してください。
 
-- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
+- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表、シンガポールの新しい年の告示と日付の改定）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
 - 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.1.0"`）
-- 反映済みのデータは、提供元の `dataVersion`（日本は反映済みの官報の年月、英国は反映済みの GOV.UK のデータの年月）と `confirmedThrough` で確認できます（`jp.dataVersion`・`england.confirmedThrough` など）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` のモジュールの定数 `dataVersion`・`confirmedThrough` は 0.12.0 で非推奨で、1.0.0 で削除します
+- 反映済みのデータは、提供元の `dataVersion`（日本は反映済みの官報の年月、英国・シンガポールは反映済みの GOV.UK・data.gov.sg のデータの年月）と `confirmedThrough` で確認できます（`jp.dataVersion`・`england.confirmedThrough` など）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` のモジュールの定数 `dataVersion`・`confirmedThrough` は 0.12.0 で非推奨で、1.0.0 で削除します
 - 1.0.0 までは、マイナー版で破壊的変更を行うことがあります。マイナー版の間を移るときに利用者がする作業は、[移行ガイド](./migration.md)と、CHANGELOG の各版の「移行」にまとめています
 - 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコード・診断のコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](../RELEASING.md) の「互換性の約束」）
 
@@ -709,7 +777,9 @@ test("出荷カレンダーの設定に問題がない", () => {
 
 英国の祝日の検証には、GOV.UK の bank holidays のデータ（<https://www.gov.uk/bank-holidays.json>、それより前の年は GOV.UK の公式リポジトリ [alphagov/calendars](https://github.com/alphagov/calendars)・[alphagov/frontend](https://github.com/alphagov/frontend) の履歴）を、Wales の祝日のウェールズ語の名称には GOV.UK のウェールズ語版の表記を利用しています（照合のデータはテスト用フィクスチャのみ。パッケージには含みません）。
 
-Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+シンガポールの祝日の検証には、MOM（Ministry of Manpower）が data.gov.sg で公開している「Singapore Public Holidays」コレクション（<https://data.gov.sg/collections/691/view>）を利用し、両者が食い違う箇所は MOM の報道発表を正としています（テスト用フィクスチャのみ。パッケージには含みません）。
+
+Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), and data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence).
 
 ## ライセンス
 

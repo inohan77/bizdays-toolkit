@@ -11,7 +11,11 @@
  *     never-matches  … 当てはまる日がない繰り返しの規則（2 月 30 日、有効期間の中に第 5 水曜日がない、提供元のない設定の祝日の翌日・祝前日、など）
  *     out-of-range   … 個別の日付、または規則の有効期間が祝日の提供元の対応年の外にある（relatedPath に提供元）
  *     no-business-day … 営業日が 1 日もない設定（営業日カレンダーのみ）
- * - info    … redundant: 取り除いても結果が変わらない規則
+ * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidays: "throw" を含む）
+ *             expired: 第 2 引数の asOf より前に終わった規則・日付（asOf を渡したときだけ）
+ *
+ * 未確定の祝日の扱い（unconfirmedHolidays）は診断では常に "accept" で評価する。診断は設定の形を調べるもので、
+ * 祝日が確定しているかどうかは関係がなく、"throw" のまま評価すると例外を握りつぶして「当てはまらない」と誤判定するため
  *
  * 判定の順番（個別の日付 → 毎年の月日 → 繰り返し（over）→ 祝日 → 繰り返し（under・振替先）→ 曜日）は
  * 固定なので、shadowed は同じ種類の規則どうしに限って調べる。種類をまたいで使われない規則は
@@ -20,9 +24,16 @@
  * shadowed の条件にする。redundant の走査の範囲は、周期がそろう長さと、範囲の外にある有効期間まで広げる
  */
 
-import { daysInMonth, fromDayNumber, parseDate, toDayNumber, type DateString } from "./date.ts";
+import {
+  daysInMonth,
+  fromDayNumber,
+  isValidDate,
+  parseDate,
+  toDayNumber,
+  type DateString,
+} from "./date.ts";
 import { compileCalendarOptions, type CalendarOptions } from "./calendar.ts";
-import { IssueCollector, type KnownErrorCode } from "./errors.ts";
+import { IssueCollector, rangeError, type KnownErrorCode } from "./errors.ts";
 import {
   compileScheduleOptions,
   createHolidayLookup,
@@ -68,7 +79,9 @@ export type KnownDiagnosticCode =
   /** 当てはまる日がない繰り返しの規則 */
   | "never-matches"
   /** 取り除いても結果が変わらない */
-  | "redundant";
+  | "redundant"
+  /** 基準日（asOf）より前に終わった規則・日付（整理の候補） */
+  | "expired";
 
 /**
  * 診断コード。将来の版で値が増えることがあるので、分岐では「その他」も扱うこと。
@@ -424,7 +437,7 @@ function analyze<T, Kind extends string>(
 ): void {
   const { source, dates, annual, recurring } = compiled;
   if (!checkProviderData(c, source as HolidaySource<string>)) return;
-  const lookup = createHolidayLookup(source);
+  const lookup = createHolidayLookup({ ...source, unconfirmedHolidays: "accept" });
   const cycle = patternCycle(recurring);
   const window = scanWindow(source as HolidaySource<string>, [...annual, ...recurring], cycle);
   /** 使われないことが分かった規則（redundant を重ねて出さない） */
@@ -650,12 +663,96 @@ function analyze<T, Kind extends string>(
 }
 
 /** 診断を実行する。祝日の提供元の誤り（年ごとに初めて使うときに分かる）も error として返す */
+/**
+ * 診断のオプション（第 2 引数）。
+ * @public
+ */
+export interface DiagnoseOptions {
+  /**
+   * 基準日 "YYYY-MM-DD"。指定すると、この日より前に終わった規則・日付（有効期間の effectiveTo、個別の日付・期間の終わり）を
+   * info の expired として返す（整理の候補）。省略時は返さない（現在時刻は使わず、結果を決定的に保つ）
+   */
+  readonly asOf?: DateString;
+}
+
+/** 第 2 引数を検証する（設定の誤りは診断結果で返すが、引数の誤りは例外。知らないキーは無視する） */
+function compileDiagnoseOptions(options: unknown): { asOf: number | null } {
+  if (options === undefined) return { asOf: null };
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw rangeError(
+      "invalid-argument",
+      "the second argument must be an object of diagnose options",
+    );
+  }
+  const asOf = (options as { asOf?: unknown }).asOf;
+  if (asOf === undefined) return { asOf: null };
+  if (!isValidDate(asOf)) {
+    throw rangeError(
+      "invalid-date",
+      `asOf must be a date string "YYYY-MM-DD": ${JSON.stringify(asOf)}`,
+    );
+  }
+  return { asOf: toDayNumber(asOf) };
+}
+
+/** 基準日より前に終わった規則・日付を expired にする（暦日の大小比較だけで、祝日は引かない） */
+function checkExpired<T, Kind extends string>(
+  c: IssueCollector,
+  compiled: CompiledSchedule<T, Kind>,
+  asOf: number,
+): void {
+  const ended = (path: string, last: number, what: string): void => {
+    if (last < asOf) {
+      c.info(
+        "expired",
+        path,
+        `This ${what} ended on ${fromDayNumber(last)}, before ${fromDayNumber(asOf)}; it no longer affects results and can be removed if the past need not be reproduced`,
+      );
+    }
+  };
+  for (const r of compiled.dates) ended(r.path, r.to, "date");
+  for (const r of compiled.annual) if (r.effectiveTo !== null) ended(r.path, r.effectiveTo, "rule");
+  for (const r of compiled.recurring)
+    if (r.effectiveTo !== null) ended(r.path, r.effectiveTo, "rule");
+}
+
+/**
+ * 判定に祝日を使わない設定（提供元がない、または holidayPolicy: "ignore" / holiday: "weekday" で祝日に従属する規則もない）の
+ * unconfirmedHolidays: "throw" は、結果に影響しないので redundant にする。dayInfo が holiday を付けるために祝日を引くので実行時には投げるが、
+ * 投げても結果が変わらない設定であることを知らせる
+ */
+function checkUnconfirmedOption<T, Kind extends string>(
+  c: IssueCollector,
+  compiled: CompiledSchedule<T, Kind>,
+  isCalendar: boolean,
+): void {
+  if (compiled.source.unconfirmedHolidays !== "throw") return;
+  const noProvider = compiled.source.providers.length === 0;
+  const holidayUnused =
+    compiled.holiday === "weekday" &&
+    !compiled.recurring.some(
+      (r) =>
+        r.holiday || r.dayAfterHoliday || r.dayBeforeHoliday || r.onHolidayRule === "after-holiday",
+    );
+  if (!noProvider && !holidayUnused) return;
+  c.info(
+    "redundant",
+    "unconfirmedHolidays",
+    noProvider
+      ? 'unconfirmedHolidays: "throw" has no effect: there is no holiday provider'
+      : `unconfirmedHolidays: "throw" has no effect on results: holidays are not used (${isCalendar ? 'holidayPolicy: "ignore"' : 'holiday: "weekday"'} and no holiday-based rule); dayInfo still throws when it looks up the holiday to report`,
+  );
+}
+
 function run<T, Kind extends string>(
   c: IssueCollector,
   compiled: CompiledSchedule<T, Kind> | undefined,
   isCalendar: boolean,
+  asOf: number | null,
 ): readonly Diagnostic[] {
   if (compiled && !c.hasErrors) {
+    if (asOf !== null) checkExpired(c, compiled, asOf);
+    checkUnconfirmedOption(c, compiled, isCalendar);
     const before = c.issues.length;
     try {
       analyze(c, compiled, isCalendar);
@@ -691,10 +788,14 @@ function run<T, Kind extends string>(
  * JavaScript から渡された型の合わない設定も受け付ける。
  * @public
  */
-export function diagnoseCalendar(options: CalendarOptions | object = {}): readonly Diagnostic[] {
+export function diagnoseCalendar(
+  options: CalendarOptions | object = {},
+  diagnoseOptions?: DiagnoseOptions,
+): readonly Diagnostic[] {
+  const { asOf } = compileDiagnoseOptions(diagnoseOptions);
   const c = new IssueCollector();
   const compiled = compileCalendarOptions<string>(c, options);
-  return run(c, compiled?.schedule, true);
+  return run(c, compiled?.schedule, true, asOf);
 }
 
 /**
@@ -706,8 +807,10 @@ export function diagnoseCalendar(options: CalendarOptions | object = {}): readon
  */
 export function diagnoseSchedule(
   options: ScheduleOptions<unknown> | object,
+  diagnoseOptions?: DiagnoseOptions,
 ): readonly Diagnostic[] {
+  const { asOf } = compileDiagnoseOptions(diagnoseOptions);
   const c = new IssueCollector();
   const compiled = compileScheduleOptions<unknown, string>(c, options);
-  return run(c, compiled, false);
+  return run(c, compiled, false, asOf);
 }

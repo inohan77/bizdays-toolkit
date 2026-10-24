@@ -356,6 +356,7 @@ export interface HolidayLookup<Kind extends string = string> {
     readonly timeZone: string;
     readonly providers: readonly HolidayProvider<Kind>[];
     readonly outOfRange: "throw" | "ignore";
+    readonly unconfirmedHolidays: "accept" | "throw";
     dateOf(input: DateInput): DateString;
     civilOf(input: DateTimeInput): CivilDateTimeParts<string>;
     civilOf(input: DateInput): CivilDateTimeParts;
@@ -415,6 +416,7 @@ export interface HolidaySourceOptions<Kind extends string = string> {
     readonly holidays?: HolidayProvider<Kind> | readonly HolidayProvider<Kind>[];
     readonly timeZone?: string;
     readonly outOfRange?: "throw" | "ignore";
+    readonly unconfirmedHolidays?: "accept" | "throw";
 }
 ```
 
@@ -451,7 +453,7 @@ export type KnownDayReason = "open-date" | "closed-date" | "open-annual" | "clos
 ### KnownErrorCode (@public)
 
 ```ts
-export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-month-day" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "invalid-provider" | "invalid-provider-data" | "no-business-day";
+export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-month-day" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "unconfirmed-holiday" | "invalid-provider" | "invalid-provider-data" | "no-business-day";
 ```
 
 ### KnownScheduleReason (@public)
@@ -783,18 +785,52 @@ export type UkHolidayKind = KnownUkHolidayKind | (string & {});
 export declare const wales: HolidayProvider<UkHolidayKind>;
 ```
 
+## bizdays-toolkit/sg
+
+### KnownSgHolidayKind (@public)
+
+```ts
+export type KnownSgHolidayKind = "regular" | "substitute" | "special";
+```
+
+### sg (@public)
+
+```ts
+export declare const sg: HolidayProvider<SgHolidayKind>;
+```
+
+### SgHoliday (@public)
+
+```ts
+export type SgHoliday = Holiday<SgHolidayKind>;
+```
+
+### SgHolidayKind (@public)
+
+```ts
+export type SgHolidayKind = KnownSgHolidayKind | (string & {});
+```
+
 ## bizdays-toolkit/diagnose
 
 ### diagnoseCalendar (@public)
 
 ```ts
-export declare function diagnoseCalendar(options?: CalendarOptions | object): readonly Diagnostic[];
+export declare function diagnoseCalendar(options?: CalendarOptions | object, diagnoseOptions?: DiagnoseOptions): readonly Diagnostic[];
+```
+
+### DiagnoseOptions (@public)
+
+```ts
+export interface DiagnoseOptions {
+    readonly asOf?: DateString;
+}
 ```
 
 ### diagnoseSchedule (@public)
 
 ```ts
-export declare function diagnoseSchedule(options: ScheduleOptions<unknown> | object): readonly Diagnostic[];
+export declare function diagnoseSchedule(options: ScheduleOptions<unknown> | object, diagnoseOptions?: DiagnoseOptions): readonly Diagnostic[];
 ```
 
 ### Diagnostic (@public)
@@ -824,7 +860,7 @@ export type DiagnosticSeverity = "error" | "warning" | "info";
 ### KnownDiagnosticCode (@public)
 
 ```ts
-export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "shadowed" | "never-matches" | "redundant";
+export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "shadowed" | "never-matches" | "redundant" | "expired";
 ```
 
 ## bizdays-toolkit/provider

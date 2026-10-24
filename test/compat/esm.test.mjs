@@ -6,10 +6,11 @@ import * as root from "bizdays-toolkit";
 import * as diagnose from "bizdays-toolkit/diagnose";
 import * as jp from "bizdays-toolkit/jp";
 import * as provider from "bizdays-toolkit/provider";
+import * as sg from "bizdays-toolkit/sg";
 import * as uk from "bizdays-toolkit/uk";
 import { smoke } from "./smoke.mjs";
 
-const { results, temporal } = smoke({ root, jp, uk, diagnose, provider });
+const { results, temporal } = smoke({ root, jp, uk, sg, diagnose, provider });
 // 本物の Temporal で確かめたかどうかを、黙って飛ばさずに必ず表示する
 console.log(
   `Temporal: ${temporal === "native" ? "checked with the native Temporal" : "skipped (no Temporal in this runtime)"}`,

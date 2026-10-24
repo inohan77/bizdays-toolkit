@@ -35,6 +35,8 @@ export type KnownErrorCode =
   | "time-zone-conflict"
   /** 対応している年の範囲の外 */
   | "out-of-range"
+  /** 判定が未確定の祝日（confirmed: false）に触れた（unconfirmedHolidays: "throw"） */
+  | "unconfirmed-holiday"
   /** 祝日の提供元の形式の誤り */
   | "invalid-provider"
   /** 祝日の提供元が返したデータの誤り */

@@ -321,6 +321,7 @@ const CALENDAR_OPTION_KEYS = [
   "holidays",
   "timeZone",
   "outOfRange",
+  "unconfirmedHolidays",
   "closedWeekdays",
   "closedAnnual",
   "closedDates",
@@ -617,6 +618,7 @@ function buildCalendar<Kind extends string>(
     timeZone: lookup.timeZone,
     providers: lookup.providers,
     outOfRange: lookup.outOfRange,
+    unconfirmedHolidays: lookup.unconfirmedHolidays,
     dateOf,
     civilOf: lookup.civilOf,
     instantOf: lookup.instantOf,
@@ -770,6 +772,10 @@ export function combineCalendars<Kind extends string = string>(
     providers: Object.freeze(providers),
     timeZone: zones[0]!,
     outOfRange: calendars.every((c) => c.outOfRange === "ignore") ? "ignore" : "throw",
+    // 未確定の祝日も同じ考え方: どれかが "throw" なら、そのカレンダーの判定が例外になるので合成の holiday も "throw"
+    unconfirmedHolidays: calendars.some((c) => c.unconfirmedHolidays === "throw")
+      ? "throw"
+      : "accept",
   });
 
   const isOpen = (date: DateString): boolean =>

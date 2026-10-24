@@ -182,6 +182,21 @@ createCalendar({ closedRecurring: [{ weekday: 1, kinds: ["national"] }] });
 // @ts-expect-error -- holiday と dayAfterHoliday は同時に指定できない
 createCalendar({ closedRecurring: [{ holiday: true, dayAfterHoliday: true }] });
 
+// --- 未確定の祝日のガード・診断の asOf（0.17.0） ---
+{
+  const c = createCalendar({ holidays: jp, unconfirmedHolidays: "throw" });
+  expectType<Equal<typeof c.unconfirmedHolidays, "accept" | "throw">>();
+  createSchedule({ weekly: [0, 1, 1, 1, 1, 1, 0], unconfirmedHolidays: "accept" });
+  // @ts-expect-error -- unconfirmedHolidays は "accept" か "throw"
+  createCalendar({ holidays: jp, unconfirmedHolidays: "ignore" });
+  const list = diagnoseCalendar({ holidays: jp }, { asOf: "2026-10-23" });
+  const codes: readonly string[] = list.map((d) => d.code);
+  void codes;
+  diagnoseSchedule({ weekly: [0, 1, 1, 1, 1, 1, 0] }, {});
+  // @ts-expect-error -- asOf は暦日の文字列だけ
+  diagnoseCalendar({}, { asOf: new Date() });
+}
+
 // --- 祝前日（0.16.0）・decidedByPath ---
 createCalendar({
   holidays: jp,

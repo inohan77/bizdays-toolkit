@@ -4,6 +4,24 @@
 
 パッチ版（0.x.y の y）は、公式データの反映と不具合の修正なので、作業は要りません。
 
+## 0.17.0
+
+動作が変わる既存の API はありません（未確定の祝日のガード `unconfirmedHolidays`、診断の第 2 引数 `asOf`、サブパス `bizdays-toolkit/sg` の追加）。
+
+| 変更                                                                                | 対応                                                                                                         |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `Calendar`・`Schedule`・`HolidayLookup` に項目 `unconfirmedHolidays` が加わる       | 自前で `Calendar` の形のオブジェクトを作っている場合（モックなど）は項目を足す。`dayInfo` の結果は変わらない |
+| 監視のワークフロー `govuk-watch.yml` が `data-watch.yml` になる（リポジトリの運用） | cron-job.org のジョブの URL を `…/actions/workflows/data-watch.yml/dispatches` に直す（RELEASING.md）        |
+
+```ts
+// 予測の祝日に依存した結果を出したくない計算では
+const strict = createCalendar({
+  holidays: jp,
+  closedWeekdays: [0, 6],
+  unconfirmedHolidays: "throw",
+});
+```
+
 ## 0.16.0
 
 日時の文字列の区切りが 1 点変わります。ほかは動作が変わりません（祝前日の規則 `dayBeforeHoliday`、サブパス `bizdays-toolkit/provider`、合成の `dayInfo` の `decidedByPath` の追加）。

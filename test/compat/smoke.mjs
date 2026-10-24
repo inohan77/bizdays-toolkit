@@ -5,10 +5,10 @@
  * 読み込み方は環境ごとに違うので、呼び出し側が各サブパスのモジュールを渡す。
  * 本物の Temporal がある環境では、Temporal のオブジェクトを入力にした確認も行う。
  *
- * @param {{ root: any, jp: any, uk: any, diagnose: any, provider: any }} modules
+ * @param {{ root: any, jp: any, uk: any, sg: any, diagnose: any, provider: any }} modules
  * @returns {{ results: { name: string, ok: boolean, error?: string }[], temporal: "native" | "absent" }}
  */
-export function smoke({ root, jp, uk, diagnose, provider }) {
+export function smoke({ root, jp, uk, sg, diagnose, provider }) {
   const results = [];
   const check = (name, fn) => {
     try {
@@ -77,6 +77,27 @@ export function smoke({ root, jp, uk, diagnose, provider }) {
       code = root.isBizdaysError(e) ? e.code : "not a bizdays error";
     }
     equal(code, "invalid-date", "error code");
+  });
+
+  check("シンガポールの祝日（振替と Asia/Singapore での判定）、未確定の祝日のガード", () => {
+    const calendar = root.createCalendar({ holidays: sg.sg, closedWeekdays: [0, 6] });
+    equal(calendar.isBusinessDay("2026-08-10"), false, "National Day (Observed)");
+    equal(calendar.isHoliday(new Date("2026-08-09T17:00:00Z")), true, "SGT");
+    const strict = root.createCalendar({ holidays: jp.jp, unconfirmedHolidays: "throw" });
+    let code;
+    try {
+      strict.isBusinessDay(`${jp.jp.confirmedThrough + 1}-03-20`);
+    } catch (e) {
+      code = root.isBizdaysError(e) ? e.code : "not a bizdays error";
+    }
+    equal(code, "unconfirmed-holiday", "unconfirmedHolidays");
+    equal(
+      diagnose
+        .diagnoseCalendar({ closedDates: ["2020-01-02"] }, { asOf: "2026-01-01" })
+        .map((d) => d.code),
+      ["expired"],
+      "asOf",
+    );
   });
 
   check("提供元の実装者向けの暦の計算（第 n 何曜日・復活祭）", () => {
