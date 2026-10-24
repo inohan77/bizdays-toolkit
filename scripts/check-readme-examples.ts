@@ -1,6 +1,6 @@
 import "./strict-warnings.ts";
 /**
- * README（英語・日本語）のコード例を実行し、コメントに書いた結果と比べる（pnpm check から実行。decisions.md の 27 番）。
+ * README とドキュメント（docs/guide.md・docs/providers.md。英語・日本語）のコード例を実行し、コメントに書いた結果と比べる（pnpm check から実行。decisions.md の 27・45 番）。
  *
  * - ts のコードブロックを 1 つずつ別のモジュールにして、ビルド済みの dist（パッケージ名での自己参照）で実行する
  * - 文の後のコメント（`expr; // "2026-11-02"` や、次の行から続く `// { ... }`）の先頭がリテラルなら、実際の値と比べる。
@@ -250,13 +250,23 @@ export function __check(index: number, actual: unknown): void {
 }
 `;
 
+/** コード例を実行するファイル（README と docs のガイド。英語・日本語） */
+const DOC_FILES = [
+  "README.md",
+  "docs/README.ja.md",
+  "docs/guide.md",
+  "docs/guide.ja.md",
+  "docs/providers.md",
+  "docs/providers.ja.md",
+];
+
 const dir = mkdtempSync(join(ROOT, ".readme-examples-"));
 const failures: string[] = [];
 let blocks = 0;
 let compared = 0;
 try {
   writeFileSync(join(dir, "__check.ts"), CHECKER);
-  for (const file of ["README.md", "docs/README.ja.md"]) {
+  for (const file of DOC_FILES) {
     const text = readFileSync(file, "utf8");
     for (const m of text.matchAll(/^```ts\n([\s\S]*?)^```/gm)) {
       const startLine = text.slice(0, m.index).split("\n").length + 1;

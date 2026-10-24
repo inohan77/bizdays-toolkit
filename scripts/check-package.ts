@@ -5,7 +5,7 @@
  * - exports のすべてのエントリーが存在し、読み込めること
  * - ランタイムの依存（dependencies）がないこと
  * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
- * - README.md（英語）と docs/README.ja.md（日本語）の構成がそろっていること（checkReadmes）
+ * - 英語と日本語のドキュメントの対（README・guide・providers）の構成がそろい、見出しへのリンクが実在すること（checkDocPair・checkDocAnchors）
  * - ライブラリのソース（src）が Node.js 固有の機能を使っていないこと（checkPortableSource。decisions.md の 26 番）
  */
 
@@ -130,14 +130,32 @@ if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
 }
 
 /**
- * README.md（英語。npm に公開する）と docs/README.ja.md（日本語。リポジトリのみ）の構成を比べる。
+ * 英語と日本語のドキュメントの対（README.md と docs/README.ja.md、docs/guide.md と docs/guide.ja.md、
+ * docs/providers.md と docs/providers.ja.md）の構成を比べる（decisions.md の 22・45 番）。
  * 日本語版をルートに置かないのは、npm がルートの README* を files の指定にかかわらず必ず含めるため。
  *
  * - 見出しの数が段ごとに一致し、コードブロックの数が一致すること（節や例の足し忘れを見つける。文章の中身は比べない）
  * - 互いへの切り替えのリンクがあること。README.md からのリンクは、npm のページからも辿れるよう GitHub の絶対 URL
+ * - docs のファイルへのリンクの見出しのアンカー（#…）が、そのファイルの見出しに実在すること
  */
-function checkReadmes(en: string, ja: string): string[] {
+const DOC_PAIRS: readonly (readonly [string, string])[] = [
+  ["README.md", "docs/README.ja.md"],
+  ["docs/guide.md", "docs/guide.ja.md"],
+  ["docs/providers.md", "docs/providers.ja.md"],
+];
+
+/** GitHub が見出しに付けるアンカー（英数字・空白・ハイフン以外を除き、小文字にして空白をハイフンに） */
+const anchorOf = (heading: string): string =>
+  heading
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .trim()
+    .replace(/\s+/g, "-");
+
+function checkDocPair(enPath: string, jaPath: string): string[] {
   const problems: string[] = [];
+  const en = readFileSync(enPath, "utf8");
+  const ja = readFileSync(jaPath, "utf8");
   const base = pkg.repository.url.replace(/^git\+/, "").replace(/\.git$/, "");
   const shape = (text: string) => {
     const withoutCode = text.replace(/^```[\s\S]*?^```/gm, "");
@@ -150,28 +168,58 @@ function checkReadmes(en: string, ja: string): string[] {
   const a = shape(en);
   const b = shape(ja);
   for (const [name, s] of [
-    ["README.md", a],
-    ["docs/README.ja.md", b],
+    [enPath, a],
+    [jaPath, b],
   ] as const) {
     if (s.oddFences) problems.push(`${name}: unbalanced code fences`);
   }
   a.levels.forEach((count, i) => {
     if (count !== b.levels[i]) {
       problems.push(
-        `README headings differ at level ${i + 1}: README.md ${count}, docs/README.ja.md ${b.levels[i]}`,
+        `headings differ at level ${i + 1}: ${enPath} ${count}, ${jaPath} ${b.levels[i]}`,
       );
     }
   });
   if (a.blocks !== b.blocks) {
-    problems.push(
-      `README code blocks differ: README.md ${a.blocks}, docs/README.ja.md ${b.blocks}`,
-    );
+    problems.push(`code blocks differ: ${enPath} ${a.blocks}, ${jaPath} ${b.blocks}`);
   }
-  if (!en.includes(`${base}/blob/main/docs/README.ja.md`)) {
-    problems.push(`README.md must link to ${base}/blob/main/docs/README.ja.md`);
+  const jaName = jaPath.replace(/^docs\//, "");
+  const enName = enPath.replace(/^docs\//, "");
+  if (enPath === "README.md") {
+    if (!en.includes(`${base}/blob/main/${jaPath}`)) {
+      problems.push(`${enPath} must link to ${base}/blob/main/${jaPath}`);
+    }
+    if (!ja.includes("](../README.md)") && !ja.includes('href="../README.md"')) {
+      problems.push(`${jaPath} must link to ../README.md`);
+    }
+  } else {
+    if (!en.includes(`./${jaName}`)) problems.push(`${enPath} must link to ./${jaName}`);
+    if (!ja.includes(`./${enName}`)) problems.push(`${jaPath} must link to ./${enName}`);
   }
-  if (!ja.includes("](../README.md)") && !ja.includes('href="../README.md"')) {
-    problems.push("docs/README.ja.md must link to ../README.md");
+  return problems;
+}
+
+/** ドキュメントの中の docs/*.md へのリンクのアンカーが、そのファイルの見出しに実在するか */
+function checkDocAnchors(): string[] {
+  const problems: string[] = [];
+  const headings = new Map<string, Set<string>>();
+  const docFiles = DOC_PAIRS.flat();
+  for (const file of docFiles) {
+    const text = readFileSync(file, "utf8").replace(/^```[\s\S]*?^```/gm, "");
+    headings.set(file, new Set([...text.matchAll(/^#{1,6} (.+)$/gm)].map((m) => anchorOf(m[1]!))));
+  }
+  for (const file of docFiles) {
+    const text = readFileSync(file, "utf8");
+    for (const m of text.matchAll(/\]\(([^)\s]+?)#([^)\s]+)\)/g)) {
+      const target = m[1]!;
+      const name = target.replace(/^.*\/docs\//, "docs/").replace(/^\.\//, "docs/");
+      const set =
+        headings.get(name) ??
+        (target.endsWith("README.md") ? headings.get("README.md") : undefined);
+      if (!set) continue; // このリポジトリのドキュメント以外へのリンク
+      const anchor = decodeURIComponent(m[2]!);
+      if (!set.has(anchor)) problems.push(`${file}: link to ${target}#${m[2]} has no such heading`);
+    }
   }
   return problems;
 }
@@ -210,11 +258,11 @@ errors.push(...checkPortableSource("src"));
 
 if (existsSync("README.ja.md"))
   errors.push("README.ja.md must not be at the root (npm always publishes root README* files)");
-if (!existsSync("docs/README.ja.md")) errors.push("docs/README.ja.md not found");
-else
-  errors.push(
-    ...checkReadmes(readFileSync("README.md", "utf8"), readFileSync("docs/README.ja.md", "utf8")),
-  );
+for (const [en, ja] of DOC_PAIRS) {
+  if (!existsSync(en) || !existsSync(ja)) errors.push(`${en} or ${ja} not found`);
+  else errors.push(...checkDocPair(en, ja));
+}
+errors.push(...checkDocAnchors());
 
 // 公開されるファイルは、npm が実際に詰めるもの（npm pack --dry-run）で確かめる。
 // files の指定から推定すると、npm が指定にかかわらず含めるファイル（ルートの README* など）を見落とすため

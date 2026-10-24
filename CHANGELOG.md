@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-25
+
+### Changed
+
+- README（英語・日本語）を入口に絞り、詳しい説明を `docs/guide.md`・`docs/guide.ja.md`（同梱の提供元・営業日カレンダー・繰り返しの規則・合成・よくある設定の例・月の期日・日ごとの値・スケジュールからのカレンダー・入力・対応年の外・未確定の祝日・エラー・設定の診断）と `docs/providers.md`・`docs/providers.ja.md`（他の国・地域の祝日の提供元の書き方）に移した。README には機能の箇条書き（7 項目）・インストール・クイックスタート・できることの一覧（提供元の表・規則の表・診断の例）・ドキュメントの索引を残した。本文の内容は変えていない（`docs/decisions.md` の 45 番）
+
+### 開発
+
+- `pnpm check`: 英語と日本語のドキュメントの対（README・`docs/guide`・`docs/providers`）の見出しの数とコードブロックの数の一致、互いへのリンク、`docs/*.md` の見出しへのリンク（`#…`）の実在を確かめる（`scripts/check-package.ts`）。コード例の実行（`scripts/check-readme-examples.ts`）も docs のガイドを対象に含めた
+- `RELEASING.md`・`docs/decisions.md` の 22・27 番に、ドキュメントの対が増えたことを書いた
+
 ## [0.17.0] - 2026-10-25
 
 ### 移行
@@ -458,7 +469,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.1...HEAD
+[0.17.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.14.1...v0.15.0
