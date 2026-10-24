@@ -63,9 +63,11 @@ jobs:
       # runner コンテキストはジョブの env では使えないため、結果のファイルのパスはここで決める
       - name: Set the report paths
         run: |
-          echo "REPORT=${RUNNER_TEMP}/govuk-report.md" >> "${GITHUB_ENV}"
-          echo "SG_REPORT=${RUNNER_TEMP}/datagovsg-report.md" >> "${GITHUB_ENV}"
-          echo "JP_REPORT=${RUNNER_TEMP}/cao-report.md" >> "${GITHUB_ENV}"
+          {
+            echo "REPORT=${RUNNER_TEMP}/govuk-report.md"
+            echo "SG_REPORT=${RUNNER_TEMP}/datagovsg-report.md"
+            echo "JP_REPORT=${RUNNER_TEMP}/cao-report.md"
+          } >> "${GITHUB_ENV}"
 
       - name: Compare with GOV.UK
         id: verify
