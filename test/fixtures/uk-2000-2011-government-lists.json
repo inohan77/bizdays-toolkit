@@ -1,0 +1,1747 @@
+{
+  "note": "Bank holidays 2000-2011 as listed by the government of the day (DTI/BERR, directgov, Scottish Executive/Government, nidirect), captured by the Wayback Machine, with the Royal Proclamations and Northern Ireland Orders in The Gazette as the second source (docs/sources/uk-bank-holidays-2000-2011.md). Compiled 2026-10-25 for bizdays-toolkit 0.21.0. Dates are the government list; titles are as written there (normalized in the test). Where a list also showed the weekend day itself next to its substitute (DTI 2004: 25 and 26 December), the weekend day is omitted, as GOV.UK's lists omit it.",
+  "principle": "The published government list is the authority; the proclamations in The Gazette verify it. Days listed by the government but not found in any proclamation are kept and recorded in knownDifferences.",
+  "fieldNotes": {
+    "record": "the section of docs/sources/uk-bank-holidays-2000-2011.md that holds the transcriptions for the year",
+    "sources": "per division, the government list used as the authority (Web Archive URL with capture time), or a statement that none exists for the year and division",
+    "knownDifferences": "days in a government list for which no proclamation was found; returned as holidays",
+    "unproclaimed": "Saturday holidays in Scotland for which neither a proclamation nor a government list was found; not returned as holidays (none in 2000-2011; the field exists so that silence can be told from absence in later ranges)"
+  },
+  "knownDifferences": [
+    {
+      "division": "scotland",
+      "date": "2010-01-04",
+      "listedAs": "2nd January (substitute day)",
+      "note": "No Royal Proclamation appoints this day: none was found in the four searches of The Gazette recorded in docs/sources/uk-bank-holidays-2000-2011.md#1-検索に使った-url (2 January 2010 was a Saturday; Schedule 1 moves only a Sunday). Confirmed by the Scottish Government in January 2014 (dracos.co.uk/wrote/bad-bank-holidays/). Kept because the government lists of the day and banks treated it as a bank holiday."
+    },
+    {
+      "division": "scotland",
+      "date": "2011-01-04",
+      "listedAs": "2nd January (substitute day)",
+      "note": "No Royal Proclamation appoints this day: none was found in the four searches of The Gazette (2 January 2011 was a Sunday, moved to 3 January by Schedule 1; the three proclamations of 2010 do not mention January 2011). Confirmed by the Scottish Government in January 2014. Kept for the same reason."
+    },
+    {
+      "division": "scotland",
+      "date": "2010-12-27",
+      "listedAs": "Christmas Day (substitute day)",
+      "note": "No Royal Proclamation appointing 27 December 2010 in Scotland was found in the four searches of The Gazette (E-26799-1 appoints 28 December only; Schedule 1 moves Christmas Day only when it is a Sunday, and 25 December 2010 was a Saturday). Not in Somerville's article; found in this collection. Kept because every government list of the day shows it as \"Christmas Day 27 December*\"."
+    }
+  ],
+  "unproclaimed": [],
+  "proclamations": [
+    {
+      "notice": "L-55364-1SI",
+      "published": "1999-01-04",
+      "edition": "London",
+      "covers": "1998 年末の再布告（参考）"
+    },
+    {
+      "notice": "L-55541-3（Edinburgh 24633 頁 1433–1434、Belfast 6048 頁 617–618）",
+      "published": "1999-07-02",
+      "edition": "London",
+      "covers": "1999 年末・2000 年"
+    },
+    {
+      "notice": "Belfast 6117 頁 211",
+      "published": "2000-03-03",
+      "edition": "Belfast",
+      "covers": "NI 2000-07-12"
+    },
+    {
+      "notice": "L-55890-1001（Edinburgh 24829 頁 1301–1302、Belfast 6147 頁 613）",
+      "published": "2000-06-21",
+      "edition": "London",
+      "covers": "Scotland 2000-12-26・2001-05-28"
+    },
+    {
+      "notice": "L-55890-1002",
+      "published": "2000-06-21",
+      "edition": "London",
+      "covers": "England・Wales・NI 2001 年"
+    },
+    {
+      "notice": "L-56043-1001（Belfast 6191 頁 1173、6195 頁 1231–1232）",
+      "published": "2000-11-28",
+      "edition": "London",
+      "covers": "England・Wales・NI 2002 年 Jubilee"
+    },
+    {
+      "notice": "Edinburgh 24921 頁 2551",
+      "published": "2000-11-28",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2002 年 Jubilee"
+    },
+    {
+      "notice": "Belfast 6209 頁 45",
+      "published": "2001-01-19",
+      "edition": "Belfast",
+      "covers": "NI 2001-03-19"
+    },
+    {
+      "notice": "Belfast 6219 頁 201",
+      "published": "2001-02-23",
+      "edition": "Belfast",
+      "covers": "NI 2001-07-12"
+    },
+    {
+      "notice": "L-56207-1005（Edinburgh 25013 頁 1095–1096、Belfast 6244 頁 537）",
+      "published": "2001-05-17",
+      "edition": "London",
+      "covers": "England・Wales・NI 2002 年、Scotland 2001-12-26"
+    },
+    {
+      "notice": "Belfast 6329 頁 233",
+      "published": "2002-03-08",
+      "edition": "Belfast",
+      "covers": "NI 2002-07-12"
+    },
+    {
+      "notice": "Edinburgh 25205 頁 961",
+      "published": "2002-04-19",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2002-12-26・2003-05-26"
+    },
+    {
+      "notice": "L-56583-1005（Belfast 6354 頁 573）",
+      "published": "2002-05-31",
+      "edition": "London",
+      "covers": "England・Wales・NI 2003 年"
+    },
+    {
+      "notice": "B-6432-1101-56 / B-6439-1101-11",
+      "published": "2003-02-28 / 2003-03-21",
+      "edition": "Belfast",
+      "covers": "NI 2003-07-14"
+    },
+    {
+      "notice": "L-56962-1003 / B-6463-1101-6",
+      "published": "2003-06-13",
+      "edition": "London / Belfast",
+      "covers": "England・Wales・NI 2004 年"
+    },
+    {
+      "notice": "E-25443-1101-213",
+      "published": "2003-06-13",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2003-12-26・2004-05-31"
+    },
+    {
+      "notice": "B-6525-1101-75",
+      "published": "2004-01-16",
+      "edition": "Belfast",
+      "covers": "NI 2004-07-12"
+    },
+    {
+      "notice": "L-57314-1111 / B-6568-1101-11 / E-25648-1101-206",
+      "published": "2004-06-11",
+      "edition": "3 版",
+      "covers": "England・Wales・NI 2004-12-28・2005 年"
+    },
+    {
+      "notice": "L-57314-1112 / B-6568-1101-12 / E-25648-1101-207",
+      "published": "2004-06-11",
+      "edition": "3 版",
+      "covers": "Scotland 2004 年 12 月・2005 年"
+    },
+    {
+      "notice": "B-6633-1101-49",
+      "published": "2005-02-04",
+      "edition": "Belfast",
+      "covers": "NI 2005-07-12"
+    },
+    {
+      "notice": "L-57662-1012 / B-6669-1101-13 / E-25853-1101-280",
+      "published": "2005-06-08 / 06-10",
+      "edition": "3 版",
+      "covers": "Scotland 2005-12-27・2006-05-29"
+    },
+    {
+      "notice": "L-57664-1011 / B-6669-1101-14 / E-25853-1101-279",
+      "published": "2005-06-10",
+      "edition": "3 版",
+      "covers": "England・Wales・NI 2006 年"
+    },
+    {
+      "notice": "B-6739-1101-6",
+      "published": "2006-02-03",
+      "edition": "Belfast",
+      "covers": "NI 2006-07-12"
+    },
+    {
+      "notice": "L-58005-1007 / B-6774-1101-24",
+      "published": "2006-06-08 / 06-09",
+      "edition": "London / Belfast",
+      "covers": "England・Wales・NI 2007 年"
+    },
+    {
+      "notice": "E-26058-1101-52",
+      "published": "2006-06-09",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2006-12-26・2007-05-28"
+    },
+    {
+      "notice": "B-6828-1101-20",
+      "published": "2006-12-15",
+      "edition": "Belfast",
+      "covers": "NI 2007-03-19"
+    },
+    {
+      "notice": "B-6842-1101-20",
+      "published": "2007-02-02",
+      "edition": "Belfast",
+      "covers": "NI 2007-07-12"
+    },
+    {
+      "notice": "L-58354-276018 / B-6880-1101-9",
+      "published": "2007-06-14 / 06-15",
+      "edition": "London / Belfast",
+      "covers": "England・Wales・NI 2008 年"
+    },
+    {
+      "notice": "E-26267-1101-7",
+      "published": "2007-06-15",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2007-12-26・2008-05-26"
+    },
+    {
+      "notice": "B-6950-1101-24",
+      "published": "2008-02-08",
+      "edition": "Belfast",
+      "covers": "NI 2008-07-14"
+    },
+    {
+      "notice": "L-58726-542804 / B-6987-1101-4",
+      "published": "2008-06-12 / 06-13",
+      "edition": "London / Belfast",
+      "covers": "England・Wales・NI 2009 年"
+    },
+    {
+      "notice": "E-26472-1101-106",
+      "published": "2008-06-13",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2008-12-26・2009-05-25"
+    },
+    {
+      "notice": "B-7059-1101-14",
+      "published": "2009-02-20",
+      "edition": "Belfast",
+      "covers": "NI 2009-07-13"
+    },
+    {
+      "notice": "L-59088-838377 / B-7092-1101-4",
+      "published": "2009-06-11 / 06-12",
+      "edition": "London / Belfast",
+      "covers": "England・Wales・NI 2010 年"
+    },
+    {
+      "notice": "E-26642-1106-204（code 1106）",
+      "published": "2009-06-12",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2009-12-28・2010-05-31"
+    },
+    {
+      "notice": "L-59248-979134 / B-7139-1101-18",
+      "published": "2009-11-23 / 11-20",
+      "edition": "London / Belfast",
+      "covers": "England・Wales・NI 2009-12-28（振替）・2010-12-28"
+    },
+    {
+      "notice": "B-7164-1101-24",
+      "published": "2010-02-19",
+      "edition": "Belfast",
+      "covers": "NI 2010-07-12"
+    },
+    {
+      "notice": "E-26799-1",
+      "published": "2010-06-11",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2010-12-28・2011-05-30"
+    },
+    {
+      "notice": "L-59496-1170066 / B-7211-1101-7",
+      "published": "2010-07-23",
+      "edition": "London / Belfast",
+      "covers": "England・Wales・NI 2011 年、NI 2011-07-12"
+    },
+    {
+      "notice": "L-59637-1268656 / B-7253-1101-1",
+      "published": "2010-12-17",
+      "edition": "London / Belfast",
+      "covers": "England・Wales・NI 2011-04-29"
+    },
+    {
+      "notice": "E-26880-2",
+      "published": "2010-12-17",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2011-04-29"
+    },
+    {
+      "notice": "E-26950-1",
+      "published": "2011-06-10",
+      "edition": "Edinburgh",
+      "covers": "Scotland 2011-12-27（ほか 2012 年）"
+    }
+  ],
+  "years": {
+    "2000": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2000",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20000510192732/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "northern-ireland": "http://web.archive.org/web/20000510192732/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "scotland": "http://web.archive.org/web/20000510192732/http://www.dti.gov.uk:80/er/bankhol.htm"
+      },
+      "england-and-wales": [
+        {
+          "date": "2000-01-03",
+          "title": "New Year's Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2000-04-21",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2000-04-24",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2000-05-01",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2000-05-29",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2000-08-28",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2000-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2000-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2000-01-03",
+          "title": "New Year (or in lieu of 2 Jan)"
+        },
+        {
+          "date": "2000-01-04",
+          "title": "New Year's Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2000-04-21",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2000-05-01",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2000-05-29",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2000-08-07",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2000-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2000-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2000-01-03",
+          "title": "New Year's Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2000-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2000-04-21",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2000-04-24",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2000-05-01",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2000-05-29",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2000-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2000-08-28",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2000-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2000-12-26",
+          "title": "Boxing Day"
+        }
+      ]
+    },
+    "2001": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2001",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20010306060835/http://www.dti.gov.uk:80/ER/bankhol.htm",
+        "northern-ireland": "http://web.archive.org/web/20010306060835/http://www.dti.gov.uk:80/ER/bankhol.htm",
+        "scotland": "No government list found. Dates from Schedule 1 of the 1971 Act and the proclamation L-55890-1001 (28 May and 26 December 2001)"
+      },
+      "england-and-wales": [
+        {
+          "date": "2001-01-01",
+          "title": "New Year's Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2001-04-13",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2001-04-16",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2001-05-07",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2001-05-28",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2001-08-27",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2001-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2001-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2001-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2001-01-02",
+          "title": "2nd January"
+        },
+        {
+          "date": "2001-04-13",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2001-05-07",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2001-05-28",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2001-08-06",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2001-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2001-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2001-01-01",
+          "title": "New Year's Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2001-03-19",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2001-04-13",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2001-04-16",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2001-05-07",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2001-05-28",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2001-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2001-08-27",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2001-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2001-12-26",
+          "title": "Boxing Day"
+        }
+      ]
+    },
+    "2002": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2002",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20020603070723/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "northern-ireland": "http://web.archive.org/web/20020603070723/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "scotland": "http://web.archive.org/web/20030423201428/http://www.scotland.gov.uk:80/library3/employment/bankhol.pdf"
+      },
+      "england-and-wales": [
+        {
+          "date": "2002-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2002-03-29",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2002-04-01",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2002-05-06",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2002-06-03",
+          "title": "Golden Jubilee Bank Holiday"
+        },
+        {
+          "date": "2002-06-04",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2002-08-26",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2002-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2002-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2002-01-01",
+          "title": "New Years Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2002-01-02",
+          "title": "2nd January (or day in lieu of 2 Jan)"
+        },
+        {
+          "date": "2002-03-29",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2002-05-06",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2002-06-03",
+          "title": "Golden Jubilee Holiday (2002 only)"
+        },
+        {
+          "date": "2002-06-04",
+          "title": "Golden Jubilee Holiday (in place of 27 May 2002)"
+        },
+        {
+          "date": "2002-08-05",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2002-12-25",
+          "title": "Christmas Day (or in lieu of 25 Dec)"
+        },
+        {
+          "date": "2002-12-26",
+          "title": "Boxing Day (or in lieu of 26 Dec)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2002-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2002-03-18",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2002-03-29",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2002-04-01",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2002-05-06",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2002-06-03",
+          "title": "Golden Jubilee Bank Holiday"
+        },
+        {
+          "date": "2002-06-04",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2002-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2002-08-26",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2002-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2002-12-26",
+          "title": "Boxing Day"
+        }
+      ]
+    },
+    "2003": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2003",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20030207145629/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "northern-ireland": "http://web.archive.org/web/20030207145629/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "scotland": "http://web.archive.org/web/20030424140946/http://www.scotland.gov.uk:80/faq/bankholidays.pdf"
+      },
+      "england-and-wales": [
+        {
+          "date": "2003-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2003-04-18",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2003-04-21",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2003-05-05",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2003-05-26",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2003-08-25",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2003-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2003-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2003-01-01",
+          "title": "New Years Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2003-01-02",
+          "title": "2nd January (or day in lieu of 2 Jan)"
+        },
+        {
+          "date": "2003-04-18",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2003-05-05",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2003-05-26",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2003-08-04",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2003-12-25",
+          "title": "Christmas Day (or in lieu of 25 Dec)"
+        },
+        {
+          "date": "2003-12-26",
+          "title": "Boxing Day (or in lieu of 26 Dec)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2003-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2003-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2003-04-18",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2003-04-21",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2003-05-05",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2003-05-26",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2003-07-14",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2003-08-25",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2003-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2003-12-26",
+          "title": "Boxing Day"
+        }
+      ]
+    },
+    "2004": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2004",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20040105003142/http://www.dti.gov.uk/er/bankhol.htm",
+        "northern-ireland": "http://web.archive.org/web/20040105003142/http://www.dti.gov.uk/er/bankhol.htm",
+        "scotland": "http://web.archive.org/web/20051105022102/http://www.scotland.gov.uk:80/library3/employment/bankhol.pdf (no 2004 capture; 2002-2005 table; the assignment of 27/28 December follows this table and the 2004-2010 list, which agree with the proclamation)"
+      },
+      "england-and-wales": [
+        {
+          "date": "2004-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2004-04-09",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2004-04-12",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2004-05-03",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2004-05-31",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2004-08-30",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2004-12-27",
+          "title": "Substitute Bank Holiday in lieu of 26th"
+        },
+        {
+          "date": "2004-12-28",
+          "title": "Substitute Bank Holiday in lieu of 25th"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2004-01-01",
+          "title": "New Years Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2004-01-02",
+          "title": "2nd January (or day in lieu of 2 Jan)"
+        },
+        {
+          "date": "2004-04-09",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2004-05-03",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2004-05-31",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2004-08-02",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2004-12-27",
+          "title": "Boxing Day (or in lieu of 26 Dec)"
+        },
+        {
+          "date": "2004-12-28",
+          "title": "Christmas Day (or in lieu of 25 Dec)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2004-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2004-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2004-04-09",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2004-04-12",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2004-05-03",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2004-05-31",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2004-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2004-08-30",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2004-12-27",
+          "title": "Substitute Bank Holiday in lieu of 26th"
+        },
+        {
+          "date": "2004-12-28",
+          "title": "Substitute Bank Holiday in lieu of 25th"
+        }
+      ]
+    },
+    "2005": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2005",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20050102020458/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "northern-ireland": "http://web.archive.org/web/20050102020458/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "scotland": "http://web.archive.org/web/20080511182514/http://www.scotland.gov.uk/Publications/2005/01/bankholidays (2004-2010 list, published 2005-01-14; the 2002-2005 PDF captured 2005-11-05 assigns 3/4 January the other way round)"
+      },
+      "england-and-wales": [
+        {
+          "date": "2005-01-03",
+          "title": "New Year's Day (substitute in lieu of 1st Jan)"
+        },
+        {
+          "date": "2005-03-25",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2005-03-28",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2005-05-02",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2005-05-30",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2005-08-29",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2005-12-26",
+          "title": "Boxing Day"
+        },
+        {
+          "date": "2005-12-27",
+          "title": "Christmas Day (substitute in lieu of 25th Dec)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2005-01-03",
+          "title": "2nd January (or in lieu of 2 Jan)"
+        },
+        {
+          "date": "2005-01-04",
+          "title": "New Years Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2005-03-25",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2005-05-02",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2005-05-30",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2005-08-01",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2005-12-26",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2005-12-27",
+          "title": "Boxing Day"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2005-01-03",
+          "title": "New Year's Day (substitute in lieu of 1st Jan)"
+        },
+        {
+          "date": "2005-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2005-03-25",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2005-03-28",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2005-05-02",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2005-05-30",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2005-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2005-08-29",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2005-12-26",
+          "title": "Boxing Day"
+        },
+        {
+          "date": "2005-12-27",
+          "title": "Christmas Day (substitute in lieu of 25th Dec)"
+        }
+      ]
+    },
+    "2006": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2006",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20060101021711/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "northern-ireland": "http://web.archive.org/web/20060101021711/http://www.dti.gov.uk:80/er/bankhol.htm",
+        "scotland": "http://web.archive.org/web/20080511182514/http://www.scotland.gov.uk/Publications/2005/01/bankholidays (no 2006 capture; 2004-2010 list)"
+      },
+      "england-and-wales": [
+        {
+          "date": "2006-01-02",
+          "title": "New Year's Day (substitute in lieu of 1st Jan)"
+        },
+        {
+          "date": "2006-04-14",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2006-04-17",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2006-05-01",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2006-05-29",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2006-08-28",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2006-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2006-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2006-01-02",
+          "title": "2nd January"
+        },
+        {
+          "date": "2006-01-03",
+          "title": "New Years Day (or in lieu of 1 Jan)"
+        },
+        {
+          "date": "2006-04-14",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2006-05-01",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2006-05-29",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2006-08-07",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2006-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2006-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2006-01-02",
+          "title": "New Year's Day (substitute in lieu of 1st Jan)"
+        },
+        {
+          "date": "2006-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2006-04-14",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2006-04-17",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2006-05-01",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2006-05-29",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2006-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2006-08-28",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2006-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2006-12-26",
+          "title": "Boxing Day"
+        }
+      ]
+    },
+    "2007": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2007",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20070716003703/http://www.berr.gov.uk:80/employment/bank-public-holidays/index.html",
+        "northern-ireland": "http://web.archive.org/web/20070716003703/http://www.berr.gov.uk:80/employment/bank-public-holidays/index.html",
+        "scotland": "http://web.archive.org/web/20080511182514/http://www.scotland.gov.uk/Publications/2005/01/bankholidays (no 2007 capture; 2004-2010 list)"
+      },
+      "england-and-wales": [
+        {
+          "date": "2007-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2007-04-06",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2007-04-09",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2007-05-07",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2007-05-28",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2007-08-27",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2007-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2007-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2007-01-01",
+          "title": "New Years Day"
+        },
+        {
+          "date": "2007-01-02",
+          "title": "2nd January"
+        },
+        {
+          "date": "2007-04-06",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2007-05-07",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2007-05-28",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2007-08-06",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2007-11-30",
+          "title": "St Andrew's Day"
+        },
+        {
+          "date": "2007-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2007-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2007-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2007-03-19",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2007-04-06",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2007-04-09",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2007-05-07",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2007-05-28",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2007-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2007-08-27",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2007-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2007-12-26",
+          "title": "Boxing Day"
+        }
+      ]
+    },
+    "2008": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2008",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20081023150954/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741",
+        "northern-ireland": "http://web.archive.org/web/20081023150954/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741",
+        "scotland": "http://web.archive.org/web/20081023150954/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741"
+      },
+      "england-and-wales": [
+        {
+          "date": "2008-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2008-03-21",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2008-03-24",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2008-05-05",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2008-05-26",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2008-08-25",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2008-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2008-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2008-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2008-01-02",
+          "title": "2nd January"
+        },
+        {
+          "date": "2008-03-21",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2008-05-05",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2008-05-26",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2008-08-04",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2008-12-01",
+          "title": "St Andrew's Day"
+        },
+        {
+          "date": "2008-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2008-12-26",
+          "title": "Boxing Day"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2008-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2008-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2008-03-21",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2008-03-24",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2008-05-05",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2008-05-26",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2008-07-14",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2008-08-25",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2008-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2008-12-26",
+          "title": "Boxing Day"
+        }
+      ]
+    },
+    "2009": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2009",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20090604175612/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741",
+        "northern-ireland": "http://web.archive.org/web/20090604175612/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741",
+        "scotland": "http://web.archive.org/web/20090604175612/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741"
+      },
+      "england-and-wales": [
+        {
+          "date": "2009-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2009-04-10",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2009-04-13",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2009-05-04",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2009-05-25",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2009-08-31",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2009-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2009-12-28",
+          "title": "Boxing Day (substitute day)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2009-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2009-01-02",
+          "title": "2nd January"
+        },
+        {
+          "date": "2009-04-10",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2009-05-04",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2009-05-25",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2009-08-03",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2009-11-30",
+          "title": "St Andrew's Day"
+        },
+        {
+          "date": "2009-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2009-12-28",
+          "title": "Boxing Day (substitute day)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2009-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2009-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2009-04-10",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2009-04-13",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2009-05-04",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2009-05-25",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2009-07-13",
+          "title": "Battle of the Boyne (Orangemen's Day) (substitute day)"
+        },
+        {
+          "date": "2009-08-31",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2009-12-25",
+          "title": "Christmas Day"
+        },
+        {
+          "date": "2009-12-28",
+          "title": "Boxing Day (substitute day)"
+        }
+      ]
+    },
+    "2010": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2010",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20101007234850/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741",
+        "northern-ireland": "http://web.archive.org/web/20090604175612/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741 (no 2010 capture of a Northern Ireland list; the 2010 column of the 2009 directgov page)",
+        "scotland": "http://web.archive.org/web/20101007234850/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741"
+      },
+      "england-and-wales": [
+        {
+          "date": "2010-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2010-04-02",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2010-04-05",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2010-05-03",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2010-05-31",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2010-08-30",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2010-12-27",
+          "title": "Christmas Day (substitute day)"
+        },
+        {
+          "date": "2010-12-28",
+          "title": "Boxing Day (substitute day)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2010-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2010-01-04",
+          "title": "2nd January (substitute day)"
+        },
+        {
+          "date": "2010-04-02",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2010-05-03",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2010-05-31",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2010-08-02",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2010-11-30",
+          "title": "St Andrew's Day"
+        },
+        {
+          "date": "2010-12-27",
+          "title": "Christmas Day (substitute day)"
+        },
+        {
+          "date": "2010-12-28",
+          "title": "Boxing Day (substitute day)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2010-01-01",
+          "title": "New Year's Day"
+        },
+        {
+          "date": "2010-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2010-04-02",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2010-04-05",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2010-05-03",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2010-05-31",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2010-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2010-08-30",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2010-12-27",
+          "title": "Christmas Day (substitute day)"
+        },
+        {
+          "date": "2010-12-28",
+          "title": "Boxing Day (substitute day)"
+        }
+      ]
+    },
+    "2011": {
+      "record": "docs/sources/uk-bank-holidays-2000-2011.md#2011",
+      "sources": {
+        "england-and-wales": "http://web.archive.org/web/20110605171618/http://www.direct.gov.uk/en/Governmentcitizensandrights/LivingintheUK/DG_073741",
+        "northern-ireland": "http://web.archive.org/web/20110502070528/http://www.nidirect.gov.uk:80/bank-holidays",
+        "scotland": "http://web.archive.org/web/20110514092048/http://www.scotland.gov.uk/Topics/People/bank-holidays"
+      },
+      "england-and-wales": [
+        {
+          "date": "2011-01-03",
+          "title": "New Year's Day (substitute day)"
+        },
+        {
+          "date": "2011-04-22",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2011-04-25",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2011-04-29",
+          "title": "Royal wedding"
+        },
+        {
+          "date": "2011-05-02",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2011-05-30",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2011-08-29",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2011-12-26",
+          "title": "Christmas Day (substitute day)"
+        },
+        {
+          "date": "2011-12-27",
+          "title": "Boxing Day (substitute day)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "2011-01-03",
+          "title": "New Years Day (substitute day)"
+        },
+        {
+          "date": "2011-01-04",
+          "title": "2nd January (substitute day)"
+        },
+        {
+          "date": "2011-04-22",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2011-04-29",
+          "title": "Royal Wedding Bank Holiday"
+        },
+        {
+          "date": "2011-05-02",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2011-05-30",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2011-08-01",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2011-11-30",
+          "title": "St Andrew's Day"
+        },
+        {
+          "date": "2011-12-26",
+          "title": "Christmas Day (substitute day)"
+        },
+        {
+          "date": "2011-12-27",
+          "title": "Boxing Day (substitute day)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "2011-01-03",
+          "title": "New Year's Day (substitute day)"
+        },
+        {
+          "date": "2011-03-17",
+          "title": "St Patrick's Day"
+        },
+        {
+          "date": "2011-04-22",
+          "title": "Good Friday"
+        },
+        {
+          "date": "2011-04-25",
+          "title": "Easter Monday"
+        },
+        {
+          "date": "2011-04-29",
+          "title": "Royal Wedding"
+        },
+        {
+          "date": "2011-05-02",
+          "title": "Early May Bank Holiday"
+        },
+        {
+          "date": "2011-05-30",
+          "title": "Spring Bank Holiday"
+        },
+        {
+          "date": "2011-07-12",
+          "title": "Battle of the Boyne (Orangemen's Day)"
+        },
+        {
+          "date": "2011-08-29",
+          "title": "Summer Bank Holiday"
+        },
+        {
+          "date": "2011-12-26",
+          "title": "Christmas Day (substitute day)"
+        },
+        {
+          "date": "2011-12-27",
+          "title": "Boxing Day (substitute day)"
+        }
+      ]
+    }
+  }
+}

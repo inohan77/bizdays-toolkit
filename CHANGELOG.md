@@ -4,9 +4,27 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-25
+
+### 移行
+
+動作が変わる既存の API はない（2012 年以降の英国の祝日は変わらない）。英国の 4 つの提供元の `supportedYears.from` が 2012 から 1974 になり、これまで `out-of-range` だった 1974〜2011 年の日付が結果を返すようになる。
+
+### Added
+
+- 英国の 4 つの提供元（`england`・`wales`・`scotland`・`northernIreland`）の対応年を 1974 年まで広げた（これまで 2012 年から）。GOV.UK のデータがない年は、2000〜2011 年は当時の政府が公表した一覧（DTI・BERR・directgov・Scottish Executive/Government・nidirect の Web Archive）を正として The Gazette の国王の布告と北アイルランドの Order で全日を照合し（`test/fixtures/uk-2000-2011-government-lists.json`）、1974〜1999 年は一覧が存在しないので Schedule 1 と The Gazette の布告・Order を正とし、Hansard の書面答弁がある年はそれを第二の出典とした（`test/fixtures/uk-1974-1999-proclamations.json`。テストは Schedule 1 を別に書いた規則で計算し（復活祭は米国海軍天文台の表）、布告の日と合わせて提供元の結果と一致することを確かめる）。出典の記録は `docs/sources/uk-bank-holidays-1974-1999.md`・`docs/sources/uk-bank-holidays-2000-2011.md`。Scotland の 3 日（2010-01-04・2010-12-27・2011-01-04）は当時の一覧にあるが布告がなく、一覧に従って振替日として返す。布告が見つからなかった 1987 年分の毎年の布告と 1975 年・1986〜1990 年の北アイルランドの Order（The Gazette の索引の欠け）は規則どおりに返し、フィクスチャの `unverified` に記録した。臨時の祝日と移動: 1977 年 Silver Jubilee bank holiday（England・Wales・NI は 6 月 7 日、Spring は 6 月 6 日に移動。Scotland は 6 月 6 日）、1981 年 Royal Wedding bank holiday（7 月 29 日）、1995 年の VE Day 50 周年（England・Wales・NI は Early May を 5 月 8 日に移動、Scotland は 5 月 8 日を "Additional bank holiday" として追加）、1999 年 12 月 31 日（"Additional bank holiday"。名称は政府の答弁の呼び方に限り、固有の名称がない日は中立の名称）、2002 年 Golden Jubilee（6 月 3 日。Spring は 6 月 4 日に移動）、2011 年 Royal Wedding（4 月 29 日）。毎年布告される日の始まり（England・Wales・NI の Early May と Scotland の Spring は 1978 年から、St Andrew's Day は 2007 年から）を符号化した。振替日の名称の割り当てが当時の一覧・布告と今の GOV.UK で違う年（12 月 25 日が土曜日の 1976・1982・1993・1999・2004 年、Scotland の 1 月 1 日が土曜日の 1977・1983・1994・2000・2005 年、Scotland の 12 月 25 日が日曜日の 1977・1983・1988・1994・2005 年、2011 年の 12 月）は当時の出典に合わせた
+
 ### Changed
 
-- ドキュメントの国の記述順を、対応年数の多い順（日本 → フランス → 英国 → シンガポール）に揃えた。README（提供元の表・節の見出し・照合のデータの説明・ライセンスの表記・箇条書き）、`docs/guide.md`・`docs/guide.ja.md`（各国の節の順・識別子の表・対応年の例）、`docs/providers.md`・`docs/providers.ja.md`、`RELEASING.md`（各国のデータの更新の節の順。「README のサイズの値」と「監視の起動とハートビート」は各国の節の後ろに置いた）、`package.json` の description。`data-watch.yml` の照合の順（英国 → シンガポール → 日本 → フランス）は実行順なので変えていない
+- README・`docs/guide.md`・`docs/guide.ja.md`: 英国の対応年を 1974〜2099 年に改め、1974〜1999 年と 2000〜2011 年の出典、布告のない 3 日・`unverified`・振替日の割り当ての違いの説明を足した。国の記述順を対応年数の多い順（日本 → 英国 → フランス → シンガポール）に揃えた（README の提供元の表・節の見出し・照合のデータの説明・ライセンスの表記・箇条書き、ガイドの各国の節・識別子の表、providers、`RELEASING.md` の各国の節、`package.json` の description。`data-watch.yml` の照合の順は実行順なので変えていない）
+- README: ライセンスの節を「MIT License。全文は LICENSE（リンク）」の形にした
+- `RELEASING.md`: 英国の 1974〜2011 年は監視の対象外で、出典の読み違いが見つかったときだけ直す、と書いた
+- `docs/decisions.md`: 49 番（英国の対応年の拡大と、GOV.UK のない年の正の決め方。一覧のない年は布告が正、`unverified`、`year >= N` の条件の意味）を追加した
+
+### 開発
+
+- テスト: `test/uk-1974-1999.test.ts`・`test/uk-2000-2011.test.ts` と、フィクスチャ `test/fixtures/uk-1974-1999-proclamations.json`・`test/fixtures/uk-2000-2011-government-lists.json` を追加した。出典の収集の記録を `docs/sources/` に置いた
+- サイズの上限（`size-limits.json`）を上げた。`./uk` 7,500 → 9,000（測定 8,576。1974〜2011 年の `RENAMED`・臨時の祝日・移動の表のため）（gzip）
 
 ## [0.20.0] - 2026-10-25
 
@@ -547,7 +565,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.1...v0.18.0

@@ -38,6 +38,39 @@ isHoliday(new Date("2026-11-22T15:30:00Z")); // true (Nov 23 in Japan time)
 
 `confirmed` tells whether the date is officially fixed. The vernal and autumnal equinox days are fixed in the Official Gazette in February of the previous year, so later years are predictions from an approximation formula (`confirmed: false`).
 
+### UK bank holidays
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { england, northernIreland, scotland, wales } from "bizdays-toolkit/uk";
+
+const edinburgh = createCalendar({ holidays: scotland, closedWeekdays: [0, 6] });
+edinburgh.isBusinessDay("2026-01-02"); // false (2nd January)
+edinburgh.addBusinessDays("2026-06-12", 1); // "2026-06-16" (June 15 is the World Cup bank holiday)
+
+scotland.holidaysInYear(2026)[0];
+// { date: "2026-01-01", name: "New Year’s Day", nameEn: "New Year’s Day", kind: "regular", confirmed: true, key: "new-year" }
+wales.holidaysInYear(2026)[0]?.names; // { cy: "Dydd Calan" }
+
+// Across several regions, use the union (a holiday in any of them is a holiday)
+const ukWide = createCalendar({ holidays: [england, scotland, northernIreland] });
+```
+
+| Provider          | ID       | GOV.UK division   | Notes                                            |
+| ----------------- | -------- | ----------------- | ------------------------------------------------ |
+| `england`         | `GB-ENG` | England and Wales |                                                  |
+| `wales`           | `GB-WLS` | England and Wales | Welsh names (`names.cy`) included                |
+| `scotland`        | `GB-SCT` | Scotland          | 2nd January, St Andrew’s Day and others          |
+| `northernIreland` | `GB-NIR` | Northern Ireland  | St Patrick’s Day, Battle of the Boyne and others |
+
+- `kind` is one of `regular` (an annual bank holiday, including years when a proclamation moved it), `substitute` (a substitute day for a bank holiday on a Saturday or Sunday) and `special` (a one-off bank holiday by proclamation, such as a jubilee or a state funeral). A substitute day has the name of the original holiday, as on GOV.UK
+- England and Wales are one division on GOV.UK and currently have the same dates, but they are separate providers, so your code keeps working if they ever differ
+- Supported years are 1974–2099. Years after the last year GOV.UK has published (`confirmedThrough`, currently 2028) are predictions from the rules (`confirmed: false`). One-off bank holidays are unknown until announced, so predicted years never contain them
+- 2000–2011 predate GOV.UK's data. For those years the authority is the list the government published at the time (DTI and BERR, directgov, the Scottish Executive and Government, nidirect; as archived by the Wayback Machine), checked day by day against the Royal Proclamations and the Northern Ireland Orders in The Gazette (the sources are listed in [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md)). Three days in Scotland (4 January 2010, 27 December 2010 and 4 January 2011) appear in every government list of the time but in no proclamation, so by the letter of the 1971 Act they were not bank holidays; the providers follow the government lists and return them as substitute days.
+- 1974–1999 predate the web: no government list survives, so for those years the Royal Proclamations and Northern Ireland Orders in The Gazette are the authority (Hansard written answers are the second source where they exist, and never differ). Every holiday in those years is either a day fixed by Schedule 1 of the 1971 Act or a day appointed in a proclamation recorded in [docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md); the few days for which no proclamation could be found (the 1987 annual proclamation and the Northern Ireland Orders of 1975 and 1986–1990, which fall in gaps of The Gazette's index) are kept by rule and listed as `unverified` in the fixture. The lower bound is 1974 because New Year's Day has been proclaimed each year in England, Wales and Northern Ireland since 1974 (Early May since 1978, Scotland's spring bank holiday since 1978); the providers encode these starts, not changes to the Act. Names follow the lists of the time, which assign substitute days differently from today's GOV.UK in a few years (in 2004, 27 December is Boxing Day and 28 December Christmas Day; in 2000 and 2005 in Scotland, 3 January is 2nd January and 4 January New Year's Day)
+- Local holidays set by Scottish councils are not included. Whether a bank holiday is a day off depends on the employment contract and similar arrangements
+- One-off bank holidays may be announced only about ten days ahead. Differences from GOV.UK are watched daily and released as patch versions
+
 ### French public holidays
 
 ```ts
@@ -69,39 +102,8 @@ company.isBusinessDay("2026-05-25"); // true
 - `name` is the French name as written on data.gouv.fr (`1er mai`, `Lundi de Pentecôte`), `nameEn` an English rendering, and `key` the stable identifier (`labour-day`, `pentecost-monday`, …; see [Holiday keys](#holiday-keys))
 - When two holidays fall on the same day (Ascension Day on May 1 in 2008, on May 8 in 2059), the provider returns one holiday for that day with the name and key of the Easter-based holiday, as the data.gouv.fr JSON does, so `keys: ["labour-day"]` does not match May 1, 2008
 - Whit Monday is a working day in many companies (the _journée de solidarité_), but it remains a public holiday by law, so the provider returns it as a holiday; write the exception as a holiday rule with `keys: ["pentecost-monday"]`, as above. Whether a holiday is a day off is the user's decision, as everywhere in this library
-- Supported years are 2000–2099. The dates follow from the law, not from a yearly publication, so every year is `confirmed: true` and the providers have no `confirmedThrough`; a change to the Labour Code would be shipped as a patch version. The dates are verified against the "Jours fériés en France" dataset on data.gouv.fr (DINUM; JSON exports for the two zones, 20 years back and 5 years ahead, currently 2006–2031). Differences are watched daily
+- Supported years are 1974–2099. The dates follow from the law, not from a yearly publication, so every year is `confirmed: true` and the providers have no `confirmedThrough`; a change to the Labour Code would be shipped as a patch version. The dates are verified against the "Jours fériés en France" dataset on data.gouv.fr (DINUM; JSON exports for the two zones, 20 years back and 5 years ahead, currently 2006–2031). Differences are watched daily
 - `FR-AM` is this library's identifier for Alsace-Moselle (the departments of Bas-Rhin, Haut-Rhin and Moselle), which has no single ISO 3166-2 code. The overseas departments and territories, whose holidays and time zones differ, are not bundled
-
-### UK bank holidays
-
-```ts
-import { createCalendar } from "bizdays-toolkit";
-import { england, northernIreland, scotland, wales } from "bizdays-toolkit/uk";
-
-const edinburgh = createCalendar({ holidays: scotland, closedWeekdays: [0, 6] });
-edinburgh.isBusinessDay("2026-01-02"); // false (2nd January)
-edinburgh.addBusinessDays("2026-06-12", 1); // "2026-06-16" (June 15 is the World Cup bank holiday)
-
-scotland.holidaysInYear(2026)[0];
-// { date: "2026-01-01", name: "New Year’s Day", nameEn: "New Year’s Day", kind: "regular", confirmed: true, key: "new-year" }
-wales.holidaysInYear(2026)[0]?.names; // { cy: "Dydd Calan" }
-
-// Across several regions, use the union (a holiday in any of them is a holiday)
-const ukWide = createCalendar({ holidays: [england, scotland, northernIreland] });
-```
-
-| Provider          | ID       | GOV.UK division   | Notes                                            |
-| ----------------- | -------- | ----------------- | ------------------------------------------------ |
-| `england`         | `GB-ENG` | England and Wales |                                                  |
-| `wales`           | `GB-WLS` | England and Wales | Welsh names (`names.cy`) included                |
-| `scotland`        | `GB-SCT` | Scotland          | 2nd January, St Andrew’s Day and others          |
-| `northernIreland` | `GB-NIR` | Northern Ireland  | St Patrick’s Day, Battle of the Boyne and others |
-
-- `kind` is one of `regular` (an annual bank holiday, including years when a proclamation moved it), `substitute` (a substitute day for a bank holiday on a Saturday or Sunday) and `special` (a one-off bank holiday by proclamation, such as a jubilee or a state funeral). A substitute day has the name of the original holiday, as on GOV.UK
-- England and Wales are one division on GOV.UK and currently have the same dates, but they are separate providers, so your code keeps working if they ever differ
-- Supported years are 2012–2099. Years after the last year GOV.UK has published (`confirmedThrough`, currently 2028) are predictions from the rules (`confirmed: false`). One-off bank holidays are unknown until announced, so predicted years never contain them
-- Local holidays set by Scottish councils are not included. Whether a bank holiday is a day off depends on the employment contract and similar arrangements
-- One-off bank holidays may be announced only about ten days ahead. Differences from GOV.UK are watched daily and released as patch versions
 
 ### Singapore public holidays
 
@@ -143,8 +145,8 @@ jp.holidaysInYear(2020).find((h) => h.date === "2020-02-24")?.key; // "emperors-
 | Provider               | Keys                                                                                                                                                                                                                                                              |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `jp`                   | `new-year`, `coming-of-age`, `national-foundation`, `emperors-birthday`, `vernal-equinox`, `showa`, `constitution-memorial`, `greenery`, `childrens`, `marine`, `mountain`, `respect-for-the-aged`, `autumnal-equinox`, `sports`, `culture`, `labor-thanksgiving` |
-| `metropole` … (France) | `new-year`, `easter-monday`, `labour-day`, `victory-in-europe`, `ascension`, `pentecost-monday`, `bastille`, `assumption`, `all-saints`, `armistice`, `christmas`; Alsace-Moselle adds `good-friday`, `saint-stephens`                                            |
 | `england` … (UK)       | `new-year`, `2nd-january`, `st-patricks`, `good-friday`, `easter-monday`, `early-may`, `spring`, `battle-of-the-boyne`, `summer`, `st-andrews`, `christmas`, `boxing-day`                                                                                         |
+| `metropole` … (France) | `new-year`, `easter-monday`, `labour-day`, `victory-in-europe`, `ascension`, `pentecost-monday`, `bastille`, `assumption`, `all-saints`, `armistice`, `christmas`; Alsace-Moselle adds `good-friday`, `saint-stephens`                                            |
 | `sg`                   | `new-year`, `chinese-new-year`, `good-friday`, `labour-day`, `hari-raya-puasa`, `vesak`, `hari-raya-haji`, `national-day`, `deepavali`, `christmas`                                                                                                               |
 
 The types `KnownJapaneseHolidayKey`, `KnownUkHolidayKey`, `KnownSgHolidayKey` and `KnownFrHolidayKey` list them for editor completion (`@beta`). Keys are derived once from the English name (lowercase, hyphens, no apostrophes, the trailing "Day" dropped) and spelled as the provider spells it (`labor-thanksgiving` in Japan, `labour-day` in Singapore). A provider you write can give its holidays keys too (see [Holidays of other countries and regions](./providers.md)).
@@ -640,7 +642,7 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## Outside the supported years
 
-Evaluating a date outside the holiday provider's supported years (1955–2099 for Japan, 2000–2099 for France, 2012–2099 for the UK, 2020–2027 for Singapore) throws a `RangeError`. To treat such dates as having no holidays, set `outOfRange: "ignore"`.
+Evaluating a date outside the holiday provider's supported years (1955–2099 for Japan, 1974–2099 for the UK, 2000–2099 for France, 2020–2027 for Singapore) throws a `RangeError`. To treat such dates as having no holidays, set `outOfRange: "ignore"`.
 
 ## Unconfirmed holidays
 

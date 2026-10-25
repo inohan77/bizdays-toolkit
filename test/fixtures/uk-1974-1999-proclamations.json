@@ -1,0 +1,1346 @@
+{
+  "note": "Bank holidays 1974-1999 for the UK: the days appointed each year by Royal Proclamation (and, for Northern Ireland, by Order of the Secretary of State) as published in The Gazette, transcribed from docs/sources/uk-bank-holidays-1974-1999.md. Compiled 2026-10-25 for bizdays-toolkit 0.21.0. No government web list exists for these years; Hansard written answers (1976-1995) are the second source where found and never differ in dates.",
+  "principle": "Schedule 1 of the Banking and Financial Dealings Act 1971 gives the recurring days; every other day the providers return for 1974-1999 must appear here as a proclaimed or ordered day, or be listed in unverified. Days the law moves on its own (a Sunday holiday moved by Schedule 1) are not proclaimed and not listed.",
+  "fieldNotes": {
+    "mode": "'added' = appointed under section 1(3); 'in-place-of YYYY-MM-DD' = appointed under section 1(2) in place of that day",
+    "source": "The Gazette edition, issue and page (or notice ID) and the publication date; 'notice only' = only the Privy Council Office notice was found, not the proclamation text",
+    "unverified": "days the providers return by rule for which no proclamation or Order was found (gaps in The Gazette's online holdings: London Gazette issues 50761-50763 and 50779-50790 (30 Dec 1986 - 2 Jan 1987) and Belfast Gazette issues 4660-5171 (27 Dec 1985 - 4 Jan 1991) are listed by The Gazette as missing online); kept because the annual practice is unbroken. dateCertainty 'fixed' = the date itself leaves no choice; 'substitute-inferred' = the day is a substitute whose direction is inferred from the Orders of other years (see inferredFrom)",
+    "unproclaimed": "Saturday holidays in Scotland for which no appointment was found; none in 1974-1999 (Appendix B of the record)",
+    "easterSunday": "Easter Sunday 1974-1999 from a source independent of the library, used by the test to compute the Schedule 1 days",
+    "weekends": "Holidays falling on a Saturday or Sunday are not listed by the providers (the convention of GOV.UK's lists), even where Schedule 1 keeps the Saturday as a bank holiday (26 December) or a proclamation appointed an additional day without disapplying the Saturday; see decisions.md 49"
+  },
+  "easterSunday": {
+    "source": "U.S. Naval Observatory, Selected Christian Observances (https://aa.usno.navy.mil/data/christian_observances), one page per year; identical to the U.S. Census Bureau table 'Easter Dates from 1600 to 2099' (https://www.census.gov/data/software/x13as/genhol/easter-dates.html) and to the NOAA/NWS Peoria list for 1974-1999. Hansard 1976-07-12 and 1992-10-26 give Good Friday / Easter Monday of 1977 and 1992, which agree.",
+    "dates": {
+      "1974": "1974-04-14",
+      "1975": "1975-03-30",
+      "1976": "1976-04-18",
+      "1977": "1977-04-10",
+      "1978": "1978-03-26",
+      "1979": "1979-04-15",
+      "1980": "1980-04-06",
+      "1981": "1981-04-19",
+      "1982": "1982-04-11",
+      "1983": "1983-04-03",
+      "1984": "1984-04-22",
+      "1985": "1985-04-07",
+      "1986": "1986-03-30",
+      "1987": "1987-04-19",
+      "1988": "1988-04-03",
+      "1989": "1989-03-26",
+      "1990": "1990-04-15",
+      "1991": "1991-03-31",
+      "1992": "1992-04-19",
+      "1993": "1993-04-11",
+      "1994": "1994-04-03",
+      "1995": "1995-04-16",
+      "1996": "1996-04-07",
+      "1997": "1997-03-30",
+      "1998": "1998-04-12",
+      "1999": "1999-04-04"
+    }
+  },
+  "unverified": [
+    {
+      "division": "northern-ireland",
+      "date": "1975-07-14",
+      "holiday": "Battle of the Boyne (12 July 1975 was a Saturday)",
+      "reason": "No Order of the Secretary of State for 1975 was found in the Belfast Gazette.",
+      "dateCertainty": "substitute-inferred",
+      "inferredFrom": "The same direction of substitution (Saturday or Sunday to the following Monday) in every Order found: St Patrick's Day 1979-03-19, 1984-03-19; 12 July 1980-07-14, 1981-07-13, 1992-07-13, 1997-07-14, 1998-07-13. To be checked against the Belfast Gazette of the year when it becomes available (The Gazette lists issues 4660-5171 as missing online but held offline)."
+    },
+    {
+      "division": "northern-ireland",
+      "date": "1986-07-14",
+      "holiday": "Battle of the Boyne (12 July 1986 was a Saturday)",
+      "reason": "The Belfast Gazette for 1986-1990 is not in The Gazette's search index; no Order was found.",
+      "dateCertainty": "substitute-inferred",
+      "inferredFrom": "The same direction of substitution (Saturday or Sunday to the following Monday) in every Order found: St Patrick's Day 1979-03-19, 1984-03-19; 12 July 1980-07-14, 1981-07-13, 1992-07-13, 1997-07-14, 1998-07-13. To be checked against the Belfast Gazette of the year when it becomes available (The Gazette lists issues 4660-5171 as missing online but held offline)."
+    },
+    {
+      "division": "northern-ireland",
+      "date": "1987-07-13",
+      "holiday": "Battle of the Boyne (12 July 1987 was a Sunday)",
+      "reason": "Same index gap.",
+      "dateCertainty": "substitute-inferred",
+      "inferredFrom": "The same direction of substitution (Saturday or Sunday to the following Monday) in every Order found: St Patrick's Day 1979-03-19, 1984-03-19; 12 July 1980-07-14, 1981-07-13, 1992-07-13, 1997-07-14, 1998-07-13. To be checked against the Belfast Gazette of the year when it becomes available (The Gazette lists issues 4660-5171 as missing online but held offline)."
+    },
+    {
+      "division": "northern-ireland",
+      "date": "1988-07-12",
+      "holiday": "Battle of the Boyne",
+      "reason": "Same index gap.",
+      "dateCertainty": "fixed"
+    },
+    {
+      "division": "northern-ireland",
+      "date": "1989-07-12",
+      "holiday": "Battle of the Boyne",
+      "reason": "Same index gap.",
+      "dateCertainty": "fixed"
+    },
+    {
+      "division": "northern-ireland",
+      "date": "1990-07-12",
+      "holiday": "Battle of the Boyne",
+      "reason": "Same index gap.",
+      "dateCertainty": "fixed"
+    },
+    {
+      "division": "northern-ireland",
+      "date": "1990-03-19",
+      "holiday": "St Patrick's Day (17 March 1990 was a Saturday)",
+      "reason": "Same index gap; no Order found.",
+      "dateCertainty": "substitute-inferred",
+      "inferredFrom": "The same direction of substitution (Saturday or Sunday to the following Monday) in every Order found: St Patrick's Day 1979-03-19, 1984-03-19; 12 July 1980-07-14, 1981-07-13, 1992-07-13, 1997-07-14, 1998-07-13. To be checked against the Belfast Gazette of the year when it becomes available (The Gazette lists issues 4660-5171 as missing online but held offline)."
+    },
+    {
+      "division": "england-and-wales",
+      "date": "1987-01-01",
+      "holiday": "New Year's Day",
+      "reason": "The proclamation for 1987 (expected in 1986) was not found in any edition. Hansard 1985-06-13 lists it as 'To be declared by royal proclamation'.",
+      "dateCertainty": "fixed"
+    },
+    {
+      "division": "northern-ireland",
+      "date": "1987-01-01",
+      "holiday": "New Year's Day",
+      "reason": "Same.",
+      "dateCertainty": "fixed"
+    },
+    {
+      "division": "england-and-wales",
+      "date": "1987-05-04",
+      "holiday": "Early May bank holiday",
+      "reason": "Same (no proclamation and no Hansard answer found).",
+      "dateCertainty": "fixed"
+    },
+    {
+      "division": "northern-ireland",
+      "date": "1987-05-04",
+      "holiday": "Early May bank holiday",
+      "reason": "Same.",
+      "dateCertainty": "fixed"
+    },
+    {
+      "division": "scotland",
+      "date": "1986-12-26",
+      "holiday": "Boxing Day",
+      "reason": "Same (the 1987 proclamation would also appoint 26 December 1986 in Scotland).",
+      "dateCertainty": "fixed"
+    },
+    {
+      "division": "scotland",
+      "date": "1987-05-25",
+      "holiday": "Spring bank holiday",
+      "reason": "Same.",
+      "dateCertainty": "fixed"
+    }
+  ],
+  "unproclaimed": [],
+  "years": {
+    "1974": {
+      "england-and-wales": [
+        {
+          "date": "1974-01-01",
+          "mode": "added",
+          "source": "Belfast 2941 p751 / London 46113 p12735 (1973-10-26)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1974-01-01",
+          "mode": "added",
+          "source": "Belfast 2941 p751 / London 46113 p12735 (1973-10-26)"
+        },
+        {
+          "date": "1974-07-12",
+          "mode": "added",
+          "source": "Belfast 3011 p267 (1974-05-10)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1974-12-26",
+          "mode": "added",
+          "source": "Belfast 3070 p647 / Edinburgh 19546 p1321 / London 46377 p9343 (1974-10-18)"
+        }
+      ]
+    },
+    "1975": {
+      "england-and-wales": [
+        {
+          "date": "1975-01-01",
+          "mode": "added",
+          "source": "Belfast 3070 p647 / Edinburgh 19546 p1321 / London 46377 p9343 (1974-10-18)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1975-01-01",
+          "mode": "added",
+          "source": "Belfast 3070 p647 / Edinburgh 19546 p1321 / London 46377 p9343 (1974-10-18)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1975-12-26",
+          "mode": "added",
+          "source": "Edinburgh 19740 p1217 / London 46690 p11810 (1975-09-19)"
+        }
+      ]
+    },
+    "1976": {
+      "england-and-wales": [
+        {
+          "date": "1976-01-01",
+          "mode": "added",
+          "source": "Edinburgh 19740 p1217 / London 46690 p11810 (1975-09-19)"
+        },
+        {
+          "date": "1976-12-28",
+          "mode": "added",
+          "source": "Edinburgh 19947 p1253 / Belfast 3326 p709 / London 47017 p12669 (1976-09-17)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1976-01-01",
+          "mode": "added",
+          "source": "Edinburgh 19740 p1217 / London 46690 p11810 (1975-09-19)"
+        },
+        {
+          "date": "1976-07-12",
+          "mode": "added",
+          "source": "Belfast 3256 p203 (1976-03-12)"
+        },
+        {
+          "date": "1976-12-28",
+          "mode": "added",
+          "source": "Edinburgh 19947 p1253 / Belfast 3326 p709 / London 47017 p12669 (1976-09-17)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1976-12-27",
+          "mode": "added",
+          "source": "Edinburgh 19947 p1253 / Belfast 3326 p709 / London 47017 p12669 (1976-09-17)"
+        },
+        {
+          "date": "1976-12-28",
+          "mode": "added",
+          "source": "Edinburgh 19947 p1253 / Belfast 3326 p709 / London 47017 p12669 (1976-09-17)"
+        }
+      ]
+    },
+    "1977": {
+      "england-and-wales": [
+        {
+          "date": "1977-01-03",
+          "mode": "added",
+          "source": "Edinburgh 19947 p1253 / Belfast 3326 p709 / London 47017 p12669 (1976-09-17)"
+        },
+        {
+          "date": "1977-06-06",
+          "mode": "in-place-of 1977-05-30",
+          "source": "Edinburgh 20015 p75 / Belfast 3370 p35 (1977-01-21)"
+        },
+        {
+          "date": "1977-06-07",
+          "mode": "added",
+          "source": "Edinburgh 20015 p75 / Belfast 3370 p35 (1977-01-21)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1977-01-03",
+          "mode": "added",
+          "source": "Edinburgh 19947 p1253 / Belfast 3326 p709 / London 47017 p12669 (1976-09-17)"
+        },
+        {
+          "date": "1977-06-06",
+          "mode": "in-place-of 1977-05-30",
+          "source": "Edinburgh 20015 p75 / Belfast 3370 p35 (1977-01-21)"
+        },
+        {
+          "date": "1977-06-07",
+          "mode": "added",
+          "source": "Edinburgh 20015 p75 / Belfast 3370 p35 (1977-01-21)"
+        },
+        {
+          "date": "1977-07-12",
+          "mode": "added",
+          "source": "Belfast 3383 p153 (1977-02-25)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1977-01-04",
+          "mode": "added",
+          "source": "Edinburgh 19947 p1253 / Belfast 3326 p709 / London 47017 p12669 (1976-09-17)"
+        },
+        {
+          "date": "1977-06-06",
+          "mode": "added",
+          "source": "Edinburgh 20015 p75 / Belfast 3370 p35 (1977-01-21)"
+        },
+        {
+          "date": "1977-12-27",
+          "mode": "added",
+          "source": "Belfast 3441 p571 / Edinburgh 20127 p891 (1977-08-05)"
+        }
+      ]
+    },
+    "1978": {
+      "england-and-wales": [
+        {
+          "date": "1978-01-02",
+          "mode": "added",
+          "source": "Belfast 3441 p571 / Edinburgh 20127 p891 (1977-08-05)"
+        },
+        {
+          "date": "1978-05-01",
+          "mode": "added",
+          "source": "Belfast 3441 p571 / Edinburgh 20127 p891 (1977-08-05)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1978-01-02",
+          "mode": "added",
+          "source": "Belfast 3441 p571 / Edinburgh 20127 p891 (1977-08-05)"
+        },
+        {
+          "date": "1978-05-01",
+          "mode": "added",
+          "source": "Belfast 3441 p571 / Edinburgh 20127 p891 (1977-08-05)"
+        },
+        {
+          "date": "1978-07-12",
+          "mode": "added",
+          "source": "Belfast 3521 p173 (1978-03-10)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1978-05-29",
+          "mode": "added",
+          "source": "Belfast 3441 p571 / Edinburgh 20127 p891 (1977-08-05)"
+        },
+        {
+          "date": "1978-12-26",
+          "mode": "added",
+          "source": "Belfast 3575 p585 / Edinburgh 20332 p785 (1978-08-04)"
+        }
+      ]
+    },
+    "1979": {
+      "england-and-wales": [
+        {
+          "date": "1979-01-01",
+          "mode": "added",
+          "source": "Belfast 3575 p585 / Edinburgh 20332 p785 (1978-08-04)"
+        },
+        {
+          "date": "1979-05-07",
+          "mode": "added",
+          "source": "Belfast 3575 p585 / Edinburgh 20332 p785 (1978-08-04)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1979-01-01",
+          "mode": "added",
+          "source": "Belfast 3575 p585 / Edinburgh 20332 p785 (1978-08-04)"
+        },
+        {
+          "date": "1979-03-19",
+          "mode": "added",
+          "source": "Belfast 3638 p54 (1979-01-26)"
+        },
+        {
+          "date": "1979-05-07",
+          "mode": "added",
+          "source": "Belfast 3575 p585 / Edinburgh 20332 p785 (1978-08-04)"
+        },
+        {
+          "date": "1979-07-12",
+          "mode": "added",
+          "source": "Belfast 3648 p145 (1979-02-23)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1979-05-28",
+          "mode": "added",
+          "source": "Belfast 3575 p585 / Edinburgh 20332 p785 (1978-08-04)"
+        },
+        {
+          "date": "1979-12-26",
+          "mode": "added",
+          "source": "Edinburgh 20585 p1187 / Belfast 3738 p853 (1979-10-26)"
+        }
+      ]
+    },
+    "1980": {
+      "england-and-wales": [
+        {
+          "date": "1980-01-01",
+          "mode": "added",
+          "source": "Edinburgh 20585 p1187 / Belfast 3738 p853 (1979-10-26)"
+        },
+        {
+          "date": "1980-05-05",
+          "mode": "added",
+          "source": "Edinburgh 20585 p1187 / Belfast 3738 p853 (1979-10-26)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1980-01-01",
+          "mode": "added",
+          "source": "Edinburgh 20585 p1187 / Belfast 3738 p853 (1979-10-26)"
+        },
+        {
+          "date": "1980-05-05",
+          "mode": "added",
+          "source": "Edinburgh 20585 p1187 / Belfast 3738 p853 (1979-10-26)"
+        },
+        {
+          "date": "1980-07-14",
+          "mode": "added",
+          "source": "Belfast 3830 p547 (1980-07-04)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1980-05-26",
+          "mode": "added",
+          "source": "Edinburgh 20585 p1187 / Belfast 3738 p853 (1979-10-26)"
+        },
+        {
+          "date": "1980-12-26",
+          "mode": "added",
+          "source": "Edinburgh 20815 p1579 / Belfast 3886 p1053 (1980-12-05)"
+        }
+      ]
+    },
+    "1981": {
+      "england-and-wales": [
+        {
+          "date": "1981-01-01",
+          "mode": "added",
+          "source": "Edinburgh 20815 p1579 / Belfast 3886 p1053 (1980-12-05)"
+        },
+        {
+          "date": "1981-05-04",
+          "mode": "added",
+          "source": "Edinburgh 20815 p1579 / Belfast 3886 p1053 (1980-12-05)"
+        },
+        {
+          "date": "1981-07-29",
+          "mode": "added",
+          "source": "Edinburgh 20889 p493 / Belfast 3938 p407 (1981-04-14/24)"
+        },
+        {
+          "date": "1981-12-28",
+          "mode": "in-place-of 1981-12-26",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1981-01-01",
+          "mode": "added",
+          "source": "Edinburgh 20815 p1579 / Belfast 3886 p1053 (1980-12-05)"
+        },
+        {
+          "date": "1981-05-04",
+          "mode": "added",
+          "source": "Edinburgh 20815 p1579 / Belfast 3886 p1053 (1980-12-05)"
+        },
+        {
+          "date": "1981-07-13",
+          "mode": "added",
+          "source": "Belfast 3915 p171 (1981-02-20)"
+        },
+        {
+          "date": "1981-07-29",
+          "mode": "added",
+          "source": "Edinburgh 20889 p493 / Belfast 3938 p407 (1981-04-14/24)"
+        },
+        {
+          "date": "1981-12-28",
+          "mode": "in-place-of 1981-12-26",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1981-05-25",
+          "mode": "added",
+          "source": "Edinburgh 20815 p1579 / Belfast 3886 p1053 (1980-12-05)"
+        },
+        {
+          "date": "1981-07-29",
+          "mode": "added",
+          "source": "Edinburgh 20889 p493 / Belfast 3938 p407 (1981-04-14/24)"
+        },
+        {
+          "date": "1981-12-28",
+          "mode": "added",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        }
+      ]
+    },
+    "1982": {
+      "england-and-wales": [
+        {
+          "date": "1982-01-01",
+          "mode": "added",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        },
+        {
+          "date": "1982-05-03",
+          "mode": "added",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        },
+        {
+          "date": "1982-12-28",
+          "mode": "added",
+          "source": "Edinburgh 21139 p933 / Belfast 4108 p585 / London Supp 49033 p8403 (1982-06-25; notice only)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1982-01-01",
+          "mode": "added",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        },
+        {
+          "date": "1982-05-03",
+          "mode": "added",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        },
+        {
+          "date": "1982-07-12",
+          "mode": "added",
+          "source": "Belfast 4071 p309 (1982-03-26)"
+        },
+        {
+          "date": "1982-12-28",
+          "mode": "added",
+          "source": "Edinburgh 21139 p933 / Belfast 4108 p585 / London Supp 49033 p8403 (1982-06-25; notice only)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1982-01-04",
+          "mode": "in-place-of 1982-01-02",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        },
+        {
+          "date": "1982-05-31",
+          "mode": "added",
+          "source": "Edinburgh 20923 p778-779 / Belfast 3956 p547-548 (1981-06-12)"
+        },
+        {
+          "date": "1982-12-27",
+          "mode": "added",
+          "source": "Edinburgh 21139 p933 (1982-06-25; notice only)"
+        },
+        {
+          "date": "1982-12-28",
+          "mode": "in-place-of 1982-12-25",
+          "source": "Edinburgh 21139 p933 (1982-06-25; notice only)"
+        }
+      ]
+    },
+    "1983": {
+      "england-and-wales": [
+        {
+          "date": "1983-01-03",
+          "mode": "added",
+          "source": "Edinburgh 21139 p933 (1982-06-25; notice only)"
+        },
+        {
+          "date": "1983-05-02",
+          "mode": "added",
+          "source": "Edinburgh 21139 p933 (1982-06-25; notice only)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1983-01-03",
+          "mode": "added",
+          "source": "Edinburgh 21139 p933 (1982-06-25; notice only)"
+        },
+        {
+          "date": "1983-05-02",
+          "mode": "added",
+          "source": "Edinburgh 21139 p933 (1982-06-25; notice only)"
+        },
+        {
+          "date": "1983-07-12",
+          "mode": "added",
+          "source": "Belfast 4228 p267 (1983-03-25)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1983-01-04",
+          "mode": "in-place-of 1983-01-01",
+          "source": "Edinburgh 21139 p933 (1982-06-25; notice only)"
+        },
+        {
+          "date": "1983-05-30",
+          "mode": "added",
+          "source": "Edinburgh 21139 p933 (1982-06-25; notice only)"
+        },
+        {
+          "date": "1983-12-27",
+          "mode": "added",
+          "source": "Edinburgh 21345 p978 / Belfast 4269 p565 (1983-06-24; notice only)"
+        }
+      ]
+    },
+    "1984": {
+      "england-and-wales": [
+        {
+          "date": "1984-01-02",
+          "mode": "added",
+          "source": "Edinburgh 21345 p978 / Belfast 4269 p565 (1983-06-24; notice only)"
+        },
+        {
+          "date": "1984-05-07",
+          "mode": "added",
+          "source": "Edinburgh 21345 p978 / Belfast 4269 p565 (1983-06-24; notice only)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1984-01-02",
+          "mode": "added",
+          "source": "Edinburgh 21345 p978 / Belfast 4269 p565 (1983-06-24; notice only)"
+        },
+        {
+          "date": "1984-03-19",
+          "mode": "in-place-of 1984-03-17",
+          "source": "Belfast 4367 p67 (1984-02-03)"
+        },
+        {
+          "date": "1984-05-07",
+          "mode": "added",
+          "source": "Edinburgh 21345 p978 / Belfast 4269 p565 (1983-06-24; notice only)"
+        },
+        {
+          "date": "1984-07-12",
+          "mode": "added",
+          "source": "Belfast 4367 p67 (1984-02-03)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1984-05-28",
+          "mode": "added",
+          "source": "Edinburgh 21345 p978 / Belfast 4269 p565 (1983-06-24; notice only)"
+        },
+        {
+          "date": "1984-12-26",
+          "mode": "added",
+          "source": "Edinburgh 21555 p939 / London 49792 p8947 / Belfast 4432 p455 (1984-06-29; notice only)"
+        }
+      ]
+    },
+    "1985": {
+      "england-and-wales": [
+        {
+          "date": "1985-01-01",
+          "mode": "added",
+          "source": "Edinburgh 21555 p939 / London 49792 p8947 / Belfast 4432 p455 (1984-06-29; notice only)"
+        },
+        {
+          "date": "1985-05-06",
+          "mode": "added",
+          "source": "Edinburgh 21555 p939 / London 49792 p8947 / Belfast 4432 p455 (1984-06-29; notice only)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1985-01-01",
+          "mode": "added",
+          "source": "Edinburgh 21555 p939 / London 49792 p8947 / Belfast 4432 p455 (1984-06-29; notice only)"
+        },
+        {
+          "date": "1985-05-06",
+          "mode": "added",
+          "source": "Edinburgh 21555 p939 / London 49792 p8947 / Belfast 4432 p455 (1984-06-29; notice only)"
+        },
+        {
+          "date": "1985-07-12",
+          "mode": "added",
+          "source": "Belfast 4518 p37 (1985-01-18)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1985-05-27",
+          "mode": "added",
+          "source": "Edinburgh 21555 p939 / London 49792 p8947 / Belfast 4432 p455 (1984-06-29; notice only)"
+        },
+        {
+          "date": "1985-12-26",
+          "mode": "added",
+          "source": "Edinburgh 21780 p1143 / London 50218 p10661 / Belfast 4601 p723 (1985-08-02)"
+        }
+      ]
+    },
+    "1986": {
+      "england-and-wales": [
+        {
+          "date": "1986-01-01",
+          "mode": "added",
+          "source": "Edinburgh 21780 p1143 / London 50218 p10661 / Belfast 4601 p723 (1985-08-02)"
+        },
+        {
+          "date": "1986-05-05",
+          "mode": "added",
+          "source": "Edinburgh 21780 p1143 / London 50218 p10661 / Belfast 4601 p723 (1985-08-02)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1986-01-01",
+          "mode": "added",
+          "source": "Edinburgh 21780 p1143 / London 50218 p10661 / Belfast 4601 p723 (1985-08-02)"
+        },
+        {
+          "date": "1986-05-05",
+          "mode": "added",
+          "source": "Edinburgh 21780 p1143 / London 50218 p10661 / Belfast 4601 p723 (1985-08-02)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1986-05-26",
+          "mode": "added",
+          "source": "Edinburgh 21780 p1143 / London 50218 p10661 / Belfast 4601 p723 (1985-08-02)"
+        }
+      ]
+    },
+    "1987": {
+      "england-and-wales": [
+        {
+          "date": "1987-12-28",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1987-12-28",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1987-12-28",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only)"
+        }
+      ]
+    },
+    "1988": {
+      "england-and-wales": [
+        {
+          "date": "1988-01-01",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only)"
+        },
+        {
+          "date": "1988-05-02",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1988-01-01",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only)"
+        },
+        {
+          "date": "1988-05-02",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1988-01-04",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only; no 'in place of' wording)"
+        },
+        {
+          "date": "1988-05-30",
+          "mode": "added",
+          "source": "Edinburgh 22161 p879 / London 50964 p7607 (1987-06-12/15; notice only)"
+        },
+        {
+          "date": "1988-12-27",
+          "mode": "added",
+          "source": "Edinburgh 22415 p1333 (1988-09-06)"
+        }
+      ]
+    },
+    "1989": {
+      "england-and-wales": [
+        {
+          "date": "1989-01-02",
+          "mode": "added",
+          "source": "Edinburgh 22415 p1333 (1988-09-06)"
+        },
+        {
+          "date": "1989-05-01",
+          "mode": "added",
+          "source": "Edinburgh 22415 p1333 (1988-09-06)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1989-01-02",
+          "mode": "added",
+          "source": "Edinburgh 22415 p1333 (1988-09-06)"
+        },
+        {
+          "date": "1989-05-01",
+          "mode": "added",
+          "source": "Edinburgh 22415 p1333 (1988-09-06)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1989-05-29",
+          "mode": "added",
+          "source": "Edinburgh 22415 p1333 (1988-09-06)"
+        },
+        {
+          "date": "1989-12-26",
+          "mode": "added",
+          "source": "Edinburgh 22613 p1411 / London 51855 p9961 (1989-08-25/29)"
+        }
+      ]
+    },
+    "1990": {
+      "england-and-wales": [
+        {
+          "date": "1990-01-01",
+          "mode": "added",
+          "source": "Edinburgh 22613 p1411 / London 51855 p9961 (1989-08-25/29)"
+        },
+        {
+          "date": "1990-05-07",
+          "mode": "added",
+          "source": "Edinburgh 22613 p1411 / London 51855 p9961 (1989-08-25/29)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1990-01-01",
+          "mode": "added",
+          "source": "Edinburgh 22613 p1411 / London 51855 p9961 (1989-08-25/29)"
+        },
+        {
+          "date": "1990-05-07",
+          "mode": "added",
+          "source": "Edinburgh 22613 p1411 / London 51855 p9961 (1989-08-25/29)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1990-05-28",
+          "mode": "added",
+          "source": "Edinburgh 22613 p1411 / London 51855 p9961 (1989-08-25/29)"
+        },
+        {
+          "date": "1990-12-26",
+          "mode": "added",
+          "source": "Edinburgh 22787 p1255 / London 52202 p11411 (1990-07-03/04)"
+        }
+      ]
+    },
+    "1991": {
+      "england-and-wales": [
+        {
+          "date": "1991-01-01",
+          "mode": "added",
+          "source": "Edinburgh 22787 p1255 / London 52202 p11411 (1990-07-03/04)"
+        },
+        {
+          "date": "1991-05-06",
+          "mode": "added",
+          "source": "Edinburgh 22787 p1255 / London 52202 p11411 (1990-07-03/04)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1991-01-01",
+          "mode": "added",
+          "source": "Edinburgh 22787 p1255 / London 52202 p11411 (1990-07-03/04)"
+        },
+        {
+          "date": "1991-05-06",
+          "mode": "added",
+          "source": "Edinburgh 22787 p1255 / London 52202 p11411 (1990-07-03/04)"
+        },
+        {
+          "date": "1991-07-12",
+          "mode": "added",
+          "source": "Belfast 5180 p110 (1991-02-01)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1991-05-27",
+          "mode": "added",
+          "source": "Edinburgh 22787 p1255 / London 52202 p11411 (1990-07-03/04)"
+        },
+        {
+          "date": "1991-12-26",
+          "mode": "added",
+          "source": "Edinburgh 22989 p1767 / Belfast 5222 p647 (1991-06-28)"
+        }
+      ]
+    },
+    "1992": {
+      "england-and-wales": [
+        {
+          "date": "1992-01-01",
+          "mode": "added",
+          "source": "Edinburgh 22989 p1767 / Belfast 5222 p647 (1991-06-28)"
+        },
+        {
+          "date": "1992-05-04",
+          "mode": "added",
+          "source": "Edinburgh 22989 p1767 / Belfast 5222 p647 (1991-06-28)"
+        },
+        {
+          "date": "1992-12-28",
+          "mode": "in-place-of 1992-12-26",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1992-01-01",
+          "mode": "added",
+          "source": "Edinburgh 22989 p1767 / Belfast 5222 p647 (1991-06-28)"
+        },
+        {
+          "date": "1992-05-04",
+          "mode": "added",
+          "source": "Edinburgh 22989 p1767 / Belfast 5222 p647 (1991-06-28)"
+        },
+        {
+          "date": "1992-07-13",
+          "mode": "added",
+          "source": "Belfast 5291 p205 (1992-03-06)"
+        },
+        {
+          "date": "1992-12-28",
+          "mode": "in-place-of 1992-12-26",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1992-05-25",
+          "mode": "added",
+          "source": "Edinburgh 22989 p1767 / Belfast 5222 p647 (1991-06-28)"
+        },
+        {
+          "date": "1992-12-28",
+          "mode": "added",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        }
+      ]
+    },
+    "1993": {
+      "england-and-wales": [
+        {
+          "date": "1993-01-01",
+          "mode": "added",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        },
+        {
+          "date": "1993-05-03",
+          "mode": "added",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        },
+        {
+          "date": "1993-12-28",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1993-01-01",
+          "mode": "added",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        },
+        {
+          "date": "1993-05-03",
+          "mode": "added",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        },
+        {
+          "date": "1993-07-12",
+          "mode": "added",
+          "source": "Belfast 5388 p103 (1993-02-05)"
+        },
+        {
+          "date": "1993-12-28",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1993-01-04",
+          "mode": "in-place-of 1993-01-02",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        },
+        {
+          "date": "1993-05-31",
+          "mode": "added",
+          "source": "Belfast 5317 p529 / London Supp 52944 p9671 / Edinburgh 23183 p1827 (1992-06-05/08/09)"
+        },
+        {
+          "date": "1993-12-27",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        },
+        {
+          "date": "1993-12-28",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        }
+      ]
+    },
+    "1994": {
+      "england-and-wales": [
+        {
+          "date": "1994-01-03",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        },
+        {
+          "date": "1994-05-02",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1994-01-03",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        },
+        {
+          "date": "1994-05-02",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        },
+        {
+          "date": "1994-07-12",
+          "mode": "added",
+          "source": "Belfast 5494 p149 (1994-02-18)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1994-01-04",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02; no 'in place of' wording)"
+        },
+        {
+          "date": "1994-05-30",
+          "mode": "added",
+          "source": "Edinburgh 23399 p2381 / Belfast 5431 p631 (1993-06-29/07-02)"
+        },
+        {
+          "date": "1994-12-27",
+          "mode": "added",
+          "source": "London 53715 p9221 / Edinburgh 23603 p1549 / Belfast 5533 p631 (1994-06-27/28/07-01)"
+        }
+      ]
+    },
+    "1995": {
+      "england-and-wales": [
+        {
+          "date": "1995-01-02",
+          "mode": "added",
+          "source": "London 53715 p9221 / Edinburgh 23603 p1549 / Belfast 5533 p631 (1994-06-27/28/07-01)"
+        },
+        {
+          "date": "1995-05-08",
+          "mode": "added",
+          "source": "London 53715 p9221 / Edinburgh 23603 p1549 / Belfast 5533 p631 (1994-06-27/28/07-01)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1995-01-02",
+          "mode": "added",
+          "source": "London 53715 p9221 / Edinburgh 23603 p1549 / Belfast 5533 p631 (1994-06-27/28/07-01)"
+        },
+        {
+          "date": "1995-05-08",
+          "mode": "added",
+          "source": "London 53715 p9221 / Edinburgh 23603 p1549 / Belfast 5533 p631 (1994-06-27/28/07-01)"
+        },
+        {
+          "date": "1995-07-12",
+          "mode": "added",
+          "source": "Belfast 5594 p97 (1995-02-03)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1995-05-08",
+          "mode": "added",
+          "source": "London 53715 p9221 / Edinburgh 23603 p1549 / Belfast 5533 p631 (1994-06-27/28/07-01)"
+        },
+        {
+          "date": "1995-05-29",
+          "mode": "added",
+          "source": "London 53715 p9221 / Edinburgh 23603 p1549 / Belfast 5533 p631 (1994-06-27/28/07-01)"
+        },
+        {
+          "date": "1995-12-26",
+          "mode": "added",
+          "source": "Edinburgh 23811 p1715 / Belfast 5638 p613 (1995-07-04/07)"
+        }
+      ]
+    },
+    "1996": {
+      "england-and-wales": [
+        {
+          "date": "1996-01-01",
+          "mode": "added",
+          "source": "Edinburgh 23811 p1715 / Belfast 5638 p613 (1995-07-04/07)"
+        },
+        {
+          "date": "1996-05-06",
+          "mode": "added",
+          "source": "Edinburgh 23811 p1715 / Belfast 5638 p613 (1995-07-04/07)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1996-01-01",
+          "mode": "added",
+          "source": "Edinburgh 23811 p1715 / Belfast 5638 p613 (1995-07-04/07)"
+        },
+        {
+          "date": "1996-05-06",
+          "mode": "added",
+          "source": "Edinburgh 23811 p1715 / Belfast 5638 p613 (1995-07-04/07)"
+        },
+        {
+          "date": "1996-07-12",
+          "mode": "added",
+          "source": "Belfast 5702 p183 (1996-02-23)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1996-05-27",
+          "mode": "added",
+          "source": "Edinburgh 23811 p1715 / Belfast 5638 p613 (1995-07-04/07)"
+        },
+        {
+          "date": "1996-12-26",
+          "mode": "added",
+          "source": "Edinburgh 24019 p1669 / Belfast 5742 p667 (1996-07-09/12)"
+        }
+      ]
+    },
+    "1997": {
+      "england-and-wales": [
+        {
+          "date": "1997-01-01",
+          "mode": "added",
+          "source": "Edinburgh 24019 p1669 / Belfast 5742 p667 (1996-07-09/12)"
+        },
+        {
+          "date": "1997-05-05",
+          "mode": "added",
+          "source": "Edinburgh 24019 p1669 / Belfast 5742 p667 (1996-07-09/12)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1997-01-01",
+          "mode": "added",
+          "source": "Edinburgh 24019 p1669 / Belfast 5742 p667 (1996-07-09/12)"
+        },
+        {
+          "date": "1997-05-05",
+          "mode": "added",
+          "source": "Edinburgh 24019 p1669 / Belfast 5742 p667 (1996-07-09/12)"
+        },
+        {
+          "date": "1997-07-14",
+          "mode": "added",
+          "source": "Belfast 5804 p183 (1997-02-28)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1997-05-26",
+          "mode": "added",
+          "source": "Edinburgh 24019 p1669 / Belfast 5742 p667 (1996-07-09/12)"
+        },
+        {
+          "date": "1997-12-26",
+          "mode": "added",
+          "source": "Edinburgh 24230 p1785-1786 / Belfast 5845 p669 (1997-07-18)"
+        }
+      ]
+    },
+    "1998": {
+      "england-and-wales": [
+        {
+          "date": "1998-01-01",
+          "mode": "added",
+          "source": "Edinburgh 24230 p1785-1786 / Belfast 5845 p669 (1997-07-18)"
+        },
+        {
+          "date": "1998-05-04",
+          "mode": "added",
+          "source": "Edinburgh 24230 p1785-1786 / Belfast 5845 p669 (1997-07-18)"
+        },
+        {
+          "date": "1998-12-28",
+          "mode": "in-place-of 1998-12-26",
+          "source": "L-55182-5SI (1998-06-30, added); L-55364-1SI (1999-01-04, re-made as in place of)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1998-01-01",
+          "mode": "added",
+          "source": "Edinburgh 24230 p1785-1786 / Belfast 5845 p669 (1997-07-18)"
+        },
+        {
+          "date": "1998-05-04",
+          "mode": "added",
+          "source": "Edinburgh 24230 p1785-1786 / Belfast 5845 p669 (1997-07-18)"
+        },
+        {
+          "date": "1998-07-13",
+          "mode": "added",
+          "source": "Belfast 5902 p115 (1998-02-06)"
+        },
+        {
+          "date": "1998-12-28",
+          "mode": "in-place-of 1998-12-26",
+          "source": "L-55182-5SI (1998-06-30, added); L-55364-1SI (1999-01-04, re-made as in place of)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1998-05-25",
+          "mode": "added",
+          "source": "Edinburgh 24230 p1785-1786 / Belfast 5845 p669 (1997-07-18)"
+        },
+        {
+          "date": "1998-12-28",
+          "mode": "added",
+          "source": "L-55182-5SI / Edinburgh 24425 p1783 / Belfast 5945 p635 (1998-06-30/07-03)"
+        }
+      ]
+    },
+    "1999": {
+      "england-and-wales": [
+        {
+          "date": "1999-01-01",
+          "mode": "added",
+          "source": "L-55182-5SI / Edinburgh 24425 p1783 / Belfast 5945 p635 (1998-06-30/07-03)"
+        },
+        {
+          "date": "1999-05-03",
+          "mode": "added",
+          "source": "L-55182-5SI / Edinburgh 24425 p1783 / Belfast 5945 p635 (1998-06-30/07-03)"
+        },
+        {
+          "date": "1999-12-28",
+          "mode": "added",
+          "source": "L-55541-3 / Edinburgh 24633 p1433-1434 / Belfast 6048 p617-618 (1999-07-02/06)"
+        },
+        {
+          "date": "1999-12-31",
+          "mode": "added",
+          "source": "L-55541-3 / Edinburgh 24633 p1433-1434 / Belfast 6048 p617-618 (1999-07-02/06)"
+        }
+      ],
+      "northern-ireland": [
+        {
+          "date": "1999-01-01",
+          "mode": "added",
+          "source": "L-55182-5SI / Edinburgh 24425 p1783 / Belfast 5945 p635 (1998-06-30/07-03)"
+        },
+        {
+          "date": "1999-05-03",
+          "mode": "added",
+          "source": "L-55182-5SI / Edinburgh 24425 p1783 / Belfast 5945 p635 (1998-06-30/07-03)"
+        },
+        {
+          "date": "1999-07-12",
+          "mode": "added",
+          "source": "Belfast 6004 p63 (1999-01-29)"
+        },
+        {
+          "date": "1999-12-28",
+          "mode": "added",
+          "source": "L-55541-3 / Edinburgh 24633 p1433-1434 / Belfast 6048 p617-618 (1999-07-02/06)"
+        },
+        {
+          "date": "1999-12-31",
+          "mode": "added",
+          "source": "L-55541-3 / Edinburgh 24633 p1433-1434 / Belfast 6048 p617-618 (1999-07-02/06)"
+        }
+      ],
+      "scotland": [
+        {
+          "date": "1999-01-04",
+          "mode": "in-place-of 1999-01-02",
+          "source": "L-55182-5SI (added); L-55364-1SI / Belfast 5995 p1227-1228 / Edinburgh 24531 p19-20 (re-made as in place of)"
+        },
+        {
+          "date": "1999-05-31",
+          "mode": "added",
+          "source": "L-55182-5SI / Edinburgh 24425 p1783 / Belfast 5945 p635 (1998-06-30/07-03)"
+        },
+        {
+          "date": "1999-12-27",
+          "mode": "added",
+          "source": "L-55541-3 / Edinburgh 24633 p1433-1434 / Belfast 6048 p617-618 (1999-07-02/06)"
+        },
+        {
+          "date": "1999-12-28",
+          "mode": "in-place-of 1999-12-25",
+          "source": "L-55541-3 / Edinburgh 24633 p1433-1434 / Belfast 6048 p617-618 (1999-07-02/06)"
+        },
+        {
+          "date": "1999-12-31",
+          "mode": "added",
+          "source": "L-55541-3 / Edinburgh 24633 p1433-1434 / Belfast 6048 p617-618 (1999-07-02/06)"
+        }
+      ]
+    }
+  }
+}

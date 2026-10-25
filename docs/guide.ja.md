@@ -38,6 +38,39 @@ isHoliday(new Date("2026-11-22T15:30:00Z")); // true（日本時間では 11/23�
 
 `confirmed` は、その日付が公式に確定しているかを表します。春分・秋分の日は前年 2 月の官報で確定するため、それより先の年は近似式による予測（`confirmed: false`）です。
 
+### 英国の bank holidays
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { england, northernIreland, scotland, wales } from "bizdays-toolkit/uk";
+
+const edinburgh = createCalendar({ holidays: scotland, closedWeekdays: [0, 6] });
+edinburgh.isBusinessDay("2026-01-02"); // false（2nd January）
+edinburgh.addBusinessDays("2026-06-12", 1); // "2026-06-16"（6/15 は World Cup bank holiday）
+
+scotland.holidaysInYear(2026)[0];
+// { date: "2026-01-01", name: "New Year’s Day", nameEn: "New Year’s Day", kind: "regular", confirmed: true, key: "new-year" }
+wales.holidaysInYear(2026)[0]?.names; // { cy: "Dydd Calan" }
+
+// 複数の地域にまたがる場合は和集合（いずれかの地域の祝日を祝日とする）
+const ukWide = createCalendar({ holidays: [england, scotland, northernIreland] });
+```
+
+| 提供元            | ID       | GOV.UK の区分     | 備考                                       |
+| ----------------- | -------- | ----------------- | ------------------------------------------ |
+| `england`         | `GB-ENG` | England and Wales |                                            |
+| `wales`           | `GB-WLS` | England and Wales | ウェールズ語の名称（`names.cy`）が付く     |
+| `scotland`        | `GB-SCT` | Scotland          | 2nd January・St Andrew’s Day など          |
+| `northernIreland` | `GB-NIR` | Northern Ireland  | St Patrick’s Day・Battle of the Boyne など |
+
+- `kind` は `regular`（毎年の祝日。布告で日付が移動した年を含む）・`substitute`（土曜日・日曜日に当たった祝日の振替）・`special`（記念式典・国葬などの布告による臨時の祝日）のいずれかです。振替の `name` は元の祝日の名称です（GOV.UK と同じ）
+- England と Wales は GOV.UK では 1 つの区分で、日付は現在同じですが、別の提供元にしています。将来分かれても、コードを変えずに済みます
+- 対応年は 1974〜2099 年です。GOV.UK が日付を公表している年（`confirmedThrough`、現在は 2028 年）より後は、規則による予測（`confirmed: false`）です。臨時の祝日は発表されるまで分からないため、予測の年には含まれません
+- 2000〜2011 年は GOV.UK のデータがない年です。この期間は、当時の政府が公表した一覧（DTI・BERR・directgov・Scottish Executive/Government・nidirect。Wayback Machine の保存）を正とし、The Gazette の国王の布告と北アイルランドの Order で全日を照合しています（出典は [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md)）。Scotland の 3 日（2010 年 1 月 4 日・2010 年 12 月 27 日・2011 年 1 月 4 日）は当時の政府の一覧にはあるものの布告がなく、1971 年法の文言どおりなら bank holiday ではありませんが、提供元は政府の一覧に従って振替日として返します。
+- 1974〜1999 年は Web 以前で、当時の政府の一覧は残っていないので、The Gazette の国王の布告と北アイルランドの Order が正です（Hansard の書面答弁がある年はそれを第二の出典とし、日付の食い違いはありません）。この期間の祝日はすべて、1971 年法 Schedule 1 の日か、[docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md) に記録した布告で指定された日です。布告が見つからなかった少数の日（1987 年分の毎年の布告と、The Gazette の索引の欠けに当たる 1975 年・1986〜1990 年の北アイルランドの Order）は規則どおりに返し、フィクスチャに `unverified` として記録しています。下限が 1974 年なのは、England・Wales・NI の New Year's Day が 1974 年から毎年布告されているためです（Early May は 1978 年から、Scotland の Spring も 1978 年から。提供元はこの始まりを符号化しているのであって、法の附則の変更ではありません）。名称も当時の一覧に従うので、振替日の割り当てが今の GOV.UK と違う年があります（2004 年は 12 月 27 日が Boxing Day で 28 日が Christmas Day、2000 年・2005 年の Scotland は 1 月 3 日が 2nd January で 4 日が New Year’s Day）
+- Scotland の地域（council）ごとの休日は含みません。また、bank holiday に休むかどうかは雇用契約などによります
+- 臨時の祝日は 10 日ほど前に発表されることがあります。GOV.UK との差分を毎日監視し、見つけたらパッチ版で反映します
+
 ### フランスの祝日
 
 ```ts
@@ -69,39 +102,8 @@ company.isBusinessDay("2026-05-25"); // true
 - `name` は data.gouv.fr の表記（フランス語。`1er mai`・`Lundi de Pentecôte`）、`nameEn` は英訳、`key` は安定した識別子（`labour-day`・`pentecost-monday` など。[祝日の識別子](#祝日の識別子)）
 - 2 つの祝日が同じ日に当たる年（2008 年の 5 月 1 日と 2059 年の 5 月 8 日が Ascension）は、data.gouv.fr の JSON と同じく復活祭から決まる祝日の名称・`key` で 1 件を返します。`keys: ["labour-day"]` は 2008 年の 5 月 1 日には当てはまりません
 - Lundi de Pentecôte は多くの企業が出勤日にしています（連帯の日）が、法律上は祝日のままなので、提供元は祝日として返します。出勤日にするなら上のように祝日の規則 `keys: ["pentecost-monday"]` で書きます。祝日を休みにするかどうかは利用者が決める、というこのライブラリ全体の分担です
-- 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年・未来 5 年の窓で現在 2006〜2031 年）と照合しています。差分は毎日監視しています
+- 対応年は 1974〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年・未来 5 年の窓で現在 2006〜2031 年）と照合しています。差分は毎日監視しています
 - `FR-AM` は Alsace-Moselle（Bas-Rhin・Haut-Rhin・Moselle の 3 県）に対するこのライブラリの ID です（ISO 3166-2 に 1 つのコードがないため）。祝日もタイムゾーンも違う海外県・海外領土は同梱していません
-
-### 英国の bank holidays
-
-```ts
-import { createCalendar } from "bizdays-toolkit";
-import { england, northernIreland, scotland, wales } from "bizdays-toolkit/uk";
-
-const edinburgh = createCalendar({ holidays: scotland, closedWeekdays: [0, 6] });
-edinburgh.isBusinessDay("2026-01-02"); // false（2nd January）
-edinburgh.addBusinessDays("2026-06-12", 1); // "2026-06-16"（6/15 は World Cup bank holiday）
-
-scotland.holidaysInYear(2026)[0];
-// { date: "2026-01-01", name: "New Year’s Day", nameEn: "New Year’s Day", kind: "regular", confirmed: true, key: "new-year" }
-wales.holidaysInYear(2026)[0]?.names; // { cy: "Dydd Calan" }
-
-// 複数の地域にまたがる場合は和集合（いずれかの地域の祝日を祝日とする）
-const ukWide = createCalendar({ holidays: [england, scotland, northernIreland] });
-```
-
-| 提供元            | ID       | GOV.UK の区分     | 備考                                       |
-| ----------------- | -------- | ----------------- | ------------------------------------------ |
-| `england`         | `GB-ENG` | England and Wales |                                            |
-| `wales`           | `GB-WLS` | England and Wales | ウェールズ語の名称（`names.cy`）が付く     |
-| `scotland`        | `GB-SCT` | Scotland          | 2nd January・St Andrew’s Day など          |
-| `northernIreland` | `GB-NIR` | Northern Ireland  | St Patrick’s Day・Battle of the Boyne など |
-
-- `kind` は `regular`（毎年の祝日。布告で日付が移動した年を含む）・`substitute`（土曜日・日曜日に当たった祝日の振替）・`special`（記念式典・国葬などの布告による臨時の祝日）のいずれかです。振替の `name` は元の祝日の名称です（GOV.UK と同じ）
-- England と Wales は GOV.UK では 1 つの区分で、日付は現在同じですが、別の提供元にしています。将来分かれても、コードを変えずに済みます
-- 対応年は 2012〜2099 年です。GOV.UK が日付を公表している年（`confirmedThrough`、現在は 2028 年）より後は、規則による予測（`confirmed: false`）です。臨時の祝日は発表されるまで分からないため、予測の年には含まれません
-- Scotland の地域（council）ごとの休日は含みません。また、bank holiday に休むかどうかは雇用契約などによります
-- 臨時の祝日は 10 日ほど前に発表されることがあります。GOV.UK との差分を毎日監視し、見つけたらパッチ版で反映します
 
 ### シンガポールの祝日
 
@@ -143,8 +145,8 @@ jp.holidaysInYear(2020).find((h) => h.date === "2020-02-24")?.key; // "emperors-
 | 提供元                       | 識別子                                                                                                                                                                                                                                                            |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `jp`                         | `new-year`、`coming-of-age`、`national-foundation`、`emperors-birthday`、`vernal-equinox`、`showa`、`constitution-memorial`、`greenery`、`childrens`、`marine`、`mountain`、`respect-for-the-aged`、`autumnal-equinox`、`sports`、`culture`、`labor-thanksgiving` |
-| `metropole` ほか（フランス） | `new-year`、`easter-monday`、`labour-day`、`victory-in-europe`、`ascension`、`pentecost-monday`、`bastille`、`assumption`、`all-saints`、`armistice`、`christmas`。Alsace-Moselle は `good-friday`・`saint-stephens` が加わる                                     |
 | `england` ほか（英国）       | `new-year`、`2nd-january`、`st-patricks`、`good-friday`、`easter-monday`、`early-may`、`spring`、`battle-of-the-boyne`、`summer`、`st-andrews`、`christmas`、`boxing-day`                                                                                         |
+| `metropole` ほか（フランス） | `new-year`、`easter-monday`、`labour-day`、`victory-in-europe`、`ascension`、`pentecost-monday`、`bastille`、`assumption`、`all-saints`、`armistice`、`christmas`。Alsace-Moselle は `good-friday`・`saint-stephens` が加わる                                     |
 | `sg`                         | `new-year`、`chinese-new-year`、`good-friday`、`labour-day`、`hari-raya-puasa`、`vesak`、`hari-raya-haji`、`national-day`、`deepavali`、`christmas`                                                                                                               |
 
 型 `KnownJapaneseHolidayKey`・`KnownUkHolidayKey`・`KnownSgHolidayKey`・`KnownFrHolidayKey` がこの一覧を持ち、エディターの補完に使えます（`@beta`）。識別子は英語名から 1 度だけ導いたもので（小文字にし、空白をハイフンに、アポストロフィを除き、末尾の "Day" を落とす）、綴りは提供元の英語名に従います（日本は `labor-thanksgiving`、シンガポールは `labour-day`）。自作の提供元にも `key` を付けられます（[他の国・地域の祝日](./providers.ja.md)）。
@@ -631,7 +633,7 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## 対応年の外
 
-祝日の提供元の対応年（日本は 1955〜2099 年、フランスは 2000〜2099 年、英国は 2012〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRange: "ignore"` を指定してください。
+祝日の提供元の対応年（日本は 1955〜2099 年、英国は 1974〜2099 年、フランスは 2000〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRange: "ignore"` を指定してください。
 
 ## 未確定の祝日
 

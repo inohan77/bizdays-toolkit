@@ -18,14 +18,14 @@ test("提供元の ID・タイムゾーン・対応年", () => {
   );
   for (const p of [england, wales, scotland, northernIreland]) {
     assert.equal(p.timeZone, "Europe/London");
-    assert.deepEqual(p.supportedYears, { from: 2012, to: 2099 });
+    assert.deepEqual(p.supportedYears, { from: 1974, to: 2099 });
   }
 });
 
 test("対応年の外は out-of-range", () => {
   const calendar = createCalendar({ holidays: scotland });
   assert.throws(
-    () => calendar.isHoliday("2011-12-26"),
+    () => calendar.isHoliday("1973-12-31"),
     (e: unknown) => isBizdaysError(e) && e.code === "out-of-range",
   );
   assert.throws(() => calendar.isHoliday("2100-01-01"));
