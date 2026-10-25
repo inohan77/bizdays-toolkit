@@ -139,26 +139,17 @@ const SPECIAL_DAYS: readonly {
   readonly name: string;
   readonly divisions: readonly UkDivision[];
 }[] = [
-  // 臨時の祝日の名称は布告にはなく（布告は日付だけを指定する）、政府の答弁の呼び方による。固有の呼び方が公式の文書にない日は
-  // 中立の "Additional bank holiday" に、政府の答弁が述べた理由を括弧で添える（GOV.UK の 2020 年 "Early May bank holiday (VE day)" と同じ形。
-  // docs/sources/uk-bank-holidays-1974-1999.md の名称の節）
-  // 1977 年の Silver Jubilee: England・Wales・NI は 6 月 7 日を追加（Spring は 6 月 6 日に移動）。Scotland は 6 月 6 日だけを追加。
-  // 名称は Hansard 1975-12-18 の公式プログラム "Tuesday 7th (Silver Jubilee Bank Holiday)" と 1977-01-19 "a special Silver Jubilee Bank Holiday"、
-  // Scotland は 1976-06-28 "a Jubilee holiday in Scotland"
+  // 名称の根拠と、固有の名称のない日に理由を括弧で添える規則: docs/sources/uk-bank-holidays-1974-1999.md 第 5 節
+  // 1977 年 Silver Jubilee: England・Wales・NI は 6/7 を追加（Spring は 6/6 に移動）、Scotland は 6/6 だけ
   { date: "1977-06-06", name: "Silver Jubilee bank holiday", divisions: SCOTLAND },
   { date: "1977-06-07", name: "Silver Jubilee bank holiday", divisions: NOT_SCOTLAND },
-  // 名称は The London Gazette 48690（1981-07-27）の告示の見出し "ROYAL WEDDING BANK HOLIDAY" と Hansard 1981-07-30 の答弁 "the public holiday on 29 July for the Royal Wedding"
   { date: "1981-07-29", name: "Royal Wedding bank holiday", divisions: ALL },
-  // 1995 年の VE Day 50 周年: England・Wales・NI は Early May を 5 月 8 日に移動、Scotland は 5 月 1 日（附則）に加えて 8 日を追加。
-  // 政府は Scotland の分を "an additional day's bank holiday" とだけ呼び（Hansard 1993-12-16・1995-03-02）、固有の名称はない。
-  // 括弧は Hansard 1993-12-16 の理由 "commemorating the 50th anniversary of the ending of the second world war" による
+  // 1995 年: England・Wales・NI は Early May を 5/8 に移動、Scotland は附則の 5/1 に加えて 5/8 を追加
   {
     date: "1995-05-08",
     name: "Additional bank holiday (VE Day 50th anniversary)",
     divisions: SCOTLAND,
   },
-  // 政府は "a one-off additional Bank Holiday throughout the United Kingdom on Friday, 31 December 1999" と呼び（Hansard 1998-06-03）、
-  // 固有の名称はない。括弧は同じ答弁の "the year 2000 will be heralded by" と質問の "to mark the Millennium" による
   { date: "1999-12-31", name: "Additional bank holiday (Millennium)", divisions: ALL },
   { date: "2002-06-03", name: "Golden Jubilee bank holiday", divisions: ALL },
   { date: "2011-04-29", name: "Royal Wedding bank holiday", divisions: ALL },
@@ -189,13 +180,11 @@ const RENAMED: readonly {
   readonly kind: KnownUkHolidayKind;
   readonly key: KnownUkHolidayKey;
 }[] = [
-  // 12 月 25 日が土曜日の年（1976・1982・1993・1999・2004）: 27 日は附則の「25・26 日が日曜日の年の 27 日」（Boxing Day の代わり）、
-  // 28 日は Christmas Day の代わり。割り当ての文言があるのは 1982・1999 年の Scotland の布告（"in place of Saturday, 25th December"）、
-  // 2004 年の政府の一覧、1976 年の Hansard 1976-07-27 だけで、1993 年と England・Wales・NI の 28 日（布告はどの日の代わりかを書かない）は
-  // それに揃えた（docs/sources/uk-bank-holidays-1974-1999.md の付録 C）
+  // 振替日の名称の割り当て。当時の一覧・布告・Hansard の文言に揃える（根拠: docs/sources/uk-bank-holidays-1974-1999.md 付録 C、
+  // docs/sources/uk-bank-holidays-2000-2011.md）。12/25 が土曜日の年: 27 日が Boxing Day、28 日が Christmas Day の代わり
   { divisions: ALL, date: "1976-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
   { divisions: ALL, date: "1976-12-28", name: CHRISTMAS, kind: "substitute", key: "christmas" },
-  // 1 月 1 日が土曜日の年の Scotland（1977・1983・1994・2000・2005）: 3 日は附則の「1 月 2 日が日曜日なら 3 日」、4 日は布告で New Year’s Day の代わり
+  // 1/1 が土曜日の年の Scotland: 3 日が 2nd January（附則）、4 日が New Year’s Day の代わり
   {
     divisions: SCOTLAND,
     date: "1977-01-03",
@@ -204,7 +193,7 @@ const RENAMED: readonly {
     key: "2nd-january",
   },
   { divisions: SCOTLAND, date: "1977-01-04", name: NEW_YEAR, kind: "substitute", key: "new-year" },
-  // 12 月 25 日が日曜日の年の Scotland（1977・1983・1988・1994・2005）: 26 日は附則の Christmas Day の振替、27 日は布告で追加された Boxing Day
+  // 12/25 が日曜日の年の Scotland: 26 日が Christmas Day（附則）、27 日が Boxing Day（布告）
   {
     divisions: SCOTLAND,
     date: "1977-12-26",
@@ -259,7 +248,6 @@ const RENAMED: readonly {
   { divisions: SCOTLAND, date: "1994-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
   { divisions: ALL, date: "1999-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
   { divisions: ALL, date: "1999-12-28", name: CHRISTMAS, kind: "substitute", key: "christmas" },
-  // 2000 年・2005 年の Scotland: 布告は 1 月 4 日を「1 月 1 日（土）の代わり」とし、1 月 3 日は附則の「1 月 2 日が日曜日なら 3 日」
   {
     divisions: SCOTLAND,
     date: "2000-01-03",
@@ -268,7 +256,6 @@ const RENAMED: readonly {
     key: "2nd-january",
   },
   { divisions: SCOTLAND, date: "2000-01-04", name: NEW_YEAR, kind: "substitute", key: "new-year" },
-  // 2004 年: 12 月 27 日は附則の「25・26 日が日曜日の年の 27 日」（Boxing Day の代わり）、28 日は布告で Christmas Day の代わり
   { divisions: ALL, date: "2004-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
   { divisions: ALL, date: "2004-12-28", name: CHRISTMAS, kind: "substitute", key: "christmas" },
   {
@@ -279,7 +266,6 @@ const RENAMED: readonly {
     key: "2nd-january",
   },
   { divisions: SCOTLAND, date: "2005-01-04", name: NEW_YEAR, kind: "substitute", key: "new-year" },
-  // 2005 年の Scotland: 12 月 26 日は附則の「Christmas Day が日曜日なら 26 日」、27 日は布告で追加された Boxing Day
   {
     divisions: SCOTLAND,
     date: "2005-12-26",
@@ -288,7 +274,7 @@ const RENAMED: readonly {
     key: "christmas",
   },
   { divisions: SCOTLAND, date: "2005-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
-  // 2011 年: 当時の政府の一覧（directgov・Scottish Government・nidirect）は 26 日を Christmas Day、27 日を Boxing Day の振替とした
+  // 2011 年: 当時の政府の一覧は 26 日を Christmas Day、27 日を Boxing Day の振替とした
   { divisions: ALL, date: "2011-12-26", name: CHRISTMAS, kind: "substitute", key: "christmas" },
   { divisions: ALL, date: "2011-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
   // 2023 年の Scotland: GOV.UK の割り当て（1/2 が New Year’s Day、1/3 が 2nd January）に合わせる

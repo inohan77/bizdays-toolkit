@@ -578,3 +578,13 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - **規則の変更**: St Andrew's Day は St Andrew's Day Bank Holiday (Scotland) Act 2007 で加わったので 2007 年から。臨時の祝日と移動は、1977 年の Silver Jubilee（England・Wales・NI は 6 月 7 日を追加し Spring を 6 月 6 日に移動、Scotland は 6 月 6 日だけを追加）、1981 年の Royal Wedding（7 月 29 日、全区分）、1995 年の VE Day 50 周年（England・Wales・NI は Early May を 5 月 8 日に移動、Scotland は附則の 5 月 1 日に加えて 8 日を追加）、1999 年のミレニアム（12 月 31 日、全区分）、2002 年の Golden Jubilee bank holiday（6 月 3 日、臨時）と Spring bank holiday の 6 月 4 日への移動（全区分。Scotland の一覧は 6 月 4 日を "Golden Jubilee Holiday (in place of 27 May)" と呼ぶが、5 月 27 日の Spring を移したものなので名称は Spring のまま。テストの `NAME_DIFFERENCES` に記録）、2011 年の Royal Wedding bank holiday（4 月 29 日、臨時）です。`MOVED` は区分の配列を取る形に広げました（1977 年・1995 年の移動は England・Wales・NI だけ）。Northern Ireland の 3 月 17 日・7 月 12 日が土日に当たった年の振替は、Secretary of State の Order（Belfast Gazette）どおりで、規則の計算と一致します
 - **監視の対象外**: 出典が過去の保存なので毎日の照合はせず、出典の読み違いが見つかったときだけパッチ版で直します（RELEASING.md）
 - **収集の記録**: `docs/sources/uk-bank-holidays-1974-1999.md`（The Gazette の 3 版の紙面検索 76 か所・152 頁、Historic Hansard の 1970〜1999 年の全会期日 5,135 日の目次からの抽出、Wayback の照会、1987 年分と Belfast 1986〜1990 年の再調査、名称と復活祭の出典）と `docs/sources/uk-bank-holidays-2000-2011.md`。1973 年以前に広げることは、1972・1973 年の Royal Proclamation が見つからず 1971 年は別の法の下にあるので、しません。Scotland の Boxing Day については、Hansard 1976-12-08 が「1973 年に導入」と答弁する一方、布告で見つかる最初の年は 1974 年分で、1972〜1973 年の London・Edinburgh の検索でも 1973 年分は見つからず、食い違いは未解決です（対応年が 1974 年からなので結果には影響しない。1973 年まで広げるときの出発点）
+
+## 50. 納品の検査を `pnpm check` に入れる（出典の記録のリンク・測定値・フィクスチャの参照）
+
+0.21.0・0.21.1 の納品で、CHANGELOG の測定値の測り直し忘れ（`pnpm check` を通した後にコメントを足し、測り直さずに納品した）と、README の出典の記録へのリンクの書き忘れ（段階 2 の記録を足したときに README を見直さなかった）が続きました。どちらも記憶に頼っていた手順で、機械で確かめられるものです。0.21.2 で次の 3 つを `pnpm check` に入れました。
+
+- `check-size`: CHANGELOG の今の版（または [Unreleased]）の節に「`<エントリー>` … 測定 N」の形で書いた測定値が、実際の gzip の測定と一致すること。一致しなければ失敗する（上限の変更の理由の記載を確かめる既存の検査に加える）
+- `check-package`: `docs/sources/*.md` のすべてが README.md と docs/README.ja.md の両方からリンクされていること。README の「出典の食い違いまで記録する」の裏づけが記録のファイルなので、記録を足したら README に足す
+- `check-package`: テスト用フィクスチャの `record`（`docs/sources/<記録>.md#<年>` の形）が指すファイルと見出しが実在すること
+
+あわせて、納品の手順を「すべての編集 → `pnpm fmt` → `pnpm check` → check の出力から測定値を転記 → ZIP」に固定し、**check の後に 1 文字でも変えたら check からやり直す**ことにしました（RELEASING.md の「品質の確認」）。`src/uk/rules.ts` の出典のコメントは、`dist` に残って利用者に届く上に根拠の本文は記録にあるので、記録の節への短い参照に改めました（`./uk` の gzip が約 0.8 KB 減）。

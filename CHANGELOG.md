@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-10-26
+
+### Changed
+
+- `src/uk/rules.ts`: `SPECIAL_DAYS`・`RENAMED` の出典のコメントを、`docs/sources/` の記録の節への参照に短くした（根拠の本文は記録にあり、`dist` にはコメントが残るため）。`./uk` の gzip が 8,743 → 7,969 に減った（測定 7,969）。動作は変わらない
+
+### 開発
+
+- 納品の検査を `pnpm check` に 3 つ足した（decisions.md の 50 番）。`check-size`: CHANGELOG の今の版の節に書いた「測定 N」が実際の測定と一致すること（測り直し忘れを検出）。`check-package`: `docs/sources/*.md` が README.md と docs/README.ja.md の両方からリンクされていること、テスト用フィクスチャの `record`（出典の記録の節へのパス#アンカー）が実在すること
+
 ## [0.21.1] - 2026-10-26
 
 ### Data
@@ -575,7 +585,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.2...HEAD
+[0.21.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.1...v0.21.2
 [0.21.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.19.0...v0.20.0

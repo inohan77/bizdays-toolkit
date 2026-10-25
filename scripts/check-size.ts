@@ -130,7 +130,34 @@ function checkLimitChanges(): boolean {
   return false;
 }
 
+/**
+ * CHANGELOG の今の版（または [Unreleased]）の節に書いた測定値（「`<エントリー>` … 測定 N」。ルートは「ルート … 測定 N」）が、
+ * 実際の測定と一致するかを確かめる。測り直し忘れを防ぐ（decisions.md の 49 番の納品の手順）
+ */
+function checkChangelogFigures(measured: ReadonlyMap<string, number>): boolean {
+  const changelog = readFileSync("CHANGELOG.md", "utf8");
+  const parts = changelog.split(/^## \[([^\]]+)\][^\n]*$/m);
+  const sections = new Map<string, string>();
+  for (let i = 1; i < parts.length; i += 2) sections.set(parts[i]!, parts[i + 1] ?? "");
+  const text = `${sections.get("Unreleased") ?? ""}\n${sections.get(pkg.version) ?? ""}`;
+  let ok = true;
+  for (const m of text.matchAll(/(?:`(\.\/[a-z]+|\.)`|ルート)[^\n（(]*?[（(]測定 ([\d,]+)/g)) {
+    const entry = m[1] ?? ".";
+    const stated = Number(m[2]!.replaceAll(",", ""));
+    const actual = measured.get(entry);
+    if (actual === undefined) continue;
+    if (actual !== stated) {
+      console.error(
+        `CHANGELOG states 測定 ${m[2]} for ${entry}, but the measurement is ${actual}; re-measure after the last change`,
+      );
+      ok = false;
+    }
+  }
+  return ok;
+}
+
 let failed = !checkLimitChanges();
+const measured = new Map<string, number>();
 for (const [subpath, target] of Object.entries(pkg.exports)) {
   if (typeof target === "string") continue;
   const limit = limits[subpath];
@@ -141,6 +168,7 @@ for (const [subpath, target] of Object.entries(pkg.exports)) {
   }
   const files = moduleGraph(target.default);
   const size = gzipSync(Buffer.concat(files.map((f) => readFileSync(f))), { level: 9 }).length;
+  measured.set(subpath, size);
   if (limit === undefined) {
     console.error(`${subpath}: no limit in size-limits.json (gzip ${size} bytes)`);
     failed = true;
@@ -152,4 +180,5 @@ for (const [subpath, target] of Object.entries(pkg.exports)) {
     `${ok ? "OK  " : "OVER"} ${subpath.padEnd(10)} gzip ${String(size).padStart(6)} bytes / limit ${limit} (${Math.round((size / limit) * 100)}%, ${files.length} files)`,
   );
 }
+if (!checkChangelogFigures(measured)) failed = true;
 process.exit(failed ? 1 : 0);

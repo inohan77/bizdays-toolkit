@@ -163,6 +163,8 @@ README の minify + gzip のサイズは、手で測った値です（測った�
 
 ## 品質の確認
 
+納品（ZIP）の手順は「すべての編集 → `pnpm fmt` → `pnpm check` → check の出力から CHANGELOG の測定値を転記 → ZIP」の順に固定し、`pnpm check` の後に何かを変えたら check からやり直す。`pnpm check` は、CHANGELOG の今の版の「測定 N」が実測と一致すること、`docs/sources/*.md` が README（英日）からリンクされていること、フィクスチャの `record` が実在することも確かめる（decisions.md の 50 番）。
+
 `pnpm check` は、次をすべて行います（CI も同じ）。
 
 | 確認                           | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |

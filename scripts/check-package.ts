@@ -264,6 +264,49 @@ for (const [en, ja] of DOC_PAIRS) {
 }
 errors.push(...checkDocAnchors());
 
+/**
+ * 出典の記録（docs/sources/*.md）は、README.md と docs/README.ja.md の両方からリンクされていること。
+ * 「出典の食い違いまで記録する」という README の説明の裏づけなので、記録を足したら README に足す（decisions.md の 49 番）
+ */
+function checkSourceRecordsLinked(): string[] {
+  const problems: string[] = [];
+  if (!existsSync("docs/sources")) return problems;
+  const en = readFileSync("README.md", "utf8");
+  const ja = readFileSync("docs/README.ja.md", "utf8");
+  for (const name of readdirSync("docs/sources")
+    .filter((f) => f.endsWith(".md"))
+    .sort()) {
+    if (!en.includes(`docs/sources/${name}`))
+      problems.push(`README.md must link to docs/sources/${name}`);
+    if (!ja.includes(`sources/${name}`))
+      problems.push(`docs/README.ja.md must link to docs/sources/${name}`);
+  }
+  return problems;
+}
+errors.push(...checkSourceRecordsLinked());
+
+/** テスト用フィクスチャの record（出典の記録の節へのパス#アンカー）が実在すること */
+function checkFixtureRecords(): string[] {
+  const problems: string[] = [];
+  for (const file of readdirSync("test/fixtures").filter((f) => f.endsWith(".json"))) {
+    const text = readFileSync(`test/fixtures/${file}`, "utf8");
+    for (const m of text.matchAll(/"record": "(docs\/sources\/[^"#]+)#([^"]+)"/g)) {
+      const [, path, anchor] = m;
+      if (!existsSync(path!)) {
+        problems.push(`test/fixtures/${file}: record ${path} not found`);
+        continue;
+      }
+      const headings = new Set(
+        [...readFileSync(path!, "utf8").matchAll(/^#{1,6} (.+)$/gm)].map((h) => anchorOf(h[1]!)),
+      );
+      if (!headings.has(anchor!))
+        problems.push(`test/fixtures/${file}: record ${path}#${anchor} has no such heading`);
+    }
+  }
+  return problems;
+}
+errors.push(...checkFixtureRecords());
+
 // 公開されるファイルは、npm が実際に詰めるもの（npm pack --dry-run）で確かめる。
 // files の指定から推定すると、npm が指定にかかわらず含めるファイル（ルートの README* など）を見落とすため
 for (const entry of pkg.files) {
