@@ -141,7 +141,7 @@ diagnoseCalendar({
 
 英国の祝日の検証には、GOV.UK の bank holidays のデータ（<https://www.gov.uk/bank-holidays.json>、それより前の年は GOV.UK の公式リポジトリ [alphagov/calendars](https://github.com/alphagov/calendars)・[alphagov/frontend](https://github.com/alphagov/frontend) の履歴）を、Wales の祝日のウェールズ語の名称には GOV.UK のウェールズ語版の表記を利用しています（照合のデータはテスト用フィクスチャのみ。パッケージには含みません）。
 
-GOV.UK のデータがない 2000〜2011 年は、当時の政府が公表した bank holidays の一覧（DTI・BERR・directgov・Scottish Executive/Government・nidirect。Wayback Machine の保存）を正とし、The Gazette（<https://www.thegazette.co.uk/>）の国王の布告と北アイルランドの Order で照合しています（1974〜1999 年は布告が正）。1975〜1990 年の 13 日は、該当する号が The Gazette のオンラインにないため照合できておらず、規則どおりに返したうえでテスト用フィクスチャに `unverified` として理由つきで記録しています。出典は [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md) にあります（テスト用フィクスチャのみ。パッケージには含みません）。
+GOV.UK のデータがない 2000〜2011 年は、当時の政府が公表した bank holidays の一覧（DTI・BERR・directgov・Scottish Executive/Government・nidirect。Wayback Machine の保存）を正とし、The Gazette（<https://www.thegazette.co.uk/>）の国王の布告と北アイルランドの Order で照合しています（1974〜1999 年は布告が正）。1975〜1990 年の 13 日は、該当する号が The Gazette のオンラインにないため照合できておらず、規則どおりに返したうえでテスト用フィクスチャに `unverified` として理由つきで記録しています。出典は [docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md) と [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md) にあります（テスト用フィクスチャのみ。パッケージには含みません）。
 
 フランスの祝日の検証には、DINUM が data.gouv.fr で公開している「Jours fériés en France」（<https://www.data.gouv.fr/datasets/jours-feries-en-france>。Métropole と Alsace-Moselle のゾーンの JSON エクスポート）を利用しています（テスト用フィクスチャのみ。パッケージには含みません）。
 

@@ -133,7 +133,7 @@ test("英国 1974〜1999 年: 毎年布告される日の始まり（Early May �
     );
     assert.equal(
       p.holidaysInYear(1999).find((h) => h.date === "1999-12-31")?.name,
-      "Additional bank holiday",
+      "Additional bank holiday (Millennium)",
       p.id,
     );
   }
@@ -155,7 +155,7 @@ test("英国 1974〜1999 年: 毎年布告される日の始まり（Early May �
       .map((h) => [h.date, h.key ?? h.name]),
     [
       ["1995-05-01", "early-may"],
-      ["1995-05-08", "Additional bank holiday"],
+      ["1995-05-08", "Additional bank holiday (VE Day 50th anniversary)"],
       ["1995-05-29", "spring"],
     ],
   );

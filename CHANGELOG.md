@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-10-26
+
+### Data
+
+- 英国の臨時の祝日のうち固有の名称が公式の文書にない 2 日の `name` を、政府の答弁が述べた理由を括弧で添えた形にした: 1995-05-08（Scotland）"Additional bank holiday" → "Additional bank holiday (VE Day 50th anniversary)"、1999-12-31（全地域）"Additional bank holiday" → "Additional bank holiday (Millennium)"。括弧で理由を添える形は GOV.UK の 2020 年 "Early May bank holiday (VE day)" と同じ。日付・種別・`key` は変わらない（decisions.md の 49 番、`docs/sources/uk-bank-holidays-1974-1999.md` の第 5 節）
+
+### Changed
+
+- README: Data sources の英国の段落に `docs/sources/uk-bank-holidays-1974-1999.md` へのリンクを足した（0.21.0 では 2000〜2011 年の記録だけを指していた）
+
 ## [0.21.0] - 2026-10-25
 
 ### 移行
@@ -565,7 +575,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.1...HEAD
+[0.21.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.18.0...v0.19.0

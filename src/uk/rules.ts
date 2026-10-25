@@ -140,7 +140,8 @@ const SPECIAL_DAYS: readonly {
   readonly divisions: readonly UkDivision[];
 }[] = [
   // 臨時の祝日の名称は布告にはなく（布告は日付だけを指定する）、政府の答弁の呼び方による。固有の呼び方が公式の文書にない日は
-  // 中立の "Additional bank holiday"（docs/sources/uk-bank-holidays-1974-1999.md の名称の節）
+  // 中立の "Additional bank holiday" に、政府の答弁が述べた理由を括弧で添える（GOV.UK の 2020 年 "Early May bank holiday (VE day)" と同じ形。
+  // docs/sources/uk-bank-holidays-1974-1999.md の名称の節）
   // 1977 年の Silver Jubilee: England・Wales・NI は 6 月 7 日を追加（Spring は 6 月 6 日に移動）。Scotland は 6 月 6 日だけを追加。
   // 名称は Hansard 1975-12-18 の公式プログラム "Tuesday 7th (Silver Jubilee Bank Holiday)" と 1977-01-19 "a special Silver Jubilee Bank Holiday"、
   // Scotland は 1976-06-28 "a Jubilee holiday in Scotland"
@@ -149,11 +150,16 @@ const SPECIAL_DAYS: readonly {
   // 名称は The London Gazette 48690（1981-07-27）の告示の見出し "ROYAL WEDDING BANK HOLIDAY" と Hansard 1981-07-30 の答弁 "the public holiday on 29 July for the Royal Wedding"
   { date: "1981-07-29", name: "Royal Wedding bank holiday", divisions: ALL },
   // 1995 年の VE Day 50 周年: England・Wales・NI は Early May を 5 月 8 日に移動、Scotland は 5 月 1 日（附則）に加えて 8 日を追加。
-  // 政府は Scotland の分を "an additional day's bank holiday" とだけ呼び（Hansard 1993-12-16・1995-03-02）、固有の名称はない
-  { date: "1995-05-08", name: "Additional bank holiday", divisions: SCOTLAND },
+  // 政府は Scotland の分を "an additional day's bank holiday" とだけ呼び（Hansard 1993-12-16・1995-03-02）、固有の名称はない。
+  // 括弧は Hansard 1993-12-16 の理由 "commemorating the 50th anniversary of the ending of the second world war" による
+  {
+    date: "1995-05-08",
+    name: "Additional bank holiday (VE Day 50th anniversary)",
+    divisions: SCOTLAND,
+  },
   // 政府は "a one-off additional Bank Holiday throughout the United Kingdom on Friday, 31 December 1999" と呼び（Hansard 1998-06-03）、
-  // "Millennium" は質問と Hansard の見出しにあるだけで固有の名称はない
-  { date: "1999-12-31", name: "Additional bank holiday", divisions: ALL },
+  // 固有の名称はない。括弧は同じ答弁の "the year 2000 will be heralded by" と質問の "to mark the Millennium" による
+  { date: "1999-12-31", name: "Additional bank holiday (Millennium)", divisions: ALL },
   { date: "2002-06-03", name: "Golden Jubilee bank holiday", divisions: ALL },
   { date: "2011-04-29", name: "Royal Wedding bank holiday", divisions: ALL },
   { date: "2012-06-05", name: "Queen’s Diamond Jubilee", divisions: ALL },
