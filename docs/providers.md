@@ -2,7 +2,7 @@
 
 <p><b>English</b> | <a href="./providers.ja.md">日本語</a></p>
 
-How to write a holiday provider for a country or region that is not bundled (Japan, the UK, Singapore and France are; see the [guide](./guide.md#bundled-holiday-providers)), and the calendar arithmetic that `bizdays-toolkit/provider` exposes for it.
+How to write a holiday provider for a country or region that is not bundled (Japan, France, the UK and Singapore are; see the [guide](./guide.md#bundled-holiday-providers)), and the calendar arithmetic that `bizdays-toolkit/provider` exposes for it.
 
 ## Writing a holiday provider
 
@@ -61,7 +61,7 @@ nthWeekdayOfMonth(2026, 11, 4, 4); // "2026-11-26" (the 4th Thursday of November
 nthWeekdayOfMonth(2026, 5, 1, -1); // "2026-05-25" (the last Monday of May: Memorial Day)
 ```
 
-Holidays that fall on a weekend are often moved to another day (a substitute day in the UK, the day in lieu in Singapore, 振替休日 in Japan, the observed day of a US federal holiday). `substituteDays(holidays, options)` adds the substitute days to a year's holidays with the same definition the bundled providers use: for each holiday on a weekday listed in `rules`, the substitute is the first day in the given direction that is not one of the input holidays, not an already assigned substitute day and not itself a weekday listed in `rules` (so two holidays on one weekend are pushed forward in date order, as Christmas Day and Boxing Day are). A substitute day keeps the original's `key`, `names` and `confirmed`, takes `kind` from the options and, unless `name` is given, the original's names (as on GOV.UK and the Singapore gazette). `original: "drop"` leaves the weekend day itself out, as GOV.UK does. Tests check that this function reproduces the substitute days of the bundled Japanese (2007 onwards), UK and Singapore providers. Rules specific to one country, such as Japan's citizens' holiday between two holidays, are not included.
+Holidays that fall on a weekend are often moved to another day (振替休日 in Japan, a substitute day in the UK, the day in lieu in Singapore, the observed day of a US federal holiday). `substituteDays(holidays, options)` adds the substitute days to a year's holidays with the same definition the bundled providers use: for each holiday on a weekday listed in `rules`, the substitute is the first day in the given direction that is not one of the input holidays, not an already assigned substitute day and not itself a weekday listed in `rules` (so two holidays on one weekend are pushed forward in date order, as Christmas Day and Boxing Day are). A substitute day keeps the original's `key`, `names` and `confirmed`, takes `kind` from the options and, unless `name` is given, the original's names (as on GOV.UK and the Singapore gazette). `original: "drop"` leaves the weekend day itself out, as GOV.UK does. Tests check that this function reproduces the substitute days of the bundled Japanese (2007 onwards), UK and Singapore providers. Rules specific to one country, such as Japan's citizens' holiday between two holidays, are not included.
 
 ```ts
 import { substituteDays } from "bizdays-toolkit/provider";

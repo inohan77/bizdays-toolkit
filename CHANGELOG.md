@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- ドキュメントの国の記述順を、対応年数の多い順（日本 → フランス → 英国 → シンガポール）に揃えた。README（提供元の表・節の見出し・照合のデータの説明・ライセンスの表記・箇条書き）、`docs/guide.md`・`docs/guide.ja.md`（各国の節の順・識別子の表・対応年の例）、`docs/providers.md`・`docs/providers.ja.md`、`RELEASING.md`（各国のデータの更新の節の順。「README のサイズの値」と「監視の起動とハートビート」は各国の節の後ろに置いた）、`package.json` の description。`data-watch.yml` の照合の順（英国 → シンガポール → 日本 → フランス）は実行順なので変えていない
+
 ## [0.20.0] - 2026-10-25
 
 ### 移行

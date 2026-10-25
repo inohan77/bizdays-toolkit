@@ -38,6 +38,40 @@ isHoliday(new Date("2026-11-22T15:30:00Z")); // true (Nov 23 in Japan time)
 
 `confirmed` tells whether the date is officially fixed. The vernal and autumnal equinox days are fixed in the Official Gazette in February of the previous year, so later years are predictions from an approximation formula (`confirmed: false`).
 
+### French public holidays
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { alsaceMoselle, metropole } from "bizdays-toolkit/fr";
+
+const paris = createCalendar({ holidays: metropole, closedWeekdays: [0, 6] });
+paris.isBusinessDay("2026-05-14"); // false (Ascension Day)
+paris.addBusinessDays("2026-05-22", 1); // "2026-05-26" (May 25 is Whit Monday, Lundi de Pentecôte)
+metropole.holidaysInYear(2026)[1];
+// { date: "2026-04-06", name: "Lundi de Pâques", nameEn: "Easter Monday", kind: "regular", confirmed: true, key: "easter-monday" }
+alsaceMoselle.holidaysInYear(2026).length; // 13 (the 11 national holidays plus Good Friday and December 26)
+
+// A company that makes Whit Monday a working day (the "journée de solidarité"): the day stays a public holiday
+const company = createCalendar({
+  holidays: metropole,
+  closedWeekdays: [0, 6],
+  openRecurring: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }],
+});
+company.isBusinessDay("2026-05-25"); // true
+```
+
+| Provider        | ID      | Zone on data.gouv.fr | Holidays                                                                              |
+| --------------- | ------- | -------------------- | ------------------------------------------------------------------------------------- |
+| `metropole`     | `FR`    | Métropole            | The 11 holidays of the Labour Code (article L3133-1)                                  |
+| `alsaceMoselle` | `FR-AM` | Alsace-Moselle       | The 11 plus Good Friday (`good-friday`) and December 26 (`saint-stephens`, local law) |
+
+- The 11 national holidays are 8 fixed dates (January 1, May 1, May 8, July 14, August 15, November 1, November 11, December 25) and 3 days counted from Easter Sunday (Easter Monday, Ascension Day at +39 days, Whit Monday at +50 days). There are no substitute days: a holiday on a weekend is simply a weekend. `kind` is always `regular`
+- `name` is the French name as written on data.gouv.fr (`1er mai`, `Lundi de Pentecôte`), `nameEn` an English rendering, and `key` the stable identifier (`labour-day`, `pentecost-monday`, …; see [Holiday keys](#holiday-keys))
+- When two holidays fall on the same day (Ascension Day on May 1 in 2008, on May 8 in 2059), the provider returns one holiday for that day with the name and key of the Easter-based holiday, as the data.gouv.fr JSON does, so `keys: ["labour-day"]` does not match May 1, 2008
+- Whit Monday is a working day in many companies (the _journée de solidarité_), but it remains a public holiday by law, so the provider returns it as a holiday; write the exception as a holiday rule with `keys: ["pentecost-monday"]`, as above. Whether a holiday is a day off is the user's decision, as everywhere in this library
+- Supported years are 2000–2099. The dates follow from the law, not from a yearly publication, so every year is `confirmed: true` and the providers have no `confirmedThrough`; a change to the Labour Code would be shipped as a patch version. The dates are verified against the "Jours fériés en France" dataset on data.gouv.fr (DINUM; JSON exports for the two zones, 20 years back and 5 years ahead, currently 2006–2031). Differences are watched daily
+- `FR-AM` is this library's identifier for Alsace-Moselle (the departments of Bas-Rhin, Haut-Rhin and Moselle), which has no single ISO 3166-2 code. The overseas departments and territories, whose holidays and time zones differ, are not bundled
+
 ### UK bank holidays
 
 ```ts
@@ -85,40 +119,6 @@ sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
 - `sg` (ID `SG`, time zone `Asia/Singapore`) is one provider; Singapore has no regional holidays. `kind` is `regular` (an annual public holiday), `substitute` (the day after a public holiday that falls on a Sunday, which the Holidays Act makes a public holiday; it has the name of the original holiday) or `special` (a one-off holiday declared by the Government, such as Polling Day). A public holiday on a Saturday has no substitute day
 - Chinese New Year, Hari Raya Puasa, Hari Raya Haji, Vesak Day and Deepavali follow the lunar, Islamic and Hindu calendars, so they cannot be computed from rules. The dates are the ones gazetted by the Ministry of Manpower (MOM), year by year, and the substitute days follow the rule of the Holidays Act. Supported years are the years MOM has gazetted (currently 2020–2027; `confirmedThrough` is the same as the last supported year). Later years are not predicted and are outside the supported years (`out-of-range`), so `sg` never returns `confirmed: false`
 - The dates are verified against the "Singapore Public Holidays" collection on data.gov.sg (MOM). Where that data differs from the gazetted dates (2022: the revised Hari Raya dates and two missing substitute days), the gazetted dates are used. Differences from data.gov.sg are watched daily and released as patch versions
-
-### French public holidays
-
-```ts
-import { createCalendar } from "bizdays-toolkit";
-import { alsaceMoselle, metropole } from "bizdays-toolkit/fr";
-
-const paris = createCalendar({ holidays: metropole, closedWeekdays: [0, 6] });
-paris.isBusinessDay("2026-05-14"); // false (Ascension Day)
-paris.addBusinessDays("2026-05-22", 1); // "2026-05-26" (May 25 is Whit Monday, Lundi de Pentecôte)
-metropole.holidaysInYear(2026)[1];
-// { date: "2026-04-06", name: "Lundi de Pâques", nameEn: "Easter Monday", kind: "regular", confirmed: true, key: "easter-monday" }
-alsaceMoselle.holidaysInYear(2026).length; // 13 (the 11 national holidays plus Good Friday and December 26)
-
-// A company that makes Whit Monday a working day (the "journée de solidarité"): the day stays a public holiday
-const company = createCalendar({
-  holidays: metropole,
-  closedWeekdays: [0, 6],
-  openRecurring: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }],
-});
-company.isBusinessDay("2026-05-25"); // true
-```
-
-| Provider        | ID      | Zone on data.gouv.fr | Holidays                                                                              |
-| --------------- | ------- | -------------------- | ------------------------------------------------------------------------------------- |
-| `metropole`     | `FR`    | Métropole            | The 11 holidays of the Labour Code (article L3133-1)                                  |
-| `alsaceMoselle` | `FR-AM` | Alsace-Moselle       | The 11 plus Good Friday (`good-friday`) and December 26 (`saint-stephens`, local law) |
-
-- The 11 national holidays are 8 fixed dates (January 1, May 1, May 8, July 14, August 15, November 1, November 11, December 25) and 3 days counted from Easter Sunday (Easter Monday, Ascension Day at +39 days, Whit Monday at +50 days). There are no substitute days: a holiday on a weekend is simply a weekend. `kind` is always `regular`
-- `name` is the French name as written on data.gouv.fr (`1er mai`, `Lundi de Pentecôte`), `nameEn` an English rendering, and `key` the stable identifier (`labour-day`, `pentecost-monday`, …; see [Holiday keys](#holiday-keys))
-- When two holidays fall on the same day (Ascension Day on May 1 in 2008, on May 8 in 2059), the provider returns one holiday for that day with the name and key of the Easter-based holiday, as the data.gouv.fr JSON does, so `keys: ["labour-day"]` does not match May 1, 2008
-- Whit Monday is a working day in many companies (the _journée de solidarité_), but it remains a public holiday by law, so the provider returns it as a holiday; write the exception as a holiday rule with `keys: ["pentecost-monday"]`, as above. Whether a holiday is a day off is the user's decision, as everywhere in this library
-- Supported years are 2000–2099. The dates follow from the law, not from a yearly publication, so every year is `confirmed: true` and the providers have no `confirmedThrough`; a change to the Labour Code would be shipped as a patch version. The dates are verified against the "Jours fériés en France" dataset on data.gouv.fr (DINUM; JSON exports for the two zones, 20 years back and 5 years ahead, currently 2006–2031). Differences are watched daily
-- `FR-AM` is this library's identifier for Alsace-Moselle (the departments of Bas-Rhin, Haut-Rhin and Moselle), which has no single ISO 3166-2 code. The overseas departments and territories, whose holidays and time zones differ, are not bundled
 
 ### Holiday keys
 
@@ -640,7 +640,7 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## Outside the supported years
 
-Evaluating a date outside the holiday provider's supported years (1955–2099 for Japan, 2012–2099 for the UK, 2020–2027 for Singapore) throws a `RangeError`. To treat such dates as having no holidays, set `outOfRange: "ignore"`.
+Evaluating a date outside the holiday provider's supported years (1955–2099 for Japan, 2000–2099 for France, 2012–2099 for the UK, 2020–2027 for Singapore) throws a `RangeError`. To treat such dates as having no holidays, set `outOfRange: "ignore"`.
 
 ## Unconfirmed holidays
 

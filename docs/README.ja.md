@@ -129,9 +129,9 @@ diagnoseCalendar({
 
 [Semantic Versioning](https://semver.org/lang/ja/) に従います。詳しくは [RELEASING.md](../RELEASING.md) を参照してください。
 
-- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表、シンガポールの新しい年の告示と日付の改定、フランスの労働法典の改正）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
+- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、フランスの労働法典の改正、GOV.UK の新しい年の公表、シンガポールの新しい年の告示と日付の改定）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
 - 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.1.0"`）
-- 反映済みのデータは、提供元の `dataVersion`（日本は反映済みの官報の年月、英国・シンガポールは反映済みの GOV.UK・data.gov.sg のデータの年月）と `confirmedThrough` で確認できます（`jp.dataVersion`・`england.confirmedThrough` など）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` のモジュールの定数 `dataVersion`・`confirmedThrough` は 0.12.0 で非推奨で、1.0.0 で削除します
+- 反映済みのデータは、提供元の `dataVersion`（日本は反映済みの官報の年月、フランス・英国・シンガポールは反映済みの data.gouv.fr・GOV.UK・data.gov.sg のデータの年月）と `confirmedThrough` で確認できます（`jp.dataVersion`・`england.confirmedThrough` など）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` のモジュールの定数 `dataVersion`・`confirmedThrough` は 0.12.0 で非推奨で、1.0.0 で削除します
 - 1.0.0 までは、マイナー版で破壊的変更を行うことがあります。マイナー版の間を移るときに利用者がする作業は、[移行ガイド](./migration.md)と、CHANGELOG の各版の「移行」にまとめています
 - 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコード・診断のコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](../RELEASING.md) の「互換性の約束」）
 
@@ -139,13 +139,13 @@ diagnoseCalendar({
 
 日本の祝日の検証には、内閣府ホームページで公開されている「国民の祝日」の CSV（<https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv>） を利用しています（テスト用フィクスチャのみ。パッケージには含みません）。
 
+フランスの祝日の検証には、DINUM が data.gouv.fr で公開している「Jours fériés en France」（<https://www.data.gouv.fr/datasets/jours-feries-en-france>。Métropole と Alsace-Moselle のゾーンの JSON エクスポート）を利用しています（テスト用フィクスチャのみ。パッケージには含みません）。
+
 英国の祝日の検証には、GOV.UK の bank holidays のデータ（<https://www.gov.uk/bank-holidays.json>、それより前の年は GOV.UK の公式リポジトリ [alphagov/calendars](https://github.com/alphagov/calendars)・[alphagov/frontend](https://github.com/alphagov/frontend) の履歴）を、Wales の祝日のウェールズ語の名称には GOV.UK のウェールズ語版の表記を利用しています（照合のデータはテスト用フィクスチャのみ。パッケージには含みません）。
 
 シンガポールの祝日の検証には、MOM（Ministry of Manpower）が data.gov.sg で公開している「Singapore Public Holidays」コレクション（<https://data.gov.sg/collections/691/view>）を利用し、両者が食い違う箇所は MOM の報道発表を正としています（テスト用フィクスチャのみ。パッケージには含みません）。
 
-フランスの祝日の検証には、DINUM が data.gouv.fr で公開している「Jours fériés en France」（<https://www.data.gouv.fr/datasets/jours-feries-en-france>。Métropole と Alsace-Moselle のゾーンの JSON エクスポート）を利用しています（テスト用フィクスチャのみ。パッケージには含みません）。
-
-Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence), and data from data.gouv.fr made available under the [Licence Ouverte / Open Licence 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence).
+Contains data from data.gouv.fr made available under the [Licence Ouverte / Open Licence 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence), public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), and data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence).
 
 ## ライセンス
 

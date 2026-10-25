@@ -129,9 +129,9 @@ A holiday provider is an object with `id`, `timeZone`, `supportedYears` and `hol
 
 Versioning follows [Semantic Versioning](https://semver.org/). See [RELEASING.md](https://github.com/inohan77/bizdays-toolkit/blob/main/RELEASING.md) (Japanese) for details.
 
-- Official data updates (new, moved and one-off holidays by law, Official Gazette or proclamation, fixed equinox days in Japan, newly published years on GOV.UK, newly gazetted years and revised dates in Singapore, changes to the French Labour Code) are released as **patch** versions, so they reach you with either `^` or `~`
+- Official data updates (new, moved and one-off holidays by law, Official Gazette or proclamation, fixed equinox days in Japan, changes to the French Labour Code, newly published years on GOV.UK, newly gazetted years and revised dates in Singapore) are released as **patch** versions, so they reach you with either `^` or `~`
 - To freeze the holiday results, pin an exact version (for example `"bizdays-toolkit": "0.8.0"`)
-- The reflected data is shown by the provider's `dataVersion` (for Japan, the year and month of the Official Gazette reflected; for the UK and Singapore, the year and month of the GOV.UK or data.gov.sg data reflected) and `confirmedThrough` (`jp.dataVersion`, `england.confirmedThrough` and so on). The module-level constants `dataVersion` and `confirmedThrough` in `bizdays-toolkit/jp` and `bizdays-toolkit/uk` are deprecated since 0.12.0 and will be removed in 1.0.0
+- The reflected data is shown by the provider's `dataVersion` (for Japan, the year and month of the Official Gazette reflected; for France, the UK and Singapore, the year and month of the data.gouv.fr, GOV.UK or data.gov.sg data reflected) and `confirmedThrough` (`jp.dataVersion`, `england.confirmedThrough` and so on). The module-level constants `dataVersion` and `confirmedThrough` in `bizdays-toolkit/jp` and `bizdays-toolkit/uk` are deprecated since 0.12.0 and will be removed in 1.0.0
 - Before 1.0.0, minor versions may contain breaking changes. What you need to change when moving between minor versions is listed in the [migration guide](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/migration.md) (Japanese) and in the "移行" (migration) part of each version in the CHANGELOG
 - Decision reasons (`reason`), holiday kinds (`kind`), error codes and diagnostic codes may gain values in future versions. When you branch on their values, handle "anything else" too (see "互換性の約束", the compatibility promise, in [RELEASING.md](https://github.com/inohan77/bizdays-toolkit/blob/main/RELEASING.md))
 
@@ -139,13 +139,13 @@ Versioning follows [Semantic Versioning](https://semver.org/). See [RELEASING.md
 
 Japanese holidays are verified with the "National Holidays" CSV published on the Cabinet Office website (<https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv>) (as a test fixture only; not included in the package).
 
+French public holidays are verified with the "Jours fériés en France" dataset published by DINUM on data.gouv.fr (<https://www.data.gouv.fr/datasets/jours-feries-en-france>, JSON exports for the Métropole and Alsace-Moselle zones; the verification data is a test fixture only; not included in the package).
+
 UK bank holidays are verified with the GOV.UK bank holidays data (<https://www.gov.uk/bank-holidays.json>, and for earlier years the history of the official GOV.UK repositories [alphagov/calendars](https://github.com/alphagov/calendars) and [alphagov/frontend](https://github.com/alphagov/frontend)), and the Welsh names of the Wales holidays with the Welsh version of GOV.UK (the verification data is a test fixture only; not included in the package).
 
 Singapore public holidays are verified with the "Singapore Public Holidays" collection published by the Ministry of Manpower on data.gov.sg (<https://data.gov.sg/collections/691/view>), with the Ministry's press releases as the authority where the two differ (the verification data is a test fixture only; not included in the package).
 
-French public holidays are verified with the "Jours fériés en France" dataset published by DINUM on data.gouv.fr (<https://www.data.gouv.fr/datasets/jours-feries-en-france>, JSON exports for the Métropole and Alsace-Moselle zones; the verification data is a test fixture only; not included in the package).
-
-Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence), and data from data.gouv.fr made available under the [Licence Ouverte / Open Licence 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence).
+Contains data from data.gouv.fr made available under the [Licence Ouverte / Open Licence 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence), public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), and data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence).
 
 ## License
 

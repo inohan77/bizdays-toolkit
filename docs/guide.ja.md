@@ -38,6 +38,40 @@ isHoliday(new Date("2026-11-22T15:30:00Z")); // true（日本時間では 11/23�
 
 `confirmed` は、その日付が公式に確定しているかを表します。春分・秋分の日は前年 2 月の官報で確定するため、それより先の年は近似式による予測（`confirmed: false`）です。
 
+### フランスの祝日
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { alsaceMoselle, metropole } from "bizdays-toolkit/fr";
+
+const paris = createCalendar({ holidays: metropole, closedWeekdays: [0, 6] });
+paris.isBusinessDay("2026-05-14"); // false（Ascension）
+paris.addBusinessDays("2026-05-22", 1); // "2026-05-26"（5 月 25 日は Lundi de Pentecôte）
+metropole.holidaysInYear(2026)[1];
+// { date: "2026-04-06", name: "Lundi de Pâques", nameEn: "Easter Monday", kind: "regular", confirmed: true, key: "easter-monday" }
+alsaceMoselle.holidaysInYear(2026).length; // 13（全国の 11 日に Vendredi saint と 12 月 26 日が加わる）
+
+// Lundi de Pentecôte を「連帯の日」として出勤日にする企業。法律上は祝日のまま
+const company = createCalendar({
+  holidays: metropole,
+  closedWeekdays: [0, 6],
+  openRecurring: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }],
+});
+company.isBusinessDay("2026-05-25"); // true
+```
+
+| 提供元          | ID      | data.gouv.fr のゾーン | 祝日                                                                                      |
+| --------------- | ------- | --------------------- | ----------------------------------------------------------------------------------------- |
+| `metropole`     | `FR`    | Métropole             | 労働法典 L3133-1 の 11 日                                                                 |
+| `alsaceMoselle` | `FR-AM` | Alsace-Moselle        | 11 日に Vendredi saint（`good-friday`）と 12 月 26 日（`saint-stephens`。地方法）が加わる |
+
+- 全国の 11 日は固定日 8 日（1/1・5/1・5/8・7/14・8/15・11/1・11/11・12/25）と復活祭から決まる 3 日（Lundi de Pâques、Ascension = +39 日、Lundi de Pentecôte = +50 日）です。振替はなく、週末に当たった祝日はそのまま週末です。`kind` は常に `regular`
+- `name` は data.gouv.fr の表記（フランス語。`1er mai`・`Lundi de Pentecôte`）、`nameEn` は英訳、`key` は安定した識別子（`labour-day`・`pentecost-monday` など。[祝日の識別子](#祝日の識別子)）
+- 2 つの祝日が同じ日に当たる年（2008 年の 5 月 1 日と 2059 年の 5 月 8 日が Ascension）は、data.gouv.fr の JSON と同じく復活祭から決まる祝日の名称・`key` で 1 件を返します。`keys: ["labour-day"]` は 2008 年の 5 月 1 日には当てはまりません
+- Lundi de Pentecôte は多くの企業が出勤日にしています（連帯の日）が、法律上は祝日のままなので、提供元は祝日として返します。出勤日にするなら上のように祝日の規則 `keys: ["pentecost-monday"]` で書きます。祝日を休みにするかどうかは利用者が決める、というこのライブラリ全体の分担です
+- 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年・未来 5 年の窓で現在 2006〜2031 年）と照合しています。差分は毎日監視しています
+- `FR-AM` は Alsace-Moselle（Bas-Rhin・Haut-Rhin・Moselle の 3 県）に対するこのライブラリの ID です（ISO 3166-2 に 1 つのコードがないため）。祝日もタイムゾーンも違う海外県・海外領土は同梱していません
+
 ### 英国の bank holidays
 
 ```ts
@@ -85,40 +119,6 @@ sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
 - 提供元は `sg`（ID `SG`、タイムゾーン `Asia/Singapore`）の 1 つで、地域ごとの祝日はありません。`kind` は `regular`（毎年の祝日）・`substitute`（日曜日に当たった祝日の翌日。Holidays Act により祝日になり、名称は元の祝日と同じ）・`special`（政府が告示する臨時の祝日。Polling Day など）です。土曜日に当たった祝日は振り替えません
 - 旧正月・Hari Raya Puasa・Hari Raya Haji・Vesak Day・Deepavali は太陰暦・イスラム暦・ヒンドゥー暦で決まるため、規則では計算できません。日付は MOM（Ministry of Manpower）が年ごとに告示したもので、振替は Holidays Act の規則で計算します。対応年は MOM が告示した年（現在は 2020〜2027 年。`confirmedThrough` は対応年の最後の年と同じ）で、それより後の年は予測せず対応年の外（`out-of-range`）です。`sg` が `confirmed: false` を返すことはありません
 - 日付は data.gov.sg の「Singapore Public Holidays」コレクション（MOM）と照合しています。そのデータが告示と食い違う箇所（2022 年の Hari Raya の改定後の日付と、振替 2 日の欠落）は告示に従います。data.gov.sg との差分を毎日監視し、見つけたらパッチ版で反映します
-
-### フランスの祝日
-
-```ts
-import { createCalendar } from "bizdays-toolkit";
-import { alsaceMoselle, metropole } from "bizdays-toolkit/fr";
-
-const paris = createCalendar({ holidays: metropole, closedWeekdays: [0, 6] });
-paris.isBusinessDay("2026-05-14"); // false（Ascension）
-paris.addBusinessDays("2026-05-22", 1); // "2026-05-26"（5 月 25 日は Lundi de Pentecôte）
-metropole.holidaysInYear(2026)[1];
-// { date: "2026-04-06", name: "Lundi de Pâques", nameEn: "Easter Monday", kind: "regular", confirmed: true, key: "easter-monday" }
-alsaceMoselle.holidaysInYear(2026).length; // 13（全国の 11 日に Vendredi saint と 12 月 26 日が加わる）
-
-// Lundi de Pentecôte を「連帯の日」として出勤日にする企業。法律上は祝日のまま
-const company = createCalendar({
-  holidays: metropole,
-  closedWeekdays: [0, 6],
-  openRecurring: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }],
-});
-company.isBusinessDay("2026-05-25"); // true
-```
-
-| 提供元          | ID      | data.gouv.fr のゾーン | 祝日                                                                                      |
-| --------------- | ------- | --------------------- | ----------------------------------------------------------------------------------------- |
-| `metropole`     | `FR`    | Métropole             | 労働法典 L3133-1 の 11 日                                                                 |
-| `alsaceMoselle` | `FR-AM` | Alsace-Moselle        | 11 日に Vendredi saint（`good-friday`）と 12 月 26 日（`saint-stephens`。地方法）が加わる |
-
-- 全国の 11 日は固定日 8 日（1/1・5/1・5/8・7/14・8/15・11/1・11/11・12/25）と復活祭から決まる 3 日（Lundi de Pâques、Ascension = +39 日、Lundi de Pentecôte = +50 日）です。振替はなく、週末に当たった祝日はそのまま週末です。`kind` は常に `regular`
-- `name` は data.gouv.fr の表記（フランス語。`1er mai`・`Lundi de Pentecôte`）、`nameEn` は英訳、`key` は安定した識別子（`labour-day`・`pentecost-monday` など。[祝日の識別子](#祝日の識別子)）
-- 2 つの祝日が同じ日に当たる年（2008 年の 5 月 1 日と 2059 年の 5 月 8 日が Ascension）は、data.gouv.fr の JSON と同じく復活祭から決まる祝日の名称・`key` で 1 件を返します。`keys: ["labour-day"]` は 2008 年の 5 月 1 日には当てはまりません
-- Lundi de Pentecôte は多くの企業が出勤日にしています（連帯の日）が、法律上は祝日のままなので、提供元は祝日として返します。出勤日にするなら上のように祝日の規則 `keys: ["pentecost-monday"]` で書きます。祝日を休みにするかどうかは利用者が決める、というこのライブラリ全体の分担です
-- 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年・未来 5 年の窓で現在 2006〜2031 年）と照合しています。差分は毎日監視しています
-- `FR-AM` は Alsace-Moselle（Bas-Rhin・Haut-Rhin・Moselle の 3 県）に対するこのライブラリの ID です（ISO 3166-2 に 1 つのコードがないため）。祝日もタイムゾーンも違う海外県・海外領土は同梱していません
 
 ### 祝日の識別子
 
@@ -631,7 +631,7 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## 対応年の外
 
-祝日の提供元の対応年（日本は 1955〜2099 年、英国は 2012〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRange: "ignore"` を指定してください。
+祝日の提供元の対応年（日本は 1955〜2099 年、フランスは 2000〜2099 年、英国は 2012〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRange: "ignore"` を指定してください。
 
 ## 未確定の祝日
 
