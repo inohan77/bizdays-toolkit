@@ -878,6 +878,44 @@ export type SgHoliday = Holiday<SgHolidayKind>;
 export type SgHolidayKind = KnownSgHolidayKind | (string & {});
 ```
 
+## bizdays-toolkit/fr
+
+### alsaceMoselle (@public)
+
+```ts
+export declare const alsaceMoselle: HolidayProvider<FrHolidayKind>;
+```
+
+### FrHoliday (@public)
+
+```ts
+export type FrHoliday = Holiday<FrHolidayKind>;
+```
+
+### FrHolidayKind (@public)
+
+```ts
+export type FrHolidayKind = KnownFrHolidayKind | (string & {});
+```
+
+### KnownFrHolidayKey (@beta)
+
+```ts
+export type KnownFrHolidayKey = "new-year" | "easter-monday" | "labour-day" | "victory-in-europe" | "ascension" | "pentecost-monday" | "bastille" | "assumption" | "all-saints" | "armistice" | "christmas" | "good-friday" | "saint-stephens";
+```
+
+### KnownFrHolidayKind (@public)
+
+```ts
+export type KnownFrHolidayKind = "regular";
+```
+
+### metropole (@public)
+
+```ts
+export declare const metropole: HolidayProvider<FrHolidayKind>;
+```
+
 ## bizdays-toolkit/diagnose
 
 ### diagnoseCalendar (@public)

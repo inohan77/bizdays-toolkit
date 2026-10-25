@@ -19,12 +19,12 @@
 
 A business-day calendar that combines public holidays with company or store closures.
 
-- **Holidays verified day by day against official data**: Japan (Cabinet Office, 1955 to the latest year in the Official Gazette), the UK (GOV.UK; England, Wales, Scotland and Northern Ireland, 2012 onwards) and Singapore (Ministry of Manpower on data.gov.sg, 2020 onwards). Every date is checked in the tests, differences are watched daily and shipped as patch versions
+- **Holidays verified day by day against official data**: Japan (Cabinet Office, 1955 to the latest year in the Official Gazette), France (data.gouv.fr; metropolitan France and Alsace-Moselle, verified for 2006–2031), the UK (GOV.UK; England, Wales, Scotland and Northern Ireland, 2012 onwards) and Singapore (Ministry of Manpower on data.gov.sg, 2020 onwards). Every date is checked in the tests, differences are watched daily and shipped as patch versions
 - **Business-day arithmetic**: closed weekdays, annual closures (across the new year too), specific closed and open dates and holidays combine into "N business days later", "next business day after the cutoff" and month-based due dates with the four adjustment conventions used in finance
 - **Recurring rules**: "closed on the 3rd Wednesday", "every other Wednesday", "stocktaking on the last day of the month", "closed on Mondays, or the next weekday when Monday is a holiday", "the day after (or before) a holiday", each with its own behaviour on holidays and an optional effective period
 - **Day-by-day values and combined calendars**: store hours that change by weekday, holiday and date; a business-day calendar made from such a schedule; and the days on which all (or any) of several calendars are open
 - **Option diagnostics**: `bizdays-toolkit/diagnose` lists rules that never apply, rules that are shadowed or redundant, rules that have ended, typos in option names and options with no business day at all, without throwing. One line in a test keeps options honest
-- **Lightweight, zero dependencies, time-zone safe**: about 10.0 KB min+gzip (about 11.8 KB with Japanese holidays, about 11.7 KB with UK bank holidays, about 10.9 KB with Singapore holidays; measured for 0.17.0). Standard JavaScript and `Intl` only, ESM with bundled types; tested on Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno. Instants such as `Date` are converted to a civil date in the calendar's time zone before evaluation
+- **Lightweight, zero dependencies, time-zone safe**: about 11.0 KB min+gzip (about 12.9 KB with Japanese holidays, about 11.9 KB with French holidays, about 12.8 KB with UK bank holidays, about 11.9 KB with Singapore holidays; measured for 0.20.0). Standard JavaScript and `Intl` only, ESM with bundled types; tested on Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno. Instants such as `Date` are converted to a civil date in the calendar's time zone before evaluation
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface, and `bizdays-toolkit/provider` exposes the calendar arithmetic (nth weekday of a month, Easter, substitute days for holidays on a weekend) that most countries' holidays are built from
 
 ## Installation
@@ -60,11 +60,12 @@ The [guide](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md)
 
 ## What you can do
 
-### Holidays of Japan, the UK and Singapore
+### Holidays of Japan, France, the UK and Singapore
 
 | Provider                                          | Subpath              | Time zone        | Supported years | Verified against                       |
 | ------------------------------------------------- | -------------------- | ---------------- | --------------- | -------------------------------------- |
 | `jp`                                              | `bizdays-toolkit/jp` | `Asia/Tokyo`     | 1955–2099       | Cabinet Office "National Holidays" CSV |
+| `metropole`, `alsaceMoselle`                      | `bizdays-toolkit/fr` | `Europe/Paris`   | 2000–2099       | data.gouv.fr "Jours fériés en France"  |
 | `england`, `wales`, `scotland`, `northernIreland` | `bizdays-toolkit/uk` | `Europe/London`  | 2012–2099       | GOV.UK bank holidays                   |
 | `sg`                                              | `bizdays-toolkit/sg` | `Asia/Singapore` | 2020–2027       | data.gov.sg (Ministry of Manpower)     |
 
@@ -128,7 +129,7 @@ A holiday provider is an object with `id`, `timeZone`, `supportedYears` and `hol
 
 Versioning follows [Semantic Versioning](https://semver.org/). See [RELEASING.md](https://github.com/inohan77/bizdays-toolkit/blob/main/RELEASING.md) (Japanese) for details.
 
-- Official data updates (new, moved and one-off holidays by law, Official Gazette or proclamation, fixed equinox days in Japan, newly published years on GOV.UK, newly gazetted years and revised dates in Singapore) are released as **patch** versions, so they reach you with either `^` or `~`
+- Official data updates (new, moved and one-off holidays by law, Official Gazette or proclamation, fixed equinox days in Japan, newly published years on GOV.UK, newly gazetted years and revised dates in Singapore, changes to the French Labour Code) are released as **patch** versions, so they reach you with either `^` or `~`
 - To freeze the holiday results, pin an exact version (for example `"bizdays-toolkit": "0.8.0"`)
 - The reflected data is shown by the provider's `dataVersion` (for Japan, the year and month of the Official Gazette reflected; for the UK and Singapore, the year and month of the GOV.UK or data.gov.sg data reflected) and `confirmedThrough` (`jp.dataVersion`, `england.confirmedThrough` and so on). The module-level constants `dataVersion` and `confirmedThrough` in `bizdays-toolkit/jp` and `bizdays-toolkit/uk` are deprecated since 0.12.0 and will be removed in 1.0.0
 - Before 1.0.0, minor versions may contain breaking changes. What you need to change when moving between minor versions is listed in the [migration guide](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/migration.md) (Japanese) and in the "移行" (migration) part of each version in the CHANGELOG
@@ -142,7 +143,9 @@ UK bank holidays are verified with the GOV.UK bank holidays data (<https://www.g
 
 Singapore public holidays are verified with the "Singapore Public Holidays" collection published by the Ministry of Manpower on data.gov.sg (<https://data.gov.sg/collections/691/view>), with the Ministry's press releases as the authority where the two differ (the verification data is a test fixture only; not included in the package).
 
-Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), and data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence).
+French public holidays are verified with the "Jours fériés en France" dataset published by DINUM on data.gouv.fr (<https://www.data.gouv.fr/datasets/jours-feries-en-france>, JSON exports for the Métropole and Alsace-Moselle zones; the verification data is a test fixture only; not included in the package).
+
+Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence), and data from data.gouv.fr made available under the [Licence Ouverte / Open Licence 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence).
 
 ## License
 

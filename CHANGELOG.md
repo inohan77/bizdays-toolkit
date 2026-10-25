@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-25
+
+### 移行
+
+動作が変わる既存の API はない。サブパス `bizdays-toolkit/fr` が増える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+
+### Added
+
+- フランスの祝日の提供元 `bizdays-toolkit/fr` を追加した。`metropole`（ID `FR`。労働法典 L3133-1 の 11 日）と `alsaceMoselle`（ID `FR-AM`。Vendredi saint と 12 月 26 日が加わる）で、タイムゾーンは `Europe/Paris`、対応年は 2000〜2099 年。固定日と復活祭からの日数で計算し、振替はない。名称は data.gouv.fr の表記（フランス語）、`nameEn` は英訳、`key` は英語名から（`labour-day`・`pentecost-monday` など 13 個。型 `KnownFrHolidayKey`）。2 つの祝日が同じ日に当たる年（2008 年・2059 年の Ascension）は復活祭の側の名称で 1 件。祝日は法令で定まり年ごとの告示がないので、すべて `confirmed: true` で `confirmedThrough` は持たない。型 `FrHoliday`・`FrHolidayKind`・`KnownFrHolidayKind` を追加した
+- data.gouv.fr の「Jours fériés en France」（DINUM。Métropole と Alsace-Moselle のゾーンの JSON）の 2006〜2031 年のすべての日付と名称に一致することをテストで確かめる（`test/fixtures/datagouv-jours-feries.json`）
+
+### Changed
+
+- README: 提供元の表にフランスを足し、min+gzip のサイズの値を 0.20.0 で測り直した（ルート 10.0 → 11.0 KB。0.18.0・0.19.0 の追加分を含む）
+- `docs/guide.md`・`docs/guide.ja.md`: 「French public holidays / フランスの祝日」の節と、識別子の表のフランスの行を足した
+- `RELEASING.md`: 「フランスのデータの更新」の節を足し、区分の表の「規則で計算する提供元」にフランスを含めた
+- `docs/decisions.md`: 48 番（フランスの提供元と、4 か国目の選び方の基準）を追加した
+- `package.json`: `exports` に `./fr`、keywords に `france` を足した
+
+### 開発
+
+- 監視のワークフロー `data-watch.yml` に data.gouv.fr の照合を足した（issue のラベル `datagouv-data`。ハートビートは 4 つの照合がすべて動いたときだけ）。`scripts/verify-datagouv.ts` を英国・シンガポール・日本と同じ形で追加した（`pnpm verify:datagouv`）
+- テスト: `test/fr-rules.test.ts`・`test/fr-datagouv.test.ts` を追加し、`test/holiday-key.test.ts`・ESM/CJS/ブラウザー/workerd の確認・利用者の型チェックにフランスを足した
+- サイズの上限（`size-limits.json`）に `./fr` 6,500（測定 5,404）を足した（gzip）
+
 ## [0.19.0] - 2026-10-25
 
 ### 移行
@@ -518,7 +543,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.17.0...v0.17.1

@@ -4,11 +4,12 @@ import * as diagnose from "../../dist/diagnose/index.js";
 import * as jp from "../../dist/jp/index.js";
 import * as provider from "../../dist/provider/index.js";
 import * as sg from "../../dist/sg/index.js";
+import * as fr from "../../dist/fr/index.js";
 import * as uk from "../../dist/uk/index.js";
 import { smoke } from "./smoke.mjs";
 
 export default {
   fetch() {
-    return Response.json(smoke({ root, jp, uk, sg, diagnose, provider }));
+    return Response.json(smoke({ root, jp, uk, sg, fr, diagnose, provider }));
   },
 };

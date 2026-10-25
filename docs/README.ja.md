@@ -19,12 +19,12 @@
 
 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダーです。
 
-- **祝日を公式データで全日照合**: 日本（内閣府。1955 年〜官報公表済みの年）・英国（GOV.UK。England・Wales・Scotland・Northern Ireland。2012 年〜）・シンガポール（data.gov.sg の MOM のデータ。2020 年〜）のすべての日付をテストで確かめ、差分を毎日監視してパッチ版で反映します
+- **祝日を公式データで全日照合**: 日本（内閣府。1955 年〜官報公表済みの年）・フランス（data.gouv.fr。本土と Alsace-Moselle。2006〜2031 年を照合）・英国（GOV.UK。England・Wales・Scotland・Northern Ireland。2012 年〜）・シンガポール（data.gov.sg の MOM のデータ。2020 年〜）のすべての日付をテストで確かめ、差分を毎日監視してパッチ版で反映します
 - **営業日の計算**: 定休日の曜日・毎年の休業日（年末年始のような年をまたぐ期間も可）・臨時休業日・臨時営業日と祝日を組み合わせ、「N 営業日後」「締め時刻を過ぎたら翌営業日」「20 日締め翌月 10 日払い」のような期日を、金融で使われる 4 つの調整方法で計算します
 - **繰り返しの規則**: 「第 3 水曜定休」「隔週水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」「祝日の翌日（前日）は休館」を、祝日に当たったときの扱いと有効期間つきで書けます
 - **日ごとの値と合成**: 曜日・祝日・特定日で変わる営業時間のようなスケジュール、そこから作る営業日カレンダー、複数のカレンダーがすべて（またはどれか）営業している日の合成
 - **設定の診断**: `bizdays-toolkit/diagnose` が、決して使われない規則・覆われた規則・取り除いても結果が変わらない規則・終わった規則・キーの打ち間違い・営業日が 1 日もない設定を、例外を投げずに一覧で返します。テストに 1 行足すだけで設定を守れます
-- **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 10.0KB（日本の祝日込みで約 11.8KB、英国の祝日込みで約 11.7KB、シンガポールの祝日込みで約 10.9KB。0.17.0 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
+- **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 11.0KB（日本の祝日込みで約 12.9KB、フランスの祝日込みで約 11.9KB、英国の祝日込みで約 12.8KB、シンガポールの祝日込みで約 11.9KB。0.20.0 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられ、多くの国の祝日の元になる暦の計算（月の第 n 何曜日・復活祭・週末に当たった祝日の振替）を `bizdays-toolkit/provider` が公開します
 
 ## インストール
@@ -60,13 +60,14 @@ calendar.dueDate("2026-11", { day: 23, convention: "following" }); // "2026-11-2
 
 ## できること
 
-### 日本・英国・シンガポールの祝日
+### 日本・フランス・英国・シンガポールの祝日
 
-| 提供元                                            | サブパス             | タイムゾーン     | 対応年     | 照合しているデータ                  |
-| ------------------------------------------------- | -------------------- | ---------------- | ---------- | ----------------------------------- |
-| `jp`                                              | `bizdays-toolkit/jp` | `Asia/Tokyo`     | 1955〜2099 | 内閣府「国民の祝日」CSV             |
-| `england`・`wales`・`scotland`・`northernIreland` | `bizdays-toolkit/uk` | `Europe/London`  | 2012〜2099 | GOV.UK の bank holidays             |
-| `sg`                                              | `bizdays-toolkit/sg` | `Asia/Singapore` | 2020〜2027 | data.gov.sg（Ministry of Manpower） |
+| 提供元                                            | サブパス             | タイムゾーン     | 対応年     | 照合しているデータ                     |
+| ------------------------------------------------- | -------------------- | ---------------- | ---------- | -------------------------------------- |
+| `jp`                                              | `bizdays-toolkit/jp` | `Asia/Tokyo`     | 1955〜2099 | 内閣府「国民の祝日」CSV                |
+| `metropole`・`alsaceMoselle`                      | `bizdays-toolkit/fr` | `Europe/Paris`   | 2000〜2099 | data.gouv.fr「Jours fériés en France」 |
+| `england`・`wales`・`scotland`・`northernIreland` | `bizdays-toolkit/uk` | `Europe/London`  | 2012〜2099 | GOV.UK の bank holidays                |
+| `sg`                                              | `bizdays-toolkit/sg` | `Asia/Singapore` | 2020〜2027 | data.gov.sg（Ministry of Manpower）    |
 
 祝日には日付・名称（と英語名）・`kind`（国民の祝日・振替休日・国民の休日・bank holiday など。国ごとに違う）・`confirmed`（公式に確定した日付か。日本の春分の日・秋分の日と、GOV.UK が公表している最後の年より後の英国の bank holidays は予測）が付きます。対応年の外は `outOfRange: "ignore"` を指定しない限りエラーで、`unconfirmedHolidays: "throw"` にすると予測の祝日に依存する結果を止められます。詳しくは[同梱の祝日の提供元](./guide.ja.md#同梱の祝日の提供元)・[未確定の祝日](./guide.ja.md#未確定の祝日)。
 
@@ -128,7 +129,7 @@ diagnoseCalendar({
 
 [Semantic Versioning](https://semver.org/lang/ja/) に従います。詳しくは [RELEASING.md](../RELEASING.md) を参照してください。
 
-- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表、シンガポールの新しい年の告示と日付の改定）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
+- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表、シンガポールの新しい年の告示と日付の改定、フランスの労働法典の改正）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
 - 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.1.0"`）
 - 反映済みのデータは、提供元の `dataVersion`（日本は反映済みの官報の年月、英国・シンガポールは反映済みの GOV.UK・data.gov.sg のデータの年月）と `confirmedThrough` で確認できます（`jp.dataVersion`・`england.confirmedThrough` など）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` のモジュールの定数 `dataVersion`・`confirmedThrough` は 0.12.0 で非推奨で、1.0.0 で削除します
 - 1.0.0 までは、マイナー版で破壊的変更を行うことがあります。マイナー版の間を移るときに利用者がする作業は、[移行ガイド](./migration.md)と、CHANGELOG の各版の「移行」にまとめています
@@ -142,7 +143,9 @@ diagnoseCalendar({
 
 シンガポールの祝日の検証には、MOM（Ministry of Manpower）が data.gov.sg で公開している「Singapore Public Holidays」コレクション（<https://data.gov.sg/collections/691/view>）を利用し、両者が食い違う箇所は MOM の報道発表を正としています（テスト用フィクスチャのみ。パッケージには含みません）。
 
-Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), and data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence).
+フランスの祝日の検証には、DINUM が data.gouv.fr で公開している「Jours fériés en France」（<https://www.data.gouv.fr/datasets/jours-feries-en-france>。Métropole と Alsace-Moselle のゾーンの JSON エクスポート）を利用しています（テスト用フィクスチャのみ。パッケージには含みません）。
+
+Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), data from data.gov.sg made available under the [Singapore Open Data Licence](https://data.gov.sg/open-data-licence), and data from data.gouv.fr made available under the [Licence Ouverte / Open Licence 2.0](https://www.etalab.gouv.fr/licence-ouverte-open-licence).
 
 ## ライセンス
 

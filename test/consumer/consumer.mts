@@ -22,6 +22,12 @@ import {
   type KnownJapaneseHolidayKey,
 } from "bizdays-toolkit/jp";
 import { sg, type SgHoliday } from "bizdays-toolkit/sg";
+import {
+  alsaceMoselle,
+  metropole,
+  type FrHoliday,
+  type KnownFrHolidayKey,
+} from "bizdays-toolkit/fr";
 import { scotland, wales, type UkHoliday } from "bizdays-toolkit/uk";
 
 type Equal<A, B> =
@@ -117,7 +123,11 @@ expectType<Equal<typeof calTimed.time, string>>();
 const parts = toDateTimeParts({ epochMilliseconds: 0 }, "Europe/London");
 expectType<Equal<typeof parts.time, string>>();
 
-const providers: HolidayProvider[] = [jp, scotland, wales];
+const providers: HolidayProvider[] = [jp, scotland, wales, metropole, alsaceMoselle];
+const solidarity: KnownFrHolidayKey = "pentecost-monday";
+createCalendar({ holidays: metropole, openRecurring: [{ holiday: true, keys: [solidarity] }] });
+const frHoliday: FrHoliday | undefined = metropole.holidaysInYear(2026)[0];
+void frHoliday;
 const holiday: JapaneseHoliday | UkHoliday | undefined = jp.holidaysInYear(2026)[0];
 const issues: readonly Diagnostic[] = diagnoseCalendar({ holidays: jp });
 // @ts-expect-error 存在しない設定の型は誤り

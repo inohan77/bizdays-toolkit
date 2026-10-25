@@ -5,10 +5,10 @@
  * 読み込み方は環境ごとに違うので、呼び出し側が各サブパスのモジュールを渡す。
  * 本物の Temporal がある環境では、Temporal のオブジェクトを入力にした確認も行う。
  *
- * @param {{ root: any, jp: any, uk: any, sg: any, diagnose: any, provider: any }} modules
+ * @param {{ root: any, jp: any, uk: any, sg: any, fr: any, diagnose: any, provider: any }} modules
  * @returns {{ results: { name: string, ok: boolean, error?: string }[], temporal: "native" | "absent" }}
  */
-export function smoke({ root, jp, uk, sg, diagnose, provider }) {
+export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
   const results = [];
   const check = (name, fn) => {
     try {
@@ -77,6 +77,24 @@ export function smoke({ root, jp, uk, sg, diagnose, provider }) {
       code = root.isBizdaysError(e) ? e.code : "not a bizdays error";
     }
     equal(code, "invalid-date", "error code");
+  });
+
+  check("フランスの祝日（本土と Alsace-Moselle、Europe/Paris での判定、連帯の日）", () => {
+    const paris = root.createCalendar({ holidays: fr.metropole, closedWeekdays: [0, 6] });
+    equal(paris.isBusinessDay("2026-05-14"), false, "Ascension");
+    equal(
+      paris.isHoliday(new Date("2026-05-24T22:30:00Z")),
+      true,
+      "CEST (May 25 Lundi de Pentecôte)",
+    );
+    equal(fr.alsaceMoselle.holidaysInYear(2026).length, 13, "Alsace-Moselle");
+    equal(fr.metropole.holidaysInYear(2026).length, 11, "metropole");
+    const solidarity = root.createCalendar({
+      holidays: fr.metropole,
+      closedWeekdays: [0, 6],
+      openRecurring: [{ holiday: true, keys: ["pentecost-monday"] }],
+    });
+    equal(solidarity.isBusinessDay("2026-05-25"), true, "Journée de solidarité");
   });
 
   check("シンガポールの祝日（振替と Asia/Singapore での判定）、未確定の祝日のガード", () => {

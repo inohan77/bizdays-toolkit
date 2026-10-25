@@ -533,3 +533,31 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 **監視の報告書の日付**（版の変更なし）
 
 - `verify-govuk.ts`・`verify-datagovsg.ts`・`verify-cao.ts` の「確認した日付」（報告書の 1 行目・フィクスチャの「取得」）は UTC の日付でした。issue のコメントの日付（`TZ=Asia/Tokyo date`）と基準が違ったので、3 つを同時に日本時間に揃えました（`Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" })`）
+
+## 48. フランスの祝日（`bizdays-toolkit/fr`。本土と Alsace-Moselle）と、4 か国目の選び方
+
+0.20.0 で 4 か国目の提供元としてフランスを足しました（5 通目の提案の P5。改定版で香港から変更）。
+
+**選定の基準**: 次の提供元を足すときにも使えるよう、5 通目の提案書で挙げた 3 つの条件を基準に書き残します。
+
+1. 公式データと全日照合できること（照合できなければ「公式データで全日照合」という約束（19・44 番）を守れない）
+2. 利用者層の重なり（このライブラリの利用者が扱う国。香港は日本の企業の拠点として多いが、下の理由で見送った）
+3. 実装と保守の重さ（規則で計算できるか、年ごとの表か。年ごとの告示の有無。振替の規則の複雑さ）
+
+**候補の比較**:
+
+- **香港**: data.gov.hk の「Hong Kong Public Holidays Data」（Digital Policy Office・1823・JSON）は実在し、1 を満たしますが、データセットの作成が 2024 年で過去の版で遡れるのは 2023 年分まで、それより前は官報（Government Gazette）での照合になり、英国より重い作業でした。太陰暦の祝日は年ごとの表になり（シンガポールと同じ）、3 を満たしません。1 のための作業量の割に照合できる年数が少ないので見送りました（需要が示されれば表の提供元として足せる）
+- **米国**: 連邦祝日は規則で計算でき、"observed" の振替は 0.18.0 の `substituteDays` で書けますが、連邦政府の公式な機械可読データ（OPM の一覧は HTML）がなく 1 が弱く、州ごとの祝日の違いが大きい
+- **ドイツ**: 州ごとに祝日が違い（16 州）、連邦の公式な機械可読データがない
+- **フランス**: DINUM が data.gouv.fr で「Jours fériés en France」を公開し（Licence Ouverte 2.0）、ゾーンごとの JSON（`{ "YYYY-MM-DD": "名称" }`）が過去 20 年・未来 5 年の窓で得られます。祝日は労働法典 L3133-1 の 11 日で、固定日 8 日と復活祭からの日数 3 日なので規則で計算でき（英国と同じ型）、振替はなく、年ごとの告示もありません。1〜3 をすべて満たし、約 26 年分を照合できます
+
+**設計**:
+
+- 提供元は `metropole`（ID `FR`）と `alsaceMoselle`（ID `FR-AM`）の 2 つ。data.gouv.fr のゾーンに対応します。Alsace-Moselle（Bas-Rhin・Haut-Rhin・Moselle の 3 県）には ISO 3166-2 のコードが 1 つなく（Grand Est の `FR-GES` は範囲が広すぎる）、県の列挙（`FR-57-67-68`）は読めないので、このライブラリの ID として `FR-AM` を決め、ISO でないことを文書に書きます。海外県・海外領土は祝日もタイムゾーンも違い（data.gouv.fr に 11 ゾーン）、需要が見えるまで同梱しません
+- 名称は data.gouv.fr の表記（`1er mai`・`Lundi de Pentecôte`。18 番の「公式データの綴りを写す」）、`nameEn` はライブラリの英訳、`key` は英語名から 46 番の規則で導きます（`labour-day`・`pentecost-monday`・`victory-in-europe`・`bastille`・`all-saints`・`saint-stephens` など）。Lundi de Pentecôte の英語名は "Whit Monday" も一般的ですが、`key` を提案書の `pentecost-monday` に合わせ、英語名も "Pentecost Monday" にしました
+- `kind` は `regular` だけです（振替も臨時の祝日もない）。将来の値の追加に備えて型は開いたままです（42 番）
+- **2 つの祝日が同じ日に当たる年**（復活祭が 3 月 23 日なら Ascension が 5 月 1 日 = 2008 年、3 月 30 日なら 5 月 8 日 = 2059 年）は、提供元の契約（1 日に 1 件。6 番）に従い、復活祭から決まる祝日の名称・`key` で 1 件を返します。data.gouv.fr の JSON（date → name の写像）も同じ日付に Ascension を載せており、照合の対象に合わせました。`keys: ["labour-day"]` が 2008 年の 5 月 1 日に当てはまらない点は文書に書きます
+- **すべての年が `confirmed: true`** で、`confirmedThrough` は持ちません。日本の春分・秋分の日（官報）や英国の bank holiday（GOV.UK の公表・布告による移動）と違い、フランスの祝日は法令で定まり、年ごとの告示や移動がありません。変わるのは法改正のときだけで、それは予測ではなく反映の対象です（パッチ版）。対応年は 2000〜2099 年（復活祭の計算は 43 番の `easterSunday`）
+- **連帯の日**（journée de solidarité。2004 年の法で、Lundi de Pentecôte を出勤日にする企業が多い）: 法律上は祝日のままで（労働法典 L3133-1 にある）、出勤日にするかは企業の取り決めなので、提供元は祝日として返し、例外は祝日の規則 `{ holiday: true, keys: ["pentecost-monday"] }` で書きます。「祝日を休みにするかは利用者が決める」というライブラリ全体の分担（9 番）のとおりで、0.18.0 の `key` がちょうどこの用途を満たします
+- **照合と監視**: data.gouv.fr が「安定した URL」として案内する公式のエクスポート（`https://etalab.github.io/jours-feries-france-data/json/{zone}.json`。DINUM の生成）を照合に使います。`calendrier.api.gouv.fr` も同じ生成物を配信していますが、データセットのページが案内する URL を正とします。`scripts/verify-datagouv.ts` を英国・シンガポール・日本と同じ形（`--report`・`--simulate`、終了コード 0・1・2）で書き、`data-watch.yml` に 4 つ目の照合として足しました（ラベル `datagouv-data`）。JSON の窓は毎年 1 月に 1 年ずつ動くので、そのときはフィクスチャの差分だけが出る想定で（版は要らない）、RELEASING.md に書きました。「公表済みの年」の節はありません（年ごとの告示がないため）
+- **サイズ**: `./fr` の上限は 6,500（測定 5,404。gzip）。README の min+gzip の値は 0.20.0 で測り直しました（0.18.0・0.19.0 の `key`・`businessDayOfMonth`・`skipWeekdays` でルートが約 1.0 KB 増えていた）

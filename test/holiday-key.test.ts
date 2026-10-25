@@ -16,6 +16,7 @@ import {
   type KnownUkHolidayKey,
 } from "../src/uk/index.ts";
 import { sg, type KnownSgHolidayKey } from "../src/sg/index.ts";
+import { alsaceMoselle, metropole } from "../src/fr/index.ts";
 import { diagnoseCalendar } from "../src/diagnose/index.ts";
 
 const JP_KEYS: readonly KnownJapaneseHolidayKey[] = [
@@ -294,5 +295,20 @@ test("key: keys の検証（holiday 以外には付けられない・形式）�
       openRecurring: [{ holiday: true }, { holiday: true, keys: ["sports"] }],
     }),
     [["warning", "shadowed", "openRecurring[1]", "openRecurring[0]"]],
+  );
+});
+
+test("key: フランスの祝日は 13 の key を持ち、2 つの祝日が重なる年は復活祭の側の key", () => {
+  const seen = new Set<string>();
+  for (let y = 2000; y <= 2099; y++) {
+    for (const h of alsaceMoselle.holidaysInYear(y)) {
+      assert.ok(h.key !== undefined && KEY_PATTERN.test(h.key), `${h.date} ${h.name}`);
+      seen.add(h.key);
+    }
+  }
+  assert.equal(seen.size, 13);
+  assert.equal(
+    metropole.holidaysInYear(2008).find((h) => h.date === "2008-05-01")?.key,
+    "ascension",
   );
 });

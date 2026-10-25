@@ -21,6 +21,7 @@ const SUBPATHS = [
   "bizdays-toolkit/jp",
   "bizdays-toolkit/uk",
   "bizdays-toolkit/sg",
+  "bizdays-toolkit/fr",
   "bizdays-toolkit/diagnose",
   "bizdays-toolkit/provider",
 ];

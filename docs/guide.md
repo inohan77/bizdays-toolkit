@@ -86,6 +86,40 @@ sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
 - Chinese New Year, Hari Raya Puasa, Hari Raya Haji, Vesak Day and Deepavali follow the lunar, Islamic and Hindu calendars, so they cannot be computed from rules. The dates are the ones gazetted by the Ministry of Manpower (MOM), year by year, and the substitute days follow the rule of the Holidays Act. Supported years are the years MOM has gazetted (currently 2020–2027; `confirmedThrough` is the same as the last supported year). Later years are not predicted and are outside the supported years (`out-of-range`), so `sg` never returns `confirmed: false`
 - The dates are verified against the "Singapore Public Holidays" collection on data.gov.sg (MOM). Where that data differs from the gazetted dates (2022: the revised Hari Raya dates and two missing substitute days), the gazetted dates are used. Differences from data.gov.sg are watched daily and released as patch versions
 
+### French public holidays
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { alsaceMoselle, metropole } from "bizdays-toolkit/fr";
+
+const paris = createCalendar({ holidays: metropole, closedWeekdays: [0, 6] });
+paris.isBusinessDay("2026-05-14"); // false (Ascension Day)
+paris.addBusinessDays("2026-05-22", 1); // "2026-05-26" (May 25 is Whit Monday, Lundi de Pentecôte)
+metropole.holidaysInYear(2026)[1];
+// { date: "2026-04-06", name: "Lundi de Pâques", nameEn: "Easter Monday", kind: "regular", confirmed: true, key: "easter-monday" }
+alsaceMoselle.holidaysInYear(2026).length; // 13 (the 11 national holidays plus Good Friday and December 26)
+
+// A company that makes Whit Monday a working day (the "journée de solidarité"): the day stays a public holiday
+const company = createCalendar({
+  holidays: metropole,
+  closedWeekdays: [0, 6],
+  openRecurring: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }],
+});
+company.isBusinessDay("2026-05-25"); // true
+```
+
+| Provider        | ID      | Zone on data.gouv.fr | Holidays                                                                              |
+| --------------- | ------- | -------------------- | ------------------------------------------------------------------------------------- |
+| `metropole`     | `FR`    | Métropole            | The 11 holidays of the Labour Code (article L3133-1)                                  |
+| `alsaceMoselle` | `FR-AM` | Alsace-Moselle       | The 11 plus Good Friday (`good-friday`) and December 26 (`saint-stephens`, local law) |
+
+- The 11 national holidays are 8 fixed dates (January 1, May 1, May 8, July 14, August 15, November 1, November 11, December 25) and 3 days counted from Easter Sunday (Easter Monday, Ascension Day at +39 days, Whit Monday at +50 days). There are no substitute days: a holiday on a weekend is simply a weekend. `kind` is always `regular`
+- `name` is the French name as written on data.gouv.fr (`1er mai`, `Lundi de Pentecôte`), `nameEn` an English rendering, and `key` the stable identifier (`labour-day`, `pentecost-monday`, …; see [Holiday keys](#holiday-keys))
+- When two holidays fall on the same day (Ascension Day on May 1 in 2008, on May 8 in 2059), the provider returns one holiday for that day with the name and key of the Easter-based holiday, as the data.gouv.fr JSON does, so `keys: ["labour-day"]` does not match May 1, 2008
+- Whit Monday is a working day in many companies (the _journée de solidarité_), but it remains a public holiday by law, so the provider returns it as a holiday; write the exception as a holiday rule with `keys: ["pentecost-monday"]`, as above. Whether a holiday is a day off is the user's decision, as everywhere in this library
+- Supported years are 2000–2099. The dates follow from the law, not from a yearly publication, so every year is `confirmed: true` and the providers have no `confirmedThrough`; a change to the Labour Code would be shipped as a patch version. The dates are verified against the "Jours fériés en France" dataset on data.gouv.fr (DINUM; JSON exports for the two zones, 20 years back and 5 years ahead, currently 2006–2031). Differences are watched daily
+- `FR-AM` is this library's identifier for Alsace-Moselle (the departments of Bas-Rhin, Haut-Rhin and Moselle), which has no single ISO 3166-2 code. The overseas departments and territories, whose holidays and time zones differ, are not bundled
+
 ### Holiday keys
 
 Each bundled holiday that recurs every year has a stable identifier in `key`, so that a rule can select individual holidays with `{ holiday: true, keys: [...] }` (see [Recurring rules](#recurring-rules)) without depending on the official name, which follows the source data and may change in a patch version. A key never changes, even when the holiday's date or official name does (the Emperor's Birthday is `emperors-birthday` on April 29, December 23 and February 23 alike; Health and Sports Day and Sports Day are both `sports`). A substitute day carries the key of the original holiday, so `keys: ["coming-of-age"]` selects Coming of Age Day and its substitute; add `kinds: ["national"]` for the day itself only. One-off holidays (imperial ceremonies, proclaimed UK bank holidays, Singapore's Polling Day) and Japan's citizens' holidays have no key; select them with `kinds` or `dates`.
@@ -106,13 +140,14 @@ florist.isBusinessDay("2026-05-04"); // false (Greenery Day)
 jp.holidaysInYear(2020).find((h) => h.date === "2020-02-24")?.key; // "emperors-birthday" (a substitute holiday)
 ```
 
-| Provider         | Keys                                                                                                                                                                                                                                                              |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `jp`             | `new-year`, `coming-of-age`, `national-foundation`, `emperors-birthday`, `vernal-equinox`, `showa`, `constitution-memorial`, `greenery`, `childrens`, `marine`, `mountain`, `respect-for-the-aged`, `autumnal-equinox`, `sports`, `culture`, `labor-thanksgiving` |
-| `england` … (UK) | `new-year`, `2nd-january`, `st-patricks`, `good-friday`, `easter-monday`, `early-may`, `spring`, `battle-of-the-boyne`, `summer`, `st-andrews`, `christmas`, `boxing-day`                                                                                         |
-| `sg`             | `new-year`, `chinese-new-year`, `good-friday`, `labour-day`, `hari-raya-puasa`, `vesak`, `hari-raya-haji`, `national-day`, `deepavali`, `christmas`                                                                                                               |
+| Provider               | Keys                                                                                                                                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jp`                   | `new-year`, `coming-of-age`, `national-foundation`, `emperors-birthday`, `vernal-equinox`, `showa`, `constitution-memorial`, `greenery`, `childrens`, `marine`, `mountain`, `respect-for-the-aged`, `autumnal-equinox`, `sports`, `culture`, `labor-thanksgiving` |
+| `metropole` … (France) | `new-year`, `easter-monday`, `labour-day`, `victory-in-europe`, `ascension`, `pentecost-monday`, `bastille`, `assumption`, `all-saints`, `armistice`, `christmas`; Alsace-Moselle adds `good-friday`, `saint-stephens`                                            |
+| `england` … (UK)       | `new-year`, `2nd-january`, `st-patricks`, `good-friday`, `easter-monday`, `early-may`, `spring`, `battle-of-the-boyne`, `summer`, `st-andrews`, `christmas`, `boxing-day`                                                                                         |
+| `sg`                   | `new-year`, `chinese-new-year`, `good-friday`, `labour-day`, `hari-raya-puasa`, `vesak`, `hari-raya-haji`, `national-day`, `deepavali`, `christmas`                                                                                                               |
 
-The types `KnownJapaneseHolidayKey`, `KnownUkHolidayKey` and `KnownSgHolidayKey` list them for editor completion (`@beta`). Keys are derived once from the English name (lowercase, hyphens, no apostrophes, the trailing "Day" dropped) and spelled as the provider spells it (`labor-thanksgiving` in Japan, `labour-day` in Singapore). A provider you write can give its holidays keys too (see [Holidays of other countries and regions](./providers.md)).
+The types `KnownJapaneseHolidayKey`, `KnownUkHolidayKey`, `KnownSgHolidayKey` and `KnownFrHolidayKey` list them for editor completion (`@beta`). Keys are derived once from the English name (lowercase, hyphens, no apostrophes, the trailing "Day" dropped) and spelled as the provider spells it (`labor-thanksgiving` in Japan, `labour-day` in Singapore). A provider you write can give its holidays keys too (see [Holidays of other countries and regions](./providers.md)).
 
 ## Business-day calendars
 

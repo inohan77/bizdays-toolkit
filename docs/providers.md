@@ -2,7 +2,7 @@
 
 <p><b>English</b> | <a href="./providers.ja.md">日本語</a></p>
 
-How to write a holiday provider for a country or region that is not bundled (Japan, the UK and Singapore are; see the [guide](./guide.md#bundled-holiday-providers)), and the calendar arithmetic that `bizdays-toolkit/provider` exposes for it.
+How to write a holiday provider for a country or region that is not bundled (Japan, the UK, Singapore and France are; see the [guide](./guide.md#bundled-holiday-providers)), and the calendar arithmetic that `bizdays-toolkit/provider` exposes for it.
 
 ## Writing a holiday provider
 

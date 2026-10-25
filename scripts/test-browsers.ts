@@ -59,9 +59,10 @@ const page = `<!doctype html>
   import * as jp from "/dist/jp/index.js";
   import * as provider from "/dist/provider/index.js";
   import * as sg from "/dist/sg/index.js";
+  import * as fr from "/dist/fr/index.js";
   import * as uk from "/dist/uk/index.js";
   import { smoke } from "/test/compat/smoke.mjs";
-  window.__results = smoke({ root, jp, uk, sg, diagnose, provider });
+  window.__results = smoke({ root, jp, uk, sg, fr, diagnose, provider });
 </script>
 `;
 
