@@ -121,7 +121,12 @@ test("祝前日: 入力の誤り", () => {
     [{ dayBeforeHoliday: true, dayAfterHoliday: true }, /must have exactly one of/],
     [{ dayBeforeHoliday: true, holiday: true }, /must have exactly one of/],
     [{ dayBeforeHoliday: true, nth: 1 }, /closedRecurring\[0\]\.nth/],
-    [{ dayBeforeHoliday: true, kinds: ["national"] }, /closedRecurring\[0\]\.kinds/],
+    [{ dayBeforeHoliday: true, kinds: "national" }, /closedRecurring\[0\]\.kinds/],
+    [{ dayBeforeHoliday: true, keys: ["Bad Key"] }, /closedRecurring\[0\]\.keys/],
+    [
+      { dayBeforeHoliday: true, skipWeekdays: [0, 1, 2, 3, 4, 5, 6] },
+      /closedRecurring\[0\]\.skipWeekdays: cannot include every weekday/,
+    ],
     [{ dayBeforeHoliday: true, weekdays: [7] }, /closedRecurring\[0\]\.weekdays/],
     [
       { dayBeforeHoliday: true, interval: 2, anchor: "2026-01-07" },

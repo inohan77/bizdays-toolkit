@@ -46,7 +46,7 @@ export type UkHolidayKind = KnownUkHolidayKind | (string & {});
  * 英国の毎年の bank holiday の識別子（Holiday.key。既知の値）。GOV.UK の区分名から付け、布告で日付が移った年も同じ値。
  * 振替日は元の祝日の key を持ち、臨時の祝日（special）は key を持たない。
  * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
- * @beta
+ * @public
  */
 export type KnownUkHolidayKey =
   | "new-year"

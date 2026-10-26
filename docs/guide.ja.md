@@ -135,7 +135,7 @@ sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
 
 ### 祝日の識別子
 
-同梱の、毎年繰り返す祝日には安定した識別子 `key` が付いています。規則の `{ holiday: true, keys: [...] }` で祝日を個別に指すためのもので（[繰り返しの規則](#繰り返しの規則)）、公式データに従ってパッチ版で変わりうる名称に依存せずに済みます。`key` は祝日の日付や公式の名称が変わっても変わりません（天皇誕生日は 4 月 29 日・12 月 23 日・2 月 23 日とも `emperors-birthday`、体育の日とスポーツの日はどちらも `sports`）。振替日は元の祝日の `key` を持つので、`keys: ["coming-of-age"]` は成人の日とその振替休日を指します。当日だけなら `kinds: ["national"]` を併せて指定します。一度きりの祝日（皇室行事の休日、英国の布告による臨時の bank holiday、シンガポールの Polling Day）と日本の国民の休日は `key` を持たないので、`kinds` か `dates` で指します。
+同梱の、毎年繰り返す祝日には安定した識別子 `key` が付いています。規則の `{ holiday: true, keys: [...] }` で祝日を、`{ dayAfterHoliday: true, keys: [...] }`・`{ dayBeforeHoliday: true, keys: [...] }` でその前後の日を個別に指すためのもので（[繰り返しの規則](#繰り返しの規則)）、公式データに従ってパッチ版で変わりうる名称に依存せずに済みます。`key` は祝日の日付や公式の名称が変わっても変わりません（天皇誕生日は 4 月 29 日・12 月 23 日・2 月 23 日とも `emperors-birthday`、体育の日とスポーツの日はどちらも `sports`）。振替日は元の祝日の `key` を持つので、`keys: ["coming-of-age"]` は成人の日とその振替休日を指します。当日だけなら `kinds: ["national"]` を併せて指定します。一度きりの祝日（皇室行事の休日、英国の布告による臨時の bank holiday、シンガポールの Polling Day）と日本の国民の休日は `key` を持たないので、`kinds` か `dates` で指します。
 
 ```ts
 import { createCalendar } from "bizdays-toolkit";
@@ -160,7 +160,7 @@ jp.holidaysInYear(2020).find((h) => h.date === "2020-02-24")?.key; // "emperors-
 | `metropole` ほか（フランス） | `new-year`、`easter-monday`、`labour-day`、`victory-in-europe`、`ascension`、`pentecost-monday`、`bastille`、`assumption`、`all-saints`、`armistice`、`christmas`。Alsace-Moselle は `good-friday`・`saint-stephens` が加わる                                     |
 | `sg`                         | `new-year`、`chinese-new-year`、`good-friday`、`labour-day`、`hari-raya-puasa`、`vesak`、`hari-raya-haji`、`national-day`、`deepavali`、`christmas`                                                                                                               |
 
-型 `KnownJapaneseHolidayKey`・`KnownUkHolidayKey`・`KnownSgHolidayKey`・`KnownFrHolidayKey` がこの一覧を持ち、エディターの補完に使えます（`@beta`）。識別子は英語名から 1 度だけ導いたもので（小文字にし、空白をハイフンに、アポストロフィを除き、末尾の "Day" を落とす）、綴りは提供元の英語名に従います（日本は `labor-thanksgiving`、シンガポールは `labour-day`）。自作の提供元にも `key` を付けられます（[他の国・地域の祝日](./providers.ja.md)）。
+型 `KnownJapaneseHolidayKey`・`KnownUkHolidayKey`・`KnownSgHolidayKey`・`KnownFrHolidayKey` がこの一覧を持ち、エディターの補完に使えます。識別子は英語名から 1 度だけ導いたもので（小文字にし、空白をハイフンに、アポストロフィを除き、末尾の "Day" を落とす）、綴りは提供元の英語名に従います（日本は `labor-thanksgiving`、シンガポールは `labour-day`）。自作の提供元にも `key` を付けられます（[他の国・地域の祝日](./providers.ja.md)）。
 
 ## 営業日カレンダー
 
@@ -230,19 +230,20 @@ museum.dayInfo("2026-02-12").name; // "祝日の翌日休館"（2 月 11 日は�
 museum.isBusinessDay("2026-05-07"); // false（5 月 3〜6 日の連休の翌日）
 ```
 
-| 書き方                                                   | 意味                                                                                                                                 |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `{ weekday: 1 }`                                         | 毎週月曜日                                                                                                                           |
-| `{ weekday: 3, nth: 3 }`                                 | 第 3 水曜日。`nth` は 1〜5 と -1（最終）。`[2, 4]` のように配列で複数指定できる                                                      |
-| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`      | 隔週水曜日。`anchor` から偶数週の水曜日（周期は 2 週以上。下記）                                                                     |
-| `{ day: 20 }`                                            | 毎月 20 日。`day` は 1〜31 と -1（末日）。配列で複数指定できる                                                                       |
-| `{ businessDayOfMonth: -1 }`                             | 月の第 n 営業日（1〜31、-1 は最後、-2 はその前、…。配列で複数指定できる）。繰り返しの規則を除いた判定で数える（下記）                |
-| `{ holiday: true, kinds: ["substitute"] }`               | 祝日。`kinds` でその種別（`Holiday.kind`）に、`keys` で個別の祝日（`Holiday.key`）に絞れる。`holidayPolicy` より先に判定する（下記） |
-| `{ dayAfterHoliday: true }`                              | 祝日の翌日。祝日（連休なら連休）が明けた最初の祝日でない日（提供元の祝日だけで判定）                                                 |
-| `{ dayBeforeHoliday: true }`                             | 祝前日。祝日（連休なら連休）の直前の祝日でない日（提供元の祝日だけで判定）                                                           |
-| `months: [8, 12]`                                        | どの書き方にも付けられる、月の絞り込み                                                                                               |
-| `effectiveFrom: "2027-04-01"`・`effectiveTo: "…"`        | 規則の有効期間（両端を含む）。期間の外では、その規則は書かれていないのと同じになる（下記）                                           |
-| `onHolidayRule: "after-holiday"`・`skipWeekdays: [0, 6]` | 振替で祝日に加えてその曜日も飛ばす。「6 月 15 日。土日祝なら翌営業日」（下記）                                                       |
+| 書き方                                                   | 意味                                                                                                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `{ weekday: 1 }`                                         | 毎週月曜日                                                                                                                                       |
+| `{ weekday: 3, nth: 3 }`                                 | 第 3 水曜日。`nth` は 1〜5 と -1（最終）。`[2, 4]` のように配列で複数指定できる                                                                  |
+| `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`      | 隔週水曜日。`anchor` から偶数週の水曜日（周期は 2 週以上。下記）                                                                                 |
+| `{ day: 20 }`                                            | 毎月 20 日。`day` は 1〜31 と -1（末日）。配列で複数指定できる                                                                                   |
+| `{ businessDayOfMonth: -1 }`                             | 月の第 n 営業日（1〜31、-1 は最後、-2 はその前、…。配列で複数指定できる）。繰り返しの規則を除いた判定で数える（下記）                            |
+| `{ holiday: true, kinds: ["substitute"] }`               | 祝日。`kinds` でその種別（`Holiday.kind`）に、`keys` で個別の祝日（`Holiday.key`）に絞れる。`holidayPolicy` より先に判定する（下記）             |
+| `{ dayAfterHoliday: true }`                              | 祝日の翌日。祝日（連休なら連休）が明けた最初の祝日でない日（提供元の祝日だけで判定）。`kinds`・`keys`・`skipWeekdays` で絞り・広げられる（下記） |
+| `{ dayBeforeHoliday: true }`                             | 祝前日。祝日（連休なら連休）の直前の祝日でない日（提供元の祝日だけで判定）。`kinds`・`keys`・`skipWeekdays` は祝日の翌日と同じ                   |
+| `{ cycle: 6, anchor: "2026-01-05", positions: [5, 6] }`  | 日単位の周期。`anchor` を 1 日目として 6 日ごとの 5・6 日目（4 勤 2 休のような交替制。下記）                                                     |
+| `months: [8, 12]`                                        | どの書き方にも付けられる、月の絞り込み                                                                                                           |
+| `effectiveFrom: "2027-04-01"`・`effectiveTo: "…"`        | 規則の有効期間（両端を含む）。期間の外では、その規則は書かれていないのと同じになる（下記）                                                       |
+| `onHolidayRule: "after-holiday"`・`skipWeekdays: [0, 6]` | 振替で祝日に加えてその曜日も飛ばす。「6 月 15 日。土日祝なら翌営業日」（下記）                                                                   |
 
 - **第 n 何曜日**は「その月で n 回目のその曜日」です（1〜7 日が第 1）。カレンダーの第 n 週の行にある曜日ではありません
 - **その月にない日**（`nth: 5` がない月、`day: 31` がない月）は当てはまりません。末日は `day: -1` で指定します
@@ -250,8 +251,11 @@ museum.isBusinessDay("2026-05-07"); // false（5 月 3〜6 日の連休の翌日
 - **祝日の規則**（`{ holiday: true }`）は、祝日の既定の扱いの例外を書きます。「2027 年 4 月から祝日も営業」は `holidayPolicy: "closed"` のまま `openRecurring: [{ holiday: true, effectiveFrom: "2027-04-01" }]`、「振替休日と国民の休日は営業」は `openRecurring: [{ holiday: true, kinds: ["substitute", "citizens"] }]`、スケジュールの「5 月の祝日は特別営業時間」は `recurring: [{ holiday: true, months: [5], value: … }]` です。`kinds` はその種別（`Holiday.kind`。種別は提供元の一覧を参照。`holidays: jp` ならエディターで補完が効きます）の祝日に、`keys` は個別の祝日（`Holiday.key`。「春分の日・秋分の日は営業」は `{ holiday: true, keys: ["vernal-equinox", "autumnal-equinox"] }`。[祝日の識別子](#祝日の識別子)）に、`weekdays` はその曜日（「土曜の祝日は午前診療」は `{ holiday: true, weekdays: [6], value: … }`）に、`months` はその月に絞り、省略すればすべての祝日です。判定は「祝日の上」の段階で、`holidayPolicy`・スケジュールの `holiday` より先に行い、`holidayPolicy: "ignore"` でも当てはまります。当てはまる日は祝日なので、この規則に `onHolidayRule` は指定できません（`invalid-option`）。`holiday` には祝日がそのまま付きます
 - **祝日の翌日**は定義上祝日でないので、その規則に `onHolidayRule` は指定できません（`invalid-option`）。「祝日」は提供元の祝日で、毎年の休業日などは含みません。提供元のない設定では 1 日も当てはまりません。`weekdays` でその曜日に絞れます。美術館の「祝日の翌日は休館（土曜・日曜に当たる場合は開館）」は `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` です（代わりに `openRecurring` で土日を開けると、ほかの土日の休館まで打ち消してしまいます）
 - **月の第 n 営業日**（`{ businessDayOfMonth: n }`）は、「月末最終営業日は棚卸しで休業」「四半期初の第 1・第 5 営業日は予約を止める」、スケジュールなら「最終営業日は短縮営業」を規則として書くためのものです。`{ day: -1 }`（暦の末日）や `{ weekday: 5, nth: -1 }`（最終金曜日）では数日ずれます。営業日を数える基準は、そのカレンダーの**繰り返しの規則をすべて除いた判定**（個別の日付・毎年の休業日・祝日（`holidayPolicy` の扱いどおり）・`closedWeekdays`）です。`closedAnnual: [{ from: "12-31", to: "01-03" }]` の年末年始休業があれば 2026 年 12 月の最終営業日は 30 日、31 日が土曜日の 10 月は 30 日です。繰り返しの規則を基準に入れないのは、この規則自身が繰り返しの規則で、入れると定義が循環するためです。そのため `closedRecurring` の `{ weekday: 0 }` で書いた定休日は営業日として数えられます。定休日は `closedWeekdays` で書いてください（そのような設定は診断が `counting-basis` で知らせます）。メソッドの `nthBusinessDayOfMonth`・`lastBusinessDayOfMonth` は規則を適用した後の実際の営業日を返すので、`{ businessDayOfMonth: -1 }` を休業にすると `lastBusinessDayOfMonth` はその前日になります。営業日が n 日に満たない月には当てはまりません（どの月にもない n は `never-matches`）。`onHolidayRule` は既定の `"under-holiday"` と `"over-holiday"` を受け、`"after-holiday"` は `invalid-option` です。`holidayPolicy: "open"` では祝日も営業日として数えるので第 n 営業日が祝日に当たることがあり、既定ではその日は祝日の段階が先に決めます（曜日の規則と同じ優先順位）。「第 1 営業日は祝日でも休業」は `onHolidayRule: "over-holiday"` で書きます（祝日が休業の設定では結果を変えず、診断が `redundant` で知らせます）。スケジュールには営業・休業の概念がないので、数える基準のカレンダーを `calendar` で指定します: `{ businessDayOfMonth: -1, calendar: branch, value: … }`（必須。タイムゾーンはスケジュールと同じ。そのカレンダーの実際の営業日で数える。カレンダーの側に `calendar` を書くと `invalid-option`）
-- **振替で曜日も飛ばす**（`skipWeekdays`。曜日・日の規則の `onHolidayRule: "after-holiday"` と組でだけ）は、振替で飛ばす日に祝日のほかその曜日を足します。これがないと、「月曜休館（祝日なら翌平日）」は祝日が続いた後に土曜日に落ちることがあり、「6 月 15 日は創立記念日。土日祝なら翌営業日」はそもそも書けません（土曜日の 6 月 15 日はもともと休みで、規則は振り替わらない）。`skipWeekdays: [0, 6]` を付けると、本来の日が祝日かその曜日なら、その日以降で最初の「祝日でもその曜日でもない日」に当てはまります。`shiftedFrom` は本来の日で、有効期間も本来の日で判定します。規則自身の曜日は `skipWeekdays` に含められません
+- **振替で曜日も飛ばす**（`skipWeekdays`。曜日・日の規則の `onHolidayRule: "after-holiday"` と組で使う。祝日の翌日・祝前日の規則では別の意味になる。下記）は、振替で飛ばす日に祝日のほかその曜日を足します。これがないと、「月曜休館（祝日なら翌平日）」は祝日が続いた後に土曜日に落ちることがあり、「6 月 15 日は創立記念日。土日祝なら翌営業日」はそもそも書けません（土曜日の 6 月 15 日はもともと休みで、規則は振り替わらない）。`skipWeekdays: [0, 6]` を付けると、本来の日が祝日かその曜日なら、その日以降で最初の「祝日でもその曜日でもない日」に当てはまります。`shiftedFrom` は本来の日で、有効期間も本来の日で判定します。規則自身の曜日は `skipWeekdays` に含められません
 - **祝前日**（`{ dayBeforeHoliday: true }`）はその鏡像で、翌日が祝日でその日自身は祝日でない日です。連休の前は連休の初日の前日だけが当てはまります（2026 年 5 月なら 5 月 2 日（土）だけで、5 月 4 日・5 日は祝日なので当てはまりません）。扱いは祝日の翌日と同じです（`weekdays`・`months`・有効期間を付けられ、`onHolidayRule` は指定できず、提供元がなければ当てはまりません）。スケジュールの「祝前日料金」、「祝前日は深夜 2 時まで営業」（`weekdays: [1, 2, 3, 4, 5]` で土日に当たる祝前日は通常どおり）、「祝前日は当日出荷の受付を正午まで」（締め時刻をスケジュールの値にして `cutoffs.valueOn(date)` を `cutoff` に渡す）のように書きます
+- **祝日の翌日・祝前日の絞り込み**（`kinds`・`keys`）: `{ dayBeforeHoliday: true, keys: ["chinese-new-year"] }` はシンガポールの旧正月の前日で、毎年日付が動く日です。絞り込みは、その日の隣の祝日（祝前日なら連休の初日）に当てます。ゴールデンウィークの前では、`keys: ["childrens"]` は 5 月 2 日に当てはまりません（翌日は憲法記念日）。`{ dayAfterHoliday: true, kinds: ["substitute"] }` は振替休日の翌日です
+- **祝日の前の最終平日**（祝日の翌日・祝前日の `skipWeekdays`）: これがないと、月曜日の祝日の祝前日は日曜日になり、英国の bank holiday の大半や日本の月曜日の祝日では役に立ちません。`skipWeekdays: [0, 6]` を付けると、祝日とその曜日が続く塊（祝日を 1 日以上含む）の前（後）の日に当てはまります。月曜日の祝日の前の金曜日や、Good Friday から Easter Monday までが明けた火曜日です。祝日を含まない普通の週末は塊になりません。`kinds`・`keys` は、塊の中でその日に最も近い祝日に当てます。飛ばすのは書いた曜日だけで、カレンダー自身の休業日は見ません。すべての曜日は飛ばせません
+- **日単位の周期**（`{ cycle, anchor, positions }`）は、週や月にそろわない規則を書きます。4 勤 2 休のような交替制や、10 日に 1 度の点検日です。`cycle` は周期の日数（2 以上）、`anchor` は 1 日目、`positions` は当てはまる周期の中の何日目か（1〜`cycle`。すべての日は指定できない）です。`interval` と同じく `anchor` より前の日にも当てはまるので、起点から始めるには `effectiveFrom` を付けます。`onHolidayRule` は `"under-holiday"`（既定）と `"over-holiday"` で、`"after-holiday"` は `invalid-option` です。交替制はふつう祝日に関係なく回るので、`holidayPolicy: "ignore"` と `closedWeekdays: []` を指定します
 - 繰り返しの規則どうしは配列で先に書いたものが優先で、`openRecurring` は `closedRecurring` より優先です。月曜の勤労感謝の日（2026-11-23）の翌日は、月曜の規則の振替先でもあり祝日の翌日でもあります。先に書いた規則が決め、どちらが決めたかは `dayInfo` で分かります
 
 ```ts
@@ -283,6 +287,27 @@ const hours = createSchedule({
   recurring: [{ businessDayOfMonth: -1, calendar: branch, value: "9-15", name: "締め作業で短縮" }],
 });
 hours.valueOn("2026-10-29"); // "9-15"（支店の 10 月の最終営業日）
+```
+
+```ts
+// 4 勤 2 休の製造ライン
+const lineA = createCalendar({
+  holidays: jp,
+  holidayPolicy: "ignore", // 交替制は祝日に関係なく回る
+  closedWeekdays: [],
+  closedRecurring: [{ cycle: 6, anchor: "2026-01-05", positions: [5, 6], name: "班 A の休日" }],
+});
+lineA.isBusinessDay("2026-01-09"); // false（周期の 5 日目）
+lineA.addBusinessDays("2026-01-08", 1); // "2026-01-11"
+
+// bank holiday の前の最終平日は締め時刻を繰り上げる
+const cutoffs = createSchedule({
+  holidays: england,
+  weekly: [null, "16:00", "16:00", "16:00", "16:00", "16:00", null],
+  recurring: [{ dayBeforeHoliday: true, skipWeekdays: [0, 6], value: "12:00" }],
+});
+cutoffs.valueOn("2026-05-22"); // "12:00"（5 月 25 日の Spring bank holiday の前の金曜日）
+cutoffs.valueOn("2026-05-15"); // "16:00"
 ```
 
 **有効期間**（`effectiveFrom`・`effectiveTo`）を付けると、規則の変更を 1 つのカレンダーで表しながら、過去の日付の判定も変えずに再現できます。繰り返しの規則と、毎年の休業日（`closedAnnual` のオブジェクトの形）に付けられます。
@@ -738,9 +763,9 @@ diagnoseCalendar({
 - `error` があるときは、規則どうしの診断（`shadowed`・`redundant` など）は行いません
 - `shadowed` は同じ種類の規則どうし（個別の日付どうし、毎年の月日どうし、繰り返しの規則どうし）だけを調べます。判定の順番は固定なので、種類をまたいで使われない規則は `redundant` として見つかります。臨時営業日（`openDates`）と臨時休業日（`closedDates`）は同じ種類で、先の臨時営業日に含まれる臨時休業日は `shadowed` です
 - 繰り返しの規則の `shadowed` は、祝日の扱い（`onHolidayRule`）も見ます。たとえば `"under-holiday"` の規則は、同じ日に当たる `"over-holiday"` の規則を覆いません（祝日には後の規則が当たるため）
-- `dayAfterHoliday` の規則の `shadowed` は、`dayAfterHoliday` の規則どうし（`months` と期間）でだけ調べます。当てはまる日が年ごとの祝日で変わるためで、曜日の規則との重なりは `redundant` で見つかります
+- `dayAfterHoliday`・`dayBeforeHoliday` の規則の `shadowed` は、同じ種類の規則どうし（`kinds`・`keys`・`weekdays`・`months`・期間と、同じ `skipWeekdays`）でだけ調べます。当てはまる日が年ごとの祝日で変わるためで、曜日の規則との重なりは `redundant` で見つかります。`cycle` の規則の `shadowed` は `cycle` の規則どうしでだけ調べ、後の規則の周期が先の規則の周期の倍数で、後の規則のどの日も先の規則の日に当たるときに覆うとみなします
 - 有効期間のある規則の `shadowed` は、先の規則の期間が後の規則の期間を含むことも条件です。周期（`interval`）のある規則は、先の規則の周期が後の規則を含むことも条件です（毎週は隔週を覆う。位相の違う隔週どうしは互いを覆わない）
-- `redundant` は、規則を取り除いた結果と 1 日ずつ比べます。個別の日付はその期間を、毎年の月日と繰り返しの規則は個別の日付を除いた設定で、祝日の提供元の対応年（日本は 1955〜2099 年）を、提供元がなければ 2001〜2028 年（曜日と月日の組み合わせが一巡する 28 年。周期のある規則があれば、その周期がそろう長さ。隔週なら 56 年）を調べます。その範囲の外にある有効期間も調べます（`outOfRange: "throw"` では対応年の中だけ）。調べた年は `message` に書かれます。スケジュールの値は、配列と普通のオブジェクトなら中身で、それ以外（`Date` など）は同じものかで比べます
+- `redundant` は、規則を取り除いた結果と 1 日ずつ比べます。個別の日付はその期間を、毎年の月日と繰り返しの規則は個別の日付を除いた設定で、祝日の提供元の対応年（日本は 1955〜2099 年）を、提供元がなければ 2001〜2028 年（曜日と月日の組み合わせが一巡する 28 年。周期（`interval`・`cycle`）のある規則があれば、その周期がそろう長さ。隔週なら 56 年、最長 200 年）を調べます。その範囲の外にある有効期間も調べます（`outOfRange: "throw"` では対応年の中だけ）。調べた年は `message` に書かれます。スケジュールの値は、配列と普通のオブジェクトなら中身で、それ以外（`Date` など）は同じものかで比べます
 - 日本の祝日を使う設定では、全日を調べるため数百ミリ秒かかります。リクエストごとではなく、テストや起動時の確認で使ってください。開発・テスト用の道具なので、アプリの本体のバンドルに入らないようサブパスに分けています
 
 **終わった規則を見つける**（`asOf`）: 店舗ごとの設定を JSON で持つ多店舗のサービスなどでは、設定が年を追って溜まります。第 2 引数に `{ asOf: "YYYY-MM-DD" }` を渡すと、`effectiveTo` がその日より前の規則と、その日より前に終わる個別の日付・期間を、`info` の `expired` で返します（`redundant` とは独立です。過去には効いていた規則なので）。`asOf` を渡さなければ `expired` は返さないので、`assert.deepEqual(diagnoseCalendar(options), [])` のようなテストが日付で変わることはありません。`asOf` は暦日の文字列だけを受け付けます（`Date` だとタイムゾーンが要るため）。それ以外の値は `invalid-date`、第 2 引数がオブジェクトでなければ `invalid-argument` の例外になり、知らないキーは無視します。

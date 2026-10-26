@@ -142,7 +142,7 @@ test("祝日の規則: 入力の誤り", () => {
     ],
     [
       { holiday: true, weekday: 1 },
-      /must have exactly one of "weekday", "day", "businessDayOfMonth", "dayAfterHoliday", "dayBeforeHoliday" or "holiday"/,
+      /must have exactly one of "weekday", "day", "businessDayOfMonth", "dayAfterHoliday", "dayBeforeHoliday", "holiday" or "cycle"/,
     ],
     [{ holiday: true, dayAfterHoliday: true }, /must have exactly one of/],
     [{ holiday: true, nth: 1 }, /closedRecurring\[0\]\.nth/],

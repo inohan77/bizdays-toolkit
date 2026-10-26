@@ -173,6 +173,8 @@ export interface WeekdayPattern {
   readonly weekdays?: never;
   readonly kinds?: never;
   readonly keys?: never;
+  readonly cycle?: never;
+  readonly positions?: never;
 }
 
 /**
@@ -202,6 +204,8 @@ export interface DayOfMonthPattern {
   readonly weekdays?: never;
   readonly kinds?: never;
   readonly keys?: never;
+  readonly cycle?: never;
+  readonly positions?: never;
 }
 
 /**
@@ -240,19 +244,31 @@ export interface BusinessDayOfMonthPattern {
   readonly kinds?: never;
   readonly keys?: never;
   readonly skipWeekdays?: never;
+  readonly cycle?: never;
+  readonly positions?: never;
 }
 
 /**
  * 祝日の翌日（祝日が続く場合は連休が明けた日。その日自身は祝日でない）。「祝日」は提供元の祝日だけ。
+ * kinds・keys で、前日の祝日（skipWeekdays があれば、飛ばした日の手前で最も近い祝日）の種別・識別子を絞れる。
  * 当てはまる日は祝日でないので、onHolidayRule は指定できない（指定すると invalid-option）。
  * @public
  */
-export interface DayAfterHolidayPattern {
+export interface DayAfterHolidayPattern<Kind extends string = string> {
   readonly dayAfterHoliday: true;
   /** 当てはめる曜日（翌日の曜日。省略時はすべての曜日。例: [1, 2, 3, 4, 5] で土日に当たる翌日は除く） */
   readonly weekdays?: readonly Weekday[];
   /** 当てはめる月（翌日の月。省略時はすべての月） */
   readonly months?: readonly Month[];
+  /** 前日の祝日の種別（Holiday.kind。省略時はすべて） */
+  readonly kinds?: readonly Kind[];
+  /** 前日の祝日の識別子（Holiday.key。省略時はすべて。key を持たない祝日には当てはまらない） */
+  readonly keys?: readonly string[];
+  /**
+   * 祝日に加えて飛ばす曜日。祝日とこの曜日が続く塊（祝日を 1 日以上含む）が明けた日に当てはまる
+   * （例: 金曜日の祝日の翌平日は { dayAfterHoliday: true, skipWeekdays: [0, 6] } で月曜日）。すべての曜日は指定できない
+   */
+  readonly skipWeekdays?: readonly Weekday[];
   readonly weekday?: never;
   readonly nth?: never;
   readonly interval?: never;
@@ -262,23 +278,33 @@ export interface DayAfterHolidayPattern {
   readonly calendar?: never;
   readonly dayBeforeHoliday?: never;
   readonly holiday?: never;
-  readonly kinds?: never;
-  readonly keys?: never;
-  readonly skipWeekdays?: never;
+  readonly cycle?: never;
+  readonly positions?: never;
 }
 
 /**
  * 祝前日（翌日が祝日で、その日自身は祝日でない日。連休なら連休の初日の前日）。「祝日」は提供元の祝日だけ。
  * 祝日の翌日（dayAfterHoliday）の鏡像で、祝前日料金・祝前日の営業時間の延長・締め時刻の繰り上げなどを規則として書く。
+ * kinds・keys で、翌日の祝日（skipWeekdays があれば、飛ばした日の先で最も近い祝日）の種別・識別子を絞れる
+ * （例: 旧正月の前日は { dayBeforeHoliday: true, keys: ["chinese-new-year"] }）。
  * 当てはまる日は祝日でないので、onHolidayRule は指定できない（指定すると invalid-option）。
  * @public
  */
-export interface DayBeforeHolidayPattern {
+export interface DayBeforeHolidayPattern<Kind extends string = string> {
   readonly dayBeforeHoliday: true;
   /** 当てはめる曜日（祝前日の曜日。省略時はすべての曜日。例: [1, 2, 3, 4, 5] で土日に当たる祝前日は除く） */
   readonly weekdays?: readonly Weekday[];
   /** 当てはめる月（祝前日の月。省略時はすべての月） */
   readonly months?: readonly Month[];
+  /** 翌日の祝日の種別（Holiday.kind。省略時はすべて） */
+  readonly kinds?: readonly Kind[];
+  /** 翌日の祝日の識別子（Holiday.key。省略時はすべて。key を持たない祝日には当てはまらない） */
+  readonly keys?: readonly string[];
+  /**
+   * 祝日に加えて飛ばす曜日。祝日とこの曜日が続く塊（祝日を 1 日以上含む）の前の日に当てはまる
+   * （例: 月曜日の祝日の前の最終平日は { dayBeforeHoliday: true, skipWeekdays: [0, 6] } で金曜日）。すべての曜日は指定できない
+   */
+  readonly skipWeekdays?: readonly Weekday[];
   readonly weekday?: never;
   readonly nth?: never;
   readonly interval?: never;
@@ -288,6 +314,37 @@ export interface DayBeforeHolidayPattern {
   readonly calendar?: never;
   readonly dayAfterHoliday?: never;
   readonly holiday?: never;
+  readonly cycle?: never;
+  readonly positions?: never;
+}
+
+/**
+ * 日単位の周期（例: 4 勤 2 休の交替制の休日、10 日に 1 度の定期点検）。週や月にそろわない周期を、起点からの日数で書く。
+ * 起点（anchor）を 1 日目として cycle 日ごとに繰り返し、positions に書いた何日目かに当てはまる
+ * （例: 4 勤 2 休の休日は { cycle: 6, anchor: "2026-01-05", positions: [5, 6] }）。起点より前の日にも当てはまるので、
+ * 起点から始めるには effectiveFrom を併せて指定する。onHolidayRule は "under-holiday"（既定）と "over-holiday" を受け、
+ * "after-holiday" は invalid-option（周期の日を祝日の後ろへずらす意味がない）。
+ * @public
+ */
+export interface CyclePattern {
+  /** 周期（日）。2 以上の整数 */
+  readonly cycle: number;
+  /** 周期の起点の日付 "YYYY-MM-DD"（1 日目） */
+  readonly anchor: DateString;
+  /** 当てはまる日（周期の中の何日目か。1〜cycle の重複のない整数の配列。すべての日は指定できない） */
+  readonly positions: readonly number[];
+  /** 当てはめる月（省略時はすべての月） */
+  readonly months?: readonly Month[];
+  readonly weekday?: never;
+  readonly nth?: never;
+  readonly interval?: never;
+  readonly day?: never;
+  readonly businessDayOfMonth?: never;
+  readonly calendar?: never;
+  readonly dayAfterHoliday?: never;
+  readonly dayBeforeHoliday?: never;
+  readonly holiday?: never;
+  readonly weekdays?: never;
   readonly kinds?: never;
   readonly keys?: never;
   readonly skipWeekdays?: never;
@@ -326,6 +383,8 @@ export interface HolidayPattern<Kind extends string = string> {
   readonly dayAfterHoliday?: never;
   readonly dayBeforeHoliday?: never;
   readonly skipWeekdays?: never;
+  readonly cycle?: never;
+  readonly positions?: never;
 }
 
 /**
@@ -336,9 +395,10 @@ export type RecurringPattern<Kind extends string = string> =
   | WeekdayPattern
   | DayOfMonthPattern
   | BusinessDayOfMonthPattern
-  | DayAfterHolidayPattern
-  | DayBeforeHolidayPattern
-  | HolidayPattern<Kind>;
+  | DayAfterHolidayPattern<Kind>
+  | DayBeforeHolidayPattern<Kind>
+  | HolidayPattern<Kind>
+  | CyclePattern;
 
 /**
  * 繰り返しの規則（営業日カレンダーの closedRecurring・openRecurring）。
@@ -764,8 +824,12 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly nth: ReadonlySet<number> | null;
   /** 周期（週）。null は毎週・第 n 回目・日の規則 */
   readonly interval: number | null;
-  /** 周期の起点（日数）。interval が null なら null */
+  /** 周期の起点（日数）。interval・cycle が null なら null */
   readonly anchor: number | null;
+  /** 日単位の周期（日）。周期の規則以外では null */
+  readonly cycle: number | null;
+  /** 周期の中で当てはまる日（1 始まり）。周期の規則以外では null */
+  readonly positions: ReadonlySet<number> | null;
   /** 日の集合（曜日の規則では null） */
   readonly days: ReadonlySet<number> | null;
   /** 第 n 営業日の集合（第 n 営業日の規則以外では null） */
@@ -774,7 +838,7 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly basis: BasisOfMonth | null;
   /** basis の元のカレンダー（診断で同じ基準かを比べるため。basis が null なら null） */
   readonly calendar: Calendar | null;
-  /** "after-holiday" の振替で、祝日に加えて飛ばす曜日（null はなし） */
+  /** "after-holiday" の振替と、祝日の翌日・祝前日の塊で、祝日に加えて飛ばす曜日（null はなし） */
   readonly skipWeekdays: ReadonlySet<number> | null;
   /** 祝日の翌日の規則か */
   readonly dayAfterHoliday: boolean;
@@ -782,9 +846,9 @@ export interface RecurringRuleCompiled<T> extends CompiledPeriod {
   readonly dayBeforeHoliday: boolean;
   /** 祝日の規則か */
   readonly holiday: boolean;
-  /** 祝日の規則で絞る種別（null はすべての祝日） */
+  /** 祝日・祝日の翌日・祝前日の規則で絞る種別（null はすべての祝日） */
   readonly kinds: ReadonlySet<string> | null;
-  /** 祝日の規則で絞る識別子（null はすべての祝日） */
+  /** 祝日・祝日の翌日・祝前日の規則で絞る識別子（null はすべての祝日） */
   readonly keys: ReadonlySet<string> | null;
   /** 祝日・祝日の翌日・祝前日の規則で絞る曜日（null はすべての曜日） */
   readonly weekdays: ReadonlySet<number> | null;
@@ -882,19 +946,22 @@ export function compileRecurringRules<T>(
     const hasBefore = "dayBeforeHoliday" in entry;
     const hasHoliday = "holiday" in entry;
     const hasBusinessDay = "businessDayOfMonth" in entry;
+    const hasCycle = "cycle" in entry;
+    const holidayBased = hasHoliday || hasAfter || hasBefore;
     if (
       Number(hasWeekday) +
         Number(hasDay) +
         Number(hasBusinessDay) +
         Number(hasAfter) +
         Number(hasBefore) +
-        Number(hasHoliday) !==
+        Number(hasHoliday) +
+        Number(hasCycle) !==
       1
     ) {
       c.error(
         "invalid-option",
         p,
-        'must have exactly one of "weekday", "day", "businessDayOfMonth", "dayAfterHoliday", "dayBeforeHoliday" or "holiday"',
+        'must have exactly one of "weekday", "day", "businessDayOfMonth", "dayAfterHoliday", "dayBeforeHoliday", "holiday" or "cycle"',
       );
       return;
     }
@@ -908,6 +975,8 @@ export function compileRecurringRules<T>(
     let basisCalendar: Calendar | null = null;
     let interval: number | null = null;
     let anchor: number | null = null;
+    let cycle: number | null = null;
+    let positions: Set<number> | null = null;
     const hasInterval = "interval" in entry;
     const hasAnchor = "anchor" in entry;
     if (hasWeekday) {
@@ -956,13 +1025,76 @@ export function compileRecurringRules<T>(
         } else anchor = a;
       }
     } else {
-      for (const key of ["nth", "interval", "anchor"] as const) {
+      for (const key of ["nth", "interval"] as const) {
         if (key in entry) {
           c.error("invalid-option", `${p}.${key}`, `"${key}" can be used only with "weekday"`);
           ok = false;
         }
       }
-      if (hasDay) {
+      if (hasAnchor && !hasCycle) {
+        c.error(
+          "invalid-option",
+          `${p}.anchor`,
+          '"anchor" can be used only with "weekday" or "cycle"',
+        );
+        ok = false;
+      }
+      if (hasCycle) {
+        const length = entry["cycle"];
+        if (!Number.isInteger(length) || (length as number) < 2) {
+          c.error("invalid-option", `${p}.cycle`, "must be an integer of 2 or more (days)");
+          ok = false;
+        } else cycle = length as number;
+        if (!hasAnchor) {
+          c.error(
+            "invalid-option",
+            p,
+            '"anchor" is required with "cycle" (the first day of the cycle)',
+          );
+          ok = false;
+        } else {
+          const a = checkDate(c, `${p}.anchor`, entry["anchor"]);
+          if (a === undefined) ok = false;
+          else anchor = a;
+        }
+        const raw = entry["positions"];
+        if (!Array.isArray(raw) || raw.length === 0) {
+          c.error(
+            "invalid-option",
+            `${p}.positions`,
+            "must be a non-empty array of days in the cycle (1 = the anchor day)",
+          );
+          ok = false;
+        } else if (cycle !== null) {
+          const n = cycle;
+          if (!raw.every((v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= n)) {
+            c.error(
+              "invalid-option",
+              `${p}.positions`,
+              `must be integers from 1 to ${n} (the cycle)`,
+            );
+            ok = false;
+          } else if (new Set(raw).size !== raw.length) {
+            c.error("invalid-option", `${p}.positions`, "must not contain the same day twice");
+            ok = false;
+          } else if (raw.length === n) {
+            c.error(
+              "invalid-option",
+              `${p}.positions`,
+              "must not contain every day of the cycle (the rule would match every day)",
+            );
+            ok = false;
+          } else positions = new Set(raw as number[]);
+        }
+        if (entry["onHolidayRule"] === "after-holiday") {
+          c.error(
+            "invalid-option",
+            `${p}.onHolidayRule`,
+            '"after-holiday" cannot be used with "cycle" (shifting a day of the cycle has no meaning; use "under-holiday" or "over-holiday")',
+          );
+          ok = false;
+        }
+      } else if (hasDay) {
         const set = checkSet(c, `${p}.day`, entry["day"], isDayOfMonth, "1-31 or -1 (last day)");
         if (set) days = set;
         else ok = false;
@@ -1023,14 +1155,14 @@ export function compileRecurringRules<T>(
           );
           ok = false;
         }
-        if (hasHoliday && entry["kinds"] !== undefined && !Array.isArray(entry["kinds"])) {
+        if (entry["kinds"] !== undefined && !Array.isArray(entry["kinds"])) {
           c.error(
             "invalid-option",
             `${p}.kinds`,
             "must be a non-empty array of holiday kinds (Holiday.kind)",
           );
           ok = false;
-        } else if (hasHoliday && entry["kinds"] !== undefined) {
+        } else if (entry["kinds"] !== undefined) {
           const set = checkSet(
             c,
             `${p}.kinds`,
@@ -1051,14 +1183,26 @@ export function compileRecurringRules<T>(
       );
       ok = false;
     }
-    if (!hasHoliday && "kinds" in entry) {
-      c.error("invalid-option", `${p}.kinds`, '"kinds" can be used only with "holiday"');
+    if (!hasCycle && "positions" in entry) {
+      c.error("invalid-option", `${p}.positions`, '"positions" can be used only with "cycle"');
+      ok = false;
+    }
+    if (!holidayBased && "kinds" in entry) {
+      c.error(
+        "invalid-option",
+        `${p}.kinds`,
+        '"kinds" can be used only with "holiday", "dayAfterHoliday" or "dayBeforeHoliday"',
+      );
       ok = false;
     }
     let holidayKeys: Set<string> | null = null;
     if ("keys" in entry) {
-      if (!hasHoliday) {
-        c.error("invalid-option", `${p}.keys`, '"keys" can be used only with "holiday"');
+      if (!holidayBased) {
+        c.error(
+          "invalid-option",
+          `${p}.keys`,
+          '"keys" can be used only with "holiday", "dayAfterHoliday" or "dayBeforeHoliday"',
+        );
         ok = false;
       } else if (!Array.isArray(entry["keys"])) {
         c.error(
@@ -1081,7 +1225,7 @@ export function compileRecurringRules<T>(
     }
     let weekdays: Set<number> | null = null;
     if ("weekdays" in entry) {
-      if (!hasHoliday && !hasAfter && !hasBefore) {
+      if (!holidayBased) {
         c.error(
           "invalid-option",
           `${p}.weekdays`,
@@ -1130,11 +1274,15 @@ export function compileRecurringRules<T>(
     }
     let skipWeekdays: Set<number> | null = null;
     if ("skipWeekdays" in entry) {
-      if (entry["onHolidayRule"] !== "after-holiday" || !(hasWeekday || hasDay)) {
+      const aroundHoliday = hasAfter || hasBefore;
+      if (
+        !aroundHoliday &&
+        (entry["onHolidayRule"] !== "after-holiday" || !(hasWeekday || hasDay))
+      ) {
         c.error(
           "invalid-option",
           `${p}.skipWeekdays`,
-          '"skipWeekdays" can be used only with onHolidayRule: "after-holiday" on a "weekday" or "day" rule',
+          '"skipWeekdays" can be used only with "dayAfterHoliday", "dayBeforeHoliday", or onHolidayRule: "after-holiday" on a "weekday" or "day" rule',
         );
         ok = false;
       } else if (!Array.isArray(entry["skipWeekdays"])) {
@@ -1153,7 +1301,14 @@ export function compileRecurringRules<T>(
           "a weekday (0 = Sunday to 6 = Saturday)",
         );
         if (set === undefined) ok = false;
-        else if (weekday !== null && set.has(weekday)) {
+        else if (set.size === 7) {
+          c.error(
+            "invalid-option",
+            `${p}.skipWeekdays`,
+            "cannot include every weekday (no day would be left)",
+          );
+          ok = false;
+        } else if (weekday !== null && set.has(weekday)) {
           c.error(
             "invalid-option",
             `${p}.skipWeekdays`,
@@ -1172,6 +1327,8 @@ export function compileRecurringRules<T>(
           nth,
           interval,
           anchor,
+          cycle,
+          positions,
           days,
           businessDays,
           basis,
@@ -1224,17 +1381,29 @@ export function matchPattern(
   if (rule.holiday || rule.dayAfterHoliday || rule.dayBeforeHoliday) {
     if (holidayOf === undefined) return false;
     if (rule.weekdays && !rule.weekdays.has(weekdayOf(date))) return false;
+    const selected = (h: Holiday<string>): boolean =>
+      (rule.kinds === null || rule.kinds.has(h.kind)) &&
+      (rule.keys === null || (h.key !== undefined && rule.keys.has(h.key)));
     if (rule.holiday) {
       const h = holidayOf(date);
-      return (
-        h !== undefined &&
-        (rule.kinds === null || rule.kinds.has(h.kind)) &&
-        (rule.keys === null || (h.key !== undefined && rule.keys.has(h.key)))
-      );
+      return h !== undefined && selected(h);
     }
-    // 祝日の翌日は前日が祝日、祝前日は翌日が祝日（どちらもその日自身は祝日でない）
-    if (holidayOf(date) !== undefined) return false;
-    return holidayOf(addDays(date, rule.dayAfterHoliday ? -1 : 1)) !== undefined;
+    // 祝日の翌日は前日が祝日、祝前日は翌日が祝日（どちらもその日自身は祝日でない）。
+    // skipWeekdays があれば、祝日とその曜日が続く塊の前後の日で、絞り込みは塊の中で最も近い祝日に当てる
+    const skip = rule.skipWeekdays;
+    if (holidayOf(date) !== undefined || skip?.has(weekdayOf(date))) return false;
+    const step = rule.dayAfterHoliday ? -1 : 1;
+    for (let k = 1; k <= MAX_HOLIDAY_RUN; k++) {
+      const next = addDays(date, step * k);
+      const h = holidayOf(next);
+      if (h !== undefined) return selected(h);
+      if (!skip?.has(weekdayOf(next))) return false;
+    }
+    return false;
+  }
+  if (rule.cycle !== null) {
+    const offset = (toDayNumber(date) - rule.anchor!) % rule.cycle;
+    return rule.positions!.has(((offset + rule.cycle) % rule.cycle) + 1);
   }
   const dim = daysInMonth(year, month);
   if (rule.weekday !== null) {
@@ -1605,6 +1774,8 @@ export const RECURRING_RULE_KEYS = [
   "businessDayOfMonth",
   "calendar",
   "skipWeekdays",
+  "cycle",
+  "positions",
   "name",
   "onHolidayRule",
   ...PERIOD_KEYS,
@@ -1676,7 +1847,7 @@ export function compileScheduleOptions<T, Kind extends string>(
   return { source, weekly, holiday, annual, dates, recurring };
 }
 
-/** 振替元をさかのぼる最大日数（祝日が続く日数の上限。2019 年の大型連休でも 10 日） */
+/** 振替元をさかのぼる日数と、祝日の翌日・祝前日の塊を調べる日数の上限（祝日と飛ばす曜日が続く日数。2019 年の大型連休でも 10 日） */
 const MAX_HOLIDAY_RUN = 31;
 
 /** @internal 毎年の月日の規則の形がその月日 "MM-DD" に当てはまるか（有効期間は考えない） */

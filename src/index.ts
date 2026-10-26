@@ -35,6 +35,7 @@ export {
   type BusinessDayOfMonth,
   type BusinessDayOfMonthPattern,
   type CivilDateTimeParts,
+  type CyclePattern,
   type DateRangeValue,
   type DateValue,
   type DayAfterHolidayPattern,

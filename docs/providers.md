@@ -29,7 +29,7 @@ const myCountry: HolidayProvider = {
 const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] });
 ```
 
-Most holidays of other countries are an nth weekday of a month (the US federal holidays) or a fixed number of days from Easter Sunday (much of Europe). `bizdays-toolkit/provider` exposes the calendar arithmetic the bundled providers use for these, so a provider does not have to reimplement and verify it: `nthWeekdayOfMonth(year, month, weekday, n)` (`n` is 1–5 or -1 for the last), `easterSunday(year)` (Gregorian; verified against GOV.UK for the UK providers), `daysInMonth(year, month)`, `isLeapYear(year)` and `substituteDays` (below). Combine them with `addDays` and `weekdayOf` from the root. These functions are `@beta` (they may change in a minor version while their use settles).
+Most holidays of other countries are an nth weekday of a month (the US federal holidays) or a fixed number of days from Easter Sunday (much of Europe). `bizdays-toolkit/provider` exposes the calendar arithmetic the bundled providers use for these, so a provider does not have to reimplement and verify it: `nthWeekdayOfMonth(year, month, weekday, n)` (`n` is 1–5 or -1 for the last), `easterSunday(year)` (Gregorian; verified against the official data of the bundled providers), `daysInMonth(year, month)`, `isLeapYear(year)` and `substituteDays` (below). Combine them with `addDays` and `weekdayOf` from the root.
 
 ```ts
 import { addDays, createCalendar, type HolidayProvider } from "bizdays-toolkit";

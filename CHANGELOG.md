@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-27
+
+### Added
+
+- 日単位の周期の規則 `{ cycle, anchor, positions }`（型 `CyclePattern`）。週や月にそろわない周期（4 勤 2 休のような交替制、10 日に 1 度の点検日）を、起点（`anchor`）を 1 日目として周期の中の何日目か（`positions`。1 始まり）で書く。`closedRecurring`・`openRecurring`・スケジュールの `recurring` で使え、`months`・有効期間・`name` を付けられる。`onHolidayRule` は `"under-holiday"`（既定）と `"over-holiday"`。`cycle` は 2 以上の整数、`positions` は 1〜`cycle` の重複のない配列で、空とすべての日は `invalid-option`。`"after-holiday"`・`anchor` の省略・ほかの形の項目との同居も `invalid-option`
+- 祝日の翌日・祝前日の規則（`dayAfterHoliday`・`dayBeforeHoliday`）に `kinds`・`keys` を足した。隣の祝日（祝前日なら翌日の祝日、祝日の翌日なら前日の祝日）の種別・識別子で絞る（例: シンガポールの旧正月の前日は `{ dayBeforeHoliday: true, keys: ["chinese-new-year"] }`）。型 `DayAfterHolidayPattern`・`DayBeforeHolidayPattern` に既定値付きの型引数 `Kind` を足した
+- 祝日の翌日・祝前日の規則に `skipWeekdays` を足した。祝日と書いた曜日が続く塊（祝日を 1 日以上含む）の前後の日に当てはまる（例: 月曜日の祝日の前の最終平日は `{ dayBeforeHoliday: true, skipWeekdays: [0, 6] }` で金曜日）。`kinds`・`keys` は塊の中でその日に最も近い祝日に当てる。すべての曜日は `invalid-option`
+- 診断: 周期の規則どうしの `shadowed`（後の周期が先の周期の倍数で、後の規則のどの日も先の規則の日に当たるとき）、祝日の翌日・祝前日の規則どうしの `shadowed` に `kinds`・`keys` の包含を加えた。`redundant` の走査の範囲を、周期の規則の周期がそろう長さまで広げる（最長 200 年）
+
+### Changed
+
+- 提供元向けの関数（`bizdays-toolkit/provider` の `easterSunday`・`nthWeekdayOfMonth`・`daysInMonth`・`isLeapYear`・`substituteDays` と型 `SubstituteDaysOptions`・`SubstituteDirection`）と、祝日の識別子の型（`KnownJapaneseHolidayKey`・`KnownUkHolidayKey`・`KnownSgHolidayKey`・`KnownFrHolidayKey`）を `@beta` から `@public` にした。公開してから（0.16.0〜0.20.0）形が変わっておらず、同梱の 4 か国の実装で使われ方が固まったため（`key` は 46 番で版をまたいで変えないと約束済み）
+- エラーのメッセージ: 繰り返しの規則の形の数の誤り（`must have exactly one of …`）に `"cycle"` を、`kinds`・`keys`・`skipWeekdays` を使える規則の説明に祝日の翌日・祝前日を加えた（`code` と `path` は変わらない）
+- README（英日）の minify + gzip のサイズを測り直した（0.22.0 で測定）
+- `docs/decisions.md`: 53 番（日単位の周期の規則、祝日の翌日・祝前日の絞り込みと `skipWeekdays`、前への振替を足さない判断、`@public` への格上げ）を追加し、15・33・35・43・46・47 番に追記した
+- `docs/migration.md`: 1.0.0 で削除する非推奨の API の一覧を足した
+
+### 移行
+
+- 動作が変わる既存の API はない。祝日の翌日・祝前日の規則に `kinds`・`keys`・`skipWeekdays` を付けて `invalid-option` になることを確かめていたテストは、例外が出なくなるので失敗する。テストを書き換える（`docs/migration.md`）
+
+### 開発
+
+- サイズの上限（`size-limits.json`）を上げた。ルート 16,500 → 17,500（測定 16,074）、`./jp` 19,000 → 19,500（測定 18,293）、`./diagnose` 22,000 → 23,000（測定 21,445）（gzip）。周期の規則の検証・判定、祝日の翌日・祝前日の絞り込みと塊の判定、診断の追加のため
+
 ## [0.21.4] - 2026-10-26
 
 ### Changed
@@ -615,7 +640,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.4...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.4...v0.22.0
 [0.21.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.3...v0.21.4
 [0.21.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.2...v0.21.3
 [0.21.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.1...v0.21.2

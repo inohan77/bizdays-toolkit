@@ -22,7 +22,7 @@
  * 判定の順番（個別の日付 → 毎年の月日 → 繰り返し（over）→ 祝日 → 繰り返し（under・振替先）→ 曜日）は
  * 固定なので、shadowed は同じ種類の規則どうしに限って調べる。種類をまたいで使われない規則は
  * redundant（取り除いても結果が変わらない）として見つかる。
- * 有効期間（effectiveFrom・effectiveTo）のある規則は期間の包含も、周期（interval）のある規則は周期の包含も
+ * 有効期間（effectiveFrom・effectiveTo）のある規則は期間の包含も、周期（interval・cycle）のある規則は周期の包含も
  * shadowed の条件にする。redundant の走査の範囲は、周期がそろう長さと、範囲の外にある有効期間まで広げる
  */
 
@@ -163,7 +163,7 @@ function closestKey(key: string, known: readonly string[]): string | undefined {
 
 /**
  * 繰り返しの規則の当てはまり方は、年の種類（1 月 1 日の曜日 × うるう年か）の 14 通りで決まり、28 年でそろう。
- * 周期（interval）のある規則は、28 年（10,227 日）が 7 × interval 日の倍数とは限らないので、別に周期を求める（patternCycle）
+ * 周期（interval・cycle）のある規則は、28 年（10,227 日）が周期の倍数とは限らないので、別に周期を求める（patternCycle）
  */
 const PATTERN_FROM = toDayNumber("2001-01-01");
 const PATTERN_DAYS = toDayNumber("2028-12-31") - PATTERN_FROM + 1;
@@ -178,12 +178,16 @@ const lcm = (a: number, b: number): number => (a / gcd(a, b)) * b;
 
 /**
  * 繰り返しの規則の当てはまり方がそろう日数（最大 MAX_WINDOW_YEARS 年）。
- * 周期 k 週の規則は、28 年と 7k 日の最小公倍数でそろう（隔週なら 56 年）
+ * 周期 k 週の規則は 28 年と 7k 日の、周期 n 日の規則は 28 年と n 日の最小公倍数でそろう（隔週なら 56 年）
  */
 function patternCycle(rules: readonly RecurringRuleCompiled<unknown>[]): number {
-  let weeks = 1;
-  for (const rule of rules) if (rule.interval !== null) weeks = lcm(weeks, rule.interval);
-  return Math.min(lcm(PATTERN_DAYS, 7 * weeks), 366 * MAX_WINDOW_YEARS);
+  const max = 366 * MAX_WINDOW_YEARS;
+  let days = 7;
+  for (const rule of rules) {
+    if (rule.interval !== null) days = Math.min(lcm(days, 7 * rule.interval), max);
+    if (rule.cycle !== null) days = Math.min(lcm(days, rule.cycle), max);
+  }
+  return Math.min(lcm(PATTERN_DAYS, days), max);
 }
 
 interface Range {
@@ -333,6 +337,22 @@ function intervalCovers(
     later.interval % earlier.interval === 0 &&
     (later.anchor! - earlier.anchor!) % (7 * earlier.interval) === 0
   );
+}
+
+/**
+ * 日単位の周期の規則どうしで、先の規則が後の規則の当てはまる日をすべて含むか（月の絞り込みは別に比べる）。
+ * 後の周期が先の周期の倍数なら、後の規則の各位置は先の周期の決まった位置に当たる
+ */
+function cycleCovers(
+  earlier: RecurringRuleCompiled<unknown>,
+  later: RecurringRuleCompiled<unknown>,
+): boolean {
+  const e = earlier.cycle!;
+  if (later.cycle! % e !== 0) return false;
+  return [...later.positions!].every((position) => {
+    const offset = (later.anchor! + position - 1 - earlier.anchor!) % e;
+    return earlier.positions!.has(((offset + e) % e) + 1);
+  });
 }
 
 /**
@@ -584,8 +604,8 @@ function analyze<T, Kind extends string>(
             : rule.holiday
               ? "This rule matches no day: no holiday of the selected kinds, keys, weekdays and months within its effective period"
               : rule.dayAfterHoliday
-                ? "This rule matches no day: no day after a holiday on the selected weekdays and months within its effective period"
-                : "This rule matches no day: no day before a holiday on the selected weekdays and months within its effective period"
+                ? "This rule matches no day: no day after a holiday of the selected kinds and keys on the selected weekdays and months within its effective period"
+                : "This rule matches no day: no day before a holiday of the selected kinds and keys on the selected weekdays and months within its effective period"
           : businessDayBased
             ? "This rule matches no day: no month has that many business days of the counting basis in the selected months within its effective period"
             : rule.effectiveFrom === null && rule.effectiveTo === null
@@ -624,7 +644,8 @@ function analyze<T, Kind extends string>(
         );
       }
     }
-    // 祝日・祝日の翌日・祝前日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・識別子・曜日・月の絞り込み）だけで調べる
+    // 祝日・祝日の翌日・祝前日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・識別子・曜日・月の絞り込み）だけで調べる。
+    // 日単位の周期の規則は、周期の規則どうしだけで調べる（曜日・日の規則とは周期がそろわない）
     const k = recurring.findIndex(
       (r, i) =>
         i < j &&
@@ -640,19 +661,24 @@ function analyze<T, Kind extends string>(
           : rule.dayAfterHoliday || rule.dayBeforeHoliday
             ? r.dayAfterHoliday === rule.dayAfterHoliday &&
               r.dayBeforeHoliday === rule.dayBeforeHoliday &&
+              setCovers(r.kinds, rule.kinds) &&
+              setCovers(r.keys, rule.keys) &&
               setCovers(r.weekdays, rule.weekdays) &&
               setCovers(r.months, rule.months)
-            : rule.businessDays !== null
-              ? r.businessDays !== null &&
-                r.calendar === rule.calendar &&
-                setCovers(r.businessDays, rule.businessDays) &&
-                setCovers(r.months, rule.months)
-              : !r.holiday &&
-                !r.dayAfterHoliday &&
-                !r.dayBeforeHoliday &&
-                r.businessDays === null &&
-                intervalCovers(r, rule) &&
-                isSubset(bits, recurringBits[i]!)),
+            : rule.cycle !== null
+              ? r.cycle !== null && cycleCovers(r, rule) && setCovers(r.months, rule.months)
+              : rule.businessDays !== null
+                ? r.businessDays !== null &&
+                  r.calendar === rule.calendar &&
+                  setCovers(r.businessDays, rule.businessDays) &&
+                  setCovers(r.months, rule.months)
+                : !r.holiday &&
+                  !r.dayAfterHoliday &&
+                  !r.dayBeforeHoliday &&
+                  r.businessDays === null &&
+                  r.cycle === null &&
+                  intervalCovers(r, rule) &&
+                  isSubset(bits, recurringBits[i]!)),
     );
     if (k < 0) return;
     unused.add(rule);

@@ -163,7 +163,7 @@ test("skipWeekdays: 入力の誤り", () => {
   const cases: [unknown, RegExp][] = [
     [
       { weekday: 1, skipWeekdays: [6] },
-      /closedRecurring\[0\]\.skipWeekdays: "skipWeekdays" can be used only with onHolidayRule: "after-holiday"/,
+      /closedRecurring\[0\]\.skipWeekdays: "skipWeekdays" can be used only with "dayAfterHoliday", "dayBeforeHoliday", or onHolidayRule: "after-holiday"/,
     ],
     [
       { weekday: 1, onHolidayRule: "under-holiday", skipWeekdays: [6] },
@@ -174,8 +174,8 @@ test("skipWeekdays: 入力の誤り", () => {
       /closedRecurring\[0\]\.skipWeekdays/,
     ],
     [{ holiday: true, skipWeekdays: [6] }, /closedRecurring\[0\]\.skipWeekdays/],
-    [{ dayAfterHoliday: true, skipWeekdays: [6] }, /closedRecurring\[0\]\.skipWeekdays/],
-    [{ dayBeforeHoliday: true, skipWeekdays: [6] }, /closedRecurring\[0\]\.skipWeekdays/],
+    [{ businessDayOfMonth: 1, skipWeekdays: [6] }, /closedRecurring\[0\]\.skipWeekdays/],
+    [{ dayAfterHoliday: true, skipWeekdays: [7] }, /closedRecurring\[0\]\.skipWeekdays/],
     [
       { weekday: 1, onHolidayRule: "after-holiday", skipWeekdays: [1] },
       /closedRecurring\[0\]\.skipWeekdays: cannot include the rule's own weekday 1/,

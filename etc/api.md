@@ -90,6 +90,8 @@ export interface BusinessDayOfMonthPattern {
     readonly kinds?: never;
     readonly keys?: never;
     readonly skipWeekdays?: never;
+    readonly cycle?: never;
+    readonly positions?: never;
 }
 ```
 
@@ -202,6 +204,30 @@ export declare function createCalendarFromSchedule<T, Kind extends string = stri
 export declare function createSchedule<T, Kind extends string = string>(options: ScheduleOptions<T, Kind>): Schedule<T, Kind>;
 ```
 
+### CyclePattern (@public)
+
+```ts
+export interface CyclePattern {
+    readonly cycle: number;
+    readonly anchor: DateString;
+    readonly positions: readonly number[];
+    readonly months?: readonly Month[];
+    readonly weekday?: never;
+    readonly nth?: never;
+    readonly interval?: never;
+    readonly day?: never;
+    readonly businessDayOfMonth?: never;
+    readonly calendar?: never;
+    readonly dayAfterHoliday?: never;
+    readonly dayBeforeHoliday?: never;
+    readonly holiday?: never;
+    readonly weekdays?: never;
+    readonly kinds?: never;
+    readonly keys?: never;
+    readonly skipWeekdays?: never;
+}
+```
+
 ### DateInput (@public)
 
 ```ts
@@ -254,10 +280,13 @@ export interface DateValue<T> {
 ### DayAfterHolidayPattern (@public)
 
 ```ts
-export interface DayAfterHolidayPattern {
+export interface DayAfterHolidayPattern<Kind extends string = string> {
     readonly dayAfterHoliday: true;
     readonly weekdays?: readonly Weekday[];
     readonly months?: readonly Month[];
+    readonly kinds?: readonly Kind[];
+    readonly keys?: readonly string[];
+    readonly skipWeekdays?: readonly Weekday[];
     readonly weekday?: never;
     readonly nth?: never;
     readonly interval?: never;
@@ -267,19 +296,21 @@ export interface DayAfterHolidayPattern {
     readonly calendar?: never;
     readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
-    readonly kinds?: never;
-    readonly keys?: never;
-    readonly skipWeekdays?: never;
+    readonly cycle?: never;
+    readonly positions?: never;
 }
 ```
 
 ### DayBeforeHolidayPattern (@public)
 
 ```ts
-export interface DayBeforeHolidayPattern {
+export interface DayBeforeHolidayPattern<Kind extends string = string> {
     readonly dayBeforeHoliday: true;
     readonly weekdays?: readonly Weekday[];
     readonly months?: readonly Month[];
+    readonly kinds?: readonly Kind[];
+    readonly keys?: readonly string[];
+    readonly skipWeekdays?: readonly Weekday[];
     readonly weekday?: never;
     readonly nth?: never;
     readonly interval?: never;
@@ -289,9 +320,8 @@ export interface DayBeforeHolidayPattern {
     readonly calendar?: never;
     readonly dayAfterHoliday?: never;
     readonly holiday?: never;
-    readonly kinds?: never;
-    readonly keys?: never;
-    readonly skipWeekdays?: never;
+    readonly cycle?: never;
+    readonly positions?: never;
 }
 ```
 
@@ -337,6 +367,8 @@ export interface DayOfMonthPattern {
     readonly weekdays?: never;
     readonly kinds?: never;
     readonly keys?: never;
+    readonly cycle?: never;
+    readonly positions?: never;
 }
 ```
 
@@ -429,6 +461,8 @@ export interface HolidayPattern<Kind extends string = string> {
     readonly dayAfterHoliday?: never;
     readonly dayBeforeHoliday?: never;
     readonly skipWeekdays?: never;
+    readonly cycle?: never;
+    readonly positions?: never;
 }
 ```
 
@@ -540,7 +574,7 @@ export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
 ### RecurringPattern (@public)
 
 ```ts
-export type RecurringPattern<Kind extends string = string> = WeekdayPattern | DayOfMonthPattern | BusinessDayOfMonthPattern | DayAfterHolidayPattern | DayBeforeHolidayPattern | HolidayPattern<Kind>;
+export type RecurringPattern<Kind extends string = string> = WeekdayPattern | DayOfMonthPattern | BusinessDayOfMonthPattern | DayAfterHolidayPattern<Kind> | DayBeforeHolidayPattern<Kind> | HolidayPattern<Kind> | CyclePattern;
 ```
 
 ### RecurringRule (@public)
@@ -700,6 +734,8 @@ export interface WeekdayPattern {
     readonly weekdays?: never;
     readonly kinds?: never;
     readonly keys?: never;
+    readonly cycle?: never;
+    readonly positions?: never;
 }
 ```
 
@@ -759,7 +795,7 @@ export type JapaneseHolidayKind = KnownJapaneseHolidayKind | (string & {});
 export declare const jp: HolidayProvider<JapaneseHolidayKind>;
 ```
 
-### KnownJapaneseHolidayKey (@beta)
+### KnownJapaneseHolidayKey (@public)
 
 ```ts
 export type KnownJapaneseHolidayKey = "new-year" | "coming-of-age" | "national-foundation" | "emperors-birthday" | "vernal-equinox" | "showa" | "constitution-memorial" | "greenery" | "childrens" | "marine" | "mountain" | "respect-for-the-aged" | "autumnal-equinox" | "sports" | "culture" | "labor-thanksgiving";
@@ -804,7 +840,7 @@ export declare const dataVersion: string;
 export declare const england: HolidayProvider<UkHolidayKind>;
 ```
 
-### KnownUkHolidayKey (@beta)
+### KnownUkHolidayKey (@public)
 
 ```ts
 export type KnownUkHolidayKey = "new-year" | "2nd-january" | "st-patricks" | "good-friday" | "easter-monday" | "early-may" | "spring" | "battle-of-the-boyne" | "summer" | "st-andrews" | "christmas" | "boxing-day";
@@ -848,7 +884,7 @@ export declare const wales: HolidayProvider<UkHolidayKind>;
 
 ## bizdays-toolkit/sg
 
-### KnownSgHolidayKey (@beta)
+### KnownSgHolidayKey (@public)
 
 ```ts
 export type KnownSgHolidayKey = "new-year" | "chinese-new-year" | "good-friday" | "labour-day" | "hari-raya-puasa" | "vesak" | "hari-raya-haji" | "national-day" | "deepavali" | "christmas";
@@ -898,7 +934,7 @@ export type FrHoliday = Holiday<FrHolidayKind>;
 export type FrHolidayKind = KnownFrHolidayKind | (string & {});
 ```
 
-### KnownFrHolidayKey (@beta)
+### KnownFrHolidayKey (@public)
 
 ```ts
 export type KnownFrHolidayKey = "new-year" | "easter-monday" | "labour-day" | "victory-in-europe" | "ascension" | "pentecost-monday" | "bastille" | "assumption" | "all-saints" | "armistice" | "christmas" | "good-friday" | "saint-stephens";
@@ -970,37 +1006,37 @@ export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "shadowed"
 
 ## bizdays-toolkit/provider
 
-### daysInMonth (@beta)
+### daysInMonth (@public)
 
 ```ts
 export declare function daysInMonth(year: number, month: number): number;
 ```
 
-### easterSunday (@beta)
+### easterSunday (@public)
 
 ```ts
 export declare function easterSunday(year: number): DateString;
 ```
 
-### isLeapYear (@beta)
+### isLeapYear (@public)
 
 ```ts
 export declare function isLeapYear(year: number): boolean;
 ```
 
-### nthWeekdayOfMonth (@beta)
+### nthWeekdayOfMonth (@public)
 
 ```ts
 export declare function nthWeekdayOfMonth(year: number, month: number, weekday: Weekday, n: number): DateString;
 ```
 
-### substituteDays (@beta)
+### substituteDays (@public)
 
 ```ts
 export declare function substituteDays<Kind extends string>(holidays: readonly Holiday<Kind>[], options: SubstituteDaysOptions<Kind>): Holiday<Kind>[];
 ```
 
-### SubstituteDaysOptions (@beta)
+### SubstituteDaysOptions (@public)
 
 ```ts
 export interface SubstituteDaysOptions<Kind extends string> {
@@ -1014,7 +1050,7 @@ export interface SubstituteDaysOptions<Kind extends string> {
 }
 ```
 
-### SubstituteDirection (@beta)
+### SubstituteDirection (@public)
 
 ```ts
 export type SubstituteDirection = "next" | "previous";

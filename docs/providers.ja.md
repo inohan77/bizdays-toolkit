@@ -29,7 +29,7 @@ const myCountry: HolidayProvider = {
 const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] });
 ```
 
-他の国・地域の祝日の多くは「月の第 n 何曜日」（米国の連邦祝日）か「復活祭からの日数」（ヨーロッパの多くの国）で決まります。`bizdays-toolkit/provider` は、同梱の提供元が使っているこの暦の計算をそのまま公開するもので、提供元を書く人が各自に実装して検証し直す必要がなくなります。`nthWeekdayOfMonth(year, month, weekday, n)`（`n` は 1〜5 と -1（最後））、`easterSunday(year)`（グレゴリオ暦。英国の提供元で GOV.UK のデータと照合済み）、`daysInMonth(year, month)`、`isLeapYear(year)`、`substituteDays`（下記）があり、ルートの `addDays`・`weekdayOf` と組み合わせます。これらの関数は `@beta` です（使われ方が固まるまで、マイナー版で変わることがあります）。
+他の国・地域の祝日の多くは「月の第 n 何曜日」（米国の連邦祝日）か「復活祭からの日数」（ヨーロッパの多くの国）で決まります。`bizdays-toolkit/provider` は、同梱の提供元が使っているこの暦の計算をそのまま公開するもので、提供元を書く人が各自に実装して検証し直す必要がなくなります。`nthWeekdayOfMonth(year, month, weekday, n)`（`n` は 1〜5 と -1（最後））、`easterSunday(year)`（グレゴリオ暦。同梱の提供元の公式データと照合済み）、`daysInMonth(year, month)`、`isLeapYear(year)`、`substituteDays`（下記）があり、ルートの `addDays`・`weekdayOf` と組み合わせます。
 
 ```ts
 import { addDays, createCalendar, type HolidayProvider } from "bizdays-toolkit";

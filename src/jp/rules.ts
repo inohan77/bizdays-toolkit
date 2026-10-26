@@ -46,7 +46,7 @@ export type JapaneseHolidayKind = KnownJapaneseHolidayKind | (string & {});
  * （天皇誕生日は 4/29・12/23・2/23 とも "emperors-birthday"、体育の日とスポーツの日は "sports"）。
  * 振替休日は元の祝日の key を持ち、国民の休日と特例の休日は key を持たない。
  * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
- * @beta
+ * @public
  */
 export type KnownJapaneseHolidayKey =
   | "new-year"

@@ -29,6 +29,7 @@ import {
   type KnownScheduleReason,
   type ScheduleReason,
   type RecurringRule,
+  type CyclePattern,
 } from "../src/index.ts";
 import {
   getHoliday,
@@ -217,7 +218,7 @@ createCalendar({ closedRecurring: [{ dayBeforeHoliday: false }] });
 createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, dayAfterHoliday: true }] });
 // @ts-expect-error -- dayBeforeHoliday と weekday は同時に指定できない
 createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, weekday: 1 }] });
-// @ts-expect-error -- kinds は祝日の規則でだけ使える
+// 祝前日の規則は、翌日の祝日の kinds・keys で絞れる
 createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, kinds: ["national"] }] });
 {
   const c = combineCalendars([createCalendar({}), createCalendar({ closedWeekdays: [0] })], {
@@ -250,8 +251,10 @@ createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, kinds: ["national"]
   createCalendar({ closedRecurring: [{ weekday: 1, weekdays: [1] }] });
   // @ts-expect-error -- weekdays の要素は 0〜6
   createCalendar({ closedRecurring: [{ holiday: true, weekdays: [7] }] });
-  // @ts-expect-error -- kinds は祝日の規則でだけ使える
+  // 祝日の翌日の規則は、前日の祝日の kinds で絞れる
   createCalendar({ closedRecurring: [{ dayAfterHoliday: true, kinds: ["national"] }] });
+  // @ts-expect-error -- kinds は祝日・祝日の翌日・祝前日の規則でだけ使える
+  createCalendar({ closedRecurring: [{ weekday: 1, kinds: ["national"] }] });
   const month: string = c.closingMonth("2026-09-19", 20, { convention: "preceding" });
   const period: { readonly from: string; readonly to: string } = c.closingPeriod("2026-10", 20, {
     convention: "preceding",
@@ -428,8 +431,9 @@ void withoutNames;
   createCalendar({ holidays: jp, openRecurring: [{ holiday: true, keys: ["anything"] }] });
   // @ts-expect-error -- keys は祝日の規則でだけ使える
   createCalendar({ closedRecurring: [{ weekday: 1, keys: ["sports"] }] });
-  // @ts-expect-error -- keys は祝日の規則でだけ使える
+  // 祝日の翌日・祝前日の規則も keys で絞れる
   createCalendar({ closedRecurring: [{ dayAfterHoliday: true, keys: ["sports"] }] });
+  createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, keys: ["sports"] }] });
   // @ts-expect-error -- 既知の値の型なので、知らない文字列は誤り
   const badKey: KnownJapaneseHolidayKey = "golden-week";
   void badKey;
@@ -469,4 +473,50 @@ void withoutNames;
   createCalendar({ closedRecurring: [{ holiday: true, skipWeekdays: [6] }] });
   // @ts-expect-error -- 曜日の規則と第 n 営業日の規則は同時に書けない
   createCalendar({ closedRecurring: [{ weekday: 1, businessDayOfMonth: 1 }] });
+}
+
+// 日単位の周期の規則 cycle・anchor・positions と、祝日の翌日・祝前日の skipWeekdays
+{
+  createCalendar({
+    holidays: jp,
+    holidayPolicy: "ignore",
+    closedRecurring: [{ cycle: 6, anchor: "2026-01-05", positions: [5, 6], name: "班 A の休日" }],
+  });
+  createCalendar({
+    openRecurring: [
+      {
+        cycle: 10,
+        anchor: "2026-01-01",
+        positions: [1],
+        months: [4, 5],
+        onHolidayRule: "over-holiday",
+      },
+    ],
+  });
+  // @ts-expect-error -- cycle には anchor と positions が要る
+  createCalendar({ closedRecurring: [{ cycle: 6, positions: [5, 6] }] });
+  createCalendar({
+    // @ts-expect-error -- cycle と weekday は同時に指定できない
+    closedRecurring: [{ cycle: 6, anchor: "2026-01-05", positions: [5], weekday: 1 }],
+  });
+  // @ts-expect-error -- positions は cycle の規則でだけ使える
+  createCalendar({ closedRecurring: [{ day: 1, positions: [1] }] });
+  createCalendar({
+    // @ts-expect-error -- cycle の規則は weekdays で絞らない
+    closedRecurring: [{ cycle: 6, anchor: "2026-01-05", positions: [5], weekdays: [1] }],
+  });
+  createCalendar({
+    holidays: jp,
+    closedRecurring: [{ dayBeforeHoliday: true, skipWeekdays: [0, 6] }],
+  });
+  createCalendar({
+    holidays: jp,
+    closedRecurring: [{ dayAfterHoliday: true, skipWeekdays: [0, 6], keys: ["sports"] }],
+  });
+  // @ts-expect-error -- skipWeekdays の要素は 0〜6
+  createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, skipWeekdays: [7] }] });
+  // @ts-expect-error -- skipWeekdays は祝日の規則には付かない
+  createCalendar({ closedRecurring: [{ holiday: true, skipWeekdays: [0] }] });
+  const pattern: CyclePattern = { cycle: 4, anchor: "2026-01-01", positions: [4] };
+  createSchedule({ weekly: [0, 1, 1, 1, 1, 1, 0], recurring: [{ ...pattern, value: 2 }] });
 }

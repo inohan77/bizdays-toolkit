@@ -8,7 +8,6 @@
  * 照合済みの結果と一致することをテストで確かめている（同梱の提供元の実装そのものは置き換えていない）。
  * 同梱の提供元の実装とは別に、アプリの本体に不要なものが入らないようサブパスに分けている。
  *
- * 公開する関数は @beta（マイナー版で変わりうる）。使われ方が固まったら @public にする。
  */
 
 import {
@@ -46,7 +45,7 @@ function checkMonth(month: unknown): asserts month is number {
  * 復活祭の日曜日（グレゴリオ暦）。Good Friday は −2 日、Easter Monday は +1 日、Ascension は +39 日、
  * Whit Monday は +50 日、Corpus Christi は +60 日（ルートの addDays で求める）。
  * 年は 1000〜9999 の整数（それ以外は invalid-argument）。
- * @beta
+ * @public
  */
 export function easterSunday(year: number): DateString {
   checkYear(year);
@@ -57,7 +56,7 @@ export function easterSunday(year: number): DateString {
  * その月の第 n 何曜日（n は 1〜5、-1 は最後。曜日は 0 = 日曜日〜6 = 土曜日）。
  * 例: 1 月の第 3 月曜日は nthWeekdayOfMonth(2026, 1, 1, 3)、5 月の最終月曜日は nthWeekdayOfMonth(2026, 5, 1, -1)。
  * その月に n 回目のその曜日がないとき（第 5 回目）は invalid-argument。
- * @beta
+ * @public
  */
 export function nthWeekdayOfMonth(
   year: number,
@@ -97,7 +96,7 @@ export function nthWeekdayOfMonth(
 
 /**
  * その月の日数（28〜31）。
- * @beta
+ * @public
  */
 export function daysInMonth(year: number, month: number): number {
   checkYear(year);
@@ -107,7 +106,7 @@ export function daysInMonth(year: number, month: number): number {
 
 /**
  * うるう年か（グレゴリオ暦）。
- * @beta
+ * @public
  */
 export function isLeapYear(year: number): boolean {
   checkYear(year);
@@ -116,13 +115,13 @@ export function isLeapYear(year: number): boolean {
 
 /**
  * 振替の向き。"next" はその日より後で最初の振替先、"previous" はその日より前で最初の振替先。
- * @beta
+ * @public
  */
 export type SubstituteDirection = "next" | "previous";
 
 /**
  * substituteDays の設定。
- * @beta
+ * @public
  */
 export interface SubstituteDaysOptions<Kind extends string> {
   /**
@@ -251,7 +250,7 @@ function checkOptions<Kind extends string>(options: unknown): SubstituteDaysOpti
  * @example 日本の振替休日（日曜日の祝日を、その日の後で最も近い祝日でない日へ）
  * substituteDays(holidays, { rules: { 0: "next" }, kind: "substitute",
  *   name: () => ({ name: "振替休日", nameEn: "Substitute Holiday" }) });
- * @beta
+ * @public
  */
 export function substituteDays<Kind extends string>(
   holidays: readonly Holiday<Kind>[],
