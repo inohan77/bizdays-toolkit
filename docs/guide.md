@@ -20,6 +20,17 @@ The full guide to bizdays-toolkit: the bundled holiday providers, business-day c
 
 ## Bundled holiday providers
 
+The four countries differ in how a holiday on a weekend is handled and in whether later years are predicted:
+
+| Country   | A holiday on a weekend                                      | Substitute days                                                                                      | Predictions (`confirmed: false`)                   | `confirmedThrough`            |
+| --------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------- |
+| Japan     | Returned (Saturday and Sunday)                              | For a Sunday holiday, the next day (since 1973-04-12; from 2007, the next day that is not a holiday) | The equinox days after `confirmedThrough`          | Yes                           |
+| UK        | **Not returned**: only the substitute day is (as on GOV.UK) | For a Saturday or Sunday holiday, the next weekday that is not a holiday                             | All bank holidays after `confirmedThrough`         | Yes                           |
+| France    | Returned (Saturday and Sunday)                              | None                                                                                                 | None (the dates follow from the law)               | No                            |
+| Singapore | Returned (Saturday and Sunday)                              | For a Sunday holiday only, the next day that is not a holiday                                        | None (later years are outside the supported years) | Yes (the last supported year) |
+
+So a rule such as `{ holiday: true, weekdays: [6] }` (holidays on a Saturday) never matches with the UK providers, and the diagnostics report it as `never-matches`.
+
 ### Japan
 
 ```ts
@@ -67,7 +78,7 @@ const ukWide = createCalendar({ holidays: [england, scotland, northernIreland] }
 - England and Wales are one division on GOV.UK and currently have the same dates, but they are separate providers, so your code keeps working if they ever differ
 - Supported years are 1974–2099. Years after the last year GOV.UK has published (`confirmedThrough`, currently 2028) are predictions from the rules (`confirmed: false`). One-off bank holidays are unknown until announced, so predicted years never contain them
 - 2000–2011 predate GOV.UK's data. For those years the authority is the list the government published at the time (DTI and BERR, directgov, the Scottish Executive and Government, nidirect; as archived by the Wayback Machine), checked day by day against the Royal Proclamations and the Northern Ireland Orders in The Gazette (the sources are listed in [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md)). Three days in Scotland (4 January 2010, 27 December 2010 and 4 January 2011) appear in every government list of the time but in no proclamation, so by the letter of the 1971 Act they were not bank holidays; the providers follow the government lists and return them as substitute days.
-- 1974–1999 predate the web: no government list survives, so for those years the Royal Proclamations and Northern Ireland Orders in The Gazette are the authority (Hansard written answers are the second source where they exist, and never differ). Every holiday in those years is either a day fixed by Schedule 1 of the 1971 Act or a day appointed in a proclamation recorded in [docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md); the few days for which no proclamation could be found (the 1987 annual proclamation and the Northern Ireland Orders of 1975 and 1986–1990, which fall in gaps of The Gazette's index) are kept by rule and listed as `unverified` in the fixture. The lower bound is 1974 because New Year's Day has been proclaimed each year in England, Wales and Northern Ireland since 1974 (Early May since 1978, Scotland's spring bank holiday since 1978); the providers encode these starts, not changes to the Act. Names follow the lists of the time, which assign substitute days differently from today's GOV.UK in a few years (in 2004, 27 December is Boxing Day and 28 December Christmas Day; in 2000 and 2005 in Scotland, 3 January is 2nd January and 4 January New Year's Day)
+- 1974–1999 predate the web: no government list survives, so for those years the Royal Proclamations and Northern Ireland Orders in The Gazette are the authority (Hansard written answers are the second source where they exist, and never differ). Every holiday in those years is either a day fixed by Schedule 1 of the 1971 Act or a day appointed in a proclamation recorded in [docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md); the few days for which no proclamation could be found (the Northern Ireland Orders of 1986–1990, which are in issues of The Gazette that are not online; the 1987 annual proclamation, which was not found and was due when some issues of The London Gazette are not online; and the Northern Ireland Order of 1975, which was not found) are kept by rule and listed as `unverified` in the fixture. The lower bound is 1974 because New Year's Day has been proclaimed each year in England, Wales and Northern Ireland since 1974 (Early May since 1978, Scotland's spring bank holiday since 1978); the providers encode these starts, not changes to the Act. Names follow the lists of the time, which assign substitute days differently from today's GOV.UK in a few years (in 2004, 27 December is Boxing Day and 28 December Christmas Day; in 2000 and 2005 in Scotland, 3 January is 2nd January and 4 January New Year's Day)
 - Local holidays set by Scottish councils are not included. Whether a bank holiday is a day off depends on the employment contract and similar arrangements
 - One-off bank holidays may be announced only about ten days ahead. Differences from GOV.UK are watched daily and released as patch versions
 
@@ -102,7 +113,7 @@ company.isBusinessDay("2026-05-25"); // true
 - `name` is the French name as written on data.gouv.fr (`1er mai`, `Lundi de Pentecôte`), `nameEn` an English rendering, and `key` the stable identifier (`labour-day`, `pentecost-monday`, …; see [Holiday keys](#holiday-keys))
 - When two holidays fall on the same day (Ascension Day on May 1 in 2008, on May 8 in 2059), the provider returns one holiday for that day with the name and key of the Easter-based holiday, as the data.gouv.fr JSON does, so `keys: ["labour-day"]` does not match May 1, 2008
 - Whit Monday is a working day in many companies (the _journée de solidarité_), but it remains a public holiday by law, so the provider returns it as a holiday; write the exception as a holiday rule with `keys: ["pentecost-monday"]`, as above. Whether a holiday is a day off is the user's decision, as everywhere in this library
-- Supported years are 1974–2099. The dates follow from the law, not from a yearly publication, so every year is `confirmed: true` and the providers have no `confirmedThrough`; a change to the Labour Code would be shipped as a patch version. The dates are verified against the "Jours fériés en France" dataset on data.gouv.fr (DINUM; JSON exports for the two zones, 20 years back and 5 years ahead, currently 2006–2031). Differences are watched daily
+- Supported years are 2000–2099. The dates follow from the law, not from a yearly publication, so every year is `confirmed: true` and the providers have no `confirmedThrough`; a change to the Labour Code would be shipped as a patch version. The dates are verified against the "Jours fériés en France" dataset on data.gouv.fr (DINUM; JSON exports for the two zones, 20 years back and 5 years ahead, currently 2006–2031). Differences are watched daily
 - `FR-AM` is this library's identifier for Alsace-Moselle (the departments of Bas-Rhin, Haut-Rhin and Moselle), which has no single ISO 3166-2 code. The overseas departments and territories, whose holidays and time zones differ, are not bundled
 
 ### Singapore public holidays
@@ -690,7 +701,7 @@ try {
 }
 ```
 
-Main codes: `invalid-date`, `invalid-input`, `invalid-month`, `invalid-month-day`, `invalid-time`, `invalid-range`, `invalid-weekday`, `invalid-time-zone`, `invalid-option`, `out-of-range`, `invalid-provider`, `invalid-provider-data`, `no-business-day`. Future versions may add codes.
+Codes: `invalid-date`, `invalid-input`, `invalid-month`, `invalid-month-day`, `invalid-time`, `invalid-range`, `invalid-weekday`, `invalid-time-zone`, `invalid-argument`, `invalid-option`, `time-zone-conflict`, `out-of-range`, `unconfirmed-holiday`, `invalid-provider`, `invalid-provider-data`, `no-business-day`. Future versions may add codes.
 
 ## Option diagnostics
 
@@ -729,6 +740,7 @@ diagnoseCalendar({
 | `warning`  | `out-of-range`               | A specific date, or the effective period of a rule, outside the supported years of the holiday provider (`relatedPath`)                                                                                                                            |
 | `warning`  | `no-business-day`            | No business day at all (calendars only; searching for a business day throws)                                                                                                                                                                       |
 | `info`     | `redundant`                  | A rule whose removal changes nothing (covered by a combination of earlier rules, same as a closed weekday, the same value as the weekday in a schedule, and so on), or `unconfirmedHolidays: "throw"` in options whose results do not use holidays |
+| `info`     | `counting-basis`             | A `businessDayOfMonth` rule together with a weekly weekday rule in the same options: that weekday is counted as a business day (see [Recurring rules](#recurring-rules))                                                                           |
 | `info`     | `expired`                    | Only with `asOf` (below): a rule or date that ended before the given day                                                                                                                                                                           |
 
 - Branch on `code`. `message` is in English and its wording may change. Future versions may add codes

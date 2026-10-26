@@ -20,6 +20,17 @@ bizdays-toolkit の詳しい使い方です。同梱の祝日の提供元・営�
 
 ## 同梱の祝日の提供元
 
+4 か国は、週末に当たった祝日の扱いと、後の年を予測するかが違います。
+
+| 国           | 週末に当たった祝日                              | 振替                                                                             | 予測（`confirmed: false`）                       | `confirmedThrough`       |
+| ------------ | ----------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------ |
+| 日本         | 返す（土曜日・日曜日とも）                      | 日曜日の祝日は翌日（1973-04-12 から。2007 年からは、その後の祝日でない最初の日） | `confirmedThrough` より後の春分・秋分の日        | あり                     |
+| 英国         | **返さない**。振替日だけを返す（GOV.UK と同じ） | 土曜日・日曜日の祝日は、その後の祝日でない最初の平日                             | `confirmedThrough` より後のすべての bank holiday | あり                     |
+| フランス     | 返す（土曜日・日曜日とも）                      | なし                                                                             | なし（日付は法令で決まる）                       | なし                     |
+| シンガポール | 返す（土曜日・日曜日とも）                      | 日曜日の祝日だけ、その後の祝日でない最初の日                                     | なし（後の年は対応年の外）                       | あり（対応年の最後の年） |
+
+そのため `{ holiday: true, weekdays: [6] }`（土曜日の祝日）のような規則は、英国の提供元では当てはまる日がなく、診断が `never-matches` で知らせます。
+
 ### 日本の祝日
 
 ```ts
@@ -67,7 +78,7 @@ const ukWide = createCalendar({ holidays: [england, scotland, northernIreland] }
 - England と Wales は GOV.UK では 1 つの区分で、日付は現在同じですが、別の提供元にしています。将来分かれても、コードを変えずに済みます
 - 対応年は 1974〜2099 年です。GOV.UK が日付を公表している年（`confirmedThrough`、現在は 2028 年）より後は、規則による予測（`confirmed: false`）です。臨時の祝日は発表されるまで分からないため、予測の年には含まれません
 - 2000〜2011 年は GOV.UK のデータがない年です。この期間は、当時の政府が公表した一覧（DTI・BERR・directgov・Scottish Executive/Government・nidirect。Wayback Machine の保存）を正とし、The Gazette の国王の布告と北アイルランドの Order で全日を照合しています（出典は [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md)）。Scotland の 3 日（2010 年 1 月 4 日・2010 年 12 月 27 日・2011 年 1 月 4 日）は当時の政府の一覧にはあるものの布告がなく、1971 年法の文言どおりなら bank holiday ではありませんが、提供元は政府の一覧に従って振替日として返します。
-- 1974〜1999 年は Web 以前で、当時の政府の一覧は残っていないので、The Gazette の国王の布告と北アイルランドの Order が正です（Hansard の書面答弁がある年はそれを第二の出典とし、日付の食い違いはありません）。この期間の祝日はすべて、1971 年法 Schedule 1 の日か、[docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md) に記録した布告で指定された日です。布告が見つからなかった少数の日（1987 年分の毎年の布告と、The Gazette の索引の欠けに当たる 1975 年・1986〜1990 年の北アイルランドの Order）は規則どおりに返し、フィクスチャに `unverified` として記録しています。下限が 1974 年なのは、England・Wales・NI の New Year's Day が 1974 年から毎年布告されているためです（Early May は 1978 年から、Scotland の Spring も 1978 年から。提供元はこの始まりを符号化しているのであって、法の附則の変更ではありません）。名称も当時の一覧に従うので、振替日の割り当てが今の GOV.UK と違う年があります（2004 年は 12 月 27 日が Boxing Day で 28 日が Christmas Day、2000 年・2005 年の Scotland は 1 月 3 日が 2nd January で 4 日が New Year’s Day）
+- 1974〜1999 年は Web 以前で、当時の政府の一覧は残っていないので、The Gazette の国王の布告と北アイルランドの Order が正です（Hansard の書面答弁がある年はそれを第二の出典とし、日付の食い違いはありません）。この期間の祝日はすべて、1971 年法 Schedule 1 の日か、[docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md) に記録した布告で指定された日です。布告が見つからなかった少数の日（The Gazette のオンラインにない号に載っている 1986〜1990 年の北アイルランドの Order、見つからず、出るはずの時期に The London Gazette のオンラインにない号がある 1987 年分の毎年の布告、見つからなかった 1975 年の北アイルランドの Order）は規則どおりに返し、フィクスチャに `unverified` として記録しています。下限が 1974 年なのは、England・Wales・NI の New Year's Day が 1974 年から毎年布告されているためです（Early May は 1978 年から、Scotland の Spring も 1978 年から。提供元はこの始まりを符号化しているのであって、法の附則の変更ではありません）。名称も当時の一覧に従うので、振替日の割り当てが今の GOV.UK と違う年があります（2004 年は 12 月 27 日が Boxing Day で 28 日が Christmas Day、2000 年・2005 年の Scotland は 1 月 3 日が 2nd January で 4 日が New Year’s Day）
 - Scotland の地域（council）ごとの休日は含みません。また、bank holiday に休むかどうかは雇用契約などによります
 - 臨時の祝日は 10 日ほど前に発表されることがあります。GOV.UK との差分を毎日監視し、見つけたらパッチ版で反映します
 
@@ -102,7 +113,7 @@ company.isBusinessDay("2026-05-25"); // true
 - `name` は data.gouv.fr の表記（フランス語。`1er mai`・`Lundi de Pentecôte`）、`nameEn` は英訳、`key` は安定した識別子（`labour-day`・`pentecost-monday` など。[祝日の識別子](#祝日の識別子)）
 - 2 つの祝日が同じ日に当たる年（2008 年の 5 月 1 日と 2059 年の 5 月 8 日が Ascension）は、data.gouv.fr の JSON と同じく復活祭から決まる祝日の名称・`key` で 1 件を返します。`keys: ["labour-day"]` は 2008 年の 5 月 1 日には当てはまりません
 - Lundi de Pentecôte は多くの企業が出勤日にしています（連帯の日）が、法律上は祝日のままなので、提供元は祝日として返します。出勤日にするなら上のように祝日の規則 `keys: ["pentecost-monday"]` で書きます。祝日を休みにするかどうかは利用者が決める、というこのライブラリ全体の分担です
-- 対応年は 1974〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年・未来 5 年の窓で現在 2006〜2031 年）と照合しています。差分は毎日監視しています
+- 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年・未来 5 年の窓で現在 2006〜2031 年）と照合しています。差分は毎日監視しています
 - `FR-AM` は Alsace-Moselle（Bas-Rhin・Haut-Rhin・Moselle の 3 県）に対するこのライブラリの ID です（ISO 3166-2 に 1 つのコードがないため）。祝日もタイムゾーンも違う海外県・海外領土は同梱していません
 
 ### シンガポールの祝日
@@ -681,7 +692,7 @@ try {
 }
 ```
 
-主なコード: `invalid-date`・`invalid-input`・`invalid-month`・`invalid-month-day`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-option`・`out-of-range`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
+コード: `invalid-date`・`invalid-input`・`invalid-month`・`invalid-month-day`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-argument`・`invalid-option`・`time-zone-conflict`・`out-of-range`・`unconfirmed-holiday`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
 
 ## 設定の診断
 
@@ -720,6 +731,7 @@ diagnoseCalendar({
 | `warning`          | `out-of-range`          | 個別の日付、または規則の有効期間が、祝日の提供元（`relatedPath`）の対応年の外                                                                                                               |
 | `warning`          | `no-business-day`       | 営業日が 1 日もない設定（営業日カレンダーのみ。営業日を探すと例外になります）                                                                                                               |
 | `info`             | `redundant`             | 取り除いても結果が変わらない規則（先の規則の組み合わせに覆われる、定休日の曜日と同じ、スケジュールで曜日の値と同じ値など）、または判定に祝日を使わない設定の `unconfirmedHolidays: "throw"` |
+| `info`             | `counting-basis`        | `businessDayOfMonth` の規則と、同じ設定の毎週の曜日の規則が同居している。その曜日は営業日として数えられる（[繰り返しの規則](#繰り返しの規則)）                                              |
 | `info`             | `expired`               | `asOf`（下記）を渡したときだけ。基準日より前に終わった規則・日付                                                                                                                            |
 
 - 判定には `code` を使ってください。`message` は英語で、文言は変わることがあります。`code` は将来の版で増えることがあります

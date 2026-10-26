@@ -53,7 +53,7 @@
       "division": "northern-ireland",
       "date": "1986-07-14",
       "holiday": "Battle of the Boyne (12 July 1986 was a Saturday)",
-      "reason": "The Belfast Gazette for 1986-1990 is not in The Gazette's search index; no Order was found.",
+      "reason": "The Belfast Gazette issues 4660-5171 (1985-12-27 to 1991-01-04) are listed in The Gazette's Missing Gazette issues (not online, held offline); no Order was found.",
       "dateCertainty": "substitute-inferred",
       "inferredFrom": "The same direction of substitution (Saturday or Sunday to the following Monday) in every Order found: St Patrick's Day 1979-03-19, 1984-03-19; 12 July 1980-07-14, 1981-07-13, 1992-07-13, 1997-07-14, 1998-07-13. To be checked against the Belfast Gazette of the year when it becomes available (The Gazette lists issues 4660-5171 as missing online but held offline)."
     },
@@ -61,7 +61,7 @@
       "division": "northern-ireland",
       "date": "1987-07-13",
       "holiday": "Battle of the Boyne (12 July 1987 was a Sunday)",
-      "reason": "Same index gap.",
+      "reason": "Same missing issues.",
       "dateCertainty": "substitute-inferred",
       "inferredFrom": "The same direction of substitution (Saturday or Sunday to the following Monday) in every Order found: St Patrick's Day 1979-03-19, 1984-03-19; 12 July 1980-07-14, 1981-07-13, 1992-07-13, 1997-07-14, 1998-07-13. To be checked against the Belfast Gazette of the year when it becomes available (The Gazette lists issues 4660-5171 as missing online but held offline)."
     },
@@ -69,28 +69,28 @@
       "division": "northern-ireland",
       "date": "1988-07-12",
       "holiday": "Battle of the Boyne",
-      "reason": "Same index gap.",
+      "reason": "Same missing issues.",
       "dateCertainty": "fixed"
     },
     {
       "division": "northern-ireland",
       "date": "1989-07-12",
       "holiday": "Battle of the Boyne",
-      "reason": "Same index gap.",
+      "reason": "Same missing issues.",
       "dateCertainty": "fixed"
     },
     {
       "division": "northern-ireland",
       "date": "1990-07-12",
       "holiday": "Battle of the Boyne",
-      "reason": "Same index gap.",
+      "reason": "Same missing issues.",
       "dateCertainty": "fixed"
     },
     {
       "division": "northern-ireland",
       "date": "1990-03-19",
       "holiday": "St Patrick's Day (17 March 1990 was a Saturday)",
-      "reason": "Same index gap; no Order found.",
+      "reason": "Same missing issues; no Order found.",
       "dateCertainty": "substitute-inferred",
       "inferredFrom": "The same direction of substitution (Saturday or Sunday to the following Monday) in every Order found: St Patrick's Day 1979-03-19, 1984-03-19; 12 July 1980-07-14, 1981-07-13, 1992-07-13, 1997-07-14, 1998-07-13. To be checked against the Belfast Gazette of the year when it becomes available (The Gazette lists issues 4660-5171 as missing online but held offline)."
     },

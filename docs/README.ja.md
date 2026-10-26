@@ -24,7 +24,7 @@
 - **繰り返しの規則**: 「第 3 水曜定休」「隔週水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は翌平日）」「祝日の翌日（前日）は休館」を、祝日に当たったときの扱いと有効期間つきで書けます
 - **日ごとの値と合成**: 曜日・祝日・特定日で変わる営業時間のようなスケジュール、そこから作る営業日カレンダー、複数のカレンダーがすべて（またはどれか）営業している日の合成
 - **設定の診断**: `bizdays-toolkit/diagnose` が、決して使われない規則・覆われた規則・取り除いても結果が変わらない規則・終わった規則・キーの打ち間違い・営業日が 1 日もない設定を、例外を投げずに一覧で返します。テストに 1 行足すだけで設定を守れます
-- **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 11.0KB（日本の祝日込みで約 12.9KB、英国の祝日込みで約 12.8KB、フランスの祝日込みで約 11.9KB、シンガポールの祝日込みで約 11.9KB。0.20.0 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
+- **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 11.0KB（日本の祝日込みで約 12.8KB、英国の祝日込みで約 13.2KB、フランスの祝日込みで約 11.9KB、シンガポールの祝日込みで約 12.0KB。0.21.3 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられ、多くの国の祝日の元になる暦の計算（月の第 n 何曜日・復活祭・週末に当たった祝日の振替）を `bizdays-toolkit/provider` が公開します
 
 ## インストール
@@ -130,7 +130,7 @@ diagnoseCalendar({
 [Semantic Versioning](https://semver.org/lang/ja/) に従います。詳しくは [RELEASING.md](../RELEASING.md) を参照してください。
 
 - 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表、フランスの労働法典の改正、シンガポールの新しい年の告示と日付の改定）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
-- 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.1.0"`）
+- 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "0.21.3"`）
 - 反映済みのデータは、提供元の `dataVersion`（日本は反映済みの官報の年月、英国・フランス・シンガポールは反映済みの GOV.UK・data.gouv.fr・data.gov.sg のデータの年月）と `confirmedThrough` で確認できます（`jp.dataVersion`・`england.confirmedThrough` など）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` のモジュールの定数 `dataVersion`・`confirmedThrough` は 0.12.0 で非推奨で、1.0.0 で削除します
 - 1.0.0 までは、マイナー版で破壊的変更を行うことがあります。マイナー版の間を移るときに利用者がする作業は、[移行ガイド](./migration.md)と、CHANGELOG の各版の「移行」にまとめています
 - 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコード・診断のコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](../RELEASING.md) の「互換性の約束」）
@@ -141,7 +141,7 @@ diagnoseCalendar({
 
 英国の祝日の検証には、GOV.UK の bank holidays のデータ（<https://www.gov.uk/bank-holidays.json>、それより前の年は GOV.UK の公式リポジトリ [alphagov/calendars](https://github.com/alphagov/calendars)・[alphagov/frontend](https://github.com/alphagov/frontend) の履歴）を、Wales の祝日のウェールズ語の名称には GOV.UK のウェールズ語版の表記を利用しています（照合のデータはテスト用フィクスチャのみ。パッケージには含みません）。
 
-GOV.UK のデータがない 2000〜2011 年は、当時の政府が公表した bank holidays の一覧（DTI・BERR・directgov・Scottish Executive/Government・nidirect。Wayback Machine の保存）を正とし、The Gazette（<https://www.thegazette.co.uk/>）の国王の布告と北アイルランドの Order で照合しています（1974〜1999 年は布告が正）。1975〜1990 年の 13 日は、該当する号が The Gazette のオンラインにないため照合できておらず、規則どおりに返したうえでテスト用フィクスチャに `unverified` として理由つきで記録しています。出典は [docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md) と [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md) にあります（テスト用フィクスチャのみ。パッケージには含みません）。
+GOV.UK のデータがない 2000〜2011 年は、当時の政府が公表した bank holidays の一覧（DTI・BERR・directgov・Scottish Executive/Government・nidirect。Wayback Machine の保存）を正とし、The Gazette（<https://www.thegazette.co.uk/>）の国王の布告と北アイルランドの Order で照合しています（1974〜1999 年は布告が正）。1975〜1990 年の 13 日は照合できておらず、規則どおりに返したうえでテスト用フィクスチャに `unverified` として理由つきで記録しています（1986〜1990 年の北アイルランドの Order は The Gazette のオンラインにない号に載っており、1987 年分の毎年の布告と 1975 年の北アイルランドの Order は見つかっていない）。出典は [docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md) と [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md) にあります（パッケージには含みません）。
 
 フランスの祝日の検証には、DINUM が data.gouv.fr で公開している「Jours fériés en France」（<https://www.data.gouv.fr/datasets/jours-feries-en-france>。Métropole と Alsace-Moselle のゾーンの JSON エクスポート）を利用しています（テスト用フィクスチャのみ。パッケージには含みません）。
 

@@ -1,8 +1,23 @@
 # Changelog
 
-この形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に、版の付け方は [Semantic Versioning](https://semver.org/lang/ja/) と [RELEASING.md](./RELEASING.md) の方針に従います。区分には Keep a Changelog の Added / Changed / Deprecated / Removed / Fixed / Security に加えて、祝日データの更新を表す **Data** を使います。
+この形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に、版の付け方は [Semantic Versioning](https://semver.org/lang/ja/) と [RELEASING.md](./RELEASING.md) の方針に従います。区分には Keep a Changelog の Added / Changed / Deprecated / Removed / Fixed / Security に加えて、祝日データの更新を表す **Data**、マイナー版で利用者がする作業を書く **移行**（RELEASING.md）、公開物の変わらない品質の仕組み（検査・CI・リリースの手順）を書く **開発** を使います。
 
 ## [Unreleased]
+
+## [0.21.3] - 2026-10-26
+
+### Changed
+
+- ドキュメントの食い違いを直した（公開物の動作は変わらない）。ガイド（英日）のフランスの対応年を 1974〜2099 年から正しい 2000〜2099 年に、README（英日）の minify + gzip のサイズを測り直して英国込み 12.8 → 13.2 KB・日本込み 12.9 → 12.8 KB・シンガポール込み 11.9 → 12.0 KB に（測り方を `scripts/measure-bundle.ts` に固定した。0.20.0 の値は日本とシンガポールで測り方が揃っていなかった）、ガイドの診断の表に `counting-basis` を、エラーコードの一覧に `invalid-argument`・`time-zone-conflict`・`unconfirmed-holiday` を足した。英国の `unverified` の理由を「The Gazette の索引の欠け」から、1986〜1990 年の北アイルランドの Order は「オンラインにない号（Missing Gazette issues）」、1987 年分の布告と 1975 年の北アイルランドの Order は「見つかっていない」に改めた（ガイド・README・出典の記録・フィクスチャの reason。README と decisions.md の 49 番は 13 日すべてをオンラインにない号としていた）。README の版の固定の例を英日で揃え、出典の記録に付いていた「テスト用フィクスチャのみ」の誤った括弧書きを外した
+- ガイド（英日）の「同梱の祝日の提供元」の冒頭に、4 か国の比較表（週末に当たった祝日を返すか・振替・予測・`confirmedThrough`）を足した。英国の提供元は週末に当たった祝日を返さないので、`{ holiday: true, weekdays: [6] }` のような規則は当てはまらない
+- `docs/decisions.md`: 決定の文書の現状に追いついていない記述を直した。18 番（対応年は 1974 年から。49 番）・6 番（契約の項目に `key`）・10 番（CI でだけ使う道具は actionlint のほかにもある）・29 番（古い TypeScript は 0.13.0 から CI で確かめている）・45 番（`docs/` のファイルの数の数え方と、README からガイドに移った説明）に追記し、12 番に判定の順番の番号（ガイドの 1〜8）を明記して 47 番の「12 番の 5・6」を「6（`"over-holiday"` なら 4）」に、13・31 番の「README に明記」を「ガイドに明記」に、28 番の監視の範囲を 4 か国に直した。22・49 番の脱字を直した。51 番（ドキュメントの数値の検査と、前の版との祝日データの差分）を追加した
+- `RELEASING.md`: 「CI の版は次の 2 か所で管理」を直し（実際は 6 項目）、README のサイズの値の測り方を `scripts/measure-bundle.ts` に改めた。CHANGELOG の冒頭の区分の説明に「移行」「開発」を足した
+
+### 開発
+
+- `pnpm check`（`scripts/check-package.ts`）に、ドキュメントの数値・一覧を `dist` とソースの型と照合する検査を足した（decisions.md の 51 番）。README の提供元の表とガイドの国の節・「対応年の外」の節の対応年とタイムゾーン・`confirmedThrough`、祝日の識別子の表の key、エラーコードの一覧と診断の表のコード、README の「測った版」が今のマイナー系列であること、英日の対の文書で節ごとの数値がそろうこと。0.21.2 の文書に当てると、ガイドのフランスの対応年・README のサイズの測った版・診断の表とエラーコードの一覧の抜け・版の固定の例の英日の違いを検出する
+- CI に `data-compare` ジョブを足した。公開済みの前の版（npm の `latest`）と今回の `dist` の同梱の提供元を、対応年が重なるすべての年で 1 日ずつ比べ（`scripts/data-compare.ts`）、`key` が変わったとき、差分があるのに CHANGELOG に Data がないとき、提供元がなくなったか対応年が狭まったときに失敗する。照合のフィクスチャのない年（予測の年など）の安全網
+- README のサイズを測る `scripts/measure-bundle.ts` を足した（esbuild は依存にせず、パスを引数で渡す。pnpm check・CI には含めない）
 
 ## [0.21.2] - 2026-10-26
 
@@ -585,7 +600,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.2...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.3...HEAD
+[0.21.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.2...v0.21.3
 [0.21.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.1...v0.21.2
 [0.21.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.20.0...v0.21.0

@@ -261,6 +261,35 @@ jobs:
             --ratio 2 --base-label "${BASE_VERSION}" --head-label "HEAD" | tee -a "${GITHUB_STEP_SUMMARY}"
           test "${PIPESTATUS[0]}" -eq 0
 
+  data-compare:
+    # 同梱の提供元の祝日データを、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 51 番）。
+    # key が変わった・差分があるのに CHANGELOG に Data がない・提供元がなくなった・対応年が狭まった、で失敗する。
+    # 差分は Job Summary に残す。pnpm check には含めない（npm への接続が要るため。bench と同じ）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - name: Fetch the published version for comparison
+        run: |
+          base="$(npm view bizdays-toolkit version)"
+          echo "BASE_VERSION=${base}" >> "${GITHUB_ENV}"
+          mkdir -p "${RUNNER_TEMP}/base"
+          cd "${RUNNER_TEMP}/base"
+          npm pack "bizdays-toolkit@${base}" --ignore-scripts --silent
+          tar -xzf "bizdays-toolkit-${base}.tgz"
+          echo "comparing with bizdays-toolkit@${base}"
+      - name: Compare the holiday data
+        run: |
+          node scripts/data-compare.ts --base "${RUNNER_TEMP}/base/package" --head . \
+            --base-label "${BASE_VERSION}" | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${PIPESTATUS[0]}" -eq 0
+
   workflows:
     # ワークフローの構文・式・シェルスクリプトの誤りを actionlint で検出する（pnpm check はワークフローを検査しない）。
     # actionlint は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）

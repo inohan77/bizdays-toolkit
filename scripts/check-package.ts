@@ -7,6 +7,8 @@
  * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
  * - 英語と日本語のドキュメントの対（README・guide・providers）の構成がそろい、見出しへのリンクが実在すること（checkDocPair・checkDocAnchors）
  * - ライブラリのソース（src）が Node.js 固有の機能を使っていないこと（checkPortableSource。decisions.md の 26 番）
+ * - ドキュメントの数値・一覧（対応年・タイムゾーン・confirmedThrough・key の表・コードの一覧・サイズを測った版）が
+ *   dist とソースの型に一致し、英日の対で節ごとの数値がそろうこと（checkDocFacts・checkPairNumbers。decisions.md の 51 番）
  */
 
 import "./strict-warnings.ts";
@@ -14,6 +16,7 @@ import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { type BundledEntry, loadBundledProviders } from "./bundled-providers.ts";
 
 interface Pkg {
   name: string;
@@ -306,6 +309,341 @@ function checkFixtureRecords(): string[] {
   return problems;
 }
 errors.push(...checkFixtureRecords());
+
+// ---------------------------------------------------------------------------------------------
+// ドキュメントの数値・一覧を、ビルド済みの dist とソースの型と照合する（decisions.md の 51 番）。
+// コード例の実行（27 番）は結果のコメントだけを、英日の対の検査（22・45 番）は構成だけを比べるので、
+// 文章の中の数値は、英日が同じ誤りを含めば通っていた（0.21.0 でガイドのフランスの対応年が英日とも 1974 になった）。
+// ---------------------------------------------------------------------------------------------
+
+/** 国のサブパスごとの国名（英語・日本語）。文の中の「for Japan」「日本は」から提供元を決めるのに使う。国を足したらここに足す */
+const COUNTRY_NAMES: Readonly<Record<string, { en: readonly string[]; ja: string }>> = {
+  "./jp": { en: ["Japan", "Japanese"], ja: "日本" },
+  "./uk": { en: ["the UK", "UK"], ja: "英国" },
+  "./fr": { en: ["France", "French"], ja: "フランス" },
+  "./sg": { en: ["Singapore"], ja: "シンガポール" },
+};
+
+interface SubpathFacts {
+  readonly from: number;
+  readonly to: number;
+  readonly timeZones: ReadonlySet<string>;
+  readonly confirmedThrough: ReadonlySet<number | undefined>;
+  readonly exportNames: readonly string[];
+  readonly keys: ReadonlySet<string>;
+}
+
+async function subpathFacts(): Promise<Map<string, SubpathFacts>> {
+  const map = new Map<string, SubpathFacts>();
+  const groups = new Map<string, BundledEntry[]>();
+  for (const e of await loadBundledProviders("."))
+    groups.set(e.subpath, [...(groups.get(e.subpath) ?? []), e]);
+  for (const [subpath, entries] of groups) {
+    const keys = new Set<string>();
+    for (const { provider } of entries) {
+      for (let y = provider.supportedYears.from; y <= provider.supportedYears.to; y++) {
+        for (const h of provider.holidaysInYear(y)) if (h.key !== undefined) keys.add(h.key);
+      }
+    }
+    const years = new Set(
+      entries.map((e) => `${e.provider.supportedYears.from}-${e.provider.supportedYears.to}`),
+    );
+    if (years.size !== 1)
+      errors.push(`${subpath}: providers have different supportedYears (${[...years].join(", ")})`);
+    map.set(subpath, {
+      from: entries[0]!.provider.supportedYears.from,
+      to: entries[0]!.provider.supportedYears.to,
+      timeZones: new Set(entries.map((e) => e.provider.timeZone)),
+      confirmedThrough: new Set(entries.map((e) => e.provider.confirmedThrough)),
+      exportNames: entries.map((e) => e.exportName),
+      keys,
+    });
+  }
+  return map;
+}
+
+/** 見出し（# 〜 ###）で区切った節。その節のコード例が import する国のサブパスが 1 つなら、その国の節とみなす */
+function sectionsOf(
+  text: string,
+): { heading: string; body: string; subpath: string | undefined }[] {
+  const parts = text.split(/^(#{1,3} .*)$/m);
+  const out: { heading: string; body: string; subpath: string | undefined }[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const body = parts[i] ?? "";
+    const imported = new Set(
+      [...body.matchAll(/from "bizdays-toolkit\/([a-z]+)"/g)].map((m) => `./${m[1]!}`),
+    );
+    const countries = [...imported].filter((sp) => sp in COUNTRY_NAMES);
+    out.push({
+      heading: i === 0 ? "" : (parts[i - 1] ?? ""),
+      body,
+      subpath: countries.length === 1 ? countries[0] : undefined,
+    });
+  }
+  return out;
+}
+
+/** ソースの型 `export type <name> = | "a" | "b" …;` の文字列リテラルを集める（別の型を含む場合はその値を含めない） */
+function literalsOf(file: string, typeName: string): string[] {
+  const text = readFileSync(file, "utf8");
+  const m = new RegExp(`export type ${typeName} =([\\s\\S]*?);`).exec(text);
+  if (!m) {
+    errors.push(`${file}: type ${typeName} not found`);
+    return [];
+  }
+  return [...m[1]!.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/"([a-z-]+)"/g)].map((x) => x[1]!);
+}
+
+async function checkDocFacts(): Promise<string[]> {
+  const problems: string[] = [];
+  const facts = await subpathFacts();
+  const range = (f: SubpathFacts): string => `${f.from}–${f.to}`;
+  for (const subpath of facts.keys()) {
+    if (!(subpath in COUNTRY_NAMES))
+      problems.push(`scripts/check-package.ts: add ${subpath} to COUNTRY_NAMES`);
+  }
+  const subpathOfName = (name: string): string | undefined =>
+    Object.entries(COUNTRY_NAMES).find(([, n]) => n.en.includes(name) || n.ja === name)?.[0];
+  const checkRange = (
+    file: string,
+    subpath: string | undefined,
+    from: string,
+    to: string,
+    where: string,
+  ): void => {
+    const f = subpath === undefined ? undefined : facts.get(subpath);
+    if (!f) return;
+    if (Number(from) !== f.from || Number(to) !== f.to) {
+      problems.push(`${file}: ${where} says ${from}–${to}, but ${subpath} supports ${range(f)}`);
+    }
+  };
+
+  // README の提供元の表: サブパスの行の対応年とタイムゾーン
+  for (const file of ["README.md", "docs/README.ja.md"]) {
+    const rows = new Set<string>();
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      const sp = /^\|.*`bizdays-toolkit\/([a-z]+)`/.exec(line)?.[1];
+      if (sp === undefined || !line.startsWith("|")) continue;
+      const subpath = `./${sp}`;
+      const f = facts.get(subpath);
+      if (!f) continue;
+      rows.add(subpath);
+      const cells = line.split("|").map((c) => c.trim());
+      const yearsCell = cells.find((c) => /^\d{4}[–〜]\d{4}$/.test(c));
+      if (yearsCell === undefined)
+        problems.push(`${file}: the provider table row for ${subpath} has no supported years`);
+      else {
+        const [from, to] = yearsCell.split(/[–〜]/);
+        checkRange(file, subpath, from!, to!, `the provider table (${subpath})`);
+      }
+      const zone = /`([A-Z][A-Za-z_]+\/[A-Za-z_]+)`/.exec(line)?.[1];
+      if (zone !== undefined && !f.timeZones.has(zone)) {
+        problems.push(
+          `${file}: the provider table says ${zone} for ${subpath}, but it is ${[...f.timeZones].join(", ")}`,
+        );
+      }
+    }
+    for (const subpath of facts.keys()) {
+      if (!rows.has(subpath))
+        problems.push(`${file}: the provider table has no row for ${subpath}`);
+    }
+  }
+
+  // ガイド: 国の節の対応年・confirmedThrough、国名を伴う対応年（「Outside the supported years」など）
+  for (const [file, lang] of [
+    ["docs/guide.md", "en"],
+    ["docs/guide.ja.md", "ja"],
+  ] as const) {
+    const text = readFileSync(file, "utf8");
+    const supportedPattern =
+      lang === "en"
+        ? /Supported years are (?:[^.(\n]*\(currently )?(\d{4})–(\d{4})/g
+        : /対応年は(?:[^。（\n]*（現在は)? ?(\d{4})〜(\d{4}) 年/g;
+    const seenSections = new Set<string>();
+    for (const sec of sectionsOf(text)) {
+      if (sec.subpath === undefined) continue;
+      const f = facts.get(sec.subpath)!;
+      for (const m of sec.body.matchAll(supportedPattern)) {
+        seenSections.add(sec.subpath);
+        checkRange(file, sec.subpath, m[1]!, m[2]!, `"${sec.heading.replace(/^#+ /, "")}"`);
+      }
+      for (const m of sec.body.matchAll(/`confirmedThrough`[^.。\n]{0,25}?(\d{4})/g)) {
+        if (!f.confirmedThrough.has(Number(m[1]))) {
+          problems.push(
+            `${file}: "${sec.heading.replace(/^#+ /, "")}" says confirmedThrough ${m[1]}, but it is ${[...f.confirmedThrough].join(", ")}`,
+          );
+        }
+      }
+    }
+    // 国の節の対応年の文は、日本以外の国について必須（日本は README の表と「対応年の外」の節で示す）
+    for (const subpath of facts.keys()) {
+      if (subpath !== "./jp" && !seenSections.has(subpath)) {
+        problems.push(
+          `${file}: no "${lang === "en" ? "Supported years are" : "対応年は"} …" sentence in the section for ${subpath}`,
+        );
+      }
+    }
+    const en = (names: readonly string[]): string =>
+      names.map((n) => n.replace(" ", "\\s")).join("|");
+    const named =
+      lang === "en"
+        ? [
+            new RegExp(
+              `(\\d{4})–(\\d{4}) for (${Object.values(COUNTRY_NAMES)
+                .flatMap((n) => n.en.map((x) => en([x])))
+                .join("|")})\\b`,
+              "g",
+            ),
+            new RegExp(
+              `\\b(${Object.values(COUNTRY_NAMES)
+                .flatMap((n) => n.en.map((x) => en([x])))
+                .join("|")}) holidays \\((\\d{4})–(\\d{4})\\)`,
+              "g",
+            ),
+          ]
+        : [
+            new RegExp(
+              `(${Object.values(COUNTRY_NAMES)
+                .map((n) => n.ja)
+                .join("|")})は (\\d{4})〜(\\d{4}) 年`,
+              "g",
+            ),
+            new RegExp(
+              `(${Object.values(COUNTRY_NAMES)
+                .map((n) => n.ja)
+                .join("|")})の祝日の対応年（(\\d{4})〜(\\d{4}) 年）`,
+              "g",
+            ),
+          ];
+    const mentioned = new Set<string>();
+    named.forEach((pattern, i) => {
+      for (const m of text.matchAll(pattern)) {
+        const [name, from, to] =
+          lang === "en" && i === 0 ? [m[3]!, m[1]!, m[2]!] : [m[1]!, m[2]!, m[3]!];
+        const subpath = subpathOfName(name.replace(/\s+/g, " "));
+        if (subpath !== undefined) mentioned.add(subpath);
+        checkRange(file, subpath, from, to, `"${m[0]}"`);
+      }
+    });
+    // 「対応年の外」の節の括弧書きは、すべての国を挙げる
+    for (const subpath of facts.keys()) {
+      if (!mentioned.has(subpath))
+        problems.push(
+          `${file}: the supported years of ${subpath} are not listed with the country name ("Outside the supported years")`,
+        );
+    }
+
+    // 祝日の識別子の表: 行の key の集合が、そのサブパスの提供元が返す key の集合と一致すること
+    const keyRows = new Set<string>();
+    for (const line of text.split("\n")) {
+      if (!line.startsWith("| `")) continue;
+      const cells = line.split("|").slice(1, -1);
+      const first = /`([A-Za-z]+)`/.exec(cells[0] ?? "")?.[1];
+      const tokens = [
+        ...cells
+          .slice(1)
+          .join("|")
+          .matchAll(/`([a-z0-9][a-z0-9-]*)`/g),
+      ].map((m) => m[1]!);
+      if (first === undefined || tokens.length < 5) continue;
+      const subpath = [...facts].find(([, f]) => f.exportNames.includes(first))?.[0];
+      if (subpath === undefined) continue;
+      keyRows.add(subpath);
+      const listed = new Set(tokens);
+      const actual = facts.get(subpath)!.keys;
+      const missing = [...actual].filter((k) => !listed.has(k));
+      const extra = [...listed].filter((k) => !actual.has(k));
+      if (missing.length > 0 || extra.length > 0) {
+        problems.push(
+          `${file}: the key table row for ${subpath} differs (missing: ${missing.join(", ") || "-"}; not returned: ${extra.join(", ") || "-"})`,
+        );
+      }
+    }
+    for (const subpath of facts.keys()) {
+      if (!keyRows.has(subpath)) problems.push(`${file}: the key table has no row for ${subpath}`);
+    }
+
+    // エラーコードの一覧と診断の表: 型（KnownErrorCode・KnownDiagnosticCode）の値をすべて挙げること
+    const errorCodes = literalsOf("src/core/errors.ts", "KnownErrorCode");
+    const diagnosticOnly = literalsOf("src/core/diagnose.ts", "KnownDiagnosticCode").filter(
+      (c) => !errorCodes.includes(c),
+    );
+    const listLine = text
+      .split("\n")
+      .find(
+        (l) => !l.startsWith("|") && errorCodes.filter((c) => l.includes(`\`${c}\``)).length >= 5,
+      );
+    if (listLine === undefined) problems.push(`${file}: the list of error codes not found`);
+    else {
+      const missing = errorCodes.filter((c) => !listLine.includes(`\`${c}\``));
+      if (missing.length > 0)
+        problems.push(`${file}: the list of error codes lacks ${missing.join(", ")}`);
+    }
+    const tableCodes = new Set(
+      text
+        .split("\n")
+        .filter((l) => /^\| `(error|warning|info)` /.test(l))
+        .flatMap((l) => [...(l.split("|")[2] ?? "").matchAll(/`([a-z-]+)`/g)].map((m) => m[1]!)),
+    );
+    const missingDiag = diagnosticOnly.filter((c) => !tableCodes.has(c));
+    if (missingDiag.length > 0)
+      problems.push(`${file}: the diagnostics table lacks ${missingDiag.join(", ")}`);
+  }
+
+  // README のサイズの値: 測定した版が今のマイナー系列であること（RELEASING.md の「マイナー版を出すときに測り直す」）
+  const minor = pkg.version.split(".").slice(0, 2).join(".");
+  for (const [file, pattern] of [
+    ["README.md", /measured for (\d+\.\d+)\.\d+/],
+    ["docs/README.ja.md", /(\d+\.\d+)\.\d+ で測定/],
+  ] as const) {
+    const measured = pattern.exec(readFileSync(file, "utf8"))?.[1];
+    if (measured === undefined)
+      problems.push(`${file}: the version the sizes were measured for is not stated`);
+    else if (measured !== minor) {
+      problems.push(
+        `${file}: the sizes were measured for ${measured}.x, but the package is ${pkg.version}; re-measure (RELEASING.md)`,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * 英日の対の文書で、節ごと（見出しで区切る）の数値の集合が一致すること。年・版・サイズのような数値（32 以上の整数、
+ * 小数点を含む数）だけを比べる（月日の数字は英語では月名になるので比べない）。コードブロックとリンクの URL は除き、
+ * インラインのコードは含める。片方だけ直した数値を見つける（両方が同じ誤りなら checkDocFacts の側で見つける）
+ */
+function checkPairNumbers(enPath: string, jaPath: string): string[] {
+  const numbersBySection = (path: string): string[][] => {
+    const text = readFileSync(path, "utf8")
+      .replace(/^```[\s\S]*?^```/gm, "")
+      .replace(/\]\([^)]*\)|<https?:\/\/[^>]*>|https?:\/\/\S+/g, "");
+    return text.split(/^#{1,6} .*$/m).map((part) =>
+      [...part.matchAll(/(?<![\w.\-/])\d[\d,.]*\d|(?<![\w.\-/])\d(?![\w])/g)]
+        .map((m) => m[0].replaceAll(",", "").replace(/\.$/, ""))
+        .filter((n) => n.includes(".") || Number(n) >= 32)
+        .sort(),
+    );
+  };
+  const a = numbersBySection(enPath);
+  const b = numbersBySection(jaPath);
+  const problems: string[] = [];
+  a.forEach((nums, i) => {
+    const other = b[i] ?? [];
+    const onlyEn = nums.filter((n) => !other.includes(n));
+    const onlyJa = other.filter((n) => !nums.includes(n));
+    if (onlyEn.length > 0 || onlyJa.length > 0) {
+      problems.push(
+        `numbers differ in section ${i} of ${enPath} / ${jaPath}: only in English ${onlyEn.join(", ") || "-"}, only in Japanese ${onlyJa.join(", ") || "-"}`,
+      );
+    }
+  });
+  return problems;
+}
+
+errors.push(...(await checkDocFacts()));
+for (const [en, ja] of DOC_PAIRS)
+  if (existsSync(en) && existsSync(ja)) errors.push(...checkPairNumbers(en, ja));
 
 // 公開されるファイルは、npm が実際に詰めるもの（npm pack --dry-run）で確かめる。
 // files の指定から推定すると、npm が指定にかかわらず含めるファイル（ルートの README* など）を見落とすため
