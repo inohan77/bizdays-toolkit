@@ -61,7 +61,7 @@ const manyDates = createCalendar({
   closedDates: Array.from({ length: 500 }, (_, i) => addDaysSimple("2020-01-01", i * 7 + 3)),
 });
 
-// 繰り返しの規則と振替を使う設定（博物館: 月曜休館・祝日の場合は翌平日、第 3 水曜休館、月末棚卸）
+// 繰り返しの規則と振替を使う設定（博物館: 月曜休館・祝日の場合は次の祝日でない日、第 3 水曜休館、月末棚卸）
 const museum = createCalendar({
   holidays: jp,
   holidayPolicy: "open",

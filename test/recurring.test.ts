@@ -100,7 +100,7 @@ test("祝日の上（over-holiday）は、祝日でも当てはめる", () => {
   assert.equal(day.holiday?.name, "成人の日", "祝日の情報は付く");
 });
 
-test("祝日の後（after-holiday）: 月曜休館・祝日の場合は翌平日", () => {
+test("祝日の後（after-holiday）: 月曜休館・祝日の場合は次の祝日でない日", () => {
   const museum = closedOn([{ weekday: 1, name: "月曜休館", onHolidayRule: "after-holiday" }], {
     holidayPolicy: "open",
   });

@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-10-27
+
+### Changed
+
+- 祝日の識別子（`key`）の付け方の説明を、同梱の提供元に実際に付いている `key` と合わせた（公開物の動作・`key` は変わらない）。冠詞は先頭の "The" だけを除き、途中の冠詞は残す（`respect-for-the-aged`・`battle-of-the-boyne`）。例外は `new-year`・`boxing-day`・`labour-day`・`national-day` の 4 つ。規則は `docs/providers.md`（英日）にだけ書き、ガイド（英日）はそこを指す形にした（ガイド・`docs/providers.md`・決定の文書が、それぞれ別の不正確な規則を書いていた）
+- README（英日）・ガイド（英日）の `onHolidayRule: "after-holiday"` の説明を「翌平日」「next weekday」から「次の祝日でない日（土曜日のこともある）」に改め、言葉どおりの翌平日は `skipWeekdays` で書けることを示した（振替先は decisions.md の 14 番のとおり「祝日でない日」で、金曜日の規則は金曜日が祝日のたびに土曜日に振り替わる。動作は変わらない）
+- ガイド（英日）の「未確定の祝日」で、祝日の翌日・祝前日の規則が見る日を「隣の日」から「隣の日（`skipWeekdays` があれば塊の全体）」に改めた（実装どおり）
+- ガイド（英日）の作成時間の具体値（開発用の機械での測定値）を「1 ミリ秒を大きく下回る」に改めた（機械に依存する値は照合できないため）
+- `docs/migration.md`: 0.22.0 の `cycle`・祝前日の規則への書き換えに、判定の段階が変わる注意（`holidayPolicy: "open"` なら `onHolidayRule: "over-holiday"` を付ける、`openRecurring` の規則と重なる日は営業日になる、書き換えの前後で `daysBetween` を比べる）を足した
+- `docs/decisions.md`: 46 番の `key` の付け方の規則を、自身の例（`respect-for-the-aged`）と矛盾しない形に改めた（「冠詞」→「先頭の冠詞」、例外を 4 つに整理）。14 番に、土曜日への振替が「年に 0〜1 回」なのは月曜日の規則の場合だけであることを追記した
+
 ## [0.22.0] - 2026-10-27
 
 ### Added
@@ -640,7 +651,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.4...v0.22.0
 [0.21.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.3...v0.21.4
 [0.21.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.2...v0.21.3
