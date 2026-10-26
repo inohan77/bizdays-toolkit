@@ -130,7 +130,7 @@ export function nthWeekdayOfMonth(
 }
 
 /**
- * 復活祭の日曜日（グレゴリオ暦。Anonymous Gregorian algorithm）。英国の祝日の計算に使い、提供元の実装者向けに
+ * 復活祭の日曜日（グレゴリオ暦。Anonymous Gregorian algorithm）。復活祭から日数で決まる祝日の計算に使い、提供元の実装者向けに
  * bizdays-toolkit/provider からも公開する（入力の検証はそちらで行う）
  */
 export function easterSunday(year: number): DateString {

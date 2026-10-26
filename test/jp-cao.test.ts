@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { holidaysInYear, jp } from "../src/jp/index.ts";
 
-// 定数 confirmedThrough は 0.12.0 で非推奨（提供元の項目を使う）
+// 提供元の項目を使う（モジュールの定数 confirmedThrough は非推奨）
 const confirmedThrough = jp.confirmedThrough!;
 
 const fixture = readFileSync(new URL("./fixtures/cao-dates.txt", import.meta.url), "utf8")

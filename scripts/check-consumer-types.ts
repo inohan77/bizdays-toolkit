@@ -1,20 +1,13 @@
 import "./strict-warnings.ts";
 /**
- * 利用者の立場で、公開する型定義を型チェックする（pnpm check から実行。decisions.md の 29 番）。
+ * 利用者の立場で、公開する型定義を型チェックする（pnpm check から実行。decisions.md の 29・38 番）。
  *
- * test/consumer/consumer.mts を、moduleResolution を node16・nodenext・bundler に変えて tsc で確かめる。
- * パッケージ名での自己参照で dist の .d.ts を読み、ライブラリの型定義の検査（skipLibCheck: false）も有効にする。
- * 型定義の import が .ts の拡張子で書かれているため、利用者の設定で読めることを確かめる意味がある。
- * pnpm build の後に実行する。
+ * test/consumer/consumer.mts を、moduleResolution を node16・nodenext・bundler に変えて tsc で確かめ、
+ * わざと型エラーを含む test/consumer/consumer-error.mts が失敗することも確かめる。pnpm build の後に実行する。
  *
  * 引数:
- *   --tsc <path>   使う tsc（既定は開発用の依存の typescript/bin/tsc）。CI の consumer-types ジョブで、
- *                  TypeScript 5.0・5.5・5.8・7.0 の bin/tsc を渡す（decisions.md の 38 番）。
- *                  7.0 の bin/tsc も Node.js のスクリプト（中でネイティブの実行形式を起動する）なので、同じ起動の仕方で動く
- *   --label <text> 結果の表示に添える名前（例: "TypeScript 7.0.2"）
- *
- * 検査が機能していること（黙って合格にならないこと）を確かめるため、わざと型エラーを含む
- * test/consumer/consumer-error.mts も同じ設定で実行し、失敗することを確かめる。
+ *   --tsc <path>   使う tsc（既定は開発用の依存の typescript/bin/tsc。CI の consumer-types ジョブは別の版を渡す）
+ *   --label <text> 結果の表示に添える名前（例: "TypeScript <版>"）
  */
 
 import { execFileSync } from "node:child_process";

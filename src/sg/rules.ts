@@ -2,11 +2,11 @@
  * シンガポールの祝日（public holidays）の表と振替の規則。
  *
  * 旧正月・Hari Raya・Vesak Day・Deepavali は太陰暦・イスラム暦・ヒンドゥー暦で決まり、規則では計算できない。
- * 日本・英国と違い、年ごとに MOM（Ministry of Manpower）が官報で告示した日付を正として表で持つ。
+ * 規則で計算する国と違い、年ごとに MOM（Ministry of Manpower）が官報で告示した日付を正として表で持つ。
  * 振替だけは Holidays Act（1998 年版）第 4 条の規則「日曜日に当たる祝日は、その翌日のうちそれ自体が祝日でない
  * 最初の日を祝日とする」で計算し、表には書かない。土曜日に当たる祝日は振替にならない（雇用主が休みか手当を与える）。
  *
- * 識別子（key）は 11 の祝日に 1 つずつ（KnownSgHolidayKey）。振替日は元の祝日の key、Polling Day は持たない。
+ * 識別子（key）は毎年の祝日に 1 つずつ（KnownSgHolidayKey。旧正月の 2 日は同じ key）。振替日は元の祝日の key、Polling Day は持たない。
  * 名称は MOM の報道発表の綴り（アポストロフィは ’）。data.gov.sg のコレクション 691（MOM）のデータで
  * 全日照合している（test/fixtures/datagovsg-public-holidays.json）。data.gov.sg の 2022 年分は MOM の改定後の告示と
  * 食い違う（scripts/verify-datagovsg.ts の KNOWN_DIFFERENCES）ため、告示を正としている。
@@ -36,7 +36,7 @@ export type KnownSgHolidayKind =
 export type SgHolidayKind = KnownSgHolidayKind | (string & {});
 
 /**
- * シンガポールの毎年の祝日の識別子（Holiday.key。既知の値）。11 の祝日に 1 つずつ。
+ * シンガポールの毎年の祝日の識別子（Holiday.key。既知の値）。毎年の祝日に 1 つずつ（旧正月の 2 日は同じ key）。
  * 振替日は元の祝日の key を持ち、臨時の祝日（Polling Day）は key を持たない。
  * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
  * @beta

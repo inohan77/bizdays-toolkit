@@ -16,7 +16,7 @@ export interface Holiday<Kind extends string = string> {
   readonly nameEn: string;
   /**
    * ほかの言語の名称（省略可能）。キーは BCP 47 の言語タグの正規の形（例: "zh-Hant", "ko"）。
-   * 同梱の提供元（日本）は持たない。利用者が実装した提供元が付けた場合に、検証して複製・凍結して返す
+   * 同梱の提供元は、公式の出典がある言語の名称だけを付ける。利用者が実装した提供元が付けた場合に、検証して複製・凍結して返す
    */
   readonly names?: Readonly<Record<string, string>>;
   /** 種別（国ごとに定義。日本は JapaneseHolidayKind） */

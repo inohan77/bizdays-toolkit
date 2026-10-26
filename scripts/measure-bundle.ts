@@ -1,10 +1,8 @@
 /**
- * README の minify + gzip のサイズを測る（手で実行する。pnpm check・CI には含めない。RELEASING.md の「README のサイズの値」）。
+ * README の minify + gzip のサイズを測る（手で実行する。RELEASING.md の「README のサイズの値」）。
  *
  * ルートのすべてと、国の提供元（サブパスごとに、その提供元の export だけ）を読み込む入口を esbuild で
- * bundle・minify し、gzip（レベル 9）で測る。1 KB は 1,000 バイトで、小数第 1 位に丸めて README に書く。
- * esbuild はリポジトリの依存にしない（decisions.md の 10・27 番）。熟成ゲートを過ぎた版を一時的なディレクトリに入れ、
- * そのパッケージのディレクトリを --esbuild で渡す。先に pnpm build で dist を作っておくこと。
+ * bundle・minify し、gzip（レベル 9）で測る。1 KB は 1,000 バイト。先に pnpm build で dist を作っておくこと。
  *
  * 使い方: node scripts/measure-bundle.ts --esbuild <dir>/node_modules/esbuild
  */

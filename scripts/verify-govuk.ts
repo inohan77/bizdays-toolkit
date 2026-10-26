@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import type { Holiday } from "../src/core/types.ts";
 import { england, northernIreland, scotland, wales } from "../src/uk/index.ts";
 
-// 定数 confirmedThrough は 0.12.0 で非推奨（提供元の項目を使う。4 つの提供元で同じ値）
+// 提供元の項目を使う（英国の提供元はどれも同じ値。モジュールの定数 confirmedThrough は非推奨）
 const confirmedThrough = england.confirmedThrough!;
 
 const JSON_URL = "https://www.gov.uk/bank-holidays.json";

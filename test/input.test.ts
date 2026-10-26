@@ -49,7 +49,7 @@ test("不正な入力", () => {
   assert.throws(() => createCalendar({ timeZone: "Asia/Nowhere" }), RangeError);
 });
 
-test("日付と時刻の区切りは T だけ（空白で区切った文字列は 0.16.0 から invalid-time。型 DateTimeInput と同じ）", () => {
+test("日付と時刻の区切りは T だけ（空白で区切った文字列は invalid-time。型 DateTimeInput と同じ）", () => {
   assert.equal(toDateString("2026-11-23T10:00", "Asia/Tokyo"), "2026-11-23");
   assert.equal(
     toDateString("2026-11-23t10:00", "Asia/Tokyo"),

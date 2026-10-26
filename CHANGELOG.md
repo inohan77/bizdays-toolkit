@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [0.21.4] - 2026-10-26
+
+### Changed
+
+- 公開する `dist` の `.js` からコメントを除いた（`tsc --removeComments`）。型定義（`.d.ts`）の TSDoc はこれまでどおり残すので、エディターの説明は変わらない。コメントは保守する人のためのもので、利用者には型定義の TSDoc だけが要る。`dist` の `.js` の gzip が全体で約 48 KB から約 28 KB に減った（エントリーごとは下の「開発」）。動作は変わらない（`data-compare` で前の版と祝日データの差分がないこと、テスト・README のコード例・公開物の互換性の確認が通ることを確かめた）。README の minify + gzip のサイズは minify でコメントが消えるので変わらない
+- 型定義に出るコメント（TSDoc）の、現状に追いついていない記述を、国の列挙や件数を書かない形で直した。`Holiday.names` の「同梱の提供元（日本）は持たない」（Wales は持つ）を「同梱の提供元は、公式の出典がある言語の名称だけを付ける」に、`KnownSgHolidayKey` の「11 の祝日に 1 つずつ」（key は 10 種類）を「毎年の祝日に 1 つずつ（旧正月の 2 日は同じ key）」に、`bizdays-toolkit/provider` の「同梱の 3 つの提供元」（フランスが加わった）を「振替のある同梱の提供元」に、`easterSunday` の「英国の祝日の計算に使い」（フランスも使う）を「復活祭から日数で決まる祝日の計算に使い」にした
+- `docs/decisions.md`: 52 番（コメントと文書の参照の検査、コメントに書くことと書かないこと、`.js` からコメントを除くこと、取り込み時の重点確認）を追加した。34 番の「決めたのは 0 番」を「0 番目のカレンダー」にした（決定の番号と紛れないように）
+- `RELEASING.md`: 「品質の確認」に参照の検査とコメントの書き方の規則を、「ビルドと整形」にコメントを除くビルドを足した。ハートビートの説明の「4 つの照合」を「すべての照合」にした
+
+### 開発
+
+- `pnpm check`（`scripts/check-package.ts`）に、コメントと文書の参照の検査を足した（decisions.md の 52 番）。今の状態を書いたファイルに書いたファイルのパス（`scripts/…`・`docs/…` など）が実在すること、すべての文書の「decisions.md の N 番」の N が決定の文書にあること。0.21.3 に当てると `scripts/bundled-providers.ts` のコメントの誤り（実在しない `scripts/check-docs.ts`）を検出する
+- スクリプト・ワークフロー・テスト・`src` のコメント（型定義に出る TSDoc を含む）から、決定の文書と重複する理由の説明、版の経緯（「0.18.0 で追加」など）、利用元の一覧、変わりうる事実（検証のフィクスチャの一覧・TypeScript や Node.js の版の一覧・照合する国の一覧や数など）を削り、何をするか・使い方・決定の文書の番号だけを残した（52 番）
+- サイズの上限（`size-limits.json`）を、コメントを除いた `.js` の実測に合わせて下げた（上限を下げるだけなので理由の記載は要らないが、記録として書く）。ルート 26,500 → 16,500（測定 15,438）、`./jp` 29,500 → 19,000（測定 17,654）、`./uk` 9,000 → 5,000（測定 4,402）、`./sg` 6,000 → 3,500（測定 3,079）、`./fr` 6,500 → 3,000（測定 2,707）、`./diagnose` 35,500 → 22,000（測定 20,648）、`./provider` 6,500 → 3,500（測定 3,111）（gzip）
+
 ## [0.21.3] - 2026-10-26
 
 ### Changed
@@ -600,7 +615,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.3...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.4...HEAD
+[0.21.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.3...v0.21.4
 [0.21.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.2...v0.21.3
 [0.21.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.1...v0.21.2
 [0.21.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.0...v0.21.1

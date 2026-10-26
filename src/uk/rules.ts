@@ -7,11 +7,7 @@
  * - 臨時の祝日・移動: 布告ごとの日付をテーブルで持つ
  * - 識別子（key）: 毎年の祝日に GOV.UK の区分名から 1 つ（KnownUkHolidayKey）。振替日は元の祝日の key、臨時の祝日は持たない
  *
- * 2012 年以降は、すべての日付と名称が GOV.UK のデータと一致することをテスト用フィクスチャ
- * （test/fixtures/govuk-bank-holidays.json）で検証している。2000〜2011 年（GOV.UK のデータがない）は、当時の政府の公表一覧
- * （DTI・BERR・directgov・Scottish Executive/Government・nidirect の Web Archive）を正とし、The Gazette の布告で照合した
- * フィクスチャ（test/fixtures/uk-2000-2011-government-lists.json）で検証している。政府の一覧にあるが布告が見つからない日
- * （Scotland の 2010-01-04・2010-12-27・2011-01-04）は、一覧に従って祝日として返す（decisions.md の 49 番）。
+ * 年ごとの正（GOV.UK・当時の政府の一覧・布告）と検証のフィクスチャは decisions.md の 18・49 番。
  * CONFIRMED_THROUGH より後の年は、規則による予測（confirmed: false）。
  */
 

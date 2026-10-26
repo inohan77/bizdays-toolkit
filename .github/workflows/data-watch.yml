@@ -7,16 +7,15 @@ name: Watch holiday data (GOV.UK, data.gov.sg, the Cabinet Office and data.gouv.
 #   翌年の祝日は 4〜7 月ごろに公開され、Hari Raya の日付があとから改定されることがある
 # - 日本: 内閣府「国民の祝日」CSV。照合は scripts/verify-cao.ts（pnpm verify:cao と同じ）。ラベル cao-data。
 #   翌年の春分・秋分の日は 2 月ごろに公表される（New years published が毎年の作業の引き金）。法改正による祝日の新設・移動と、
-#   CSV の形式の変更（解析の失敗）も、2 月の作業を待たずに見つける（0.18.0 で追加）
+#   CSV の形式の変更（解析の失敗）も、2 月の作業を待たずに見つける
 # - フランス: data.gouv.fr「Jours fériés en France」の JSON（metropole・alsace-moselle）。照合は scripts/verify-datagouv.ts（pnpm verify:datagouv と同じ）。
 #   ラベル datagouv-data。祝日は法令で定まるので差分は法改正のとき。JSON の窓（過去 20 年・未来 5 年）は毎年 1 月に動くので、
-#   そのときはフィクスチャの差分だけが出る（--write で更新。版は要らない）（0.20.0 で追加）
-# 差分を見つけたら、フィクスチャと src/uk/rules.ts・src/sg/rules.ts・src/jp/rules.ts・src/fr/rules.ts を 1 つのコミットで直してパッチ版を出す（RELEASING.md）。
-# 4 つの照合は 1 回の起動で順に行い、すべてが動いたときだけハートビートを知らせる（0.17.0 で govuk-watch.yml から改名）。
+#   そのときはフィクスチャの差分だけが出る（--write で更新。版は要らない）
+# 差分を見つけたら、フィクスチャとその国の src/<国>/rules.ts を 1 つのコミットで直してパッチ版を出す（RELEASING.md）。
+# 照合は 1 回の起動で順に行い、すべてが動いたときだけハートビートを知らせる。
 #
 # 起動のしかた（decisions.md の 28 番）:
-# - 主: 外部の cron サービス（cron-job.org）が、毎日 06:00（日本時間）に workflow_dispatch を API で呼ぶ。
-#   GitHub の schedule は高負荷時に遅れたり落ちたりし、このリポジトリでは一度も動かなかったため
+# - 主: 外部の cron サービス（cron-job.org）が、毎日 06:00（日本時間）に workflow_dispatch を API で呼ぶ
 # - 予備: GitHub の schedule（時刻をずらして 18:17）。どちらかが動けば確認が入る
 # - 動いたことは、最後にハートビート（healthchecks.io）へ知らせる。知らせが一定時間来なければ、
 #   healthchecks.io からメールが届く（監視が動かなかったことに気付くため）
@@ -220,7 +219,7 @@ jobs:
         if: always()
         run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/data-watch.yml/enable"
 
-      # 4 つの照合まで動いたら（一致・差分あり）成功を、どれかの照合そのものが失敗したら /fail を知らせる。
+      # すべての照合まで動いたら（一致・差分あり）成功を、どれかの照合そのものが失敗したら /fail を知らせる。
       # 知らせ先の URL は Secrets（HEALTHCHECKS_PING_URL）に置く。未設定なら知らせずに通知だけ出す
       - name: Send the heartbeat
         if: always()

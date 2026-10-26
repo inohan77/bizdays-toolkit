@@ -206,7 +206,7 @@ export interface BusinessDayOptions {
   /**
    * 締め時刻 "HH:mm"（カレンダーのタイムゾーン）。
    * 入力の時刻がこの時刻以降なら、その日は対象にしない。時刻を持たない入力（暦日の文字列・Temporal の PlainDate など）
-   * と組み合わせると code: "invalid-argument" の Error（締め時刻が黙って無視されるのを防ぐ。0.15.0 から）
+   * と組み合わせると code: "invalid-argument" の Error（締め時刻が黙って無視されるのを防ぐため）
    */
   readonly cutoff?: string;
 }

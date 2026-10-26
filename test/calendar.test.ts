@@ -36,7 +36,7 @@ test("締め時刻（14 時）をはさむ最短の出荷日", () => {
     "2026-10-10",
   );
 
-  // 時刻のない入力と cutoff の組み合わせは、締め時刻が黙って無視されるのを防ぐため invalid-argument（0.15.0）
+  // 時刻のない入力と cutoff の組み合わせは、締め時刻が黙って無視されるのを防ぐため invalid-argument
   assert.throws(
     () => shipping.businessDayOnOrAfter("2026-10-10", { cutoff: "14:00" }),
     (e: unknown) =>

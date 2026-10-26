@@ -131,7 +131,7 @@ createCalendar({ holidayPolicy: "skip" });
 // @ts-expect-error -- 返す一覧は変更できない
 createCalendar({ holidays: jp }).holidaysInYear(2026).push(jp.holidaysInYear(2026)[0]!);
 
-// --- 繰り返しの規則（0.4.0） ---
+// --- 繰り返しの規則 ---
 createCalendar({
   closedRecurring: [
     { weekday: 1 },
@@ -154,7 +154,7 @@ createCalendar({ closedRecurring: [{ day: 1, onHolidayRule: "rule" }] });
 // @ts-expect-error -- スケジュールの繰り返しの規則には value が必要
 createSchedule({ weekly: [1, 1, 1, 1, 1, 1, 1], recurring: [{ day: 1 }] });
 
-// --- 有効期間・周期（0.10.0）、祝日の翌日（0.11.0） ---
+// --- 有効期間・周期、祝日の翌日 ---
 createCalendar({
   holidays: jp,
   closedRecurring: [
@@ -173,7 +173,7 @@ createCalendar({ closedRecurring: [{ dayAfterHoliday: true, weekday: 1 }] });
 // @ts-expect-error -- 個別の日付には有効期間を付けられない
 createCalendar({ closedDates: [{ date: "2026-10-19", effectiveTo: "2026-12-31" }] });
 
-// --- 祝日の規則（0.12.0）・rulePath ---
+// --- 祝日の規則・rulePath ---
 createCalendar({
   holidays: jp,
   openRecurring: [
@@ -188,7 +188,7 @@ createCalendar({ closedRecurring: [{ weekday: 1, kinds: ["national"] }] });
 // @ts-expect-error -- holiday と dayAfterHoliday は同時に指定できない
 createCalendar({ closedRecurring: [{ holiday: true, dayAfterHoliday: true }] });
 
-// --- 未確定の祝日のガード・診断の asOf（0.17.0） ---
+// --- 未確定の祝日のガード・診断の asOf ---
 {
   const c = createCalendar({ holidays: jp, unconfirmedHolidays: "throw" });
   expectType<Equal<typeof c.unconfirmedHolidays, "accept" | "throw">>();
@@ -203,7 +203,7 @@ createCalendar({ closedRecurring: [{ holiday: true, dayAfterHoliday: true }] });
   diagnoseCalendar({}, { asOf: new Date() });
 }
 
-// --- 祝前日（0.16.0）・decidedByPath ---
+// --- 祝前日・decidedByPath ---
 createCalendar({
   holidays: jp,
   closedRecurring: [
@@ -235,7 +235,7 @@ createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, kinds: ["national"]
   void rulePath2;
 }
 
-// --- weekdays の絞り込み・kinds の型・営業日を考慮した締め日（0.15.0） ---
+// --- weekdays の絞り込み・kinds の型・営業日を考慮した締め日 ---
 {
   const c = createCalendar({
     holidays: jp,
@@ -267,7 +267,7 @@ createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, kinds: ["national"]
   createCalendar({ holidays: jp, closedRecurring: rules });
 }
 
-// --- 締め期間・瞬間への変換（0.14.0） ---
+// --- 締め期間・瞬間への変換 ---
 {
   const period: { readonly from: string; readonly to: string } = closingPeriod("2026-11", 20);
   createCalendar({ closedDates: [period, closingPeriod("2026-11-05", -1)] });
@@ -282,7 +282,7 @@ createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, kinds: ["national"]
   closingPeriod("2026-11", "20");
 }
 
-// --- スケジュールからのカレンダー（0.13.0） ---
+// --- スケジュールからのカレンダー ---
 {
   const hours = createSchedule<{ open: string } | null>({
     weekly: [null, { open: "9" }, null, null, null, null, null],
@@ -300,7 +300,7 @@ createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, kinds: ["national"]
   void reason;
 }
 
-// --- カレンダーの合成（0.11.0） ---
+// --- カレンダーの合成 ---
 {
   const a = createCalendar({ holidays: jp });
   const b = createCalendar({ holidays: jp, closedWeekdays: [0] });
@@ -318,11 +318,11 @@ createCalendar({ closedRecurring: [{ dayBeforeHoliday: true, kinds: ["national"]
 const shifted: string | undefined = createCalendar().dayInfo("2026-10-13").shiftedFrom;
 void shifted;
 
-// 祝日の値の決め方の型（0.4.0 で HolidayValueRule に改名。旧名 HolidayRule は 0.5.0 で削除）
+// 祝日の値の決め方の型 HolidayValueRule
 const sundayHours: HolidayValueRule<number> = { sameAs: 0 };
 createSchedule({ weekly: [1, 2, 3, 4, 5, 6, 7], holiday: sundayHours });
 
-// --- 規則の診断（0.5.0） ---
+// --- 規則の診断 ---
 const diagnostics = diagnoseCalendar({ holidays: jp, closedWeekdays: [0] });
 // 打ち間違いのキーも型エラーにならずに渡せる（診断で見つけるため）
 diagnoseCalendar({ closeWeekdays: [0] });
@@ -342,7 +342,7 @@ for (const d of diagnostics) {
 // @ts-expect-error -- 診断の結果は変更できない
 diagnostics.push(diagnostics[0]!);
 
-// --- 月の計算と日付の調整（0.6.0） ---
+// --- 月の計算と日付の調整 ---
 const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
 const adjusted: string = office.adjust("2026-10-31", { convention: "modified-following" });
 void adjusted;
@@ -356,7 +356,7 @@ office.dueDate("2026-10", { day: 0, convention: "following" });
 const convention: BusinessDayConvention = "preceding";
 void convention;
 
-// --- 祝日のほかの言語の名称（0.7.0） ---
+// --- 祝日のほかの言語の名称 ---
 const holidayNames: Readonly<Record<string, string>> | undefined = createCalendar({
   holidays: jp,
 }).getHoliday("2026-11-23")?.names;
@@ -406,7 +406,7 @@ void withoutNames;
 }
 
 // ------------------------------------------------------------
-// 祝日の識別子 key と絞り込み keys（0.18.0）
+// 祝日の識別子 key と絞り込み keys
 // ------------------------------------------------------------
 {
   const h = jp.holidaysInYear(2026)[0];
@@ -443,7 +443,7 @@ void withoutNames;
 }
 
 // ------------------------------------------------------------
-// 第 n 営業日の規則 businessDayOfMonth と、振替で飛ばす曜日 skipWeekdays（0.19.0）
+// 第 n 営業日の規則 businessDayOfMonth と、振替で飛ばす曜日 skipWeekdays
 // ------------------------------------------------------------
 {
   const branch = createCalendar({

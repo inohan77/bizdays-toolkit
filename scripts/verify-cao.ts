@@ -8,7 +8,7 @@ import "./strict-warnings.ts";
  *   pnpm verify:cao --report <path>  … 結果を Markdown で書き出す（監視のワークフローが issue の本文に使う）
  *   pnpm verify:cao --simulate       … 取得した CSV に架空の祝日を 1 行足して照合する（--write とは併用できない）
  *
- * 毎日の監視（.github/workflows/data-watch.yml）が英国・シンガポールと同じ起動で実行し、差分・取得の失敗なら issue を立てる。
+ * 毎日の監視（.github/workflows/data-watch.yml）がほかの国の照合と同じ起動で実行し、差分・取得の失敗なら issue を立てる。
  * 「New years published」（CSV の最終年が CONFIRMED_THROUGH より後）は、RELEASING.md の毎年の作業の引き金で、
  * src/jp/rules.ts の CONFIRMED_THROUGH・DATA_VERSION を更新する。
  *

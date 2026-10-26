@@ -6,7 +6,7 @@
  * 比率だけを見て、どれかの計測が前の版の RATIO 倍より遅くなったら失敗にする（アルゴリズムの悪化だけを捉える）。
  * 絶対値は記録として表に残す（GitHub の Job Summary に書くには、出力を $GITHUB_STEP_SUMMARY に渡す）。
  *
- * 使い方: node scripts/bench-compare.ts <base.json> <head.json> [--ratio 2] [--base-label 0.11.1] [--head-label HEAD]
+ * 使い方: node scripts/bench-compare.ts <base.json> <head.json> [--ratio 2] [--base-label <label>] [--head-label <label>]
  */
 
 import "./strict-warnings.ts";

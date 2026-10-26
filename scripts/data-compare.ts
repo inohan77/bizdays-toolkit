@@ -1,22 +1,15 @@
 /**
  * 前の版との祝日データの差分（CI の data-compare ジョブ。decisions.md の 51 番）。
  *
- * 公開済みの前の版（npm の latest を展開したディレクトリ）と今回の dist の同梱の提供元を、対応年が重なる
- * すべての年について 1 日ずつ比べ、祝日の date・name・nameEn・kind・key・confirmed・names の差分を表にする。
- * 照合のフィクスチャが守るのは公式データのある年だけで、予測の年（英国の confirmedThrough より後など）や
- * 公式データのない年は、src の編集で黙って変わりうる。公開した結果そのものを前の版と比べて安全網にする。
+ * 前の版と今回の dist の同梱の提供元を、対応年が重なるすべての年について 1 日ずつ比べる。
+ * 前の版にない提供元と、前の版の対応年の外の年は比べない。
+ * 失敗にする条件: key が変わった、差分があるのに CHANGELOG の今の版（または [Unreleased]）に「### Data」がない、
+ * 前の版の提供元がなくなったか対応年が狭まった。
  *
- * 失敗にする条件:
- *   - key が変わった（同じ日付の祝日で key が違う、または消えた）。key は版をまたいで変えない（46 番）
- *   - 日付・名称・種別・confirmed などに差分があるのに、CHANGELOG の今の版（または [Unreleased]）の節に
- *     「### Data」がない。意図した反映なら Data に書いてあるはずで、書いていなければ意図しない変化（50 番と同じ形）
- *   - 前の版の提供元がなくなった、または対応年が狭まった（どちらもメジャー版でしか行わない変更）
- *
- * 前の版にない提供元・前の版の対応年の外の年は比べない（対応年の拡大は前の版では out-of-range）。
- * 新しい依存は使わない（10 番）。npm への接続が要るので pnpm check には含めない（37 番の bench と同じ）。
- *
- * 使い方: node scripts/data-compare.ts --base <dir> [--head .] [--base-label 0.21.2] [--changelog CHANGELOG.md]
- * 終了コード: 0 合格、1 失敗、2 使い方・読み込みの誤り。結果は Markdown で標準出力に書く（Job Summary に渡す）。
+ * 使い方: node scripts/data-compare.ts --base <dir> [--head .] [--base-label <label>] [--changelog CHANGELOG.md]
+ *   --base は前の版を展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回の
+ *   リポジトリ（pnpm build 済み）
+ * 終了コード: 0 合格、1 失敗、2 使い方・読み込みの誤り。結果は Markdown で標準出力に書く。
  */
 
 import "./strict-warnings.ts";

@@ -1,7 +1,7 @@
 /**
  * CHANGELOG.md から指定した版の節を取り出して標準出力に書く（GitHub Release の本文に使う）。
  *
- *   node scripts/release-notes.ts 0.1.0
+ *   node scripts/release-notes.ts <version>
  */
 
 import "./strict-warnings.ts";

@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # npm 12 の動作要件（^22.22.2 || ^24.15.0）を満たす版
+        # npm の動作要件を満たす版（RELEASING.md の「開発環境の版」）
         node: ["22.23.3", "24.22.0"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,7 +36,7 @@ jobs:
         run: npm pack --dry-run --ignore-scripts
 
   compat:
-    # 公開する dist を、engines の下限（22.12.0）と、LTS 入りを控えた系列（26）で確かめる（decisions.md の 23 番）。
+    # 公開する dist を、engines の下限と、check で使わない LTS・LTS 入りを控えた系列で確かめる（版は matrix。decisions.md の 23 番）。
     # これらの版ではテスト（.ts の直接実行）も npm 12 も動かないため、ビルドは固定の Node.js 24 で行い、
     # Node.js を切り替えてから、プレーンな JavaScript の確認（test/compat）だけを実行する
     runs-on: ubuntu-24.04
@@ -173,10 +173,7 @@ jobs:
 
   consumer-types:
     # 公開する型定義を、利用者が使う TypeScript の複数の版で型チェックする（decisions.md の 38 番）。
-    # pnpm check は開発用の版（6.0）だけなので、約束する下限（5.0）・bundler が安定した 5.5・5 系の最終（5.8）・
-    # ネイティブ版（7.0）を CI で確かめる。各版は npm の依存にせず、版と SHA-256 を固定した tgz から一時的に入れる
-    # （7.0 は実行形式を optional dependency として配るので、ランナー向けの linux-x64 も固定して入れる）。
-    # 版を上げるときは、各系列の最終パッチを、公開から 48 時間を過ぎたものから選ぶ（RELEASING.md）
+    # 各版は npm の依存にせず、版と SHA-256 を固定した tgz から一時的に入れる。版の選び方は RELEASING.md
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -229,9 +226,8 @@ jobs:
         run: git diff --exit-code -- package.json pnpm-lock.yaml
 
   bench:
-    # 性能の退行を、公開済みの前の版（npm の latest）と同じランナー・同じ Node.js で比べて検出する（decisions.md の 37 番）。
-    # ランナーの性能は実行ごとにぶれるので、絶対値ではなく比率で判定する（どれかの計測が 2 倍より遅ければ失敗）。
-    # 絶対値は Job Summary に記録として残す。pnpm check には含めない（手元の機械に依存しないため）
+    # 性能の退行を、公開済みの前の版（npm の latest）と同じランナーで比べて検出する（decisions.md の 37 番）。
+    # どれかの計測が 2 倍より遅ければ失敗。絶対値は Job Summary に残す
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -263,8 +259,7 @@ jobs:
 
   data-compare:
     # 同梱の提供元の祝日データを、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 51 番）。
-    # key が変わった・差分があるのに CHANGELOG に Data がない・提供元がなくなった・対応年が狭まった、で失敗する。
-    # 差分は Job Summary に残す。pnpm check には含めない（npm への接続が要るため。bench と同じ）
+    # 失敗の条件は scripts/data-compare.ts。差分は Job Summary に残す
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
