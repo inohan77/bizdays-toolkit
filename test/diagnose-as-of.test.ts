@@ -8,13 +8,13 @@ const brief = (list: readonly { severity: string; code: string; path: string }[]
   list.map((d) => [d.severity, d.code, d.path]);
 
 const options = {
-  holidays: jp,
+  holidayProvider: jp,
   closedWeekdays: [0, 6],
-  closedRecurring: [
+  closedRecurringRules: [
     { weekday: 1, name: "月曜定休", effectiveTo: "2027-03-31" },
     { weekday: 2, name: "火曜定休", effectiveFrom: "2027-04-01" },
   ],
-  closedAnnual: [
+  closedAnnualDates: [
     { from: "08-13", to: "08-16", effectiveTo: "2026-12-31" },
     { from: "12-29", to: "01-03" },
   ],
@@ -29,13 +29,13 @@ const options = {
 test("asOf: 基準日より前に終わった規則・日付が info の expired になる。省略時の結果は変わらない", () => {
   assert.deepEqual(brief(diagnoseCalendar(options)), [], "asOf なし");
   assert.deepEqual(brief(diagnoseCalendar(options, {})), [], "空のオプション");
-  // 順番は判定の優先順位（openDates → closedDates → closedAnnual → closedRecurring）
+  // 順番は判定の優先順位（openDates → closedDates → closedAnnualDates → closedRecurringRules）
   assert.deepEqual(brief(diagnoseCalendar(options, { asOf: "2027-10-23" })), [
     ["info", "expired", "openDates[0]"],
     ["info", "expired", "closedDates[0]"],
     ["info", "expired", "closedDates[1]"],
-    ["info", "expired", "closedAnnual[0]"],
-    ["info", "expired", "closedRecurring[0]"],
+    ["info", "expired", "closedAnnualDates[0]"],
+    ["info", "expired", "closedRecurringRules[0]"],
   ]);
   // 終わりの日が基準日と同じなら expired ではない（その日まで有効）
   assert.deepEqual(brief(diagnoseCalendar(options, { asOf: "2026-12-31" })), [
@@ -44,7 +44,7 @@ test("asOf: 基準日より前に終わった規則・日付が info の expired
     ["info", "expired", "closedDates[1]"],
   ]);
   const d = diagnoseCalendar(options, { asOf: "2027-10-23" }).find(
-    (x) => x.path === "closedRecurring[0]",
+    (x) => x.path === "closedRecurringRules[0]",
   )!;
   assert.match(d.message, /2027-03-31/);
   assert.match(d.message, /2027-10-23/);
@@ -52,23 +52,28 @@ test("asOf: 基準日より前に終わった規則・日付が info の expired
 
 test("asOf: スケジュールでも同じ。redundant などとは独立に返す", () => {
   const schedule = {
-    holidays: jp,
-    weekly: [0, 1, 1, 1, 1, 1, 0],
+    holidayProvider: jp,
+    weekdayValues: [0, 1, 1, 1, 1, 1, 0],
     dates: [{ date: "2026-01-02", value: 0 }],
-    annual: [{ from: "08-13", to: "08-16", value: 0, effectiveTo: "2026-12-31" }],
-    recurring: [{ weekday: 1, value: 2, effectiveTo: "2026-06-30" }],
+    annualDates: [{ from: "08-13", to: "08-16", value: 0, effectiveTo: "2026-12-31" }],
+    recurringRules: [{ weekday: 1, value: 2, effectiveTo: "2026-06-30" }],
   };
   assert.deepEqual(brief(diagnoseSchedule(schedule, { asOf: "2027-01-01" })), [
     ["info", "expired", "dates[0]"],
-    ["info", "expired", "annual[0]"],
-    ["info", "expired", "recurring[0]"],
+    ["info", "expired", "annualDates[0]"],
+    ["info", "expired", "recurringRules[0]"],
   ]);
   assert.deepEqual(brief(diagnoseSchedule(schedule, { asOf: "2026-01-01" })), []);
 });
 
 test("asOf: 対応年の外の基準日でも例外にならず（祝日を引かない）、知らないキーは無視、誤りは例外", () => {
   assert.deepEqual(
-    brief(diagnoseCalendar({ holidays: jp, closedDates: ["2026-01-02"] }, { asOf: "2200-01-01" })),
+    brief(
+      diagnoseCalendar(
+        { holidayProvider: jp, closedDates: ["2026-01-02"] },
+        { asOf: "2200-01-01" },
+      ),
+    ),
     [["info", "expired", "closedDates[0]"]],
   );
   assert.deepEqual(

@@ -19,7 +19,7 @@ export interface Holiday<Kind extends string = string> {
    * 同梱の提供元は、公式の出典がある言語の名称だけを付ける。利用者が実装した提供元が付けた場合に、検証して複製・凍結して返す
    */
   readonly names?: Readonly<Record<string, string>>;
-  /** 種別（国ごとに定義。日本は JapaneseHolidayKind） */
+  /** 種別（国ごとに定義。日本は JpHolidayKind） */
   readonly kind: Kind;
   /**
    * その日が観測している祝日の識別子（省略可能）。/^[a-z0-9][a-z0-9-]*$/ に限る。

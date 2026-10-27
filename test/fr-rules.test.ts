@@ -40,8 +40,8 @@ test("フランス: 2 つの祝日が同じ日に当たる年は復活祭から�
   );
   // keys: ["labour-day"] は 2008 年には当てはまらない（key は 1 つだけ）
   const c = createCalendar({
-    holidays: metropole,
-    openRecurring: [{ holiday: true, keys: ["labour-day"] }],
+    holidayProvider: metropole,
+    openRecurringRules: [{ holiday: true, keys: ["labour-day"] }],
   });
   assert.equal(c.isBusinessDay("2008-05-01"), false);
   assert.equal(c.isBusinessDay("2009-05-01"), true);
@@ -84,13 +84,15 @@ test("フランス: 識別子と英語名、復活祭から決まる日付の例
 
 test("フランス: 連帯の日（Lundi de Pentecôte を出勤日にする企業）は祝日の規則で書く", () => {
   const company = createCalendar({
-    holidays: metropole,
+    holidayProvider: metropole,
     closedWeekdays: [0, 6],
-    openRecurring: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }],
+    openRecurringRules: [
+      { holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" },
+    ],
   });
-  assert.equal(company.dayInfo("2026-05-25").reason, "open-recurring");
+  assert.equal(company.dayInfoOn("2026-05-25").reason, "open-recurring");
   assert.equal(
-    company.dayInfo("2026-05-25").holiday?.name,
+    company.dayInfoOn("2026-05-25").holiday?.name,
     "Lundi de Pentecôte",
     "法律上は祝日のまま",
   );

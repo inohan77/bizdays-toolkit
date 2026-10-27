@@ -3,7 +3,7 @@
 import { createCalendar } from "bizdays-toolkit";
 import { jp } from "bizdays-toolkit/jp";
 
-const calendar = createCalendar({ holidays: jp });
+const calendar = createCalendar({ holidayProvider: jp });
 // 戻り値は boolean なので、string には代入できない
 const wrong: string = calendar.isBusinessDay("2026-10-20");
 void wrong;

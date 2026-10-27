@@ -14,24 +14,26 @@ const brief = (options: object) =>
 
 test("祝日の翌日: 連休が明けた日だけに当てはまり、その日自身が祝日なら当てはまらない", () => {
   const library = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     holidayPolicy: "open",
-    closedRecurring: [{ dayAfterHoliday: true, name: "祝日の翌日休館" }],
+    closedRecurringRules: [{ dayAfterHoliday: true, name: "祝日の翌日休館" }],
   });
   // 2026-05-03〜05-06 は祝日（憲法記念日・みどりの日・こどもの日・振替休日）
   assert.deepEqual(
     ["2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07", "2026-05-08"].map(
-      (d) => library.dayInfo(d).reason,
+      (d) => library.dayInfoOn(d).reason,
     ),
-    ["holiday", "holiday", "holiday", "closed-recurring", "regular"],
+    ["holiday", "holiday", "holiday", "closed-recurring", "default"],
   );
-  assert.deepEqual(library.dayInfo("2026-05-07"), {
+  assert.deepEqual(library.dayInfoOn("2026-05-07"), {
     date: "2026-05-07",
     weekday: 4,
+    open: false,
     businessDay: false,
     reason: "closed-recurring",
     name: "祝日の翌日休館",
-    rulePath: "closedRecurring[0]",
+    optionPath: "closedRecurringRules[0]",
+    rulePath: "closedRecurringRules[0]",
   });
   // 2026-02-11（水・建国記念の日）の翌日
   assert.equal(library.isBusinessDay("2026-02-12"), false);
@@ -43,37 +45,46 @@ test("祝日の翌日: 連休が明けた日だけに当てはまり、その日
 
 test("祝日の翌日: 配列の順番・holidayPolicy・months・有効期間と組み合わせる", () => {
   const rules: RecurringRule[] = [
-    { weekday: 1, name: "月曜休館", onHolidayRule: "after-holiday" },
+    { weekday: 1, name: "月曜休館", holidayOverlapPolicy: "after-holiday" },
     { dayAfterHoliday: true, name: "祝日の翌日休館" },
   ];
-  const library = createCalendar({ holidays: jp, holidayPolicy: "open", closedRecurring: rules });
+  const library = createCalendar({
+    holidayProvider: jp,
+    holidayPolicy: "open",
+    closedRecurringRules: rules,
+  });
   // 2026-11-23（月・勤労感謝の日）の翌日は、月曜の振替先でもあり祝日の翌日でもある。先に書いた規則が決める
-  assert.deepEqual(library.dayInfo("2026-11-24"), {
+  assert.deepEqual(library.dayInfoOn("2026-11-24"), {
     date: "2026-11-24",
     weekday: 2,
+    open: false,
     businessDay: false,
     reason: "closed-recurring",
     name: "月曜休館",
     shiftedFrom: "2026-11-23",
-    rulePath: "closedRecurring[0]",
+    optionPath: "closedRecurringRules[0]",
+    rulePath: "closedRecurringRules[0]",
   });
   const reversed = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     holidayPolicy: "open",
-    closedRecurring: [...rules].reverse(),
+    closedRecurringRules: [...rules].reverse(),
   });
-  assert.equal(reversed.dayInfo("2026-11-24").name, "祝日の翌日休館");
-  assert.equal(reversed.dayInfo("2026-11-24").shiftedFrom, undefined);
+  assert.equal(reversed.dayInfoOn("2026-11-24").name, "祝日の翌日休館");
+  assert.equal(reversed.dayInfoOn("2026-11-24").shiftedFrom, undefined);
 
   // 祝日が休業（既定）でも、翌日の規則は提供元の祝日で判定する
-  const closed = createCalendar({ holidays: jp, closedRecurring: [{ dayAfterHoliday: true }] });
-  assert.equal(closed.dayInfo("2026-02-11").reason, "holiday");
-  assert.equal(closed.dayInfo("2026-02-12").reason, "closed-recurring");
+  const closed = createCalendar({
+    holidayProvider: jp,
+    closedRecurringRules: [{ dayAfterHoliday: true }],
+  });
+  assert.equal(closed.dayInfoOn("2026-02-11").reason, "holiday");
+  assert.equal(closed.dayInfoOn("2026-02-12").reason, "closed-recurring");
 
   const may = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     holidayPolicy: "open",
-    closedRecurring: [{ dayAfterHoliday: true, months: [5], effectiveTo: "2026-12-31" }],
+    closedRecurringRules: [{ dayAfterHoliday: true, months: [5], effectiveTo: "2026-12-31" }],
   });
   assert.equal(may.isBusinessDay("2026-05-07"), false);
   assert.equal(may.isBusinessDay("2026-02-12"), true, "5 月以外");
@@ -82,41 +93,44 @@ test("祝日の翌日: 配列の順番・holidayPolicy・months・有効期間�
 
 test("祝日の翌日: スケジュールの値、対応年の始まり、提供元なし", () => {
   const hours = createSchedule({
-    holidays: jp,
-    weekly: ["10-17", "10-19", "10-19", "10-19", "10-19", "10-19", "10-17"],
-    holiday: { sameAs: 0 },
-    recurring: [{ dayAfterHoliday: true, value: "12-17", name: "連休明けは短縮" }],
+    holidayProvider: jp,
+    weekdayValues: ["10-17", "10-19", "10-19", "10-19", "10-19", "10-19", "10-17"],
+    holidayPolicy: { sameAs: 0 },
+    recurringRules: [{ dayAfterHoliday: true, value: "12-17", name: "連休明けは短縮" }],
   });
   assert.equal(hours.valueOn("2026-05-06"), "10-17");
-  assert.equal(hours.dayInfo("2026-05-07").value, "12-17");
-  assert.equal(hours.dayInfo("2026-05-07").reason, "recurring");
+  assert.equal(hours.dayInfoOn("2026-05-07").value, "12-17");
+  assert.equal(hours.dayInfoOn("2026-05-07").reason, "recurring");
   // 対応年の始まり（1955-01-01）の前日は対応年の外だが、例外にならず祝日でないとみなす
-  const edge = createCalendar({ holidays: jp, closedRecurring: [{ dayAfterHoliday: true }] });
+  const edge = createCalendar({
+    holidayProvider: jp,
+    closedRecurringRules: [{ dayAfterHoliday: true }],
+  });
   assert.equal(edge.isBusinessDay("1955-01-01"), false, "元日は祝日");
   assert.equal(edge.isBusinessDay("1955-01-02"), false, "元日の翌日");
   // 提供元がなければ、1 日も当てはまらない
-  const none = createCalendar({ closedRecurring: [{ dayAfterHoliday: true }] });
+  const none = createCalendar({ closedRecurringRules: [{ dayAfterHoliday: true }] });
   assert.equal(none.isBusinessDay("2027-01-02"), true);
 });
 
 test("祝日の翌日: 入力の誤り", () => {
   const cases: [unknown, RegExp][] = [
     [
-      { dayAfterHoliday: true, onHolidayRule: "over-holiday" },
-      /closedRecurring\[0\]\.onHolidayRule: cannot be used with "dayAfterHoliday"/,
+      { dayAfterHoliday: true, holidayOverlapPolicy: "over-holiday" },
+      /closedRecurringRules\[0\]\.holidayOverlapPolicy: cannot be used with "dayAfterHoliday"/,
     ],
-    [{ dayAfterHoliday: false }, /closedRecurring\[0\]\.dayAfterHoliday: must be true/],
+    [{ dayAfterHoliday: false }, /closedRecurringRules\[0\]\.dayAfterHoliday: must be true/],
     [{ dayAfterHoliday: true, weekday: 1 }, /must have exactly one of/],
-    [{ dayAfterHoliday: true, day: 1 }, /must have exactly one of/],
-    [{ dayAfterHoliday: true, nth: 1 }, /closedRecurring\[0\]\.nth/],
+    [{ dayAfterHoliday: true, dayOfMonth: 1 }, /must have exactly one of/],
+    [{ dayAfterHoliday: true, nth: 1 }, /closedRecurringRules\[0\]\.nth/],
     [
       { dayAfterHoliday: true, interval: 2, anchor: "2026-01-07" },
-      /closedRecurring\[0\]\.interval/,
+      /closedRecurringRules\[0\]\.interval/,
     ],
   ];
   for (const [entry, message] of cases) {
     assert.throws(
-      () => createCalendar({ holidays: jp, closedRecurring: [entry as RecurringRule] }),
+      () => createCalendar({ holidayProvider: jp, closedRecurringRules: [entry as RecurringRule] }),
       (e: unknown) => isBizdaysError(e) && e.code === "invalid-option" && message.test(e.message),
       JSON.stringify(entry),
     );
@@ -124,13 +138,13 @@ test("祝日の翌日: 入力の誤り", () => {
 });
 
 test("祝日の翌日: 診断（never-matches・shadowed・redundant）", () => {
-  assert.deepEqual(brief({ closedRecurring: [{ dayAfterHoliday: true }] }), [
-    ["warning", "never-matches", "closedRecurring[0]", ""],
+  assert.deepEqual(brief({ closedRecurringRules: [{ dayAfterHoliday: true }] }), [
+    ["warning", "never-matches", "closedRecurringRules[0]", ""],
   ]);
   assert.deepEqual(
     brief({
-      holidays: jp,
-      closedRecurring: [
+      holidayProvider: jp,
+      closedRecurringRules: [
         { dayAfterHoliday: true },
         { dayAfterHoliday: true, months: [5] },
         {
@@ -142,26 +156,26 @@ test("祝日の翌日: 診断（never-matches・shadowed・redundant）", () => 
       ],
     }),
     [
-      ["warning", "shadowed", "closedRecurring[1]", "closedRecurring[0]"],
-      ["warning", "never-matches", "closedRecurring[2]", ""],
+      ["warning", "shadowed", "closedRecurringRules[1]", "closedRecurringRules[0]"],
+      ["warning", "never-matches", "closedRecurringRules[2]", ""],
     ],
     "月の絞り込みで覆われる。2027 年 6 月に祝日の翌日はない",
   );
   assert.deepEqual(
     brief({
-      holidays: jp,
-      closedRecurring: [{ dayAfterHoliday: true, months: [5] }, { dayAfterHoliday: true }],
+      holidayProvider: jp,
+      closedRecurringRules: [{ dayAfterHoliday: true, months: [5] }, { dayAfterHoliday: true }],
     }),
-    [["info", "redundant", "closedRecurring[0]", ""]],
+    [["info", "redundant", "closedRecurringRules[0]", ""]],
     "後の規則のほうが広いので、先の規則は覆われないが取り除いても変わらない",
   );
   // 曜日の規則とは shadowed で比べない（祝日次第で年ごとに変わる）が、取り除いて変わらなければ redundant
   assert.deepEqual(
     brief({
-      holidays: jp,
+      holidayProvider: jp,
       closedWeekdays: [0, 1, 2, 3, 4, 5, 6],
-      closedRecurring: [{ dayAfterHoliday: true }],
+      closedRecurringRules: [{ dayAfterHoliday: true }],
     }).filter((d) => d[1] !== "no-business-day"),
-    [["info", "redundant", "closedRecurring[0]", ""]],
+    [["info", "redundant", "closedRecurringRules[0]", ""]],
   );
 });

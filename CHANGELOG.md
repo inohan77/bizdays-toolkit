@@ -4,6 +4,50 @@
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-27
+
+公開する名前を 1 つの規則に合わせて改めた版です（`docs/decisions.md` の 54 番）。名前の整理の版を区切るため、版の番号を 0.30.0 にしました（0.23.0〜0.29.0 は欠番）。旧名は 1.0.0 まで受け付けます。作業は「移行」と `docs/migration.md` の 0.30.0 の節にあります。
+
+### Added
+
+- 週の第 n 営業日の規則 `{ businessDayOfWeek, weekStart }`（繰り返しの規則。数え方・`calendar`・`holidayOverlapPolicy` は `businessDayOfMonth` と同じ）と、型 `BusinessDayOfWeek`・`BusinessDayOfWeekPattern`
+- `migrateCalendarOptions`・`migrateScheduleOptions`（`bizdays-toolkit/diagnose`）: 保存した設定の旧名のキーと値を新しい名前に書き換え、書き換えたもの（`OptionChange`）を元の位置で返す。型 `OptionsMigration`・`OptionChange`
+- 診断コード `deprecated-option`（0.30.0 で改名した旧名を、書いた位置で知らせる warning。1.0.0 で削除する）
+- `CalendarFromScheduleOptions`（`createCalendarFromSchedule` の第 3 引数の型に名前を付けた）
+
+### Changed
+
+- 公開する名前を、規則 N1〜N9（`etc/naming.md`）に合わせて改めた。設定のキー 18 個・値 2 つ、関数・メソッド 6 つ、型 17 個、返す項目 4 つ、型引数（`T` → `Value`）、引数（`addDays` の `n`、`isValidDate` の `input`、`closingMonth`・`closingPeriod` の `closingDayOfMonth`）。一覧は `docs/migration.md` の 0.30.0 の節。旧名は `@deprecated` の別名として残り、設定の旧名は読み替える（両方を書くと `invalid-option`）
+- 返す値: 営業日カレンダーの理由 `"regular"` → `"default"`（`createCalendarFromSchedule` は `"open-weekday"`）、エラーコード `"invalid-month-day"` → `"invalid-annual-date"`、設定の中の位置を表す文字列は新しいキー名（日本の祝日の `kind` は Data）
+- 規則の形ごとに受ける項目を型で分けた（`holidayOverlapPolicy`・`skipWeekdays`・`calendar`）。実行時に `invalid-option` になる書き方が型でも通らない（`docs/decisions.md` の 33 番の見直し）
+- `outOfRangePolicy: "throw"` のとき、隣の日を見る規則（祝日の翌日・祝前日・`skipWeekdays`・`"after-holiday"` の振替元）が対応年の外の日を見ると `out-of-range` を投げる（これまでは外を黙って祝日でないとみなしていた）。診断は外を祝日なしとして扱う
+- 打ち間違いの候補（`unknown-option` の `message`）は、旧名に近いキーなら新しい名前を挙げる
+
+### Deprecated
+
+- 0.30.0 で改名した旧名のすべて（`docs/migration.md` の「1.0.0 で削除する予定の API」）。1.0.0 で削除し、設定の旧名は `invalid-option` にする
+
+### Data
+
+- 日本の祝日の `kind` の `"national"` を `"regular"` にした（日付・名称・`key` は変わらない）
+
+### 移行
+
+- 実行時は旧名のままでも動くが、返す値の変更・対応年の端の挙動・TypeScript で必須のキーの旧名・`dayInfoOn` の結果を丸ごと比べるテストは 0.30.0 に上げた時点で対応が要る（下の箇条）。それ以外は TypeScript の取り消し線と診断の `deprecated-option` を手がかりに新しい名前に書き換える。保存した設定は `migrateCalendarOptions`・`migrateScheduleOptions` で書き換えられる
+- 型が旧名を持つのは省略可能なキーだけなので、スケジュールの `weekly`・合成の `businessDay`・期日の `day`・振替の `rules`・規則の `day` は、TypeScript では新しい名前に書き換える
+- 返す値（`reason` の `"regular"`、日本の `kind` の `"national"`、エラーコード `"invalid-month-day"`、設定の中の位置の文字列）と比べているコードを改める
+- `dayInfoOn` の結果を `deepEqual` で比べているテストは、期待値に `open` と、`rulePath` があれば `optionPath` を足し、`reason` が `"regular"` なら `"default"`（`createCalendarFromSchedule` では `"open-weekday"`）に直す
+- 対応年の最後の日付の近くで祝前日・祝日の翌日・振替の規則を使っていて例外になったら、`outOfRangePolicy: "ignore"` にするか、対応年の中で使う
+
+### 開発
+
+- 名前の規則の検査 `scripts/check-names.ts` を `pnpm check` に足した（`etc/naming.md` の用語集・外部の名前の出典と、移行ガイドの削除予定の表に照らす。名前を許す一覧は持たない）。名前が約束する意味は `test/naming.test.ts` の性質のテストで確かめる
+- 改名の表を `src/core/renamed.ts` の 1 か所に置き、読み替え・診断・`migrate…` がこの表だけを使う
+- `scripts/bench.ts` は、前の版が新しい名前を知らないときは設定を旧名に戻して渡す（CI の bench が同じ場面を比べるため）
+- `scripts/check-readme-examples.ts` は、0.30.x の間だけ返す旧名の項目（削除予定の表から決める）を比べない
+- サイズの上限を上げた（ルート 17,500 → 18,500、`./jp` 19,500 → 21,000、`./diagnose` 23,000 → 25,000、`./provider` 3,500 → 4,500 バイト）。改名の表・旧名の読み替え・旧名の別名・週の第 n 営業日・`migrate…` のため。gzip でルート 16,074 → 17,639、`./jp` 18,293 → 19,883、`./diagnose` 21,445 → 23,913、`./provider` 3,111 → 4,041 バイト
+- README のサイズの値を 0.30.0 で測り直した
+
 ## [0.22.2] - 2026-10-27
 
 ### Changed
@@ -660,7 +704,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.2...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.2...v0.30.0
 [0.22.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.1...v0.22.2
 [0.22.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.4...v0.22.0

@@ -11,7 +11,7 @@
  *
  * @example Lundi de Pentecôte を「連帯の日」として出勤日にする企業（法律上は祝日のまま。既定の扱いの例外として書く）
  * createCalendar({ holidays: metropole, closedWeekdays: [0, 6],
- *   openRecurring: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }] });
+ *   openRecurringRules: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }] });
  */
 
 import type { Holiday, HolidayProvider } from "../core/types.ts";

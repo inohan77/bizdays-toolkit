@@ -1,6 +1,6 @@
 {
   "name": "bizdays-toolkit",
-  "version": "0.22.2",
+  "version": "0.30.0",
   "description": "Holidays, business-day calendar and day-by-day schedules (e.g. store hours) with time zone support. Japanese holidays verified against the Cabinet Office data; UK bank holidays (England, Wales, Scotland, Northern Ireland) verified against GOV.UK and The Gazette; French public holidays (metropole, Alsace-Moselle) verified against data.gouv.fr; Singapore public holidays verified against data.gov.sg. / 祝日と営業日のカレンダー（タイムゾーン対応・日本の祝日は内閣府、英国の bank holidays は GOV.UK と The Gazette、フランスの祝日は data.gouv.fr、シンガポールの祝日は data.gov.sg のデータで全日照合）",
   "keywords": [
     "bank-holidays",
@@ -76,7 +76,7 @@
     "bench": "node scripts/bench.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "node scripts/check-toolchain.ts && pnpm typecheck && pnpm lint && pnpm test && pnpm test:tz && pnpm build && pnpm test:compat && node scripts/check-readme-examples.ts && node scripts/check-consumer-types.ts && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/api-report.ts",
+    "check": "node scripts/check-toolchain.ts && pnpm typecheck && pnpm lint && pnpm test && pnpm test:tz && pnpm build && pnpm test:compat && node scripts/check-readme-examples.ts && node scripts/check-consumer-types.ts && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/check-names.ts && node scripts/api-report.ts",
     "verify:cao": "node scripts/verify-cao.ts",
     "verify:govuk": "node scripts/verify-govuk.ts",
     "verify:datagovsg": "node scripts/verify-datagovsg.ts",

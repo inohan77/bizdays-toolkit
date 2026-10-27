@@ -9,10 +9,10 @@ const sunday: Hours = { open: "10:00", close: "19:00" };
 
 /** 店舗の営業時間の例: 火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業 */
 const storeHours = createSchedule<Hours>({
-  holidays: jp,
-  weekly: [sunday, weekday, null, weekday, weekday, weekday, weekday],
-  holiday: { sameAs: 0 },
-  annual: [{ date: "01-01", value: null, name: "元日休業" }],
+  holidayProvider: jp,
+  weekdayValues: [sunday, weekday, null, weekday, weekday, weekday, weekday],
+  holidayPolicy: { sameAs: 0 },
+  annualDates: [{ date: "01-01", value: null, name: "元日休業" }],
   dates: [{ date: "2026-12-31", value: { open: "10:00", close: "17:00" }, name: "大晦日" }],
 });
 
@@ -23,25 +23,25 @@ test("曜日ごとの値", () => {
 });
 
 test("祝日は指定した曜日の値（sameAs）", () => {
-  const day = storeHours.dayInfo("2026-11-03"); // 文化の日（火曜 = 定休日だが祝日は日曜の営業時間）
+  const day = storeHours.dayInfoOn("2026-11-03"); // 文化の日（火曜 = 定休日だが祝日は日曜の営業時間）
   assert.deepEqual(day.value, sunday);
   assert.equal(day.reason, "holiday");
   assert.equal(day.name, "文化の日");
-  assert.equal(day.holiday?.kind, "national");
+  assert.equal(day.holiday?.kind, "regular");
 });
 
 test("優先順位: 個別の日付 > 毎年の月日 > 祝日 > 曜日", () => {
-  const newYear = storeHours.dayInfo("2027-01-01"); // 元日（祝日）より毎年の月日が優先
+  const newYear = storeHours.dayInfoOn("2027-01-01"); // 元日（祝日）より毎年の月日が優先
   assert.equal(newYear.value, null);
   assert.equal(newYear.reason, "annual");
   assert.equal(newYear.name, "元日休業");
   assert.equal(newYear.holiday?.name, "元日", "祝日の情報は規則に関係なく付く");
-  const eve = storeHours.dayInfo("2026-12-31");
+  const eve = storeHours.dayInfoOn("2026-12-31");
   assert.deepEqual(eve.value, { open: "10:00", close: "17:00" });
   assert.equal(eve.reason, "date");
   const s = createSchedule<string>({
-    weekly: ["w", "w", "w", "w", "w", "w", "w"],
-    annual: [{ date: "05-05", value: "annual" }],
+    weekdayValues: ["w", "w", "w", "w", "w", "w", "w"],
+    annualDates: [{ date: "05-05", value: "annual" }],
     dates: [{ date: "2026-05-05", value: "date" }],
   });
   assert.equal(s.valueOn("2026-05-05"), "date");
@@ -49,27 +49,27 @@ test("優先順位: 個別の日付 > 毎年の月日 > 祝日 > 曜日", () => 
 });
 
 test("祝日の規則（weekday / sameAs / value）", () => {
-  const make = (holiday: "weekday" | { sameAs: 0 } | { value: string }) =>
+  const make = (holiday: "ignore" | { sameAs: 0 } | { value: string }) =>
     createSchedule<string>({
-      holidays: jp,
-      weekly: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
-      holiday,
+      holidayProvider: jp,
+      weekdayValues: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
+      holidayPolicy: holiday,
     });
   const culture = "2026-11-03"; // 火曜の祝日
-  assert.equal(make("weekday").valueOn(culture), "tue");
-  assert.equal(make("weekday").dayInfo(culture).reason, "weekday");
+  assert.equal(make("ignore").valueOn(culture), "tue");
+  assert.equal(make("ignore").dayInfoOn(culture).reason, "weekday");
   assert.equal(make({ sameAs: 0 }).valueOn(culture), "sun");
   assert.equal(make({ value: "closed" }).valueOn(culture), "closed");
   assert.equal(
-    createSchedule<string>({ weekly: ["a", "b", "c", "d", "e", "f", "g"] }).valueOn(culture),
+    createSchedule<string>({ weekdayValues: ["a", "b", "c", "d", "e", "f", "g"] }).valueOn(culture),
     "c",
   );
 });
 
 test("期間の指定と、先に書いた規則の優先", () => {
   const s = createSchedule<number>({
-    weekly: [0, 0, 0, 0, 0, 0, 0],
-    annual: [
+    weekdayValues: [0, 0, 0, 0, 0, 0, 0],
+    annualDates: [
       { from: "12-29", to: "01-03", value: 1, name: "年末年始" },
       { date: "01-02", value: 2 },
     ],
@@ -81,7 +81,7 @@ test("期間の指定と、先に書いた規則の優先", () => {
   assert.equal(s.valueOn("2026-12-28"), 4);
   assert.equal(s.valueOn("2026-12-30"), 3, "配列で先に書いた個別の日付が優先");
   assert.equal(s.valueOn("2027-01-02"), 1, "配列で先に書いた期間が優先");
-  assert.equal(s.dayInfo("2027-01-03").name, "年末年始");
+  assert.equal(s.dayInfoOn("2027-01-03").name, "年末年始");
   assert.equal(s.valueOn("2027-01-04"), 0);
 });
 
@@ -92,25 +92,29 @@ test("瞬間は祝日の提供元のタイムゾーンで暦日にする", () =>
 
 test("不正な設定", () => {
   assert.throws(
-    () => createSchedule<number>({ weekly: [0, 0, 0] as unknown as [0, 0, 0, 0, 0, 0, 0] }),
+    () => createSchedule<number>({ weekdayValues: [0, 0, 0] as unknown as [0, 0, 0, 0, 0, 0, 0] }),
     { code: "invalid-option" },
-  );
-  assert.throws(
-    () => createSchedule<number>({ weekly: [0, 0, 0, 0, 0, 0, 0], holiday: { sameAs: 7 as 0 } }),
-    RangeError,
   );
   assert.throws(
     () =>
       createSchedule<number>({
-        weekly: [0, 0, 0, 0, 0, 0, 0],
-        annual: [{ date: "13-01", value: 1 }],
+        weekdayValues: [0, 0, 0, 0, 0, 0, 0],
+        holidayPolicy: { sameAs: 7 as 0 },
       }),
     RangeError,
   );
   assert.throws(
     () =>
       createSchedule<number>({
-        weekly: [0, 0, 0, 0, 0, 0, 0],
+        weekdayValues: [0, 0, 0, 0, 0, 0, 0],
+        annualDates: [{ date: "13-01", value: 1 }],
+      }),
+    RangeError,
+  );
+  assert.throws(
+    () =>
+      createSchedule<number>({
+        weekdayValues: [0, 0, 0, 0, 0, 0, 0],
         dates: [{ from: "2026-12-31", to: "2026-12-01", value: 1 }],
       }),
     RangeError,
@@ -127,7 +131,7 @@ test("civilOf: カレンダーのタイムゾーンでの暦日と時刻", () =>
     date: "2026-10-15",
     time: "00:30",
   });
-  const office = createCalendar({ holidays: jp });
+  const office = createCalendar({ holidayProvider: jp });
   assert.deepEqual(office.civilOf(instant), { date: "2026-10-14", time: "16:30" });
   assert.deepEqual(toJapanDateTime(instant), { date: "2026-10-14", time: "16:30" });
   assert.deepEqual(toDateTimeParts(instant, "America/New_York"), {
@@ -151,6 +155,6 @@ test("「今、営業時間内か」はアプリ側で 1 行で書ける", () =>
 
 test("返す値は変更できない", () => {
   assert.ok(Object.isFrozen(storeHours));
-  assert.ok(Object.isFrozen(storeHours.dayInfo("2026-10-14")));
+  assert.ok(Object.isFrozen(storeHours.dayInfoOn("2026-10-14")));
   assert.ok(Object.isFrozen(storeHours.civilOf("2026-10-14")));
 });

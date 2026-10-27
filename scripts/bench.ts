@@ -16,6 +16,7 @@ import { writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { RENAMED_KEYS } from "../src/core/renamed.ts";
 
 const args = process.argv.slice(2);
 const argValue = (name: string): string | undefined => {
@@ -33,8 +34,37 @@ const root: Root = packageDir
 const jpModule: Jp = packageDir
   ? await import(pathToFileURL(resolve(packageDir, "dist/jp/index.js")).href)
   : await import("../src/jp/index.ts");
-const { createCalendar, createSchedule } = root;
 const { jp } = jpModule;
+
+// 前の版の dist が 0.30.0 より前（新しい名前を知らない）なら、設定の新しい名前を旧名に戻して渡す。
+// CI の bench は同じ場面を前の版と比べるため（新しい名前のままだと、前の版は知らないキーとして黙って無視する）
+const legacy =
+  typeof (root.createCalendar({}) as { diffBusinessDays?: unknown }).diffBusinessDays !==
+  "function";
+const RULE_LISTS = ["closedRecurringRules", "openRecurringRules", "recurringRules"];
+function toLegacy(
+  value: Record<string, unknown>,
+  places: readonly string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(value)) {
+    const renamed = RENAMED_KEYS.find((r) => places.includes(r.place) && r.to === key);
+    out[renamed ? renamed.from : key] = RULE_LISTS.includes(key)
+      ? (v as Record<string, unknown>[]).map((rule) => toLegacy(rule, ["rule"]))
+      : v;
+  }
+  return out;
+}
+const createCalendar: Root["createCalendar"] = (options) =>
+  root.createCalendar(
+    (legacy ? toLegacy(options as never, ["source", "calendar"]) : options) as never,
+  );
+const createSchedule: Root["createSchedule"] = (options) =>
+  root.createSchedule(
+    (legacy ? toLegacy(options as never, ["source", "schedule"]) : options) as never,
+  );
+const diff = (calendar: ReturnType<Root["createCalendar"]>, from: string, to: string): number =>
+  legacy ? calendar.businessDaysBetween(from, to) : calendar.diffBusinessDays(from, to);
 
 interface Case {
   readonly name: string;
@@ -49,34 +79,34 @@ function addDaysSimple(date: string, days: number): string {
 
 // 典型的な店舗の設定（日曜定休・祝日休業・年末年始）
 const store = createCalendar({
-  holidays: jp,
+  holidayProvider: jp,
   closedWeekdays: [0],
-  closedAnnual: [{ from: "12-31", to: "01-03", name: "年末年始" }],
+  closedAnnualDates: [{ from: "12-31", to: "01-03", name: "年末年始" }],
 });
 
 // 個別の日付の規則が多い設定（臨時休業日 500 件）
 const manyDates = createCalendar({
-  holidays: jp,
+  holidayProvider: jp,
   closedWeekdays: [0, 6],
   closedDates: Array.from({ length: 500 }, (_, i) => addDaysSimple("2020-01-01", i * 7 + 3)),
 });
 
 // 繰り返しの規則と振替を使う設定（博物館: 月曜休館・祝日の場合は次の祝日でない日、第 3 水曜休館、月末棚卸）
 const museum = createCalendar({
-  holidays: jp,
+  holidayProvider: jp,
   holidayPolicy: "open",
-  closedRecurring: [
-    { weekday: 1, onHolidayRule: "after-holiday" },
+  closedRecurringRules: [
+    { weekday: 1, holidayOverlapPolicy: "after-holiday" },
     { weekday: 3, nth: 3 },
-    { day: -1, onHolidayRule: "over-holiday" },
+    { dayOfMonth: -1, holidayOverlapPolicy: "over-holiday" },
   ],
 });
 
 const hours = createSchedule({
-  holidays: jp,
-  weekly: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
-  holiday: { sameAs: 0 },
-  annual: [{ date: "01-01", value: "closed" }],
+  holidayProvider: jp,
+  weekdayValues: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
+  holidayPolicy: { sameAs: 0 },
+  annualDates: [{ date: "01-01", value: "closed" }],
 });
 
 const cases: Case[] = [
@@ -86,21 +116,21 @@ const cases: Case[] = [
     run: () => store.addBusinessDays("2026-01-05", 250),
   },
   {
-    name: "businessDaysBetween（店舗・10 年）",
-    run: () => store.businessDaysBetween("2020-01-01", "2030-01-01"),
+    name: "diffBusinessDays（店舗・10 年）",
+    run: () => diff(store, "2020-01-01", "2030-01-01"),
   },
   {
-    name: "businessDaysBetween（臨時休業日 500 件・1 年）",
-    run: () => manyDates.businessDaysBetween("2026-01-01", "2027-01-01"),
+    name: "diffBusinessDays（臨時休業日 500 件・1 年）",
+    run: () => diff(manyDates, "2026-01-01", "2027-01-01"),
   },
   {
-    name: "businessDaysBetween（繰り返し・振替・1 年）",
-    run: () => museum.businessDaysBetween("2026-01-01", "2027-01-01"),
+    name: "diffBusinessDays（繰り返し・振替・1 年）",
+    run: () => diff(museum, "2026-01-01", "2027-01-01"),
   },
   { name: "valueOn（スケジュール・1 日）", run: () => hours.valueOn("2026-11-03") },
   {
     name: "createCalendar（店舗の設定）",
-    run: () => createCalendar({ holidays: jp, closedWeekdays: [0] }),
+    run: () => createCalendar({ holidayProvider: jp, closedWeekdays: [0] }),
   },
 ];
 

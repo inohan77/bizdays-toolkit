@@ -24,7 +24,7 @@
 - **繰り返しの規則**: 「第 3 水曜定休」「隔週水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は次の祝日でない日）」「祝日の翌日（前日）は休館」「bank holiday の前の最終平日」「4 勤 2 休の交替制」を、祝日に当たったときの扱いと有効期間つきで書けます
 - **日ごとの値と合成**: 曜日・祝日・特定日で変わる営業時間のようなスケジュール、そこから作る営業日カレンダー、複数のカレンダーがすべて（またはどれか）営業している日の合成
 - **設定の診断**: `bizdays-toolkit/diagnose` が、決して使われない規則・覆われた規則・取り除いても結果が変わらない規則・終わった規則・キーの打ち間違い・営業日が 1 日もない設定を、例外を投げずに一覧で返します。テストに 1 行足すだけで設定を守れます
-- **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 11.5KB（日本の祝日込みで約 13.2KB、英国の祝日込みで約 13.6KB、フランスの祝日込みで約 12.4KB、シンガポールの祝日込みで約 12.4KB。0.22.0 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
+- **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 12.7KB（日本の祝日込みで約 14.4KB、英国の祝日込みで約 14.8KB、フランスの祝日込みで約 13.6KB、シンガポールの祝日込みで約 13.6KB。0.30.0 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられ、多くの国の祝日の元になる暦の計算（月の第 n 何曜日・復活祭・週末に当たった祝日の振替）を `bizdays-toolkit/provider` が公開します
 
 ## インストール
@@ -46,14 +46,14 @@ import { isHoliday, jp } from "bizdays-toolkit/jp";
 isHoliday("2026-11-23"); // true（勤労感謝の日）
 
 const calendar = createCalendar({
-  holidays: jp,
+  holidayProvider: jp,
   closedWeekdays: [0, 6],
-  closedAnnual: [{ from: "12-29", to: "01-03", name: "年末年始休業" }],
+  closedAnnualDates: [{ from: "12-29", to: "01-03", name: "年末年始休業" }],
 });
 calendar.isBusinessDay("2026-12-30"); // false
 calendar.addBusinessDays("2026-12-28", 1); // "2027-01-04"
 calendar.businessDayOnOrAfter("2026-12-28T15:30", { cutoff: "14:00" }); // "2027-01-04"（締め時刻を過ぎているので翌営業日）
-calendar.dueDate("2026-11", { day: 23, convention: "following" }); // "2026-11-24"（23 日は祝日）
+calendar.dueDate("2026-11", { dayOfMonth: 23, convention: "following" }); // "2026-11-24"（23 日は祝日）
 ```
 
 以下の内容は[ガイド](./guide.ja.md)に、CI で実行しているコード例つきで詳しく書いています。この README は短い版です。
@@ -69,30 +69,31 @@ calendar.dueDate("2026-11", { day: 23, convention: "following" }); // "2026-11-2
 | `metropole`・`alsaceMoselle`                      | `bizdays-toolkit/fr` | `Europe/Paris`   | 2000〜2099 | data.gouv.fr「Jours fériés en France」                                                         |
 | `sg`                                              | `bizdays-toolkit/sg` | `Asia/Singapore` | 2020〜2027 | data.gov.sg（Ministry of Manpower）                                                            |
 
-祝日には日付・名称（と英語名）・`kind`（国民の祝日・振替休日・国民の休日・bank holiday など。国ごとに違う）・`confirmed`（公式に確定した日付か。日本の春分の日・秋分の日と、GOV.UK が公表している最後の年より後の英国の bank holidays は予測）が付きます。対応年の外は `outOfRange: "ignore"` を指定しない限りエラーで、`unconfirmedHolidays: "throw"` にすると予測の祝日に依存する結果を止められます。詳しくは[同梱の祝日の提供元](./guide.ja.md#同梱の祝日の提供元)・[未確定の祝日](./guide.ja.md#未確定の祝日)。
+祝日には日付・名称（と英語名）・`kind`（国民の祝日・振替休日・国民の休日・bank holiday など。国ごとに違う）・`confirmed`（公式に確定した日付か。日本の春分の日・秋分の日と、GOV.UK が公表している最後の年より後の英国の bank holidays は予測）が付きます。対応年の外は `outOfRangePolicy: "ignore"` を指定しない限りエラーで、`unconfirmedHolidayPolicy: "throw"` にすると予測の祝日に依存する結果を止められます。詳しくは[同梱の祝日の提供元](./guide.ja.md#同梱の祝日の提供元)・[未確定の祝日](./guide.ja.md#未確定の祝日)。
 
 ### 営業日カレンダーと繰り返しの規則
 
-カレンダーは、祝日の提供元と、`closedWeekdays`（定休日の曜日）・`closedAnnual`（毎年の月日の期間。年またぎも可）・`closedDates`・`openDates`（臨時休業・臨時営業）・`closedRecurring` / `openRecurring`（繰り返しの規則）から作ります:
+カレンダーは、祝日の提供元と、`closedWeekdays`（定休日の曜日）・`closedAnnualDates`（毎年の月日の期間。年またぎも可）・`closedDates`・`openDates`（臨時休業・臨時営業）・`closedRecurringRules` / `openRecurringRules`（繰り返しの規則）から作ります:
 
 | 規則                                                      | 意味                                                                   |
 | --------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `{ weekday: 3, nth: 3 }`                                  | 第 3 水曜日（`nth` は 1〜5 と -1（最終）。配列で複数指定できる）       |
 | `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`       | 隔週水曜日（`anchor` から数える）                                      |
 | `{ cycle: 6, anchor: "2026-01-05", positions: [5, 6] }`   | `anchor` から 6 日ごとの 5・6 日目（4 勤 2 休）                        |
-| `{ day: 20 }`・`{ day: -1 }`                              | 毎月 20 日・毎月末日                                                   |
+| `{ dayOfMonth: 20 }`・`{ dayOfMonth: -1 }`                | 毎月 20 日・毎月末日                                                   |
 | `{ businessDayOfMonth: -1 }`・`{ businessDayOfMonth: 5 }` | 月末最終営業日・第 5 営業日                                            |
+| `{ businessDayOfWeek: -1, weekStart: 1 }`                 | 月曜始まりの週の最終営業日                                             |
 | `{ holiday: true, kinds: ["substitute"] }`                | 祝日（種別や識別子 `keys: ["vernal-equinox"]` で絞れる）               |
 | `{ dayAfterHoliday: true }`・`{ dayBeforeHoliday: true }` | 祝日（連休）の翌日・前日                                               |
-| `onHolidayRule: "after-holiday"`                          | 「月曜休館（祝日なら次の祝日でない日。土曜日もある）」のような振替     |
+| `holidayOverlapPolicy: "after-holiday"`                   | 「月曜休館（祝日なら次の祝日でない日。土曜日もある）」のような振替     |
 | `skipWeekdays: [0, 6]`                                    | `"after-holiday"` で土日も飛ばす（「6 月 15 日。土日祝なら翌営業日」） |
 | `effectiveFrom`・`effectiveTo`                            | 規則の有効期間                                                         |
 
-`dayInfo` で、その日が営業か休業かの理由（`reason`・`name`・`rulePath`）が分かります。同梱の毎年繰り返す祝日には安定した識別子 `key`（`vernal-equinox`・`good-friday`・`hari-raya-puasa` など）が付いていて、月日や曜日では書けない祝日を規則から個別に指せます。詳しくは[営業日カレンダー](./guide.ja.md#営業日カレンダー)・[繰り返しの規則](./guide.ja.md#繰り返しの規則)・[祝日の識別子](./guide.ja.md#祝日の識別子)・[よくある設定の例](./guide.ja.md#よくある設定の例)。
+`dayInfoOn` で、その日が営業か休業かの理由（`reason`・`name`・`optionPath`）が分かります。同梱の毎年繰り返す祝日には安定した識別子 `key`（`vernal-equinox`・`good-friday`・`hari-raya-puasa` など）が付いていて、月日や曜日では書けない祝日を規則から個別に指せます。詳しくは[営業日カレンダー](./guide.ja.md#営業日カレンダー)・[繰り返しの規則](./guide.ja.md#繰り返しの規則)・[祝日の識別子](./guide.ja.md#祝日の識別子)・[よくある設定の例](./guide.ja.md#よくある設定の例)。
 
 ### 期日・スケジュール・合成
 
-- `dueDate("2026-11", { day: 23, convention: "following" })`・`adjust`・`closingMonth`・`closingPeriod` が、`following`・`preceding`・`modified-following`・`modified-preceding` の調整方法で月の期日と締め期間を計算します（[月の期日と日付の調整](./guide.ja.md#月の期日と日付の調整)）
+- `dueDate("2026-11", { dayOfMonth: 23, convention: "following" })`・`adjust`・`closingMonth`・`closingPeriod` が、`following`・`preceding`・`modified-following`・`modified-preceding` の調整方法で月の期日と締め期間を計算します（[月の期日と日付の調整](./guide.ja.md#月の期日と日付の調整)）
 - `createSchedule` は、同じ種類の規則で日ごとの値（営業時間・出荷の締め時刻・料金区分）を引き、`createCalendarFromSchedule` でそのスケジュールから営業日カレンダーを作れます。営業時間表が唯一の設定になります（[日ごとの値](./guide.ja.md#日ごとの値営業時間など)・[スケジュールから営業日カレンダーを作る](./guide.ja.md#スケジュールから営業日カレンダーを作る)）
 - `combineCalendars` は、複数のカレンダーがすべて（またはどれか）営業している日を合成します。自社と銀行の両方が営業している送金日など（[カレンダーの合成](./guide.ja.md#カレンダーの合成)）
 - 日付は `"YYYY-MM-DD"`・`"YYYY-MM-DDTHH:mm"`・`Date`・Temporal のオブジェクトで渡せ、瞬間はカレンダーのタイムゾーンで暦日に変換します（[日付・日時の入力](./guide.ja.md#日付日時の入力)）
@@ -104,12 +105,12 @@ import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
 import { jp } from "bizdays-toolkit/jp";
 
 diagnoseCalendar({
-  holidays: jp,
+  holidayProvider: jp,
   closedWeekdays: [0],
-  closedRecurring: [{ weekday: 0 }],
+  closedRecurringRules: [{ weekday: 0 }],
   closeAnnual: ["12-31"],
 }).map((d) => [d.severity, d.code, d.path]);
-// [["warning", "unknown-option", "closeAnnual"], ["info", "redundant", "closedRecurring[0]"]]
+// [["warning", "unknown-option", "closeAnnual"], ["info", "redundant", "closedRecurringRules[0]"]]
 ```
 
 `diagnoseCalendar`・`diagnoseSchedule` は、設定の問題を例外を投げずにすべて返します。キーの打ち間違い（候補つき）、決して当てはまらない規則、先の規則に覆われた規則、取り除いても結果が変わらない規則、営業日が 1 日もない設定、`{ asOf }` を渡せば終わった規則。テストに `assert.deepEqual(diagnoseCalendar(options), [])` と書くだけで設定を守れます。詳しくは[設定の診断](./guide.ja.md#設定の診断)・[エラー](./guide.ja.md#エラー)。

@@ -6,7 +6,7 @@
 
 ## 祝日の提供元を書く
 
-`HolidayProvider` を実装して `holidays` に渡します。複数渡すと和集合になります（タイムゾーンが異なる場合は `timeZone` の指定が必要です）。
+`HolidayProvider` を実装して `holidayProvider` に渡します。複数渡すと和集合になります（タイムゾーンが異なる場合は `timeZone` の指定が必要です）。
 
 ```ts
 import { createCalendar, type HolidayProvider } from "bizdays-toolkit";
@@ -26,10 +26,10 @@ const myCountry: HolidayProvider = {
     },
   ],
 };
-const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] });
+const calendar = createCalendar({ holidayProvider: myCountry, closedWeekdays: [0, 6] });
 ```
 
-他の国・地域の祝日の多くは「月の第 n 何曜日」（米国の連邦祝日）か「復活祭からの日数」（ヨーロッパの多くの国）で決まります。`bizdays-toolkit/provider` は、同梱の提供元が使っているこの暦の計算をそのまま公開するもので、提供元を書く人が各自に実装して検証し直す必要がなくなります。`nthWeekdayOfMonth(year, month, weekday, n)`（`n` は 1〜5 と -1（最後））、`easterSunday(year)`（グレゴリオ暦。同梱の提供元の公式データと照合済み）、`daysInMonth(year, month)`、`isLeapYear(year)`、`substituteDays`（下記）があり、ルートの `addDays`・`weekdayOf` と組み合わせます。
+他の国・地域の祝日の多くは「月の第 n 何曜日」（米国の連邦祝日）か「復活祭からの日数」（ヨーロッパの多くの国）で決まります。`bizdays-toolkit/provider` は、同梱の提供元が使っているこの暦の計算をそのまま公開するもので、提供元を書く人が各自に実装して検証し直す必要がなくなります。`nthWeekdayOfMonth(year, month, weekday, n)`（`n` は 1〜5 と -1（最後））、`easterSunday(year)`（グレゴリオ暦。同梱の提供元の公式データと照合済み）、`lengthOfMonth(year, month)`、`isLeapYear(year)`、`withSubstituteDays`（下記）があり、ルートの `addDays`・`weekdayOf` と組み合わせます。
 
 ```ts
 import { addDays, createCalendar, type HolidayProvider } from "bizdays-toolkit";
@@ -56,15 +56,15 @@ const bavaria: HolidayProvider<"public"> = {
     ];
   },
 };
-createCalendar({ holidays: bavaria }).isHoliday("2026-06-04"); // true（Fronleichnam）
+createCalendar({ holidayProvider: bavaria }).isHoliday("2026-06-04"); // true（Fronleichnam）
 nthWeekdayOfMonth(2026, 11, 4, 4); // "2026-11-26"（11 月第 4 木曜: 米国の Thanksgiving Day）
 nthWeekdayOfMonth(2026, 5, 1, -1); // "2026-05-25"（5 月最終月曜: 米国の Memorial Day）
 ```
 
-週末に当たった祝日は別の日に振り替えられることが多くあります（日本の振替休日、英国の substitute day、シンガポールの翌日の休日、米国の連邦祝日の observed）。`substituteDays(holidays, options)` は、1 年分の祝日に振替日を足して返します。定義は同梱の提供元と同じで、`rules` に書いた曜日に当たる祝日ごとに、指定の向きで「入力の祝日でも、それまでに決めた振替日でも、`rules` に書いた曜日でもない最初の日」を振替日にします（Christmas Day と Boxing Day のように 1 つの週末に 2 つの祝日が重なれば、日付順に先へ送られます）。振替日は元の祝日の `key`・`names`・`confirmed` を引き継ぎ、`kind` は設定で与え、名称は `name` を省略すれば元の祝日のまま（GOV.UK・シンガポールの告示の流儀）です。`original: "drop"` にすると、GOV.UK の一覧と同じく週末の日そのものを結果から外します。この関数が同梱の日本（2007 年以降）・英国・シンガポールの提供元の振替日を再現することをテストで確かめています。日本の国民の休日（2 つの祝日に挟まれた日）のような国に固有の規則は含みません。
+週末に当たった祝日は別の日に振り替えられることが多くあります（日本の振替休日、英国の substitute day、シンガポールの翌日の休日、米国の連邦祝日の observed）。`withSubstituteDays(holidays, options)` は、1 年分の祝日に振替日を足して返します。定義は同梱の提供元と同じで、`directions` に書いた曜日に当たる祝日ごとに、指定の向きで「入力の祝日でも、それまでに決めた振替日でも、`directions` に書いた曜日でもない最初の日」を振替日にします（Christmas Day と Boxing Day のように 1 つの週末に 2 つの祝日が重なれば、日付順に先へ送られます）。振替日は元の祝日の `key`・`names`・`confirmed` を引き継ぎ、`kind` は設定で与え、名称は `name` を省略すれば元の祝日のまま（GOV.UK・シンガポールの告示の流儀）です。`originalPolicy: "drop"` にすると、GOV.UK の一覧と同じく週末の日そのものを結果から外します。この関数が同梱の日本（2007 年以降）・英国・シンガポールの提供元の振替日を再現することをテストで確かめています。日本の国民の休日（2 つの祝日に挟まれた日）のような国に固有の規則は含みません。
 
 ```ts
-import { substituteDays } from "bizdays-toolkit/provider";
+import { withSubstituteDays } from "bizdays-toolkit/provider";
 
 const federal = [
   {
@@ -76,20 +76,20 @@ const federal = [
   },
 ];
 // 米国の連邦祝日: 土曜日なら前の金曜日、日曜日なら次の月曜日に observed
-substituteDays(federal, {
-  rules: { 6: "previous", 0: "next" },
+withSubstituteDays(federal, {
+  directions: { 6: "previous", 0: "next" },
   kind: "observed",
-  name: (h) => ({ name: `${h.name} (observed)`, nameEn: `${h.nameEn} (observed)` }),
+  renameSubstitute: (h) => ({ name: `${h.name} (observed)`, nameEn: `${h.nameEn} (observed)` }),
 }).map((h) => `${h.date} ${h.kind}`);
 // ["2026-07-03 observed", "2026-07-04 federal"]
 
 // 日本・シンガポール: 日曜日の祝日だけを、次の祝日でない日へ
-substituteDays(federal, { rules: { 0: "next" }, kind: "substitute" }).length; // 1（2026 年 7 月 4 日は土曜日）
+withSubstituteDays(federal, { directions: { 0: "next" }, kind: "substitute" }).length; // 1（2026 年 7 月 4 日は土曜日）
 // 英国: 土曜日・日曜日とも振り替え、GOV.UK の一覧は振替日だけを載せる
-substituteDays(federal, {
-  rules: { 6: "next", 0: "next" },
+withSubstituteDays(federal, {
+  directions: { 6: "next", 0: "next" },
   kind: "substitute",
-  original: "drop",
+  originalPolicy: "drop",
 }).map((h) => h.date);
 // ["2026-07-06"]
 ```
@@ -110,5 +110,5 @@ const jpWithNames = {
       return name === undefined ? h : { ...h, names: { "zh-Hant": name } };
     }),
 };
-createCalendar({ holidays: jpWithNames }).getHoliday("2026-01-01")?.names; // { "zh-Hant": "元日" }
+createCalendar({ holidayProvider: jpWithNames }).holidayOn("2026-01-01")?.names; // { "zh-Hant": "元日" }
 ```

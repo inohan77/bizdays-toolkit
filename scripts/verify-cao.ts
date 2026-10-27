@@ -23,7 +23,7 @@ import "./strict-warnings.ts";
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { holidaysInYear, jp, type JapaneseHoliday } from "../src/jp/index.ts";
+import { holidaysInYear, jp, type JpHoliday } from "../src/jp/index.ts";
 
 const CSV_URL = "https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv";
 const FIXTURE = new URL("../test/fixtures/cao-dates.txt", import.meta.url);
@@ -81,7 +81,7 @@ function parse(bytes: Uint8Array): Row[] {
 }
 
 /** CSV の名前とライブラリの名前が同じものを指しているか */
-function sameName(csvName: string, h: JapaneseHoliday): boolean {
+function sameName(csvName: string, h: JpHoliday): boolean {
   if (csvName.startsWith("休日")) {
     // 振替休日・国民の休日は「休日」、2019 年の特例は「休日（祝日扱い）」
     return h.kind === "substitute" || h.kind === "citizens" || h.kind === "special";
@@ -106,7 +106,7 @@ async function main(): Promise<number> {
   const firstYear = Number(rows[0]!.date.slice(0, 4));
   const lastYear = Number(rows.at(-1)!.date.slice(0, 4));
   const expected = new Map(rows.map((r) => [r.date, r.name]));
-  const actual = new Map<string, JapaneseHoliday>();
+  const actual = new Map<string, JpHoliday>();
   for (let y = firstYear; y <= lastYear; y++)
     for (const h of holidaysInYear(y)) actual.set(h.date, h);
 

@@ -10,7 +10,7 @@ import {
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 
-const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+const office = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
 
 test("営業日を考慮した締め日: 締め日が休業日なら convention で調整した日が締め日", () => {
   // 2026-09-20 は日曜。preceding なら 9/18（金）締め、following なら 9/21（月）締め
@@ -88,7 +88,7 @@ test("営業日を考慮した締め日: 締め日が休業日なら convention 
 test("営業日を考慮した締め日: 長期休業で固有の期間がない月は no-business-day、その日は次の月に属する", () => {
   // 2026-12-15〜2027-02-10 休業（改装）。20 日締め・preceding
   const reno = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     closedWeekdays: [0, 6],
     closedDates: [{ from: "2026-12-15", to: "2027-02-10" }],
   });
@@ -137,14 +137,14 @@ test("営業日を考慮した締め日: 空でない期間を順に並べると
   const calendars = [
     office,
     createCalendar({
-      holidays: jp,
+      holidayProvider: jp,
       closedWeekdays: [0, 6],
       closedDates: [{ from: "2026-12-15", to: "2027-02-10" }],
     }),
     createCalendar({
-      holidays: jp,
+      holidayProvider: jp,
       closedWeekdays: [0],
-      closedAnnual: [
+      closedAnnualDates: [
         { from: "12-29", to: "01-03" },
         { from: "08-10", to: "08-20" },
       ],

@@ -7,7 +7,7 @@ import {
   type Holiday,
   type HolidayProvider,
 } from "../src/index.ts";
-import { jp, type KnownJapaneseHolidayKey } from "../src/jp/index.ts";
+import { jp, type KnownJpHolidayKey } from "../src/jp/index.ts";
 import {
   england,
   northernIreland,
@@ -19,7 +19,7 @@ import { sg, type KnownSgHolidayKey } from "../src/sg/index.ts";
 import { alsaceMoselle, metropole } from "../src/fr/index.ts";
 import { diagnoseCalendar } from "../src/diagnose/index.ts";
 
-const JP_KEYS: readonly KnownJapaneseHolidayKey[] = [
+const JP_KEYS: readonly KnownJpHolidayKey[] = [
   "new-year",
   "coming-of-age",
   "national-foundation",
@@ -74,8 +74,8 @@ test("key: 日本の祝日法の祝日は 1 つずつ key を持ち、振替休�
         continue;
       }
       assert.ok(h.key !== undefined && KEY_PATTERN.test(h.key), `${h.date} ${h.name}`);
-      assert.ok(JP_KEYS.includes(h.key as KnownJapaneseHolidayKey), `${h.date} ${h.key}`);
-      if (h.kind === "national") seen.add(h.key);
+      assert.ok(JP_KEYS.includes(h.key as KnownJpHolidayKey), `${h.date} ${h.key}`);
+      if (h.kind === "regular") seen.add(h.key);
     }
   }
   assert.deepEqual([...seen].sort(), [...JP_KEYS].sort(), "既知の key はすべて現れる");
@@ -151,22 +151,22 @@ test("key: シンガポールの 11 の祝日は 1 つずつ key を持ち、振
 test("key: 規則の keys で祝日を個別に指せる（kinds・weekdays・months との AND）", () => {
   // 花屋: 祝日は定休だが、春分の日・秋分の日（彼岸の中日）だけは営業
   const florist = createCalendar({
-    holidays: jp,
-    openRecurring: [
+    holidayProvider: jp,
+    openRecurringRules: [
       { holiday: true, keys: ["vernal-equinox", "autumnal-equinox"], name: "彼岸は営業" },
     ],
   });
-  assert.equal(florist.dayInfo("2026-03-20").reason, "open-recurring");
-  assert.equal(florist.dayInfo("2026-09-23").reason, "open-recurring");
-  assert.equal(florist.dayInfo("2026-05-04").reason, "holiday", "ほかの祝日は休業のまま");
-  assert.equal(florist.dayInfo("2026-05-06").reason, "holiday", "振替休日も休業のまま");
+  assert.equal(florist.dayInfoOn("2026-03-20").reason, "open-recurring");
+  assert.equal(florist.dayInfoOn("2026-09-23").reason, "open-recurring");
+  assert.equal(florist.dayInfoOn("2026-05-04").reason, "holiday", "ほかの祝日は休業のまま");
+  assert.equal(florist.dayInfoOn("2026-05-06").reason, "holiday", "振替休日も休業のまま");
 
   // 英国のパブ: bank holiday は営業するが Good Friday と Easter Monday だけ休む
   const pub = createCalendar({
-    holidays: england,
+    holidayProvider: england,
     holidayPolicy: "open",
-    closedRecurring: [{ holiday: true, keys: ["good-friday", "easter-monday"] }],
-    closedAnnual: ["12-25"],
+    closedRecurringRules: [{ holiday: true, keys: ["good-friday", "easter-monday"] }],
+    closedAnnualDates: ["12-25"],
   });
   assert.equal(pub.isBusinessDay("2026-04-03"), false, "Good Friday");
   assert.equal(pub.isBusinessDay("2026-04-06"), false, "Easter Monday");
@@ -175,23 +175,25 @@ test("key: 規則の keys で祝日を個別に指せる（kinds・weekdays・mo
 
   // 振替休日は元の祝日の key を持つので「成人の日とその振替」を 1 つの規則で指せる
   const both = createCalendar({
-    holidays: jp,
-    openRecurring: [{ holiday: true, keys: ["sports"] }],
+    holidayProvider: jp,
+    openRecurringRules: [{ holiday: true, keys: ["sports"] }],
   });
   assert.equal(both.isBusinessDay("2020-07-24"), true, "スポーツの日（2020 年は移動）");
   // 当日だけなら kinds を併せて指定する（2020-02-24 は天皇誕生日の振替休日）
   const onlyDay = createCalendar({
-    holidays: jp,
-    openRecurring: [{ holiday: true, keys: ["emperors-birthday"], kinds: ["national"] }],
+    holidayProvider: jp,
+    openRecurringRules: [{ holiday: true, keys: ["emperors-birthday"], kinds: ["regular"] }],
   });
   assert.equal(onlyDay.isBusinessDay("2020-02-23"), true, "当日");
   assert.equal(onlyDay.isBusinessDay("2020-02-24"), false, "振替休日は対象外");
 
   // スケジュール: 特定の祝日だけ値を変える
   const pool = createSchedule<string>({
-    holidays: jp,
-    weekly: ["regular", "regular", "regular", "regular", "regular", "regular", "regular"],
-    recurring: [{ holiday: true, keys: ["marine", "mountain"], value: "summer", name: "夏季料金" }],
+    holidayProvider: jp,
+    weekdayValues: ["regular", "regular", "regular", "regular", "regular", "regular", "regular"],
+    recurringRules: [
+      { holiday: true, keys: ["marine", "mountain"], value: "summer", name: "夏季料金" },
+    ],
   });
   assert.equal(pool.valueOn("2026-07-20"), "summer", "海の日");
   assert.equal(pool.valueOn("2026-08-11"), "summer", "山の日");
@@ -199,8 +201,8 @@ test("key: 規則の keys で祝日を個別に指せる（kinds・weekdays・mo
 
   // key を持たない祝日（国民の休日）には当てはまらない（kinds で指す）
   const none = createCalendar({
-    holidays: jp,
-    openRecurring: [{ holiday: true, keys: ["new-year"] }],
+    holidayProvider: jp,
+    openRecurringRules: [{ holiday: true, keys: ["new-year"] }],
   });
   assert.equal(none.isBusinessDay("2026-09-22"), false, "国民の休日は key を持たない");
 });
@@ -222,19 +224,19 @@ test("key: 利用者の提供元が付けた key を検証し、複製・凍結�
       } as Holiday,
     ],
   });
-  const ok = createCalendar({ holidays: provider("christmas-2") });
-  const holiday = ok.dayInfo("2026-12-25").holiday!;
+  const ok = createCalendar({ holidayProvider: provider("christmas-2") });
+  const holiday = ok.dayInfoOn("2026-12-25").holiday!;
   assert.equal(holiday.key, "christmas-2");
   assert.ok(Object.isFrozen(holiday));
-  const noKey = createCalendar({ holidays: provider(undefined) });
+  const noKey = createCalendar({ holidayProvider: provider(undefined) });
   assert.equal(
-    "key" in noKey.dayInfo("2026-12-25").holiday!,
+    "key" in noKey.dayInfoOn("2026-12-25").holiday!,
     false,
     "省略した key は項目ごと持たない",
   );
   for (const bad of ["", "Christmas", "-x", "christmas day", 1]) {
     assert.throws(
-      () => createCalendar({ holidays: provider(bad) }).dayInfo("2026-12-25"),
+      () => createCalendar({ holidayProvider: provider(bad) }).dayInfoOn("2026-12-25"),
       (e: unknown) => isBizdaysError(e) && e.code === "invalid-provider-data",
       JSON.stringify(bad),
     );
@@ -253,19 +255,24 @@ test("key: keys の検証（holiday 以外には付けられない・形式）�
   assert.equal(
     code(() =>
       createCalendar({
-        holidays: jp,
-        closedRecurring: [{ weekday: 1, keys: ["sports"] } as never],
+        holidayProvider: jp,
+        closedRecurringRules: [{ weekday: 1, keys: ["sports"] } as never],
       }),
     ),
     "invalid-option",
   );
   assert.equal(
-    code(() => createCalendar({ holidays: jp, openRecurring: [{ holiday: true, keys: [] }] })),
+    code(() =>
+      createCalendar({ holidayProvider: jp, openRecurringRules: [{ holiday: true, keys: [] }] }),
+    ),
     "invalid-option",
   );
   assert.equal(
     code(() =>
-      createCalendar({ holidays: jp, openRecurring: [{ holiday: true, keys: ["Sports"] }] }),
+      createCalendar({
+        holidayProvider: jp,
+        openRecurringRules: [{ holiday: true, keys: ["Sports"] }],
+      }),
     ),
     "invalid-option",
   );
@@ -273,28 +280,28 @@ test("key: keys の検証（holiday 以外には付けられない・形式）�
     diagnoseCalendar(options).map((d) => [d.severity, d.code, d.path, d.relatedPath ?? ""]);
   assert.deepEqual(
     brief({
-      holidays: jp,
-      openRecurring: [
+      holidayProvider: jp,
+      openRecurringRules: [
         { holiday: true, keys: ["nonexistent"] },
         { holiday: true, keys: ["sports"] },
-        { holiday: true, keys: ["sports"], kinds: ["national"] },
+        { holiday: true, keys: ["sports"], kinds: ["regular"] },
         { holiday: true, keys: ["sports", "culture"] },
       ],
     }),
     [
-      ["warning", "never-matches", "openRecurring[0]", ""],
-      ["warning", "shadowed", "openRecurring[2]", "openRecurring[1]"],
-      ["info", "redundant", "openRecurring[1]", ""],
+      ["warning", "never-matches", "openRecurringRules[0]", ""],
+      ["warning", "shadowed", "openRecurringRules[2]", "openRecurringRules[1]"],
+      ["info", "redundant", "openRecurringRules[1]", ""],
     ],
     "対応年に現れない key は never-matches、key の集合の包含は shadowed（広い集合は覆われず、後の広い規則が同じ値なので先の規則は redundant）",
   );
   // 広い規則が先なら、狭い規則が shadowed
   assert.deepEqual(
     brief({
-      holidays: jp,
-      openRecurring: [{ holiday: true }, { holiday: true, keys: ["sports"] }],
+      holidayProvider: jp,
+      openRecurringRules: [{ holiday: true }, { holiday: true, keys: ["sports"] }],
     }),
-    [["warning", "shadowed", "openRecurring[1]", "openRecurring[0]"]],
+    [["warning", "shadowed", "openRecurringRules[1]", "openRecurringRules[0]"]],
   );
 });
 

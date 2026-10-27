@@ -83,7 +83,7 @@ test("シンガポール: 種別は regular・substitute・special（Polling Day
     [2020, 2023, 2025].map((y) => sg.holidaysInYear(y).find((h) => h.kind === "special")?.date),
     ["2020-07-10", "2023-09-01", "2025-05-03"],
   );
-  const calendar = createCalendar({ holidays: sg, closedWeekdays: [0, 6] });
+  const calendar = createCalendar({ holidayProvider: sg, closedWeekdays: [0, 6] });
   assert.equal(calendar.isBusinessDay("2026-08-10"), false, "National Day の振替");
   assert.equal(calendar.addBusinessDays("2026-08-07", 1), "2026-08-11");
   assert.equal(

@@ -14,6 +14,7 @@ import { rangeError, typeError } from "./errors.ts";
 
 /**
  * Temporal.PlainDate / PlainDateTime として受け付ける最小限の形。
+ * @namingSource temporal
  * @public
  */
 export interface TemporalDateLike {
@@ -27,6 +28,7 @@ export interface TemporalDateLike {
 
 /**
  * Temporal.Instant / ZonedDateTime として受け付ける最小限の形。
+ * @namingSource temporal
  * @public
  */
 export interface TemporalInstantLike {
@@ -41,6 +43,7 @@ export type DateInput = string | Date | TemporalDateLike | TemporalInstantLike;
 
 /**
  * Temporal.PlainDateTime として受け付ける最小限の形（時刻を持つ TemporalDateLike）。
+ * @namingSource temporal
  * @public
  */
 export interface TemporalDateTimeLike extends TemporalDateLike {

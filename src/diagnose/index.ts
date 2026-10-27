@@ -14,3 +14,9 @@ export {
   type DiagnosticSeverity,
   type KnownDiagnosticCode,
 } from "../core/diagnose.ts";
+export {
+  migrateCalendarOptions,
+  migrateScheduleOptions,
+  type OptionChange,
+  type OptionsMigration,
+} from "../core/migrate.ts";

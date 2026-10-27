@@ -4,7 +4,7 @@
  * @example
  * import { createCalendar } from "bizdays-toolkit";
  * import { jp } from "bizdays-toolkit/jp";
- * const calendar = createCalendar({ holidays: jp });
+ * const calendar = createCalendar({ holidayProvider: jp });
  *
  * @example 祝日だけを調べるなら、このモジュールの関数をそのまま使える
  * import { isHoliday } from "bizdays-toolkit/jp";
@@ -20,34 +20,32 @@ import {
   DATA_VERSION,
   SUPPORTED_YEARS,
   computeJapaneseHolidays,
-  type JapaneseHolidayKind,
+  type JpHolidayKind,
+  type KnownJpHolidayKey,
+  type KnownJpHolidayKind,
 } from "./rules.ts";
 
-export type {
-  JapaneseHolidayKind,
-  KnownJapaneseHolidayKey,
-  KnownJapaneseHolidayKind,
-} from "./rules.ts";
+export type { JpHolidayKind, KnownJpHolidayKey, KnownJpHolidayKind } from "./rules.ts";
 
 /**
  * 日本の祝日。
  * @public
  */
-export type JapaneseHoliday = Holiday<JapaneseHolidayKind>;
+export type JpHoliday = Holiday<JpHolidayKind>;
 
-const cache = new Map<number, readonly JapaneseHoliday[]>();
+const cache = new Map<number, readonly JpHoliday[]>();
 
 /**
  * 日本の祝日の提供元（createCalendar・createSchedule の holidays に渡す）。
  * @public
  */
-export const jp: HolidayProvider<JapaneseHolidayKind> = Object.freeze({
+export const jp: HolidayProvider<JpHolidayKind> = Object.freeze({
   id: "JP",
   timeZone: "Asia/Tokyo",
   supportedYears: SUPPORTED_YEARS,
   dataVersion: DATA_VERSION,
   confirmedThrough: CONFIRMED_THROUGH,
-  holidaysInYear(year: number): readonly JapaneseHoliday[] {
+  holidaysInYear(year: number): readonly JpHoliday[] {
     let list = cache.get(year);
     if (!list) {
       list = Object.freeze(computeJapaneseHolidays(year));
@@ -57,9 +55,9 @@ export const jp: HolidayProvider<JapaneseHolidayKind> = Object.freeze({
   },
 });
 
-let defaultCalendar: Calendar<JapaneseHolidayKind> | undefined;
-const calendar = (): Calendar<JapaneseHolidayKind> =>
-  (defaultCalendar ??= createCalendar({ holidays: jp }));
+let defaultCalendar: Calendar<JpHolidayKind> | undefined;
+const calendar = (): Calendar<JpHolidayKind> =>
+  (defaultCalendar ??= createCalendar({ holidayProvider: jp }));
 
 /**
  * 祝日か（Date などの瞬間は日本時間で判定する）。
@@ -73,15 +71,15 @@ export function isHoliday(input: DateInput): boolean {
  * 祝日なら祝日を返す。
  * @public
  */
-export function getHoliday(input: DateInput): JapaneseHoliday | undefined {
-  return calendar().getHoliday(input);
+export function holidayOn(input: DateInput): JpHoliday | undefined {
+  return calendar().holidayOn(input);
 }
 
 /**
  * その年の祝日。
  * @public
  */
-export function holidaysInYear(year: number): readonly JapaneseHoliday[] {
+export function holidaysInYear(year: number): readonly JpHoliday[] {
   return calendar().holidaysInYear(year);
 }
 
@@ -89,7 +87,7 @@ export function holidaysInYear(year: number): readonly JapaneseHoliday[] {
  * 期間内の祝日（両端を含む）。
  * @public
  */
-export function holidaysBetween(from: DateInput, to: DateInput): readonly JapaneseHoliday[] {
+export function holidaysBetween(from: DateInput, to: DateInput): readonly JpHoliday[] {
   return calendar().holidaysBetween(from, to);
 }
 
@@ -132,3 +130,35 @@ export const dataVersion: string = DATA_VERSION;
  * @public
  */
 export const confirmedThrough: number = CONFIRMED_THROUGH;
+
+/**
+ * @deprecated 0.30.0 で holidayOn に改名した。1.0.0 で削除する
+ * @public
+ */
+export function getHoliday(input: DateInput): JpHoliday | undefined {
+  return calendar().holidayOn(input);
+}
+
+/**
+ * @deprecated 0.30.0 で JpHoliday に改名した。1.0.0 で削除する
+ * @public
+ */
+export type JapaneseHoliday = JpHoliday;
+
+/**
+ * @deprecated 0.30.0 で JpHolidayKind に改名した。1.0.0 で削除する
+ * @public
+ */
+export type JapaneseHolidayKind = JpHolidayKind;
+
+/**
+ * @deprecated 0.30.0 で KnownJpHolidayKind に改名した（値 "national" は "regular"）。1.0.0 で削除する
+ * @public
+ */
+export type KnownJapaneseHolidayKind = KnownJpHolidayKind;
+
+/**
+ * @deprecated 0.30.0 で KnownJpHolidayKey に改名した。1.0.0 で削除する
+ * @public
+ */
+export type KnownJapaneseHolidayKey = KnownJpHolidayKey;

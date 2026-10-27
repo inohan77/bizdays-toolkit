@@ -25,8 +25,8 @@ const provider = (names: unknown): HolidayProvider => ({
 
 test("names: 提供元が付けたほかの言語の名称を、複製・凍結して返す", () => {
   const source = { "zh-Hant": "聖誕節", ko: "크리스마스" };
-  const calendar = createCalendar({ holidays: provider(source) });
-  const holiday = calendar.getHoliday("2026-12-25")!;
+  const calendar = createCalendar({ holidayProvider: provider(source) });
+  const holiday = calendar.holidayOn("2026-12-25")!;
   assert.deepEqual(holiday.names, { "zh-Hant": "聖誕節", ko: "크리스마스" });
   assert.ok(Object.isFrozen(holiday.names));
   source.ko = "changed";
@@ -34,17 +34,17 @@ test("names: 提供元が付けたほかの言語の名称を、複製・凍結�
   // 別の実行環境（vm）で作られた普通のオブジェクトも受け付ける
   const foreign = runInNewContext('({ "zh-Hant": "聖誕節" })') as unknown;
   assert.deepEqual(
-    createCalendar({ holidays: provider(foreign) }).getHoliday("2026-12-25")?.names,
+    createCalendar({ holidayProvider: provider(foreign) }).holidayOn("2026-12-25")?.names,
     { "zh-Hant": "聖誕節" },
   );
 });
 
 test("names: 省略した祝日には項目自体がない（同梱の日本の祝日も持たない）", () => {
-  const calendar = createCalendar({ holidays: provider(undefined) });
-  assert.equal("names" in calendar.getHoliday("2026-12-25")!, false);
+  const calendar = createCalendar({ holidayProvider: provider(undefined) });
+  assert.equal("names" in calendar.holidayOn("2026-12-25")!, false);
   assert.ok(holidaysInYear(2026).every((h) => !("names" in h)));
   assert.ok(
-    createCalendar({ holidays: jp })
+    createCalendar({ holidayProvider: jp })
       .holidaysInYear(2026)
       .every((h) => !("names" in h)),
   );
@@ -62,16 +62,16 @@ test("names: 誤りは invalid-provider-data（言語タグは正規の形で書
     Object.create({ ko: "継承した項目" }) as unknown,
   ];
   for (const names of bad) {
-    const calendar = createCalendar({ holidays: provider(names) });
+    const calendar = createCalendar({ holidayProvider: provider(names) });
     assert.throws(
-      () => calendar.getHoliday("2026-12-25"),
+      () => calendar.holidayOn("2026-12-25"),
       { code: "invalid-provider-data" },
       String(JSON.stringify(names)),
     );
   }
   // 診断では、使っていない年も含めて error として見つかる
   assert.deepEqual(
-    diagnoseCalendar({ holidays: provider({ "zh-hant": "聖誕節" }) }).map((d) => d.code),
+    diagnoseCalendar({ holidayProvider: provider({ "zh-hant": "聖誕節" }) }).map((d) => d.code),
     ["invalid-provider-data"],
   );
 });

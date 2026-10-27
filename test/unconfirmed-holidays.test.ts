@@ -24,30 +24,30 @@ const throwsUnconfirmed = (fn: () => unknown, label?: string): void =>
     label,
   );
 
-test("unconfirmedHolidays: 既定は accept で、これまでどおり予測の祝日で判定する", () => {
-  const calendar = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
-  assert.equal(calendar.unconfirmedHolidays, "accept");
+test("unconfirmedHolidayPolicy: 既定は accept で、これまでどおり予測の祝日で判定する", () => {
+  const calendar = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
+  assert.equal(calendar.unconfirmedHolidayPolicy, "accept");
   assert.equal(calendar.isBusinessDay(equinox), false);
-  assert.equal(calendar.dayInfo(equinox).holiday?.confirmed, false);
+  assert.equal(calendar.dayInfoOn(equinox).holiday?.confirmed, false);
 });
 
-test("unconfirmedHolidays: throw は、評価した日が未確定の祝日なら止める（探索・調整・期日・隣の日を見る規則を含む）", () => {
+test("unconfirmedHolidayPolicy: throw は、評価した日が未確定の祝日なら止める（探索・調整・期日・隣の日を見る規則を含む）", () => {
   const calendar = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     closedWeekdays: [0, 6],
-    unconfirmedHolidays: "throw",
+    unconfirmedHolidayPolicy: "throw",
   });
-  assert.equal(calendar.unconfirmedHolidays, "throw");
+  assert.equal(calendar.unconfirmedHolidayPolicy, "throw");
   // 確定している年はこれまでどおり
   assert.equal(calendar.isBusinessDay(`${jp.confirmedThrough}-01-01`), false);
-  throwsUnconfirmed(() => calendar.dayInfo(equinox), "dayInfo");
+  throwsUnconfirmed(() => calendar.dayInfoOn(equinox), "dayInfoOn");
   throwsUnconfirmed(() => calendar.isBusinessDay(equinox), "isBusinessDay");
   throwsUnconfirmed(() => calendar.isHoliday(equinox), "isHoliday");
   throwsUnconfirmed(() => calendar.adjust(equinox, { convention: "following" }), "adjust");
   throwsUnconfirmed(
     () =>
       calendar.dueDate(equinox.slice(0, 7), {
-        day: Number(equinox.slice(8)) as 20,
+        dayOfMonth: Number(equinox.slice(8)) as 20,
         convention: "following",
       }),
     "dueDate",
@@ -60,22 +60,22 @@ test("unconfirmedHolidays: throw は、評価した日が未確定の祝日な�
     "addBusinessDays",
   );
   throwsUnconfirmed(
-    () => calendar.businessDaysBetween(`${year}-01-01`, `${year}-12-31`),
-    "businessDaysBetween",
+    () => calendar.diffBusinessDays(`${year}-01-01`, `${year}-12-31`),
+    "diffBusinessDays",
   );
   // 祝前日・祝日の翌日の規則は隣の日の祝日を引くので、その日自身が祝日でなくても止まる
   const eve = createCalendar({
-    holidays: jp,
-    closedRecurring: [{ dayBeforeHoliday: true }],
-    unconfirmedHolidays: "throw",
+    holidayProvider: jp,
+    closedRecurringRules: [{ dayBeforeHoliday: true }],
+    unconfirmedHolidayPolicy: "throw",
   });
   const prev = new Date(`${equinox}T00:00:00Z`);
   prev.setUTCDate(prev.getUTCDate() - 1);
   throwsUnconfirmed(() => eve.isBusinessDay(prev.toISOString().slice(0, 10)), "dayBeforeHoliday");
 });
 
-test("unconfirmedHolidays: holidaysInYear・holidaysBetween は投げず、影響する日を列挙できる（逃げ道）", () => {
-  const calendar = createCalendar({ holidays: jp, unconfirmedHolidays: "throw" });
+test("unconfirmedHolidayPolicy: holidaysInYear・holidaysBetween は投げず、影響する日を列挙できる（逃げ道）", () => {
+  const calendar = createCalendar({ holidayProvider: jp, unconfirmedHolidayPolicy: "throw" });
   const unconfirmed = calendar
     .holidaysBetween(`${year}-01-01`, `${year}-12-31`)
     .filter((h) => !h.confirmed);
@@ -90,80 +90,86 @@ test("unconfirmedHolidays: holidaysInYear・holidaysBetween は投げず、影�
   assert.ok(calendar.holidaysInYear(year).some((h) => !h.confirmed));
 });
 
-test("unconfirmedHolidays: スケジュール、スケジュールからのカレンダー、合成に引き継がれる", () => {
+test("unconfirmedHolidayPolicy: スケジュール、スケジュールからのカレンダー、合成に引き継がれる", () => {
   const schedule = createSchedule({
-    holidays: jp,
-    weekly: [0, 1, 1, 1, 1, 1, 0],
-    holiday: { sameAs: 0 },
-    unconfirmedHolidays: "throw",
+    holidayProvider: jp,
+    weekdayValues: [0, 1, 1, 1, 1, 1, 0],
+    holidayPolicy: { sameAs: 0 },
+    unconfirmedHolidayPolicy: "throw",
   });
-  assert.equal(schedule.unconfirmedHolidays, "throw");
+  assert.equal(schedule.unconfirmedHolidayPolicy, "throw");
   throwsUnconfirmed(() => schedule.valueOn(equinox), "valueOn");
   const fromSchedule = createCalendarFromSchedule(schedule, (v) => v === 1);
-  assert.equal(fromSchedule.unconfirmedHolidays, "throw");
+  assert.equal(fromSchedule.unconfirmedHolidayPolicy, "throw");
   throwsUnconfirmed(() => fromSchedule.isBusinessDay(equinox), "fromSchedule");
-  const accept = createCalendar({ holidays: jp, closedWeekdays: [3] });
+  const accept = createCalendar({ holidayProvider: jp, closedWeekdays: [3] });
   const strict = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     closedWeekdays: [0, 6],
-    unconfirmedHolidays: "throw",
+    unconfirmedHolidayPolicy: "throw",
   });
-  const combined = combineCalendars([accept, strict], { businessDay: "all" });
-  assert.equal(combined.unconfirmedHolidays, "throw", "どれかが throw なら throw");
-  throwsUnconfirmed(() => combined.dayInfo(equinox), "combined");
+  const combined = combineCalendars([accept, strict], { open: "all" });
+  assert.equal(combined.unconfirmedHolidayPolicy, "throw", "どれかが throw なら throw");
+  throwsUnconfirmed(() => combined.dayInfoOn(equinox), "combined");
   assert.equal(
-    combineCalendars([accept, createCalendar({ holidays: jp })], { businessDay: "all" })
-      .unconfirmedHolidays,
+    combineCalendars([accept, createCalendar({ holidayProvider: jp })], { open: "all" })
+      .unconfirmedHolidayPolicy,
     "accept",
   );
 });
 
-test("unconfirmedHolidays: 設定の値の誤りと、判定に祝日を使わない設定の redundant", () => {
+test("unconfirmedHolidayPolicy: 設定の値の誤りと、判定に祝日を使わない設定の redundant", () => {
   assert.throws(
-    () => createCalendar({ holidays: jp, unconfirmedHolidays: "maybe" as never }),
+    () => createCalendar({ holidayProvider: jp, unconfirmedHolidayPolicy: "maybe" as never }),
     (e: unknown) =>
-      isBizdaysError(e) && e.code === "invalid-option" && /unconfirmedHolidays/.test(e.message),
+      isBizdaysError(e) &&
+      e.code === "invalid-option" &&
+      /unconfirmedHolidayPolicy/.test(e.message),
   );
   const brief = (list: readonly { severity: string; code: string; path: string }[]) =>
     list.map((d) => [d.severity, d.code, d.path]);
   assert.deepEqual(
     brief(
-      diagnoseCalendar({ holidays: jp, holidayPolicy: "ignore", unconfirmedHolidays: "throw" }),
+      diagnoseCalendar({
+        holidayProvider: jp,
+        holidayPolicy: "ignore",
+        unconfirmedHolidayPolicy: "throw",
+      }),
     ),
-    [["info", "redundant", "unconfirmedHolidays"]],
+    [["info", "redundant", "unconfirmedHolidayPolicy"]],
     "holidayPolicy: ignore で祝日の規則がない",
   );
   assert.deepEqual(
-    brief(diagnoseCalendar({ unconfirmedHolidays: "throw" })),
-    [["info", "redundant", "unconfirmedHolidays"]],
+    brief(diagnoseCalendar({ unconfirmedHolidayPolicy: "throw" })),
+    [["info", "redundant", "unconfirmedHolidayPolicy"]],
     "提供元がない",
   );
   assert.deepEqual(
     brief(
       diagnoseSchedule({
-        holidays: jp,
-        weekly: [0, 1, 1, 1, 1, 1, 0],
-        unconfirmedHolidays: "throw",
+        holidayProvider: jp,
+        weekdayValues: [0, 1, 1, 1, 1, 1, 0],
+        unconfirmedHolidayPolicy: "throw",
       }),
     ),
-    [["info", "redundant", "unconfirmedHolidays"]],
+    [["info", "redundant", "unconfirmedHolidayPolicy"]],
     "holiday: weekday で祝日の規則がない",
   );
   for (const options of [
-    { holidays: jp, unconfirmedHolidays: "throw" },
+    { holidayProvider: jp, unconfirmedHolidayPolicy: "throw" },
     {
-      holidays: jp,
+      holidayProvider: jp,
       holidayPolicy: "ignore",
-      unconfirmedHolidays: "throw",
-      closedRecurring: [{ weekday: 1, onHolidayRule: "after-holiday" }],
+      unconfirmedHolidayPolicy: "throw",
+      closedRecurringRules: [{ weekday: 1, holidayOverlapPolicy: "after-holiday" }],
     },
     {
-      holidays: jp,
+      holidayProvider: jp,
       holidayPolicy: "ignore",
-      unconfirmedHolidays: "throw",
-      closedRecurring: [{ dayBeforeHoliday: true }],
+      unconfirmedHolidayPolicy: "throw",
+      closedRecurringRules: [{ dayBeforeHoliday: true }],
     },
-    { holidays: jp, holidayPolicy: "ignore", unconfirmedHolidays: "accept" },
+    { holidayProvider: jp, holidayPolicy: "ignore", unconfirmedHolidayPolicy: "accept" },
   ] as const) {
     assert.deepEqual(brief(diagnoseCalendar(options)), [], JSON.stringify(options));
   }
@@ -171,9 +177,9 @@ test("unconfirmedHolidays: 設定の値の誤りと、判定に祝日を使わ�
   assert.deepEqual(
     brief(
       diagnoseCalendar({
-        holidays: jp,
-        unconfirmedHolidays: "throw",
-        openRecurring: [{ holiday: true, months: [3], effectiveFrom: `${year}-01-01` }],
+        holidayProvider: jp,
+        unconfirmedHolidayPolicy: "throw",
+        openRecurringRules: [{ holiday: true, months: [3], effectiveFrom: `${year}-01-01` }],
       }),
     ),
     [],

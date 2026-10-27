@@ -11,7 +11,7 @@ import {
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 
-const office = createCalendar({ holidays: jp, closedWeekdays: [0, 6] });
+const office = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
 
 test("monthOf: 日付・月の n か月後", () => {
   assert.equal(monthOf("2026-10-16"), "2026-10");
@@ -84,12 +84,15 @@ test("adjust・dueDate: convention の誤りは invalid-argument", () => {
   assert.throws(() => office.adjust("2026-10-31", undefined as never), {
     code: "invalid-argument",
   });
-  assert.throws(() => office.dueDate("2026-10", { day: 10 } as never), {
+  assert.throws(() => office.dueDate("2026-10", { dayOfMonth: 10 } as never), {
     code: "invalid-argument",
   });
-  assert.throws(() => office.dueDate("2026-10", { day: 0 as never, convention: "following" }), {
-    code: "invalid-argument",
-  });
+  assert.throws(
+    () => office.dueDate("2026-10", { dayOfMonth: 0 as never, convention: "following" }),
+    {
+      code: "invalid-argument",
+    },
+  );
 });
 
 test("月の第 n 営業日・最初と最後の営業日", () => {
@@ -100,7 +103,7 @@ test("月の第 n 営業日・最初と最後の営業日", () => {
   assert.equal(office.lastBusinessDayOfMonth("2026-10"), "2026-10-30");
   assert.equal(office.nthBusinessDayOfMonth("2026-10", -2), "2026-10-29");
   assert.equal(office.firstBusinessDayOfMonth("2027-01"), "2027-01-04");
-  const count = office.listBusinessDays("2026-10-01", "2026-10-31").length;
+  const count = office.businessDatesBetween("2026-10-01", "2026-10-31").length;
   assert.equal(office.nthBusinessDayOfMonth("2026-10", count), "2026-10-30");
   assert.equal(office.nthBusinessDayOfMonth("2026-10", -count), "2026-10-01");
   assert.throws(() => office.nthBusinessDayOfMonth("2026-10", count + 1), {
@@ -113,19 +116,28 @@ test("月の第 n 営業日・最初と最後の営業日", () => {
 });
 
 test("dueDate: その月にない日は末日に読み替えてから調整する", () => {
-  assert.equal(office.dueDate("2026-10", { day: 10, convention: "following" }), "2026-10-13");
-  assert.equal(office.dueDate("2026-10", { day: -1, convention: "preceding" }), "2026-10-30");
-  // 2027 年 2 月 28 日は日曜日
-  assert.equal(office.dueDate("2027-02", { day: 30, convention: "following" }), "2027-03-01");
   assert.equal(
-    office.dueDate("2027-02", { day: 31, convention: "modified-following" }),
+    office.dueDate("2026-10", { dayOfMonth: 10, convention: "following" }),
+    "2026-10-13",
+  );
+  assert.equal(
+    office.dueDate("2026-10", { dayOfMonth: -1, convention: "preceding" }),
+    "2026-10-30",
+  );
+  // 2027 年 2 月 28 日は日曜日
+  assert.equal(
+    office.dueDate("2027-02", { dayOfMonth: 30, convention: "following" }),
+    "2027-03-01",
+  );
+  assert.equal(
+    office.dueDate("2027-02", { dayOfMonth: 31, convention: "modified-following" }),
     "2027-02-26",
     "読み替えた末日（2 月）の月で判定する",
   );
   // 20 日締め・翌月 10 日払い（休業日なら翌営業日）
   const order = "2026-10-21";
   const pay = office.dueDate(monthOf(closingMonth(order, 20), 1), {
-    day: 10,
+    dayOfMonth: 10,
     convention: "following",
   });
   assert.equal(pay, "2026-12-10");
@@ -165,7 +177,7 @@ test("closingPeriod: その月分の期間（前月の締め日の翌日から�
   assert.ok(Object.isFrozen(closingPeriod("2026-11", 20)));
   assert.equal("name" in closingPeriod("2026-11", 20), false);
   // closedDates にそのまま渡せる
-  const cal = createCalendar({ holidays: jp, closedDates: [closingPeriod("2026-11", 20)] });
+  const cal = createCalendar({ holidayProvider: jp, closedDates: [closingPeriod("2026-11", 20)] });
   assert.equal(cal.isBusinessDay("2026-10-21"), false);
   assert.equal(cal.isBusinessDay("2026-11-20"), false);
   assert.equal(cal.isBusinessDay("2026-11-24"), true);

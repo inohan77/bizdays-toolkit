@@ -12,14 +12,22 @@ import { jp } from "../src/jp/index.ts";
 type Hours = { readonly open: string; readonly close: string } | null;
 const weekday: Hours = { open: "10:00", close: "18:00" };
 const hours = createSchedule<Hours>({
-  holidays: jp,
-  weekly: [null, weekday, weekday, weekday, weekday, weekday, { open: "10:00", close: "17:00" }],
-  holiday: { sameAs: 0 },
-  annual: [
+  holidayProvider: jp,
+  weekdayValues: [
+    null,
+    weekday,
+    weekday,
+    weekday,
+    weekday,
+    weekday,
+    { open: "10:00", close: "17:00" },
+  ],
+  holidayPolicy: { sameAs: 0 },
+  annualDates: [
     { from: "12-31", to: "01-03", value: null, name: "年末年始" },
     { date: "01-04", value: { open: "11:00", close: "15:00" }, name: "仕事始め" },
   ],
-  recurring: [
+  recurringRules: [
     {
       holiday: true,
       kinds: ["substitute"],
@@ -47,67 +55,72 @@ test("スケジュールからのカレンダー: isOpen の結果で営業日�
   );
   assert.equal(calendar.addBusinessDays("2026-12-29", 2), "2027-01-04", "年末年始をまたぐ");
   assert.equal(calendar.nextBusinessDay("2026-12-31"), "2027-01-04");
-  assert.equal(calendar.businessDaysBetween("2026-12-28", "2027-01-11"), 9);
+  assert.equal(calendar.diffBusinessDays("2026-12-28", "2027-01-11"), 9);
   assert.equal(calendar.adjust("2027-01-02", { convention: "following" }), "2027-01-04");
   assert.equal(calendar.lastBusinessDayOfMonth("2026-12"), "2026-12-30");
-  assert.equal(calendar.dueDate("2027-01", { day: 1, convention: "following" }), "2027-01-04");
-  // 祝日・タイムゾーン・outOfRange はスケジュールのもの
+  assert.equal(
+    calendar.dueDate("2027-01", { dayOfMonth: 1, convention: "following" }),
+    "2027-01-04",
+  );
+  // 祝日・タイムゾーン・outOfRangePolicy はスケジュールのもの
   assert.equal(calendar.timeZone, "Asia/Tokyo");
-  assert.equal(calendar.outOfRange, "throw");
+  assert.equal(calendar.outOfRangePolicy, "throw");
   assert.equal(calendar.providers[0], jp);
   assert.equal(calendar.isHoliday("2027-01-01"), true);
   assert.ok(Object.isFrozen(calendar));
 });
 
 test("スケジュールからのカレンダー: reason の対応（annual で営業になる日は open-annual）", () => {
-  assert.deepEqual(calendar.dayInfo("2027-01-04"), {
+  assert.deepEqual(calendar.dayInfoOn("2027-01-04"), {
     date: "2027-01-04",
     weekday: 1,
+    open: true,
     businessDay: true,
     reason: "open-annual",
     name: "仕事始め",
-    rulePath: "annual[1]",
+    optionPath: "annualDates[1]",
+    rulePath: "annualDates[1]",
   });
-  assert.equal(calendar.dayInfo("2027-01-02").reason, "closed-annual");
-  assert.equal(calendar.dayInfo("2026-10-20").reason, "closed-date");
-  assert.equal(calendar.dayInfo("2026-10-20").rulePath, "dates[0]");
+  assert.equal(calendar.dayInfoOn("2027-01-02").reason, "closed-annual");
+  assert.equal(calendar.dayInfoOn("2026-10-20").reason, "closed-date");
+  assert.equal(calendar.dayInfoOn("2026-10-20").optionPath, "dates[0]");
   assert.equal(
-    calendar.dayInfo("2026-05-06").reason,
+    calendar.dayInfoOn("2026-05-06").reason,
     "open-recurring",
     "振替休日は営業（祝日の規則）",
   );
-  assert.equal(calendar.dayInfo("2026-05-06").holiday?.kind, "substitute");
-  assert.equal(calendar.dayInfo("2026-10-21").reason, "closed-recurring");
-  assert.equal(calendar.dayInfo("2026-11-23").reason, "holiday", "祝日の扱いで休業");
-  assert.equal(calendar.dayInfo("2026-10-19").reason, "regular");
-  assert.equal(calendar.dayInfo("2026-10-18").reason, "closed-weekday");
+  assert.equal(calendar.dayInfoOn("2026-05-06").holiday?.kind, "substitute");
+  assert.equal(calendar.dayInfoOn("2026-10-21").reason, "closed-recurring");
+  assert.equal(calendar.dayInfoOn("2026-11-23").reason, "holiday", "祝日の扱いで休業");
+  assert.equal(calendar.dayInfoOn("2026-10-19").reason, "open-weekday");
+  assert.equal(calendar.dayInfoOn("2026-10-18").reason, "closed-weekday");
   assert.equal(
-    calendar.dayInfo("2026-10-18").name,
+    calendar.dayInfoOn("2026-10-18").name,
     undefined,
     "曜日で決まった日には名前を付けない",
   );
   // 祝日の扱いで営業になる祝日も reason は "holiday"（createCalendar の holidayPolicy: "open" と同じ）
   const openOnHolidays = createCalendarFromSchedule(
     createSchedule<Hours>({
-      holidays: jp,
-      weekly: [null, weekday, weekday, weekday, weekday, weekday, weekday],
-      holiday: { value: weekday },
+      holidayProvider: jp,
+      weekdayValues: [null, weekday, weekday, weekday, weekday, weekday, weekday],
+      holidayPolicy: { value: weekday },
     }),
     (v) => v !== null,
   );
-  assert.equal(openOnHolidays.dayInfo("2026-11-23").reason, "holiday");
-  assert.equal(openOnHolidays.dayInfo("2026-11-23").businessDay, true);
-  // 祝日が曜日どおり（"weekday"）なら regular / closed-weekday
+  assert.equal(openOnHolidays.dayInfoOn("2026-11-23").reason, "holiday");
+  assert.equal(openOnHolidays.dayInfoOn("2026-11-23").open, true);
+  // 祝日が曜日どおり（"weekday"）なら open-weekday / closed-weekday
   const ignore = createCalendarFromSchedule(
     createSchedule<Hours>({
-      holidays: jp,
-      weekly: [null, weekday, weekday, weekday, weekday, weekday, weekday],
-      holiday: "weekday",
+      holidayProvider: jp,
+      weekdayValues: [null, weekday, weekday, weekday, weekday, weekday, weekday],
+      holidayPolicy: "ignore",
     }),
     (v) => v !== null,
   );
-  assert.equal(ignore.dayInfo("2026-11-23").reason, "regular");
-  assert.equal(ignore.dayInfo("2026-11-23").holiday?.name, "勤労感謝の日");
+  assert.equal(ignore.dayInfoOn("2026-11-23").reason, "open-weekday");
+  assert.equal(ignore.dayInfoOn("2026-11-23").holiday?.name, "勤労感謝の日");
 });
 
 test("スケジュールからのカレンダー: isOpen は値だけを受け取る。合成にも渡せる", () => {
@@ -123,25 +136,27 @@ test("スケジュールからのカレンダー: isOpen は値だけを受け�
   assert.equal(until18.isBusinessDay("2026-10-17"), false, "土曜は 17:00 まで");
   assert.equal(until18.isBusinessDay("2026-10-19"), true);
   const combined = combineCalendars(
-    [calendar, createCalendar({ holidays: jp, closedWeekdays: [3] })],
+    [calendar, createCalendar({ holidayProvider: jp, closedWeekdays: [3] })],
     {
-      businessDay: "all",
+      open: "all",
     },
   );
-  assert.deepEqual(combined.dayInfo("2027-01-04"), {
+  assert.deepEqual(combined.dayInfoOn("2027-01-04"), {
     date: "2027-01-04",
     weekday: 1,
+    open: true,
     businessDay: true,
     reason: "open-annual",
     name: "仕事始め",
-    rulePath: "annual[1]",
+    optionPath: "annualDates[1]",
+    rulePath: "annualDates[1]",
     decidedBy: 0,
     decidedByPath: [0],
   });
-  assert.equal(combined.dayInfo("2026-10-14").decidedBy, 1);
+  assert.equal(combined.dayInfoOn("2026-10-14").decidedBy, 1);
 });
 
-test("スケジュールからのカレンダー: 入力の誤り・maxSearchDays", () => {
+test("スケジュールからのカレンダー: 入力の誤り・searchDayLimit", () => {
   const cases: [() => unknown, string, RegExp][] = [
     [
       () => createCalendarFromSchedule({} as never, () => true),
@@ -159,9 +174,9 @@ test("スケジュールからのカレンダー: 入力の誤り・maxSearchDay
       /isOpen must be a function/,
     ],
     [
-      () => createCalendarFromSchedule(hours, () => true, { maxSearchDays: 0 }),
+      () => createCalendarFromSchedule(hours, () => true, { searchDayLimit: 0 }),
       "invalid-option",
-      /maxSearchDays/,
+      /searchDayLimit/,
     ],
   ];
   for (const [fn, code, message] of cases) {
@@ -171,7 +186,7 @@ test("スケジュールからのカレンダー: 入力の誤り・maxSearchDay
       code,
     );
   }
-  const never = createCalendarFromSchedule(hours, () => false, { maxSearchDays: 10 });
+  const never = createCalendarFromSchedule(hours, () => false, { searchDayLimit: 10 });
   assert.throws(
     () => never.nextBusinessDay("2026-10-19"),
     (e: unknown) => isBizdaysError(e) && e.code === "no-business-day" && /10 days/.test(e.message),

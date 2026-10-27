@@ -78,7 +78,7 @@ test("英国 2000〜2011 年: 布告のない 3 日（Scotland 2010-01-04・2010
     fixture.knownDifferences.map((d) => `${d.division} ${d.date}`),
     ["scotland 2010-01-04", "scotland 2011-01-04", "scotland 2010-12-27"],
   );
-  const edinburgh = createCalendar({ holidays: scotland, closedWeekdays: [0, 6] });
+  const edinburgh = createCalendar({ holidayProvider: scotland, closedWeekdays: [0, 6] });
   for (const d of fixture.knownDifferences) {
     const holiday = scotland
       .holidaysInYear(Number(d.date.slice(0, 4)))

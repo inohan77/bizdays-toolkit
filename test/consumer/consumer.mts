@@ -11,16 +11,11 @@ import {
   type DateInput,
   type DayInfo,
   type HolidayProvider,
-  type ScheduleDay,
+  type ScheduleDayInfo,
 } from "bizdays-toolkit";
 import { diagnoseCalendar, type Diagnostic } from "bizdays-toolkit/diagnose";
-import { easterSunday, nthWeekdayOfMonth, substituteDays } from "bizdays-toolkit/provider";
-import {
-  jp,
-  toJapanDateTime,
-  type JapaneseHoliday,
-  type KnownJapaneseHolidayKey,
-} from "bizdays-toolkit/jp";
+import { easterSunday, nthWeekdayOfMonth, withSubstituteDays } from "bizdays-toolkit/provider";
+import { jp, toJapanDateTime, type JpHoliday, type KnownJpHolidayKey } from "bizdays-toolkit/jp";
 import { sg, type SgHoliday } from "bizdays-toolkit/sg";
 import {
   alsaceMoselle,
@@ -34,58 +29,67 @@ type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 function expectType<T extends true>(): T | void {}
 
-const calendar = createCalendar({ holidays: [jp], closedWeekdays: [0, 6] });
+const calendar = createCalendar({ holidayProvider: [jp], closedWeekdays: [0, 6] });
 const days: readonly DayInfo[] = calendar.daysBetween("2026-11-01", "2026-11-30");
 const schedule = createSchedule({
-  holidays: jp,
-  weekly: [0, 1, 1, 1, 1, 1, 0],
-  holiday: { sameAs: 0 },
+  holidayProvider: jp,
+  weekdayValues: [0, 1, 1, 1, 1, 1, 0],
+  holidayPolicy: { sameAs: 0 },
 });
-const values: readonly ScheduleDay<number>[] = schedule.daysBetween("2026-11-01", "2026-11-30");
+const values: readonly ScheduleDayInfo<number>[] = schedule.daysBetween("2026-11-01", "2026-11-30");
 const combined = combineCalendars(
-  [calendar, createCalendar({ holidays: jp, closedRecurring: [{ dayAfterHoliday: true }] })],
-  { businessDay: "all" },
+  [
+    calendar,
+    createCalendar({ holidayProvider: jp, closedRecurringRules: [{ dayAfterHoliday: true }] }),
+  ],
+  { open: "all" },
 );
-const decidedBy: number | undefined = combined.dayInfo("2026-11-24").decidedBy;
+const decidedBy: number | undefined = combined.dayInfoOn("2026-11-24").decidedBy;
 void decidedBy;
-const decidedByPath: readonly number[] | undefined = combined.dayInfo("2026-11-24").decidedByPath;
+const decidedByPath: readonly number[] | undefined = combined.dayInfoOn("2026-11-24").decidedByPath;
 void decidedByPath;
 createCalendar({
-  holidays: jp,
-  closedRecurring: [{ dayBeforeHoliday: true, weekdays: [1, 2, 3, 4, 5], months: [5] }],
+  holidayProvider: jp,
+  closedRecurringRules: [{ dayBeforeHoliday: true, weekdays: [1, 2, 3, 4, 5], months: [5] }],
 });
 const sgHoliday: SgHoliday | undefined = sg.holidaysInYear(2026)[0];
 void sgHoliday;
-const strict = createCalendar({ holidays: jp, unconfirmedHolidays: "throw" });
-const mode: "accept" | "throw" = strict.unconfirmedHolidays;
+const strict = createCalendar({ holidayProvider: jp, unconfirmedHolidayPolicy: "throw" });
+const mode: "accept" | "throw" = strict.unconfirmedHolidayPolicy;
 void mode;
-const expired: readonly Diagnostic[] = diagnoseCalendar({ holidays: jp }, { asOf: "2026-10-23" });
+const expired: readonly Diagnostic[] = diagnoseCalendar(
+  { holidayProvider: jp },
+  { asOf: "2026-10-23" },
+);
 void expired;
 const easter: string = easterSunday(2026);
 const thanksgiving: string = nthWeekdayOfMonth(2026, 11, 4, 4);
 void easter;
 void thanksgiving;
-const rulePath: string | undefined = combined.dayInfo("2026-11-24").rulePath;
-void rulePath;
-createCalendar({ holidays: jp, openRecurring: [{ holiday: true, kinds: ["substitute"] }] });
-const equinox: KnownJapaneseHolidayKey = "vernal-equinox";
-createCalendar({ holidays: jp, openRecurring: [{ holiday: true, keys: [equinox] }] });
+const optionPath: string | undefined = combined.dayInfoOn("2026-11-24").optionPath;
+void optionPath;
+createCalendar({
+  holidayProvider: jp,
+  openRecurringRules: [{ holiday: true, kinds: ["substitute"] }],
+});
+const equinox: KnownJpHolidayKey = "vernal-equinox";
+createCalendar({ holidayProvider: jp, openRecurringRules: [{ holiday: true, keys: [equinox] }] });
 const key: string | undefined = jp.holidaysInYear(2026)[0]?.key;
 void key;
 const monthEnd = createCalendar({
-  holidays: jp,
+  holidayProvider: jp,
   closedWeekdays: [0, 6],
-  closedRecurring: [
+  closedRecurringRules: [
     { businessDayOfMonth: -1 },
-    { day: 15, months: [6], onHolidayRule: "after-holiday", skipWeekdays: [0, 6] },
+    { dayOfMonth: 15, months: [6], holidayOverlapPolicy: "after-holiday", skipWeekdays: [0, 6] },
   ],
 });
 createSchedule({
-  holidays: jp,
-  weekly: [0, 1, 1, 1, 1, 1, 0],
-  recurring: [{ businessDayOfMonth: -1, calendar: monthEnd, value: 2 }],
+  holidayProvider: jp,
+  weekdayValues: [0, 1, 1, 1, 1, 1, 0],
+  recurringRules: [{ businessDayOfMonth: -1, calendar: monthEnd, value: 2 }],
 });
-const observed = substituteDays(
+const observed = withSubstituteDays(
   [
     {
       date: "2026-07-04",
@@ -95,7 +99,7 @@ const observed = substituteDays(
       confirmed: true,
     },
   ],
-  { rules: { 6: "previous", 0: "next" }, kind: "observed" },
+  { directions: { 6: "previous", 0: "next" }, kind: "observed" },
 );
 void observed;
 const fromSchedule = createCalendarFromSchedule(schedule, (v) => v > 0);
@@ -103,9 +107,9 @@ const open: boolean = fromSchedule.isBusinessDay("2026-11-24");
 void open;
 const period: { readonly from: string; readonly to: string } = closingPeriod("2026-11", 20);
 createCalendar({
-  holidays: jp,
-  openRecurring: [{ holiday: true, kinds: ["substitute"], weekdays: [6] }],
-  closedRecurring: [{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }],
+  holidayProvider: jp,
+  openRecurringRules: [{ holiday: true, kinds: ["substitute"], weekdays: [6] }],
+  closedRecurringRules: [{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }],
 });
 const businessClosing: string = calendar.closingMonth("2026-09-19", 20, {
   convention: "preceding",
@@ -125,11 +129,14 @@ expectType<Equal<typeof parts.time, string>>();
 
 const providers: HolidayProvider[] = [jp, scotland, wales, metropole, alsaceMoselle];
 const solidarity: KnownFrHolidayKey = "pentecost-monday";
-createCalendar({ holidays: metropole, openRecurring: [{ holiday: true, keys: [solidarity] }] });
+createCalendar({
+  holidayProvider: metropole,
+  openRecurringRules: [{ holiday: true, keys: [solidarity] }],
+});
 const frHoliday: FrHoliday | undefined = metropole.holidaysInYear(2026)[0];
 void frHoliday;
-const holiday: JapaneseHoliday | UkHoliday | undefined = jp.holidaysInYear(2026)[0];
-const issues: readonly Diagnostic[] = diagnoseCalendar({ holidays: jp });
+const holiday: JpHoliday | UkHoliday | undefined = jp.holidaysInYear(2026)[0];
+const issues: readonly Diagnostic[] = diagnoseCalendar({ holidayProvider: jp });
 // @ts-expect-error 存在しない設定の型は誤り
 createCalendar({ closedWeekdays: ["sunday"] });
 

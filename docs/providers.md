@@ -6,7 +6,7 @@ How to write a holiday provider for a country or region that is not bundled (Jap
 
 ## Writing a holiday provider
 
-Implement `HolidayProvider` and pass it as `holidays`. Several providers give their union (if their time zones differ, `timeZone` is required).
+Implement `HolidayProvider` and pass it as `holidayProvider`. Several providers give their union (if their time zones differ, `timeZone` is required).
 
 ```ts
 import { createCalendar, type HolidayProvider } from "bizdays-toolkit";
@@ -26,10 +26,10 @@ const myCountry: HolidayProvider = {
     },
   ],
 };
-const calendar = createCalendar({ holidays: myCountry, closedWeekdays: [0, 6] });
+const calendar = createCalendar({ holidayProvider: myCountry, closedWeekdays: [0, 6] });
 ```
 
-Most holidays of other countries are an nth weekday of a month (the US federal holidays) or a fixed number of days from Easter Sunday (much of Europe). `bizdays-toolkit/provider` exposes the calendar arithmetic the bundled providers use for these, so a provider does not have to reimplement and verify it: `nthWeekdayOfMonth(year, month, weekday, n)` (`n` is 1–5 or -1 for the last), `easterSunday(year)` (Gregorian; verified against the official data of the bundled providers), `daysInMonth(year, month)`, `isLeapYear(year)` and `substituteDays` (below). Combine them with `addDays` and `weekdayOf` from the root.
+Most holidays of other countries are an nth weekday of a month (the US federal holidays) or a fixed number of days from Easter Sunday (much of Europe). `bizdays-toolkit/provider` exposes the calendar arithmetic the bundled providers use for these, so a provider does not have to reimplement and verify it: `nthWeekdayOfMonth(year, month, weekday, n)` (`n` is 1–5 or -1 for the last), `easterSunday(year)` (Gregorian; verified against the official data of the bundled providers), `lengthOfMonth(year, month)`, `isLeapYear(year)` and `withSubstituteDays` (below). Combine them with `addDays` and `weekdayOf` from the root.
 
 ```ts
 import { addDays, createCalendar, type HolidayProvider } from "bizdays-toolkit";
@@ -56,15 +56,15 @@ const bavaria: HolidayProvider<"public"> = {
     ];
   },
 };
-createCalendar({ holidays: bavaria }).isHoliday("2026-06-04"); // true (Corpus Christi)
+createCalendar({ holidayProvider: bavaria }).isHoliday("2026-06-04"); // true (Corpus Christi)
 nthWeekdayOfMonth(2026, 11, 4, 4); // "2026-11-26" (the 4th Thursday of November: Thanksgiving Day)
 nthWeekdayOfMonth(2026, 5, 1, -1); // "2026-05-25" (the last Monday of May: Memorial Day)
 ```
 
-Holidays that fall on a weekend are often moved to another day (振替休日 in Japan, a substitute day in the UK, the day in lieu in Singapore, the observed day of a US federal holiday). `substituteDays(holidays, options)` adds the substitute days to a year's holidays with the same definition the bundled providers use: for each holiday on a weekday listed in `rules`, the substitute is the first day in the given direction that is not one of the input holidays, not an already assigned substitute day and not itself a weekday listed in `rules` (so two holidays on one weekend are pushed forward in date order, as Christmas Day and Boxing Day are). A substitute day keeps the original's `key`, `names` and `confirmed`, takes `kind` from the options and, unless `name` is given, the original's names (as on GOV.UK and the Singapore gazette). `original: "drop"` leaves the weekend day itself out, as GOV.UK does. Tests check that this function reproduces the substitute days of the bundled Japanese (2007 onwards), UK and Singapore providers. Rules specific to one country, such as Japan's citizens' holiday between two holidays, are not included.
+Holidays that fall on a weekend are often moved to another day (振替休日 in Japan, a substitute day in the UK, the day in lieu in Singapore, the observed day of a US federal holiday). `withSubstituteDays(holidays, options)` adds the substitute days to a year's holidays with the same definition the bundled providers use: for each holiday on a weekday listed in `directions`, the substitute is the first day in the given direction that is not one of the input holidays, not an already assigned substitute day and not itself a weekday listed in `directions` (so two holidays on one weekend are pushed forward in date order, as Christmas Day and Boxing Day are). A substitute day keeps the original's `key`, `names` and `confirmed`, takes `kind` from the options and, unless `name` is given, the original's names (as on GOV.UK and the Singapore gazette). `originalPolicy: "drop"` leaves the weekend day itself out, as GOV.UK does. Tests check that this function reproduces the substitute days of the bundled Japanese (2007 onwards), UK and Singapore providers. Rules specific to one country, such as Japan's citizens' holiday between two holidays, are not included.
 
 ```ts
-import { substituteDays } from "bizdays-toolkit/provider";
+import { withSubstituteDays } from "bizdays-toolkit/provider";
 
 const federal = [
   {
@@ -75,21 +75,21 @@ const federal = [
     confirmed: true,
   },
 ];
-// US federal holidays: a Saturday is observed on the Friday before, a Sunday on the Monday after
-substituteDays(federal, {
-  rules: { 6: "previous", 0: "next" },
+// US federal holidayProvider: a Saturday is observed on the Friday before, a Sunday on the Monday after
+withSubstituteDays(federal, {
+  directions: { 6: "previous", 0: "next" },
   kind: "observed",
-  name: (h) => ({ name: `${h.name} (observed)`, nameEn: `${h.nameEn} (observed)` }),
+  renameSubstitute: (h) => ({ name: `${h.name} (observed)`, nameEn: `${h.nameEn} (observed)` }),
 }).map((h) => `${h.date} ${h.kind}`);
 // ["2026-07-03 observed", "2026-07-04 federal"]
 
 // Japan and Singapore: only a Sunday holiday moves, to the next day that is not a holiday
-substituteDays(federal, { rules: { 0: "next" }, kind: "substitute" }).length; // 1 (July 4, 2026 is a Saturday)
+withSubstituteDays(federal, { directions: { 0: "next" }, kind: "substitute" }).length; // 1 (July 4, 2026 is a Saturday)
 // The UK: Saturday and Sunday both move, and GOV.UK lists only the substitute day
-substituteDays(federal, {
-  rules: { 6: "next", 0: "next" },
+withSubstituteDays(federal, {
+  directions: { 6: "next", 0: "next" },
   kind: "substitute",
-  original: "drop",
+  originalPolicy: "drop",
 }).map((h) => h.date);
 // ["2026-07-06"]
 ```
@@ -110,5 +110,5 @@ const jpWithNames = {
       return name === undefined ? h : { ...h, names: { "zh-Hant": name } };
     }),
 };
-createCalendar({ holidays: jpWithNames }).getHoliday("2026-01-01")?.names; // { "zh-Hant": "元日" }
+createCalendar({ holidayProvider: jpWithNames }).holidayOn("2026-01-01")?.names; // { "zh-Hant": "元日" }
 ```

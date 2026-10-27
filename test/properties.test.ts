@@ -17,6 +17,7 @@ import {
   type Calendar,
   type Month,
   type RecurringRule,
+  type ScheduleRecurringRule,
   type Weekday,
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
@@ -60,19 +61,19 @@ function randomCalendar(g: Gen): { calendar: Calendar; describe: string } {
     return { from, to: addDays(from, g.int(0, 10)) };
   });
   const openDates = Array.from({ length: g.int(0, 3) }, () => g.date());
-  const closedAnnual = g.int(0, 1) ? [{ from: "12-29", to: "01-03" }] : [];
+  const closedAnnualDates = g.int(0, 1) ? [{ from: "12-29", to: "01-03" }] : [];
   const holidayPolicy = g.pick(["closed", "open", "ignore"] as const);
   const options = {
-    holidays: jp,
+    holidayProvider: jp,
     closedWeekdays: weekdays,
     closedDates,
     openDates,
-    closedAnnual,
+    closedAnnualDates,
     holidayPolicy,
   };
   return {
     calendar: createCalendar(options),
-    describe: JSON.stringify({ ...options, holidays: "jp" }),
+    describe: JSON.stringify({ ...options, holidayProvider: "jp" }),
   };
 }
 
@@ -100,13 +101,13 @@ property("addBusinessDays の結果は営業日で、n 進めて −n 戻ると�
   const context = `${describe} start=${start} n=${n}`;
   assert.ok(calendar.isBusinessDay(forward), context);
   assert.equal(calendar.addBusinessDays(forward, -n), start, context);
-  assert.equal(calendar.businessDaysBetween(start, forward), n, context);
-  assert.equal(calendar.businessDaysBetween(forward, start), -n, context);
+  assert.equal(calendar.diffBusinessDays(start, forward), n, context);
+  assert.equal(calendar.diffBusinessDays(forward, start), -n, context);
   return context;
 });
 
 property(
-  "休業日を起点にした addBusinessDays は、翌営業日を 1 と数える（businessDaysBetween は起点が営業日のときだけ逆算になる）",
+  "休業日を起点にした addBusinessDays は、翌営業日を 1 と数える（diffBusinessDays は起点が営業日のときだけ逆算になる）",
   (g) => {
     const { calendar, describe } = randomCalendar(g);
     const day = g.date();
@@ -121,12 +122,8 @@ property(
       calendar.addBusinessDays(onOrAfter, n - 1),
       context,
     );
-    // 休業日の起点は数えないので、businessDaysBetween は n − 1（decisions.md の 31 番）
-    assert.equal(
-      calendar.businessDaysBetween(day, calendar.addBusinessDays(day, n)),
-      n - 1,
-      context,
-    );
+    // 休業日の起点は数えないので、diffBusinessDays は n − 1（decisions.md の 31 番）
+    assert.equal(calendar.diffBusinessDays(day, calendar.addBusinessDays(day, n)), n - 1, context);
     // 負の方向は、前営業日を −1 と数える
     assert.equal(calendar.addBusinessDays(day, -1), calendar.previousBusinessDay(day), context);
     return context;
@@ -140,7 +137,7 @@ property("nextBusinessDay との間に営業日はなく、previousBusinessDay �
   const context = `${describe} day=${day} next=${next}`;
   assert.ok(next > day, context);
   assert.ok(calendar.isBusinessDay(next), context);
-  assert.deepEqual(calendar.listBusinessDays(addDays(day, 1), next), [next], context);
+  assert.deepEqual(calendar.businessDatesBetween(addDays(day, 1), next), [next], context);
   assert.equal(
     calendar.previousBusinessDay(next),
     calendar.businessDayOnOrBefore(addDays(next, -1)),
@@ -149,14 +146,14 @@ property("nextBusinessDay との間に営業日はなく、previousBusinessDay �
   return context;
 });
 
-property("listBusinessDays の件数は businessDaysBetween と一致する", (g) => {
+property("businessDatesBetween の件数は diffBusinessDays と一致する", (g) => {
   const { calendar, describe } = randomCalendar(g);
   const from = g.date();
   const to = addDays(from, g.int(0, 120));
   const context = `${describe} from=${from} to=${to}`;
   assert.equal(
-    calendar.listBusinessDays(from, to).length,
-    calendar.businessDaysBetween(from, addDays(to, 1)),
+    calendar.businessDatesBetween(from, to).length,
+    calendar.diffBusinessDays(from, addDays(to, 1)),
     context,
   );
   return context;
@@ -166,14 +163,14 @@ property("営業日カレンダーと、同じ規則の真偽値のスケジュ�
   const weekdays = [0, 1, 2, 3, 4, 5, 6].map(() => g.int(0, 2) > 0);
   const holidayValue = g.int(0, 1) === 1;
   const calendar = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     closedWeekdays: [0, 1, 2, 3, 4, 5, 6].filter((w) => !weekdays[w]) as Weekday[],
     holidayPolicy: holidayValue ? "open" : "closed",
   });
   const schedule = createSchedule({
-    holidays: jp,
-    weekly: weekdays as [boolean, boolean, boolean, boolean, boolean, boolean, boolean],
-    holiday: { value: holidayValue },
+    holidayProvider: jp,
+    weekdayValues: weekdays as [boolean, boolean, boolean, boolean, boolean, boolean, boolean],
+    holidayPolicy: { value: holidayValue },
   });
   const day = g.date();
   const context = `weekly=${JSON.stringify(weekdays)} holiday=${holidayValue} day=${day}`;
@@ -185,7 +182,7 @@ property("瞬間の入力は、カレンダーのタイムゾーンで暦日に�
   const day = g.date();
   const minutes = g.int(0, 24 * 60 - 1);
   const wall = `${day}T${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-  const calendar = createCalendar({ holidays: jp });
+  const calendar = createCalendar({ holidayProvider: jp });
   // 日本時間の壁時計の日時と、それを +09:00 の瞬間にしたものは同じ暦日・時刻になる
   const context = `wall=${wall}`;
   assert.deepEqual(calendar.civilOf(new Date(`${wall}:00+09:00`)), calendar.civilOf(wall), context);
@@ -201,25 +198,37 @@ const ON_HOLIDAY = ["under-holiday", "over-holiday", "after-holiday"] as const;
 /** 乱数で繰り返しの規則を作る */
 function randomRecurring(g: Gen): RecurringRule[] {
   return Array.from({ length: g.int(1, 3) }, (): RecurringRule => {
-    const onHolidayRule = g.pick(ON_HOLIDAY);
+    const holidayOverlapPolicy = g.pick(ON_HOLIDAY);
     const months = g.int(0, 3) === 0 ? { months: [g.int(1, 12) as Month] } : {};
     if (g.int(0, 1) === 0) {
       const nth = g.int(0, 2) === 0 ? {} : { nth: g.pick([1, 2, 3, 4, 5, -1] as const) };
-      return { weekday: g.int(0, 6) as Weekday, ...nth, ...months, onHolidayRule };
+      // 規則の形ごとの型（holidayOverlapPolicy と skipWeekdays の組み合わせ）は乱数の合併では表せないので、規則の型として渡す
+      return {
+        weekday: g.int(0, 6) as Weekday,
+        ...nth,
+        ...months,
+        holidayOverlapPolicy,
+      } as RecurringRule;
     }
-    return { day: g.pick([1, 10, 15, 20, 28, 31, -1] as const), ...months, onHolidayRule };
+    return {
+      dayOfMonth: g.pick([1, 10, 15, 20, 28, 31, -1] as const),
+      ...months,
+      holidayOverlapPolicy,
+    } as RecurringRule;
   });
 }
 
 property("振替先は振替元より後の祝日でない日で、その間はすべて祝日", (g) => {
-  const rules = randomRecurring(g).map((r) => ({ ...r, onHolidayRule: "after-holiday" as const }));
+  const rules = randomRecurring(g).map(
+    (r) => ({ ...r, holidayOverlapPolicy: "after-holiday" as const }) as RecurringRule,
+  );
   const calendar = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     holidayPolicy: g.pick(["open", "closed"] as const),
-    closedRecurring: rules,
+    closedRecurringRules: rules,
   });
   const day = g.date();
-  const info = calendar.dayInfo(day);
+  const info = calendar.dayInfoOn(day);
   const context = `rules=${JSON.stringify(rules)} day=${day}`;
   if (info.shiftedFrom !== undefined) {
     assert.ok(info.shiftedFrom < day, context);
@@ -234,10 +243,10 @@ property("振替先は振替元より後の祝日でない日で、その間は�
 
 property("繰り返しの規則があっても、営業日の移動と数え上げの性質は保たれる", (g) => {
   const calendar = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     holidayPolicy: g.pick(["open", "closed", "ignore"] as const),
-    closedRecurring: randomRecurring(g),
-    openRecurring: g.int(0, 2) === 0 ? randomRecurring(g) : [],
+    closedRecurringRules: randomRecurring(g),
+    openRecurringRules: g.int(0, 2) === 0 ? randomRecurring(g) : [],
   });
   const start = calendar.businessDayOnOrAfter(g.date());
   const n = g.int(1, 30);
@@ -245,7 +254,7 @@ property("繰り返しの規則があっても、営業日の移動と数え上�
   const context = `start=${start} n=${n}`;
   assert.ok(calendar.isBusinessDay(forward), context);
   assert.equal(calendar.addBusinessDays(forward, -n), start, context);
-  assert.equal(calendar.businessDaysBetween(start, forward), n, context);
+  assert.equal(calendar.diffBusinessDays(start, forward), n, context);
   return context;
 });
 
@@ -254,24 +263,24 @@ property("繰り返しの規則でも、営業日カレンダーと真偽値の�
   const closed = randomRecurring(g);
   const holidayOpen = g.int(0, 1) === 1;
   const calendar = createCalendar({
-    holidays: jp,
+    holidayProvider: jp,
     holidayPolicy: holidayOpen ? "open" : "closed",
-    openRecurring: open,
-    closedRecurring: closed,
+    openRecurringRules: open,
+    closedRecurringRules: closed,
   });
   const schedule = createSchedule({
-    holidays: jp,
-    weekly: [true, true, true, true, true, true, true],
-    holiday: { value: holidayOpen },
-    recurring: [
-      ...open.map((r) => ({ ...r, value: true })),
-      ...closed.map((r) => ({ ...r, value: false })),
+    holidayProvider: jp,
+    weekdayValues: [true, true, true, true, true, true, true],
+    holidayPolicy: { value: holidayOpen },
+    recurringRules: [
+      ...open.map((r) => ({ ...r, value: true }) as ScheduleRecurringRule<boolean>),
+      ...closed.map((r) => ({ ...r, value: false }) as ScheduleRecurringRule<boolean>),
     ],
   });
   const day = g.date();
   const context = `open=${JSON.stringify(open)} closed=${JSON.stringify(closed)} holidayOpen=${holidayOpen} day=${day}`;
   assert.equal(calendar.isBusinessDay(day), schedule.valueOn(day), context);
-  assert.equal(calendar.dayInfo(day).shiftedFrom, schedule.dayInfo(day).shiftedFrom, context);
+  assert.equal(calendar.dayInfoOn(day).shiftedFrom, schedule.dayInfoOn(day).shiftedFrom, context);
   return context;
 });
 
@@ -320,7 +329,7 @@ property("月の第 n 営業日は、その月の営業日の一覧の n 番目�
   const { calendar, describe } = randomCalendar(g);
   const month = g.date().slice(0, 7);
   const last = addDays(monthOf(month, 1) + "-01", -1);
-  const days = calendar.listBusinessDays(`${month}-01`, last);
+  const days = calendar.businessDatesBetween(`${month}-01`, last);
   const context = `${describe} month=${month} days=${days.length}`;
   if (days.length === 0) {
     assert.throws(() => calendar.firstBusinessDayOfMonth(month), { code: "no-business-day" });
@@ -346,7 +355,7 @@ property("dueDate は、末日に読み替えた日付を adjust したもの", 
   const date = `${month}-${String(day === -1 || day > lastDay ? lastDay : day).padStart(2, "0")}`;
   const context = `${describe} month=${month} day=${day} ${convention}`;
   assert.equal(
-    calendar.dueDate(month, { day, convention }),
+    calendar.dueDate(month, { dayOfMonth: day, convention }),
     calendar.adjust(date, { convention }),
     context,
   );

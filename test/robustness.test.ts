@@ -32,14 +32,14 @@ test("例外にはコードが付き、従来の例外クラスのままであ�
   throwsCode(() => holidaysInYear(2100), "out-of-range");
   throwsCode(() => createCalendar({ timeZone: "Asia/Nowhere" }), "invalid-time-zone");
   throwsCode(() => createCalendar({ closedWeekdays: [7 as 0] }), "invalid-weekday");
-  throwsCode(() => createCalendar({ closedAnnual: ["02-30"] }), "invalid-month-day");
+  throwsCode(() => createCalendar({ closedAnnualDates: ["02-30"] }), "invalid-annual-date");
   throwsCode(
     () => createCalendar({ closedDates: [{ from: "2026-12-31", to: "2026-12-01" }] }),
     "invalid-range",
   );
   throwsCode(
     () =>
-      createCalendar({ closedWeekdays: [0, 1, 2, 3, 4, 5, 6], maxSearchDays: 10 }).nextBusinessDay(
+      createCalendar({ closedWeekdays: [0, 1, 2, 3, 4, 5, 6], searchDayLimit: 10 }).nextBusinessDay(
         "2026-01-01",
       ),
     "no-business-day",
@@ -58,7 +58,10 @@ test("設定の誤りのメッセージには、設定の中の位置が入る",
   );
   assert.throws(
     () =>
-      createSchedule({ weekly: [0, 0, 0, 0, 0, 0, 0], dates: [{ date: "2026-01-01" } as never] }),
+      createSchedule({
+        weekdayValues: [0, 0, 0, 0, 0, 0, 0],
+        dates: [{ date: "2026-01-01" } as never],
+      }),
     /dates\[0\]: must have "value"/,
   );
 });
@@ -73,7 +76,11 @@ test("作ったあとに元の設定を書き換えても、結果は変わら�
   const weekly: [number, number, number, number, number, number, number] = [0, 1, 1, 1, 1, 1, 0];
   const closedDates = ["2026-10-14"];
   const holiday = { sameAs: 0 as const };
-  const schedule = createSchedule({ weekly, holiday, holidays: jp });
+  const schedule = createSchedule({
+    weekdayValues: weekly,
+    holidayPolicy: holiday,
+    holidayProvider: jp,
+  });
   const calendar = createCalendar({ closedDates });
 
   weekly[3] = 99;
@@ -131,21 +138,24 @@ const ok = (date: string) => ({ date, name: "n", nameEn: "n", kind: "public", co
 
 test("祝日の提供元の形式を、作る時点で検証する", () => {
   throwsCode(
-    () => createCalendar({ holidays: provider(() => [], { id: "" }) }),
+    () => createCalendar({ holidayProvider: provider(() => [], { id: "" }) }),
     "invalid-provider",
   );
   throwsCode(
     () =>
       createCalendar({
-        holidays: provider(() => [], { supportedYears: { from: 2100, to: 2000 } }),
+        holidayProvider: provider(() => [], { supportedYears: { from: 2100, to: 2000 } }),
       }),
     "invalid-provider",
   );
   throwsCode(
-    () => createCalendar({ holidays: provider(() => [], { timeZone: "Nowhere/City" }) }),
+    () => createCalendar({ holidayProvider: provider(() => [], { timeZone: "Nowhere/City" }) }),
     "invalid-provider",
   );
-  throwsCode(() => createCalendar({ holidays: [jp, provider(() => [])] }), "time-zone-conflict");
+  throwsCode(
+    () => createCalendar({ holidayProvider: [jp, provider(() => [])] }),
+    "time-zone-conflict",
+  );
 });
 
 test("祝日の提供元が返したデータを、年ごとに初めて使うときに検証する", () => {
@@ -157,7 +167,7 @@ test("祝日の提供元が返したデータを、年ごとに初めて使う�
     ["confirmed がない", () => [{ date: "2026-05-01", name: "n", nameEn: "n", kind: "public" }]],
   ];
   for (const [label, fn] of cases) {
-    const calendar = createCalendar({ holidays: provider(fn) });
+    const calendar = createCalendar({ holidayProvider: provider(fn) });
     assert.throws(
       () => calendar.isHoliday("2026-05-01"),
       (e: unknown) => isBizdaysError(e) && e.code === "invalid-provider-data",
@@ -168,14 +178,14 @@ test("祝日の提供元が返したデータを、年ごとに初めて使う�
 
 test("提供元が返した祝日は、契約の項目だけを持つ変更できないオブジェクトになる", () => {
   const calendar = createCalendar({
-    holidays: provider(() => [{ ...ok("2026-05-01"), extra: 1 }]),
+    holidayProvider: provider(() => [{ ...ok("2026-05-01"), extra: 1 }]),
   });
-  const h = calendar.getHoliday("2026-05-01");
+  const h = calendar.holidayOn("2026-05-01");
   assert.deepEqual(h, ok("2026-05-01"));
   assert.ok(Object.isFrozen(h));
   // 順序の乱れた提供元でも、一覧は日付順になる
   const unordered = createCalendar({
-    holidays: provider(() => [ok("2026-12-01"), ok("2026-01-01")]),
+    holidayProvider: provider(() => [ok("2026-12-01"), ok("2026-01-01")]),
   });
   assert.deepEqual(
     unordered.holidaysInYear(2026).map((x) => x.date),

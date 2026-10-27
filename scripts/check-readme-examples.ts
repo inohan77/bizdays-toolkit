@@ -221,6 +221,8 @@ function parse(text: string): unknown {
   const js = text.replaceAll("{…}", "__ANY__");
   return new Function("__ANY__", "return (" + js + ");")(ANY);
 }
+// 0.30.x の間だけ返す旧名の項目（docs/migration.md の削除予定の表にある、結果の型の項目）。文書の例は新しい名前だけを書くので、比べない
+const DEPRECATED_RESULT_KEYS: string[] = JSON.parse(process.env.README_DEPRECATED_KEYS ?? "[]");
 function match(actual: unknown, expected: unknown): boolean {
   if (expected === ANY) return true;
   if (typeof expected === "string" && expected.includes("…") && typeof actual === "string") {
@@ -237,7 +239,10 @@ function match(actual: unknown, expected: unknown): boolean {
   }
   if (expected !== null && typeof expected === "object") {
     if (actual === null || typeof actual !== "object" || Array.isArray(actual)) return false;
-    const keys = new Set([...Object.keys(expected), ...Object.keys(actual)]);
+    const keys = new Set([
+      ...Object.keys(expected),
+      ...Object.keys(actual).filter((k) => k in expected || !DEPRECATED_RESULT_KEYS.includes(k)),
+    ]);
     return [...keys].every((k) => match((actual as any)[k], (expected as any)[k]));
   }
   return Object.is(actual, expected);
@@ -260,6 +265,14 @@ const DOC_FILES = [
   "docs/providers.md",
   "docs/providers.ja.md",
 ];
+
+// 削除予定の表（docs/migration.md）の、結果の型の項目の名前（例: `DayInfo.businessDay` の businessDay）
+const RESULT_TYPES = ["DayInfo", "ScheduleDayInfo", "HolidayLookup", "Calendar", "Schedule"];
+const deprecatedResultKeys = [
+  ...readFileSync("docs/migration.md", "utf8").matchAll(/`([A-Za-z]+)\.([A-Za-z]+)`/g),
+]
+  .filter((m) => RESULT_TYPES.includes(m[1]!))
+  .map((m) => m[2]!);
 
 const dir = mkdtempSync(join(ROOT, ".readme-examples-"));
 const failures: string[] = [];
@@ -285,6 +298,7 @@ try {
           env: {
             ...process.env,
             README_EXPECTED: JSON.stringify(prepared.checks.map((c) => c.expected)),
+            README_DEPRECATED_KEYS: JSON.stringify(deprecatedResultKeys),
           },
         },
       );

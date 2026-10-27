@@ -24,7 +24,7 @@ A business-day calendar that combines public holidays with company or store clos
 - **Recurring rules**: "closed on the 3rd Wednesday", "every other Wednesday", "stocktaking on the last day of the month", "closed on Mondays, moved to the next non-holiday when Monday is a holiday", "the day after (or before) a holiday", "the last weekday before a bank holiday", shift cycles such as four days on and two days off, each with its own behaviour on holidays and an optional effective period
 - **Day-by-day values and combined calendars**: store hours that change by weekday, holiday and date; a business-day calendar made from such a schedule; and the days on which all (or any) of several calendars are open
 - **Option diagnostics**: `bizdays-toolkit/diagnose` lists rules that never apply, rules that are shadowed or redundant, rules that have ended, typos in option names and options with no business day at all, without throwing. One line in a test keeps options honest
-- **Lightweight, zero dependencies, time-zone safe**: about 11.5 KB min+gzip (about 13.2 KB with Japanese holidays, about 13.6 KB with UK bank holidays, about 12.4 KB with French holidays, about 12.4 KB with Singapore holidays; measured for 0.22.0). Standard JavaScript and `Intl` only, ESM with bundled types; tested on Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno. Instants such as `Date` are converted to a civil date in the calendar's time zone before evaluation
+- **Lightweight, zero dependencies, time-zone safe**: about 12.7 KB min+gzip (about 14.4 KB with Japanese holidays, about 14.8 KB with UK bank holidays, about 13.6 KB with French holidays, about 13.6 KB with Singapore holidays; measured for 0.30.0). Standard JavaScript and `Intl` only, ESM with bundled types; tested on Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno. Instants such as `Date` are converted to a civil date in the calendar's time zone before evaluation
 - **Extensible to other countries and regions**: holiday providers are pluggable through the `HolidayProvider` interface, and `bizdays-toolkit/provider` exposes the calendar arithmetic (nth weekday of a month, Easter, substitute days for holidays on a weekend) that most countries' holidays are built from
 
 ## Installation
@@ -46,14 +46,14 @@ import { isHoliday, jp } from "bizdays-toolkit/jp";
 isHoliday("2026-11-23"); // true (Labor Thanksgiving Day)
 
 const calendar = createCalendar({
-  holidays: jp,
+  holidayProvider: jp,
   closedWeekdays: [0, 6],
-  closedAnnual: [{ from: "12-29", to: "01-03", name: "New Year closure" }],
+  closedAnnualDates: [{ from: "12-29", to: "01-03", name: "New Year closure" }],
 });
 calendar.isBusinessDay("2026-12-30"); // false
 calendar.addBusinessDays("2026-12-28", 1); // "2027-01-04"
 calendar.businessDayOnOrAfter("2026-12-28T15:30", { cutoff: "14:00" }); // "2027-01-04" (after the cutoff, so the next business day)
-calendar.dueDate("2026-11", { day: 23, convention: "following" }); // "2026-11-24" (the 23rd is a holiday)
+calendar.dueDate("2026-11", { dayOfMonth: 23, convention: "following" }); // "2026-11-24" (the 23rd is a holiday)
 ```
 
 The [guide](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md) explains everything below in full, with examples that are run in CI. This README is the short version.
@@ -69,30 +69,31 @@ The [guide](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md)
 | `metropole`, `alsaceMoselle`                      | `bizdays-toolkit/fr` | `Europe/Paris`   | 2000–2099       | data.gouv.fr "Jours fériés en France"                                                         |
 | `sg`                                              | `bizdays-toolkit/sg` | `Asia/Singapore` | 2020–2027       | data.gov.sg (Ministry of Manpower)                                                            |
 
-Each holiday carries its date, name (and English name), `kind` (national, substitute, citizens' holiday, bank holiday and so on, by country) and `confirmed` (whether the date is officially fixed; the Japanese equinox days and UK bank holidays after the last published year are predictions). Years after the supported range are an error unless `outOfRange: "ignore"` is set, and `unconfirmedHolidays: "throw"` stops any result that would depend on a predicted holiday. Details: [Bundled holiday providers](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#bundled-holiday-providers), [Unconfirmed holidays](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#unconfirmed-holidays).
+Each holiday carries its date, name (and English name), `kind` (national, substitute, citizens' holiday, bank holiday and so on, by country) and `confirmed` (whether the date is officially fixed; the Japanese equinox days and UK bank holidays after the last published year are predictions). Years after the supported range are an error unless `outOfRangePolicy: "ignore"` is set, and `unconfirmedHolidayPolicy: "throw"` stops any result that would depend on a predicted holiday. Details: [Bundled holiday providers](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#bundled-holiday-providers), [Unconfirmed holidays](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#unconfirmed-holidays).
 
 ### Business-day calendars and recurring rules
 
-A calendar is built from the holiday provider and your closures: `closedWeekdays`, `closedAnnual` (month-day ranges, across the new year too), `closedDates` and `openDates`, and recurring rules in `closedRecurring` / `openRecurring`:
+A calendar is built from the holiday provider and your closures: `closedWeekdays`, `closedAnnualDates` (month-day ranges, across the new year too), `closedDates` and `openDates`, and recurring rules in `closedRecurringRules` / `openRecurringRules`:
 
 | Rule                                                      | Meaning                                                                          |
 | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `{ weekday: 3, nth: 3 }`                                  | The 3rd Wednesday (`nth` is 1–5 or -1 for the last; an array for several)        |
 | `{ weekday: 3, interval: 2, anchor: "2026-01-07" }`       | Every other Wednesday, counted from the anchor                                   |
 | `{ cycle: 6, anchor: "2026-01-05", positions: [5, 6] }`   | Days 5 and 6 of every 6 days from the anchor (four days on, two days off)        |
-| `{ day: 20 }`, `{ day: -1 }`                              | The 20th, the last day of the month                                              |
+| `{ dayOfMonth: 20 }`, `{ dayOfMonth: -1 }`                | The 20th, the last day of the month                                              |
 | `{ businessDayOfMonth: -1 }`, `{ businessDayOfMonth: 5 }` | The last business day of the month, the 5th business day                         |
+| `{ businessDayOfWeek: -1, weekStart: 1 }`                 | The last business day of the week starting on Monday                             |
 | `{ holiday: true, kinds: ["substitute"] }`                | Holidays, optionally narrowed by kind or by key (`keys: ["vernal-equinox"]`)     |
 | `{ dayAfterHoliday: true }`, `{ dayBeforeHoliday: true }` | The day after (or before) a holiday or a run of holidays                         |
-| `onHolidayRule: "after-holiday"`                          | "Closed on Mondays, or the next non-holiday if a holiday" (can be a Saturday)    |
+| `holidayOverlapPolicy: "after-holiday"`                   | "Closed on Mondays, or the next non-holiday if a holiday" (can be a Saturday)    |
 | `skipWeekdays: [0, 6]`                                    | With `"after-holiday"`: also skip weekends ("June 15, or the next business day") |
 | `effectiveFrom`, `effectiveTo`                            | The period the rule is in effect                                                 |
 
-`dayInfo` tells you why a day is open or closed (`reason`, `name`, `rulePath`). Every bundled holiday that recurs each year has a stable `key` (`vernal-equinox`, `good-friday`, `hari-raya-puasa`, …), so a rule can select individual holidays that no date pattern can express. Details: [Business-day calendars](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#business-day-calendars), [Recurring rules](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#recurring-rules), [Holiday keys](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#holiday-keys), [Common recipes](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#common-recipes).
+`dayInfoOn` tells you why a day is open or closed (`reason`, `name`, `optionPath`). Every bundled holiday that recurs each year has a stable `key` (`vernal-equinox`, `good-friday`, `hari-raya-puasa`, …), so a rule can select individual holidays that no date pattern can express. Details: [Business-day calendars](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#business-day-calendars), [Recurring rules](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#recurring-rules), [Holiday keys](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#holiday-keys), [Common recipes](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#common-recipes).
 
 ### Due dates, schedules and combined calendars
 
-- `dueDate("2026-11", { day: 23, convention: "following" })`, `adjust`, `closingMonth` and `closingPeriod` compute month-based due dates and closing periods with the `following`, `preceding`, `modified-following` and `modified-preceding` conventions ([Month-based due dates](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#month-based-due-dates-and-date-adjustment))
+- `dueDate("2026-11", { dayOfMonth: 23, convention: "following" })`, `adjust`, `closingMonth` and `closingPeriod` compute month-based due dates and closing periods with the `following`, `preceding`, `modified-following` and `modified-preceding` conventions ([Month-based due dates](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#month-based-due-dates-and-date-adjustment))
 - `createSchedule` gives a value per day (store hours, a shipping cutoff, a price band) from the same kinds of rules, and `createCalendarFromSchedule` turns such a schedule into a calendar so the hours are the only configuration ([Day-by-day values](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#day-by-day-values-eg-store-hours), [A calendar from a schedule](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#a-business-day-calendar-from-a-schedule))
 - `combineCalendars` builds the days on which all (or any) of several calendars are open, such as your company and the bank for a remittance date ([Combining calendars](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#combining-calendars))
 - Dates can be given as `"YYYY-MM-DD"`, `"YYYY-MM-DDTHH:mm"`, `Date` or Temporal objects; instants are converted in the calendar's time zone ([Date and date-time inputs](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#date-and-date-time-inputs))
@@ -104,12 +105,12 @@ import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
 import { jp } from "bizdays-toolkit/jp";
 
 diagnoseCalendar({
-  holidays: jp,
+  holidayProvider: jp,
   closedWeekdays: [0],
-  closedRecurring: [{ weekday: 0 }],
+  closedRecurringRules: [{ weekday: 0 }],
   closeAnnual: ["12-31"],
 }).map((d) => [d.severity, d.code, d.path]);
-// [["warning", "unknown-option", "closeAnnual"], ["info", "redundant", "closedRecurring[0]"]]
+// [["warning", "unknown-option", "closeAnnual"], ["info", "redundant", "closedRecurringRules[0]"]]
 ```
 
 `diagnoseCalendar` and `diagnoseSchedule` return every problem in the options without throwing: typos (with a suggestion), rules that never match, rules shadowed by earlier ones, rules whose removal changes nothing, options with no business day, and, with `{ asOf }`, rules that have ended. `assert.deepEqual(diagnoseCalendar(options), [])` in a test keeps options honest. Details: [Option diagnostics](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#option-diagnostics), [Errors](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/guide.md#errors).

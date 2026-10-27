@@ -17,6 +17,8 @@
 - すべての値を網羅したことを型で確かめたい利用者は `Known…` を使えます。その場合、値が増えたときに型エラーで気付くことを利用者自身が選んだことになります
 - ライブラリの内部では `Known…` で分岐し、対応漏れを型で検出します
 
+（0.30.0 で追記: `KnownDayReason` の `"regular"` を `"default"` に、`createCalendarFromSchedule` の曜日の値で営業日になる日を `"open-weekday"` に改めた。`"regular"` は祝日の種別（`Holiday.kind`）の語で、一義一語（54 番の N1）に反していたため）
+
 ## 3. 例外は従来のクラスのまま、`code` を持つ
 
 例外は `RangeError`・`TypeError`・`Error` のインスタンスで、`code` プロパティを持ちます。`isBizdaysError()` で、このライブラリの例外かを判定できます。
@@ -31,6 +33,8 @@
 - 将来の版で足した設定を古い版に渡しても壊れないようにするためです（前方互換）
 - 打ち間違いは TypeScript では型エラーになります。JavaScript から使う場合のために、内部で警告として記録しており、規則の診断（`diagnoseCalendar`・`diagnoseSchedule`）で検出できます（15 番）
 - 無視するのは「知らないキー」だけです。知っているキーの無効な組み合わせ（`{ dayAfterHoliday: true, onHolidayRule: "over-holiday" }`・`{ day: 1, interval: 2 }` など）は、設定の意図を読み違えないよう作成時に例外にします（33 番・35 番）。前方互換のための無視と、矛盾の検出は別の目的です
+
+（0.30.0 で追記: 0.30.0 で改名した旧名は、知らないキーではなく知っているキーとして扱う。0.30.x の間は新しい名前に読み替えて `deprecated-option` を記録し、1.0.0 以降は `invalid-option` を投げる（改名の表 `src/core/renamed.ts` は残す））
 
 ## 5. 設定は作る時点で取り込み、返すものは変更できない
 
@@ -95,6 +99,8 @@ lint には、整形の oxfmt と同じプロジェクト（oxc）の oxlint を
 
 ガイドの「Business-day calendars」は、この順番を 1〜8 の番号で示しています。個別の日付を臨時営業日（1）と臨時休業日（2）に分け、毎年の月日（3）、繰り返しの規則（祝日の上）と祝日の規則（4）、祝日（5）、繰り返しの規則（祝日の下・振替先）（6）、曜日（7）、それ以外（8）です。ほかの番号で「12 番の n」と書くときは、この番号を指します（0.21.3 で明記）。
 
+（0.30.0 で追記: 規則ごとの選択 `onHolidayRule` を `holidayOverlapPolicy` に改名した（N5: 選択肢の項目は `Policy` で終える）。状態の数は変えていない）
+
 ## 13. 「第 n 何曜日」は、その月で n 回目のその曜日
 
 `{ weekday: 3, nth: 3 }` は、その月で 3 回目の水曜日（15〜21 日の水曜日）です。
@@ -149,6 +155,8 @@ lint には、整形の oxfmt と同じプロジェクト（oxc）の oxlint を
 - ID は ISO 3166-2 のコード（`GB-ENG`・`GB-WLS`・`GB-SCT`・`GB-NIR`）です。地域ごとに完結した祝日の一覧を返すので、コアに国と地域の親子関係は持たせていません。複数の地域にまたがる場合は、和集合（`holidays` に配列で渡す）で使えます
 - サブパスは ISO 3166-1 の `gb` ではなく `uk` にしています。`gb` は Great Britain（Northern Ireland を含まない）と読まれるためです。型の名前も同じ理由で `British…` ではなく `Uk…` にしています
 - Scotland の地域（council）ごとの休日は扱いません。GOV.UK のデータになく、照合できないためです
+
+（0.30.0 で追記: 日本の型の名前を、ほかの国と同じ略号の流儀（`JpHoliday`・`KnownJpHolidayKind` など）に揃えた（N7））
 
 ## 18. 英国の祝日は規則で計算し、GOV.UK のデータで 2012 年から全日照合する
 
@@ -278,6 +286,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - 「隔週」は `{ weekday, interval, anchor }` で書きます。`interval` は 2 以上の整数で、1 は毎週と同じなので受け付けません。`anchor` は `weekday` と同じ曜日の日付で、周期の位相を決めるだけです（起点より前の日にも当てはまります）。開始日を兼ねさせなかったのは、`anchor` の意味を 1 つに保つためで、開始日は `effectiveFrom` で書けます。起点を「偶数週・奇数週」や ISO 週番号にしなかったのは、年をまたぐと週の数え方が変わり、店舗の掲示（「○月○日から隔週」）と一致しなくなるためです
 - 有効期間の診断（`never-matches`・`shadowed`・`redundant`・`out-of-range`）は 15 番に書きました。期間の中に当てはまる日がない規則は `never-matches` に含め、新しい code は足していません（message で区別します）
 
+（0.30.0 で追記: `anchor` は、隔週でも日単位の周期でも「周期を数え始める日」の 1 つの意味で用語集に載せた（54 番）。名前は変えていない）
+
 ## 31. `businessDaysBetween` だけが半開区間
 
 期間を取る API のうち、`daysBetween`・`listBusinessDays`・`holidaysBetween` は両端を含みますが、`businessDaysBetween(from, to)` は `from` 以上 `to` 未満の営業日の数です。
@@ -285,6 +295,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - 半開区間だと `businessDaysBetween(a, b) + businessDaysBetween(b, c) = businessDaysBetween(a, c)` が成り立ち、**起点 `a` が営業日なら** `addBusinessDays(a, n)` の結果 `b` について `businessDaysBetween(a, b) = n` になります（`addBusinessDays` の逆算）。日数の差を求める `diffDays` も同じ考え方です
 - 起点が休業日のときは逆算になりません（0.15.0 で明記）。`addBusinessDays` は「翌日以降の n 個目の営業日」を返し、`n = 0` は `businessDayOnOrAfter` と同じなので、休業日からは `+0` と `+1` が同じ日（翌営業日）です。一方 `businessDaysBetween` は休業日の起点を数えないので、`businessDaysBetween(a, addBusinessDays(a, n)) = n − 1` です。これは期日計算の慣習（Excel の `WORKDAY` と同じ）で、変えると利用者の期日が変わるため挙動は変えず、`addBusinessDays(a, n) = addBusinessDays(businessDayOnOrAfter(a), n − 1)`（n ≥ 1）を性質のテストで固定し、README に書きました
 - 「期間の営業日の一覧」を返す `listBusinessDays` は両端を含むほうが自然で、数が要るなら `.length` で求められます。「Between なのに範囲の扱いが違う」という違和感はありますが、名前を変える（`countBusinessDays` など）利用者の作業に見合う利益がないので、名前は変えず、範囲の扱いをガイドに明記しています（0.17.1 までは README。45 番）
+
+（0.30.0 で追記: 半開区間の数の関数を `diffBusinessDays` に改名し、名前の形（`diff…` は数、`…Between` は両端を含む一覧）で区間の扱いが分かるようにした。一覧を返していた `listBusinessDays` は `businessDatesBetween`（54 番の N2））
 
 ## 32. 国ごとの日時の変換関数（`toJapanDate`・`toJapanDateTime`）は非推奨にし、国に依らない経路に集約する
 
@@ -307,6 +319,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 
 （0.22.0 で追記: 祝日の翌日・祝前日の規則に `kinds`・`keys`（隣の祝日で絞る）と `skipWeekdays`（祝日と書いた曜日が続く塊の前後の日）を足しました。定義の「提供元の祝日だけ」は変わりません。53 番）
 
+（0.30.0 で追記: 「祝日の翌日・祝前日・祝日の規則は `holidayOverlapPolicy` を受けない」などの形ごとの制限を、型でも表すようにした。`{ ...rule, onHolidayRule }` と重ねて書けるよう型を緩めた判断は、その書き方が実行時に例外になる以上利点がないので改め、43 番の「型と実行時の食い違いは不具合」に揃えた。旧名の `onHolidayRule` だけは 1.0.0 まで形を問わず受ける）
+
 ## 34. カレンダーの合成は作成済みのカレンダーに対して行い、判定を決めたカレンダーの結果を引き継ぐ
 
 `combineCalendars(calendars, { businessDay: "all" | "any" })` は、作成済みの営業日カレンダーを合成して、通常の営業日カレンダーを返します（0.11.0）。
@@ -317,6 +331,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - タイムゾーンは同じでなければなりません（既存の `time-zone-conflict`）。日付の文字列を各カレンダーに渡して判定するため、暦日の意味がそろっている必要があります
 - 公開インターフェース（`Calendar`）だけで合成するので、合成したカレンダーをさらに合成できます。設定の診断は設定に対するものなので、合成したカレンダーは対象にしません
 - 内部では、営業日の探索・調整・月の営業日の実装を `createCalendar` から切り出して共用しています。合成でも `maxSearchDays` を指定できます
+
+（0.30.0 で追記: 合成の設定 `businessDay` を `open` に改めた（`DayInfo.open` と同じ語））
 
 ## 35. 祝日を対象にする規則は繰り返しの規則の形の 1 つ（`holiday: true`）で、「祝日の上」の段階で判定する
 
@@ -330,6 +346,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - 名前は `ScheduleOptions.holiday` と同じ語ですが、規則の中では「対象の日」を表し、`dayAfterHoliday: true` と並べて最も読みやすいので、この名前にしました
 
 （0.22.0 で追記: `kinds`・`keys` は祝日の翌日・祝前日の規則でも使えるようになりました。意味は隣の祝日の種別・識別子の絞り込みです。53 番）
+
+（0.30.0 で追記: スケジュールの `holiday` を `holidayPolicy` に、値の `"weekday"` を `"ignore"` に改めた（カレンダーの `holidayPolicy` と同じ扱いの選択なので、同じ名前と同じ語にした。N5））
 
 ## 36. 値を決めた規則の位置を `rulePath` で返す
 
@@ -354,6 +372,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - 判定は「どれかの計測が前の版の 2 倍より遅い」で失敗にします。アルゴリズムの悪化（走査が 2 重になった、など）を捉える粗い線で、数十%の差はノイズとみなします。絶対値は Job Summary に残し、リリースごとの傾向を追えるようにします
 - `pnpm check` には含めません（結果が機械に依存するため。RELEASING.md の「品質の確認」）
 
+（0.30.0 で追記: 0.30.0 の改名でも、旧名は `@deprecated` の別名として 1.0.0 まで残す（一時的な重複）。削除予定の表には、型の項目とメソッドを修飾名で載せる）
+
 ## 38. スケジュールから営業日カレンダーを作る（`createCalendarFromSchedule`）。利用者の TypeScript の版は CI で確かめる
 
 営業時間表のようなスケジュールが設定の正本である利用者のために、スケジュールと「値が営業か」を決める関数から営業日カレンダーを作る関数を足しました（0.13.0）。
@@ -372,6 +392,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - 各版は依存にせず、版と SHA-256 を固定した tgz を `npm pack` で取り出して一時ディレクトリに入れます（10 番の考え方。7.0 は実行形式を optional dependency として配るので、ランナー向けの `@typescript/typescript-linux-x64` も固定して入れ、ほかのプラットフォームの実行形式は入れません）
 - 7.0 の `tsc` はコンパイラー API を持たないので、`api-report.ts`（API のスナップショット）が使う開発用の TypeScript は 6.0 のままです（7.1 で API が出たときに改めて判断）。7.0 の `bin/tsc` は Node.js のスクリプト（中で実行形式を起動する）なので、起動の仕方は 5・6 系と同じです
 - 黙って合格になる検査を避けるため（26 番と同じ考え）、わざと型エラーを含む入力（`test/consumer/consumer-error.mts`）も各版・各設定で実行し、失敗として報告されることを確かめます。リポジトリの `@types`（`@types/node`）は古い版では読めない構文を含むので、`--typeRoots` を空にして読みません
+
+（0.30.0 で追記: `createCalendarFromSchedule` の第 3 引数の型に `CalendarFromScheduleOptions` と名前を付け（N7）、理由の対応表の `weekday` → `"regular"` を `"open-weekday"` に改めた）
 
 ## 39. 締め期間は `closingPeriod` で返し、締め日の読み替えは `closingMonth` と同じ 1 か所で行う
 
@@ -416,6 +438,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 
 - `HolidayPattern<Kind>.kinds` を `readonly Kind[]` にし、`RecurringRule<Kind>`・`RecurringValue<T, Kind>` を通して `CalendarOptions<Kind>`・`ScheduleOptions<T, Kind>` に型引数を流します（0.15.0）。8 番が型引数 `Kind` を残した理由（日本の祝日で種別の補完が効く）が、`kinds` には届いていませんでした。種別は開いた型（2 番）なので、提供元にない文字列も型では通り（診断で `never-matches`）、既定値付きの型引数の追加は `RecurringRule` を単独で使うコードを壊しません
 - `businessDayOnOrAfter` の `cutoff` を、時刻を持たない入力（暦日の文字列・Temporal の `PlainDate` など）と組み合わせると `invalid-argument` にします（0.15.0）。それまでは暦日を 0 時として扱い、締め時刻は黙って無視されていました。注文の受付時刻を `Date` で渡すつもりがフォームの日付文字列をそのまま渡した、という事故が、出荷が間に合わなかったあとにしか分からないためです。4 番の「知っているキーの無効な組み合わせは例外」と同じ性格で、黙って通っていた呼び出しを止める変更なので CHANGELOG の「移行」と docs/migration.md に書きました（0.x のマイナー版で行える。1.0.0 以降なら行えない）。型では区別できません（文字列は暦日も日時も `string`）
+
+（0.30.0 で追記: 日本の祝日の種別 `"national"` を `"regular"` に改めた（英国・シンガポール・フランスと同じ語。毎年繰り返す祝日の種別）。`kinds` の `"national"` は、日本の提供元を使う設定でだけ 0.30.x の間読み替える）
 
 ## 43. 祝前日の規則、提供元の実装者向けのサブパス、入れ子の合成の経路、空白区切りの日時の廃止、Bun・Deno の確認
 
@@ -533,6 +557,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 
 （0.22.0 で追記: `substituteDays` と `Known…HolidayKey` の型は `@public` にしました。53 番）
 
+（0.30.0 で追記: `substituteDays` を `withSubstituteDays` に（N2 の `with…`）、設定の `rules`・`name`・`original` を `directions`・`renameSubstitute`・`originalPolicy` に改めた）
+
 ## 47. 月の第 n 営業日の規則 `businessDayOfMonth`、振替で曜日も飛ばす `skipWeekdays`
 
 0.19.0 で、5 通目の機能拡張提案の残り 2 つ（P2・P3）を入れました。どちらも既存の規則の形では書けず、年ごとに日付を列挙するしかなかったものです（33・41 番が規則の代わりとしては退けた形）。
@@ -564,6 +590,8 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - `verify-govuk.ts`・`verify-datagovsg.ts`・`verify-cao.ts` の「確認した日付」（報告書の 1 行目・フィクスチャの「取得」）は UTC の日付でした。issue のコメントの日付（`TZ=Asia/Tokyo date`）と基準が違ったので、3 つを同時に日本時間に揃えました（`Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" })`）
 
 （0.22.0 で追記: `skipWeekdays` を祝日の翌日・祝前日の規則にも付けられるようにしました。「振替先と同じ定義」（33 番）を共有する規則に同じ項目を付けるもので、意味は「祝日と書いた曜日が続く塊の前後の日」です。53 番）
+
+（0.30.0 で追記: 規則の `day` を `dayOfMonth` に改めた（`day` は 1 日・日数の語で、月の中の日には `day of month` を使う）。同じ数え方の週版 `businessDayOfWeek`（`weekStart` は必須）を足した。週は `weekStart` から 7 日間で、週に番号は付けないので 30 番が ISO 週番号を退けた理由は当たらない）
 
 ## 48. フランスの祝日（`bizdays-toolkit/fr`。本土と Alsace-Moselle）と、4 か国目の選び方
 
@@ -683,3 +711,32 @@ GOV.UK の監視（govuk-watch。0.17.0 から data-watch で、シンガポー�
 - 非推奨の API（32・37 番）は 1.0.0 で削除する前提を変えず、移行ガイドに削除予定の一覧を 1 か所にまとめました
 
 サイズは、ルートが 15,438 → 16,074 バイト、`./jp` が 17,654 → 18,293 バイト、`./diagnose` が 20,648 → 21,445 バイト（いずれも gzip）に増え、3 つの上限を上げました。
+
+（0.30.0 で追記: `anchor` の説明を 30 番と同じ定義（周期を数え始める日）に揃えた）
+
+## 54. 公開する名前の規則を先に決め、0.30.0 ですべての名前を規則に合わせる
+
+名前の揺れ（`businessDaysBetween` が数を返し、`listBusinessDays` が一覧を返すなど）は、名前の付け方の規則を最初に決めていなかったことが原因でした。1.0.0 の前に一度だけ、規則を先に作ってから、すべての名前を規則に合わせて改めます。
+
+- 規則（N1〜N9）・用語集・外部の名前の出典は `etc/naming.md` に置き、`scripts/check-names.ts` がビルド済みの型定義に当てて確かめます。過去の経緯は考慮せず、名前を許す一覧（例外）は持ちません。対象は export・項目・メソッド・引数・型引数・文字列の値のすべてです
+- 規則から機械的に決まらない新しい名前（`rulePath` → `optionPath`、`invalid-month-day` → `invalid-annual-date`）は、N1 の意味の重なりとしてレビューで決めました
+- 改名した設定のキーと値の表は `src/core/renamed.ts` の 1 か所に置き、検証の入口での読み替え・診断の `deprecated-option`・移行の関数がこの表だけを使います。0.30.x の間は旧名を受け付け、旧名と新しい名前の両方を書くと `invalid-option` です。旧名の関数・メソッド・型・返す項目は `@deprecated` の別名として残し、すべて移行ガイドの削除予定の表に修飾名で載せます。設定の型が旧名のキーを持つのは省略可能なキーだけで、必須のキー（`weekly`・合成の `businessDay`・期日の `day`・振替の `rules`）と規則の `day` は実行時だけ受け付けます
+- 位置を表す文字列（`optionPath`・診断の `path`・例外のメッセージ）は、旧名で書いた設定でも新しい名前で返します。`deprecated-option` の `path` だけは、利用者が書いた旧名の位置です
+- 型と実行時の一致（33・43 番）は新しい名前についての約束で、旧名の経路は 1.0.0 で消えます
+
+**規則の要点**（本文は `etc/naming.md`）
+
+- N1 一語一義・一義一語（用語集）、N2 関数・メソッドの名前の形が返すものと引数を約束する（`is…` は真偽値、`diff…` は数、`…Between` は両端を含む一覧、`…On` はその日のもの、`with…` は足した新しい一覧など。逆向きの約束も持つ）、N3 真偽値の項目は形容詞か過去分詞、N4 単数・複数は型の形に合わせる、N5 選択肢の項目は `Policy` で終える、N6 関数を受ける項目は動詞で始める、N7 国の型の頭・設定の型の名前、N8 外部の名前は写す（`@namingSource`）、N9 スケジュール版の型は `Schedule` で始める
+- 意味の重なりのうち型で表せるもの（`day` を項目の名前の最後に使わない、`rule` は繰り返しの規則の型だけ、など）は、用語集の「型」の列で機械的に確かめる（C12）。同じ名前の `Policy` の選択肢は、項目の名前を PascalCase にした型の値の部分集合にする（規則の形ごとに選択肢を絞るのは部分集合なので合う）
+
+**同じ版に入れたもの**
+
+- 型と実行時の一致（33 番の見直し）: 規則の形ごとに受ける項目を型で分けた。型を狭める変更は 1.0.0 の後ではメジャー版になるので、改名と同じ版で行った
+- 隣の日を見る規則と対応年の端: `outOfRangePolicy: "throw"` で外の日を見たら `out-of-range` を投げる。44 番の「結果が予測に依存しうる経路を漏れなく止める」に対し、分からない年に依存する結果を黙って返すのは強さが逆転していたため（シンガポールは対応年の終わりが毎年動くので、最後の 12 月 31 日の祝前日が毎年この状態になる）。診断は走査の端で例外にしないよう、外を祝日なしとして扱う
+- 週の第 n 営業日 `{ businessDayOfWeek, weekStart }`: 47 番の「月」を「週」に替えた規則で、名前は新しい規則で決めた。`weekStart` は 16 番が `convention` を必須にしたのと同じ理由で必須
+- `migrateCalendarOptions`・`migrateScheduleOptions`: 診断と同じく開発・移行の道具なので `bizdays-toolkit/diagnose` に置いた（15 番）。1.0.0 より前に保存した設定を 1.0.0 以降に読み込む利用者のため、1.0.0 以降も残す
+
+**版の番号と出し方**
+
+- 名前の全面的な整理の版を区切るため 0.30.0 とした（0.23.0〜0.29.0 は欠番）。プレリリースは出さない。旧名を 0.30.x の間受け付け、診断と `migrate…` で書き換え先が分かるので、移行期間そのものが試す期間になる
+- 1.0.0 で、旧名（関数・メソッド・型・返す項目）を削除し、設定の旧名を永久に `invalid-option` にし、診断コード `deprecated-option` を削除する

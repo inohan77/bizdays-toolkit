@@ -8,7 +8,7 @@
 ### addDays (@public)
 
 ```ts
-export declare function addDays(date: DateString, days: number): DateString;
+export declare function addDays(date: DateString, n: number): DateString;
 ```
 
 ### AdjustOptions (@public)
@@ -38,25 +38,16 @@ export interface AnnualRange extends EffectivePeriod {
 }
 ```
 
-### AnnualRangeValue (@public)
+### AnnualRangeValue (@public, @deprecated)
 
 ```ts
-export interface AnnualRangeValue<T> extends EffectivePeriod {
-    readonly from: string;
-    readonly to: string;
-    readonly value: T;
-    readonly name?: string;
-}
+export type AnnualRangeValue<Value> = ScheduleAnnualRange<Value>;
 ```
 
-### AnnualValue (@public)
+### AnnualValue (@public, @deprecated)
 
 ```ts
-export interface AnnualValue<T> extends EffectivePeriod {
-    readonly date: string;
-    readonly value: T;
-    readonly name?: string;
-}
+export type AnnualValue<Value> = ScheduleAnnualDate<Value>;
 ```
 
 ### BusinessDayConvention (@public)
@@ -82,7 +73,43 @@ export interface BusinessDayOfMonthPattern {
     readonly nth?: never;
     readonly interval?: never;
     readonly anchor?: never;
-    readonly day?: never;
+    readonly dayOfMonth?: never;
+    readonly dayAfterHoliday?: never;
+    readonly dayBeforeHoliday?: never;
+    readonly holiday?: never;
+    readonly weekdays?: never;
+    readonly kinds?: never;
+    readonly keys?: never;
+    readonly skipWeekdays?: never;
+    readonly cycle?: never;
+    readonly positions?: never;
+    readonly businessDayOfWeek?: never;
+    readonly weekStart?: never;
+    readonly holidayOverlapPolicy?: "under-holiday" | "over-holiday";
+}
+```
+
+### BusinessDayOfWeek (@public)
+
+```ts
+export type BusinessDayOfWeek = 1 | 2 | 3 | 4 | 5 | 6 | 7 | -1 | -2 | -3 | -4 | -5 | -6 | -7;
+```
+
+### BusinessDayOfWeekPattern (@public)
+
+```ts
+export interface BusinessDayOfWeekPattern {
+    readonly businessDayOfWeek: BusinessDayOfWeek | readonly BusinessDayOfWeek[];
+    readonly weekStart: Weekday;
+    readonly months?: readonly Month[];
+    readonly calendar?: Calendar;
+    readonly holidayOverlapPolicy?: "under-holiday" | "over-holiday";
+    readonly weekday?: never;
+    readonly nth?: never;
+    readonly interval?: never;
+    readonly anchor?: never;
+    readonly dayOfMonth?: never;
+    readonly businessDayOfMonth?: never;
     readonly dayAfterHoliday?: never;
     readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
@@ -95,26 +122,35 @@ export interface BusinessDayOfMonthPattern {
 }
 ```
 
-### BusinessDayOptions (@public)
+### BusinessDayOnOrAfterOptions (@public)
 
 ```ts
-export interface BusinessDayOptions {
+export interface BusinessDayOnOrAfterOptions {
     readonly cutoff?: string;
 }
+```
+
+### BusinessDayOptions (@public, @deprecated)
+
+```ts
+export type BusinessDayOptions = BusinessDayOnOrAfterOptions;
 ```
 
 ### Calendar (@public)
 
 ```ts
 export interface Calendar<Kind extends string = string> extends HolidayLookup<Kind> {
+    dayInfoOn(input: DateInput): DayInfo<Kind>;
     dayInfo(input: DateInput): DayInfo<Kind>;
     daysBetween(from: DateInput, to: DateInput): readonly DayInfo<Kind>[];
     isBusinessDay(input: DateInput): boolean;
     nextBusinessDay(input: DateInput): DateString;
     previousBusinessDay(input: DateInput): DateString;
-    businessDayOnOrAfter(input: DateInput, options?: BusinessDayOptions): DateString;
+    businessDayOnOrAfter(input: DateInput, options?: BusinessDayOnOrAfterOptions): DateString;
     businessDayOnOrBefore(input: DateInput): DateString;
     addBusinessDays(input: DateInput, n: number): DateString;
+    diffBusinessDays(from: DateInput, to: DateInput): number;
+    businessDatesBetween(from: DateInput, to: DateInput): readonly DateString[];
     businessDaysBetween(from: DateInput, to: DateInput): number;
     listBusinessDays(from: DateInput, to: DateInput): readonly DateString[];
     adjust(input: DateInput, options: AdjustOptions): DateString;
@@ -122,11 +158,20 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
     firstBusinessDayOfMonth(month: MonthString): DateString;
     lastBusinessDayOfMonth(month: MonthString): DateString;
     dueDate(month: MonthString, options: DueDateOptions): DateString;
-    closingMonth(input: DateInput, closingDay: number, options: AdjustOptions): MonthString;
-    closingPeriod(input: DateInput | MonthString, closingDay: number, options: AdjustOptions): {
+    closingMonth(input: DateInput, closingDayOfMonth: number, options: AdjustOptions): MonthString;
+    closingPeriod(input: DateInput | MonthString, closingDayOfMonth: number, options: AdjustOptions): {
         readonly from: DateString;
         readonly to: DateString;
     };
+}
+```
+
+### CalendarFromScheduleOptions (@public)
+
+```ts
+export interface CalendarFromScheduleOptions {
+    readonly searchDayLimit?: number;
+    readonly maxSearchDays?: number;
 }
 ```
 
@@ -135,12 +180,16 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
 ```ts
 export interface CalendarOptions<Kind extends string = string> extends HolidaySourceOptions<Kind> {
     readonly closedWeekdays?: readonly Weekday[];
-    readonly closedAnnual?: readonly (AnnualDate | AnnualRange)[];
+    readonly closedAnnualDates?: readonly (AnnualDate | AnnualRange)[];
     readonly closedDates?: readonly (SpecificDate | DateRange)[];
     readonly openDates?: readonly (SpecificDate | DateRange)[];
+    readonly closedRecurringRules?: readonly RecurringRule<Kind>[];
+    readonly openRecurringRules?: readonly RecurringRule<Kind>[];
+    readonly holidayPolicy?: HolidayPolicy;
+    readonly searchDayLimit?: number;
+    readonly closedAnnual?: readonly (AnnualDate | AnnualRange)[];
     readonly closedRecurring?: readonly RecurringRule<Kind>[];
     readonly openRecurring?: readonly RecurringRule<Kind>[];
-    readonly holidayPolicy?: HolidayPolicy;
     readonly maxSearchDays?: number;
 }
 ```
@@ -157,13 +206,13 @@ export interface CivilDateTimeParts<Time extends string | null = string | null> 
 ### closingMonth (@public)
 
 ```ts
-export declare function closingMonth(date: DateString, closingDay: number): MonthString;
+export declare function closingMonth(date: DateString, closingDayOfMonth: number): MonthString;
 ```
 
 ### closingPeriod (@public)
 
 ```ts
-export declare function closingPeriod(input: DateString | MonthString, closingDay: number): {
+export declare function closingPeriod(input: DateString | MonthString, closingDayOfMonth: number): {
     readonly from: DateString;
     readonly to: DateString;
 };
@@ -172,16 +221,23 @@ export declare function closingPeriod(input: DateString | MonthString, closingDa
 ### combineCalendars (@public)
 
 ```ts
-export declare function combineCalendars<Kind extends string = string>(calendars: readonly Calendar<Kind>[], options: CombineOptions): Calendar<Kind>;
+export declare function combineCalendars<Kind extends string = string>(calendars: readonly Calendar<Kind>[], options: CombineCalendarsOptions): Calendar<Kind>;
 ```
 
-### CombineOptions (@public)
+### CombineCalendarsOptions (@public)
 
 ```ts
-export interface CombineOptions {
-    readonly businessDay: "all" | "any";
+export interface CombineCalendarsOptions {
+    readonly open: "all" | "any";
+    readonly searchDayLimit?: number;
     readonly maxSearchDays?: number;
 }
+```
+
+### CombineOptions (@public, @deprecated)
+
+```ts
+export type CombineOptions = CombineCalendarsOptions;
 ```
 
 ### createCalendar (@public)
@@ -193,15 +249,13 @@ export declare function createCalendar<Kind extends string = string>(options?: C
 ### createCalendarFromSchedule (@public)
 
 ```ts
-export declare function createCalendarFromSchedule<T, Kind extends string = string>(schedule: Schedule<T, Kind>, isOpen: (value: T) => boolean, options?: {
-    readonly maxSearchDays?: number;
-}): Calendar<Kind>;
+export declare function createCalendarFromSchedule<Value, Kind extends string = string>(schedule: Schedule<Value, Kind>, isOpen: (value: Value) => boolean, options?: CalendarFromScheduleOptions): Calendar<Kind>;
 ```
 
 ### createSchedule (@public)
 
 ```ts
-export declare function createSchedule<T, Kind extends string = string>(options: ScheduleOptions<T, Kind>): Schedule<T, Kind>;
+export declare function createSchedule<Value, Kind extends string = string>(options: ScheduleOptions<Value, Kind>): Schedule<Value, Kind>;
 ```
 
 ### CyclePattern (@public)
@@ -215,7 +269,7 @@ export interface CyclePattern {
     readonly weekday?: never;
     readonly nth?: never;
     readonly interval?: never;
-    readonly day?: never;
+    readonly dayOfMonth?: never;
     readonly businessDayOfMonth?: never;
     readonly calendar?: never;
     readonly dayAfterHoliday?: never;
@@ -225,6 +279,9 @@ export interface CyclePattern {
     readonly kinds?: never;
     readonly keys?: never;
     readonly skipWeekdays?: never;
+    readonly businessDayOfWeek?: never;
+    readonly weekStart?: never;
+    readonly holidayOverlapPolicy?: "under-holiday" | "over-holiday";
 }
 ```
 
@@ -244,15 +301,10 @@ export interface DateRange {
 }
 ```
 
-### DateRangeValue (@public)
+### DateRangeValue (@public, @deprecated)
 
 ```ts
-export interface DateRangeValue<T> {
-    readonly from: DateString;
-    readonly to: DateString;
-    readonly value: T;
-    readonly name?: string;
-}
+export type DateRangeValue<Value> = ScheduleDateRange<Value>;
 ```
 
 ### DateString (@public)
@@ -267,14 +319,10 @@ export type DateString = string;
 export type DateTimeInput = Date | TemporalInstantLike | TemporalDateTimeLike | `${number}-${number}-${number}T${string}`;
 ```
 
-### DateValue (@public)
+### DateValue (@public, @deprecated)
 
 ```ts
-export interface DateValue<T> {
-    readonly date: DateString;
-    readonly value: T;
-    readonly name?: string;
-}
+export type DateValue<Value> = ScheduleSpecificDate<Value>;
 ```
 
 ### DayAfterHolidayPattern (@public)
@@ -291,13 +339,16 @@ export interface DayAfterHolidayPattern<Kind extends string = string> {
     readonly nth?: never;
     readonly interval?: never;
     readonly anchor?: never;
-    readonly day?: never;
+    readonly dayOfMonth?: never;
     readonly businessDayOfMonth?: never;
     readonly calendar?: never;
     readonly dayBeforeHoliday?: never;
     readonly holiday?: never;
     readonly cycle?: never;
     readonly positions?: never;
+    readonly businessDayOfWeek?: never;
+    readonly weekStart?: never;
+    readonly holidayOverlapPolicy?: never;
 }
 ```
 
@@ -315,13 +366,16 @@ export interface DayBeforeHolidayPattern<Kind extends string = string> {
     readonly nth?: never;
     readonly interval?: never;
     readonly anchor?: never;
-    readonly day?: never;
+    readonly dayOfMonth?: never;
     readonly businessDayOfMonth?: never;
     readonly calendar?: never;
     readonly dayAfterHoliday?: never;
     readonly holiday?: never;
     readonly cycle?: never;
     readonly positions?: never;
+    readonly businessDayOfWeek?: never;
+    readonly weekStart?: never;
+    readonly holidayOverlapPolicy?: never;
 }
 ```
 
@@ -331,11 +385,13 @@ export interface DayBeforeHolidayPattern<Kind extends string = string> {
 export interface DayInfo<Kind extends string = string> {
     readonly date: DateString;
     readonly weekday: Weekday;
+    readonly open: boolean;
     readonly businessDay: boolean;
     readonly reason: DayReason;
     readonly name?: string;
     readonly holiday?: Holiday<Kind>;
     readonly shiftedFrom?: DateString;
+    readonly optionPath?: string;
     readonly rulePath?: string;
     readonly decidedBy?: number;
     readonly decidedByPath?: readonly number[];
@@ -352,9 +408,8 @@ export type DayOfMonth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
 
 ```ts
 export interface DayOfMonthPattern {
-    readonly day: DayOfMonth | readonly DayOfMonth[];
+    readonly dayOfMonth: DayOfMonth | readonly DayOfMonth[];
     readonly months?: readonly Month[];
-    readonly skipWeekdays?: readonly Weekday[];
     readonly weekday?: never;
     readonly nth?: never;
     readonly interval?: never;
@@ -369,6 +424,8 @@ export interface DayOfMonthPattern {
     readonly keys?: never;
     readonly cycle?: never;
     readonly positions?: never;
+    readonly businessDayOfWeek?: never;
+    readonly weekStart?: never;
 }
 ```
 
@@ -388,7 +445,7 @@ export declare function diffDays(from: DateString, to: DateString): number;
 
 ```ts
 export interface DueDateOptions {
-    readonly day: DayOfMonth;
+    readonly dayOfMonth: DayOfMonth;
     readonly convention: BusinessDayConvention;
 }
 ```
@@ -428,6 +485,8 @@ export interface Holiday<Kind extends string = string> {
 export interface HolidayLookup<Kind extends string = string> {
     readonly timeZone: string;
     readonly providers: readonly HolidayProvider<Kind>[];
+    readonly outOfRangePolicy: "throw" | "ignore";
+    readonly unconfirmedHolidayPolicy: "accept" | "throw";
     readonly outOfRange: "throw" | "ignore";
     readonly unconfirmedHolidays: "accept" | "throw";
     dateOf(input: DateInput): DateString;
@@ -436,10 +495,17 @@ export interface HolidayLookup<Kind extends string = string> {
     instantOf(date: DateString, time: string): Date;
     today(now?: Date): DateString;
     isHoliday(input: DateInput): boolean;
+    holidayOn(input: DateInput): Holiday<Kind> | undefined;
     getHoliday(input: DateInput): Holiday<Kind> | undefined;
     holidaysInYear(year: number): readonly Holiday<Kind>[];
     holidaysBetween(from: DateInput, to: DateInput): readonly Holiday<Kind>[];
 }
+```
+
+### HolidayOverlapPolicy (@public)
+
+```ts
+export type HolidayOverlapPolicy = "under-holiday" | "over-holiday" | "after-holiday";
 ```
 
 ### HolidayPattern (@public)
@@ -455,7 +521,7 @@ export interface HolidayPattern<Kind extends string = string> {
     readonly nth?: never;
     readonly interval?: never;
     readonly anchor?: never;
-    readonly day?: never;
+    readonly dayOfMonth?: never;
     readonly businessDayOfMonth?: never;
     readonly calendar?: never;
     readonly dayAfterHoliday?: never;
@@ -463,6 +529,9 @@ export interface HolidayPattern<Kind extends string = string> {
     readonly skipWeekdays?: never;
     readonly cycle?: never;
     readonly positions?: never;
+    readonly businessDayOfWeek?: never;
+    readonly weekStart?: never;
+    readonly holidayOverlapPolicy?: never;
 }
 ```
 
@@ -492,21 +561,20 @@ export interface HolidayProvider<Kind extends string = string> {
 
 ```ts
 export interface HolidaySourceOptions<Kind extends string = string> {
+    readonly holidayProvider?: HolidayProvider<Kind> | readonly HolidayProvider<Kind>[];
     readonly holidays?: HolidayProvider<Kind> | readonly HolidayProvider<Kind>[];
-    readonly timeZone?: string;
     readonly outOfRange?: "throw" | "ignore";
     readonly unconfirmedHolidays?: "accept" | "throw";
+    readonly timeZone?: string;
+    readonly outOfRangePolicy?: "throw" | "ignore";
+    readonly unconfirmedHolidayPolicy?: "accept" | "throw";
 }
 ```
 
-### HolidayValueRule (@public)
+### HolidayValueRule (@public, @deprecated)
 
 ```ts
-export type HolidayValueRule<T> = "weekday" | {
-    readonly sameAs: Weekday;
-} | {
-    readonly value: T;
-};
+export type HolidayValueRule<Value> = ScheduleHolidayPolicy<Value> | "weekday";
 ```
 
 ### isBizdaysError (@public)
@@ -520,25 +588,31 @@ export declare function isBizdaysError(error: unknown): error is Error & {
 ### isValidDate (@public)
 
 ```ts
-export declare function isValidDate(value: unknown): value is DateString;
+export declare function isValidDate(input: unknown): input is DateString;
 ```
 
 ### KnownDayReason (@public)
 
 ```ts
-export type KnownDayReason = "open-date" | "closed-date" | "open-annual" | "closed-annual" | "open-recurring" | "closed-recurring" | "holiday" | "closed-weekday" | "regular";
+export type KnownDayReason = "open-date" | "closed-date" | "open-annual" | "closed-annual" | "open-recurring" | "closed-recurring" | "holiday" | "closed-weekday" | "default" | "open-weekday";
 ```
 
 ### KnownErrorCode (@public)
 
 ```ts
-export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-month-day" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "unconfirmed-holiday" | "invalid-provider" | "invalid-provider-data" | "no-business-day";
+export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-annual-date" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "unconfirmed-holiday" | "invalid-provider" | "invalid-provider-data" | "no-business-day";
 ```
 
-### KnownScheduleReason (@public)
+### KnownScheduleDayReason (@public)
 
 ```ts
-export type KnownScheduleReason = "date" | "annual" | "recurring" | "holiday" | "weekday";
+export type KnownScheduleDayReason = "date" | "annual" | "recurring" | "holiday" | "weekday";
+```
+
+### KnownScheduleReason (@public, @deprecated)
+
+```ts
+export type KnownScheduleReason = KnownScheduleDayReason;
 ```
 
 ### Month (@public)
@@ -565,84 +639,177 @@ export type MonthString = string;
 export type Nth = 1 | 2 | 3 | 4 | 5 | -1;
 ```
 
-### OnHolidayRule (@public)
+### OnHolidayRule (@public, @deprecated)
 
 ```ts
-export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";
+export type OnHolidayRule = HolidayOverlapPolicy;
 ```
 
 ### RecurringPattern (@public)
 
 ```ts
-export type RecurringPattern<Kind extends string = string> = WeekdayPattern | DayOfMonthPattern | BusinessDayOfMonthPattern | DayAfterHolidayPattern<Kind> | DayBeforeHolidayPattern<Kind> | HolidayPattern<Kind> | CyclePattern;
+export type RecurringPattern<Kind extends string = string> = (WeekdayPattern & ({
+    readonly holidayOverlapPolicy: "after-holiday";
+    readonly skipWeekdays?: readonly Weekday[];
+} | {
+    readonly holidayOverlapPolicy?: "under-holiday" | "over-holiday";
+    readonly skipWeekdays?: never;
+})) | (DayOfMonthPattern & ({
+    readonly holidayOverlapPolicy: "after-holiday";
+    readonly skipWeekdays?: readonly Weekday[];
+} | {
+    readonly holidayOverlapPolicy?: "under-holiday" | "over-holiday";
+    readonly skipWeekdays?: never;
+})) | BusinessDayOfMonthPattern | BusinessDayOfWeekPattern | DayAfterHolidayPattern<Kind> | DayBeforeHolidayPattern<Kind> | HolidayPattern<Kind> | CyclePattern;
 ```
 
 ### RecurringRule (@public)
 
 ```ts
-export type RecurringRule<Kind extends string = string> = RecurringPattern<Kind> & EffectivePeriod & {
+export type RecurringRule<Kind extends string = string> = (Exclude<RecurringPattern<Kind>, BusinessDayOfMonthPattern | BusinessDayOfWeekPattern> | ((BusinessDayOfMonthPattern | BusinessDayOfWeekPattern) & {
+    readonly calendar?: never;
+})) & EffectivePeriod & {
     readonly name?: string;
-    readonly onHolidayRule?: OnHolidayRule;
+    readonly onHolidayRule?: HolidayOverlapPolicy;
 };
 ```
 
-### RecurringValue (@public)
+### RecurringValue (@public, @deprecated)
 
 ```ts
-export type RecurringValue<T, Kind extends string = string> = RecurringRule<Kind> & {
-    readonly value: T;
-};
+export type RecurringValue<Value, Kind extends string = string> = ScheduleRecurringRule<Value, Kind>;
 ```
 
 ### Schedule (@public)
 
 ```ts
-export interface Schedule<T, Kind extends string = string> extends HolidayLookup<Kind> {
-    valueOn(input: DateInput): T;
-    dayInfo(input: DateInput): ScheduleDay<T, Kind>;
-    daysBetween(from: DateInput, to: DateInput): readonly ScheduleDay<T, Kind>[];
+export interface Schedule<Value, Kind extends string = string> extends HolidayLookup<Kind> {
+    valueOn(input: DateInput): Value;
+    dayInfoOn(input: DateInput): ScheduleDayInfo<Value, Kind>;
+    dayInfo(input: DateInput): ScheduleDayInfo<Value, Kind>;
+    daysBetween(from: DateInput, to: DateInput): readonly ScheduleDayInfo<Value, Kind>[];
 }
 ```
 
-### ScheduleDay (@public)
+### ScheduleAnnualDate (@public)
 
 ```ts
-export interface ScheduleDay<T, Kind extends string = string> {
+export interface ScheduleAnnualDate<Value> extends EffectivePeriod {
+    readonly date: string;
+    readonly value: Value;
+    readonly name?: string;
+}
+```
+
+### ScheduleAnnualRange (@public)
+
+```ts
+export interface ScheduleAnnualRange<Value> extends EffectivePeriod {
+    readonly from: string;
+    readonly to: string;
+    readonly value: Value;
+    readonly name?: string;
+}
+```
+
+### ScheduleDateRange (@public)
+
+```ts
+export interface ScheduleDateRange<Value> {
+    readonly from: DateString;
+    readonly to: DateString;
+    readonly value: Value;
+    readonly name?: string;
+}
+```
+
+### ScheduleDay (@public, @deprecated)
+
+```ts
+export type ScheduleDay<Value, Kind extends string = string> = ScheduleDayInfo<Value, Kind>;
+```
+
+### ScheduleDayInfo (@public)
+
+```ts
+export interface ScheduleDayInfo<Value, Kind extends string = string> {
     readonly date: DateString;
     readonly weekday: Weekday;
-    readonly value: T;
-    readonly reason: ScheduleReason;
+    readonly value: Value;
+    readonly reason: ScheduleDayReason;
     readonly name?: string;
     readonly holiday?: Holiday<Kind>;
     readonly shiftedFrom?: DateString;
+    readonly optionPath?: string;
     readonly rulePath?: string;
 }
+```
+
+### ScheduleDayReason (@public)
+
+```ts
+export type ScheduleDayReason = KnownScheduleDayReason | (string & {});
+```
+
+### ScheduleHolidayPolicy (@public)
+
+```ts
+export type ScheduleHolidayPolicy<Value> = "ignore" | {
+    readonly sameAs: Weekday;
+} | {
+    readonly value: Value;
+};
 ```
 
 ### ScheduleOptions (@public)
 
 ```ts
-export interface ScheduleOptions<T, Kind extends string = string> extends HolidaySourceOptions<Kind> {
-    readonly weekly: readonly [
-        T,
-        T,
-        T,
-        T,
-        T,
-        T,
-        T
+export interface ScheduleOptions<Value, Kind extends string = string> extends HolidaySourceOptions<Kind> {
+    readonly weekdayValues: readonly [
+        Value,
+        Value,
+        Value,
+        Value,
+        Value,
+        Value,
+        Value
     ];
-    readonly holiday?: HolidayValueRule<T>;
-    readonly recurring?: readonly RecurringValue<T, Kind>[];
-    readonly annual?: readonly (AnnualValue<T> | AnnualRangeValue<T>)[];
-    readonly dates?: readonly (DateValue<T> | DateRangeValue<T>)[];
+    readonly holidayPolicy?: ScheduleHolidayPolicy<Value>;
+    readonly recurringRules?: readonly ScheduleRecurringRule<Value, Kind>[];
+    readonly annualDates?: readonly (ScheduleAnnualDate<Value> | ScheduleAnnualRange<Value>)[];
+    readonly holiday?: ScheduleHolidayPolicy<Value> | "weekday";
+    readonly recurring?: readonly ScheduleRecurringRule<Value, Kind>[];
+    readonly annual?: readonly (ScheduleAnnualDate<Value> | ScheduleAnnualRange<Value>)[];
+    readonly dates?: readonly (ScheduleSpecificDate<Value> | ScheduleDateRange<Value>)[];
 }
 ```
 
-### ScheduleReason (@public)
+### ScheduleReason (@public, @deprecated)
 
 ```ts
-export type ScheduleReason = KnownScheduleReason | (string & {});
+export type ScheduleReason = ScheduleDayReason;
+```
+
+### ScheduleRecurringRule (@public)
+
+```ts
+export type ScheduleRecurringRule<Value, Kind extends string = string> = (Exclude<RecurringPattern<Kind>, BusinessDayOfMonthPattern | BusinessDayOfWeekPattern> | ((BusinessDayOfMonthPattern | BusinessDayOfWeekPattern) & {
+    readonly calendar: Calendar;
+})) & EffectivePeriod & {
+    readonly name?: string;
+    readonly onHolidayRule?: HolidayOverlapPolicy;
+    readonly value: Value;
+};
+```
+
+### ScheduleSpecificDate (@public)
+
+```ts
+export interface ScheduleSpecificDate<Value> {
+    readonly date: DateString;
+    readonly value: Value;
+    readonly name?: string;
+}
 ```
 
 ### SpecificDate (@public)
@@ -724,8 +891,7 @@ export interface WeekdayPattern {
     readonly interval?: number;
     readonly anchor?: DateString;
     readonly months?: readonly Month[];
-    readonly skipWeekdays?: readonly Weekday[];
-    readonly day?: never;
+    readonly dayOfMonth?: never;
     readonly businessDayOfMonth?: never;
     readonly calendar?: never;
     readonly dayAfterHoliday?: never;
@@ -736,6 +902,8 @@ export interface WeekdayPattern {
     readonly keys?: never;
     readonly cycle?: never;
     readonly positions?: never;
+    readonly businessDayOfWeek?: never;
+    readonly weekStart?: never;
 }
 ```
 
@@ -753,22 +921,28 @@ export declare const confirmedThrough: number;
 export declare const dataVersion: string;
 ```
 
-### getHoliday (@public)
+### getHoliday (@public, @deprecated)
 
 ```ts
-export declare function getHoliday(input: DateInput): JapaneseHoliday | undefined;
+export declare function getHoliday(input: DateInput): JpHoliday | undefined;
+```
+
+### holidayOn (@public)
+
+```ts
+export declare function holidayOn(input: DateInput): JpHoliday | undefined;
 ```
 
 ### holidaysBetween (@public)
 
 ```ts
-export declare function holidaysBetween(from: DateInput, to: DateInput): readonly JapaneseHoliday[];
+export declare function holidaysBetween(from: DateInput, to: DateInput): readonly JpHoliday[];
 ```
 
 ### holidaysInYear (@public)
 
 ```ts
-export declare function holidaysInYear(year: number): readonly JapaneseHoliday[];
+export declare function holidaysInYear(year: number): readonly JpHoliday[];
 ```
 
 ### isHoliday (@public)
@@ -777,34 +951,58 @@ export declare function holidaysInYear(year: number): readonly JapaneseHoliday[]
 export declare function isHoliday(input: DateInput): boolean;
 ```
 
-### JapaneseHoliday (@public)
+### JapaneseHoliday (@public, @deprecated)
 
 ```ts
-export type JapaneseHoliday = Holiday<JapaneseHolidayKind>;
+export type JapaneseHoliday = JpHoliday;
 ```
 
-### JapaneseHolidayKind (@public)
+### JapaneseHolidayKind (@public, @deprecated)
 
 ```ts
-export type JapaneseHolidayKind = KnownJapaneseHolidayKind | (string & {});
+export type JapaneseHolidayKind = JpHolidayKind;
 ```
 
 ### jp (@public)
 
 ```ts
-export declare const jp: HolidayProvider<JapaneseHolidayKind>;
+export declare const jp: HolidayProvider<JpHolidayKind>;
 ```
 
-### KnownJapaneseHolidayKey (@public)
+### JpHoliday (@public)
 
 ```ts
-export type KnownJapaneseHolidayKey = "new-year" | "coming-of-age" | "national-foundation" | "emperors-birthday" | "vernal-equinox" | "showa" | "constitution-memorial" | "greenery" | "childrens" | "marine" | "mountain" | "respect-for-the-aged" | "autumnal-equinox" | "sports" | "culture" | "labor-thanksgiving";
+export type JpHoliday = Holiday<JpHolidayKind>;
 ```
 
-### KnownJapaneseHolidayKind (@public)
+### JpHolidayKind (@public)
 
 ```ts
-export type KnownJapaneseHolidayKind = "national" | "substitute" | "citizens" | "special";
+export type JpHolidayKind = KnownJpHolidayKind | (string & {});
+```
+
+### KnownJapaneseHolidayKey (@public, @deprecated)
+
+```ts
+export type KnownJapaneseHolidayKey = KnownJpHolidayKey;
+```
+
+### KnownJapaneseHolidayKind (@public, @deprecated)
+
+```ts
+export type KnownJapaneseHolidayKind = KnownJpHolidayKind;
+```
+
+### KnownJpHolidayKey (@public)
+
+```ts
+export type KnownJpHolidayKey = "new-year" | "coming-of-age" | "national-foundation" | "emperors-birthday" | "vernal-equinox" | "showa" | "constitution-memorial" | "greenery" | "childrens" | "marine" | "mountain" | "respect-for-the-aged" | "autumnal-equinox" | "sports" | "culture" | "labor-thanksgiving";
+```
+
+### KnownJpHolidayKind (@public)
+
+```ts
+export type KnownJpHolidayKind = "regular" | "substitute" | "citizens" | "special";
 ```
 
 ### toJapanDate (@public, @deprecated)
@@ -1001,15 +1199,47 @@ export type DiagnosticSeverity = "error" | "warning" | "info";
 ### KnownDiagnosticCode (@public)
 
 ```ts
-export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "shadowed" | "never-matches" | "redundant" | "expired" | "counting-basis";
+export type KnownDiagnosticCode = KnownErrorCode | "unknown-option" | "deprecated-option" | "shadowed" | "never-matches" | "redundant" | "expired" | "counting-basis";
+```
+
+### migrateCalendarOptions (@public)
+
+```ts
+export declare function migrateCalendarOptions(options: object): OptionsMigration<CalendarOptions>;
+```
+
+### migrateScheduleOptions (@public)
+
+```ts
+export declare function migrateScheduleOptions<Value>(options: object): OptionsMigration<ScheduleOptions<Value>>;
+```
+
+### OptionChange (@public)
+
+```ts
+export interface OptionChange {
+    readonly path: string;
+    readonly from: string;
+    readonly to: string;
+    readonly conflicting?: boolean;
+}
+```
+
+### OptionsMigration (@public)
+
+```ts
+export interface OptionsMigration<Options> {
+    readonly options: Options;
+    readonly changes: readonly OptionChange[];
+}
 ```
 
 ## bizdays-toolkit/provider
 
-### daysInMonth (@public)
+### daysInMonth (@public, @deprecated)
 
 ```ts
-export declare function daysInMonth(year: number, month: number): number;
+export declare const daysInMonth: typeof lengthOfMonth;
 ```
 
 ### easterSunday (@public)
@@ -1024,34 +1254,57 @@ export declare function easterSunday(year: number): DateString;
 export declare function isLeapYear(year: number): boolean;
 ```
 
+### lengthOfMonth (@public)
+
+```ts
+export declare function lengthOfMonth(year: number, month: number): number;
+```
+
 ### nthWeekdayOfMonth (@public)
 
 ```ts
 export declare function nthWeekdayOfMonth(year: number, month: number, weekday: Weekday, n: number): DateString;
 ```
 
-### substituteDays (@public)
+### substituteDays (@public, @deprecated)
 
 ```ts
-export declare function substituteDays<Kind extends string>(holidays: readonly Holiday<Kind>[], options: SubstituteDaysOptions<Kind>): Holiday<Kind>[];
+export declare const substituteDays: typeof withSubstituteDays;
 ```
 
-### SubstituteDaysOptions (@public)
+### SubstituteDaysOptions (@public, @deprecated)
 
 ```ts
-export interface SubstituteDaysOptions<Kind extends string> {
-    readonly rules: Readonly<Partial<Record<Weekday, SubstituteDirection>>>;
-    readonly kind: Kind;
-    readonly name?: (holiday: Holiday<Kind>) => {
-        readonly name: string;
-        readonly nameEn: string;
-    };
-    readonly original?: "keep" | "drop";
-}
+export type SubstituteDaysOptions<Kind extends string> = WithSubstituteDaysOptions<Kind>;
 ```
 
 ### SubstituteDirection (@public)
 
 ```ts
 export type SubstituteDirection = "next" | "previous";
+```
+
+### withSubstituteDays (@public)
+
+```ts
+export declare function withSubstituteDays<Kind extends string>(holidays: readonly Holiday<Kind>[], options: WithSubstituteDaysOptions<Kind>): Holiday<Kind>[];
+```
+
+### WithSubstituteDaysOptions (@public)
+
+```ts
+export interface WithSubstituteDaysOptions<Kind extends string> {
+    readonly directions: Readonly<Partial<Record<Weekday, SubstituteDirection>>>;
+    readonly kind: Kind;
+    readonly renameSubstitute?: (holiday: Holiday<Kind>) => {
+        readonly name: string;
+        readonly nameEn: string;
+    };
+    readonly originalPolicy?: "keep" | "drop";
+    readonly name?: (holiday: Holiday<Kind>) => {
+        readonly name: string;
+        readonly nameEn: string;
+    };
+    readonly original?: "keep" | "drop";
+}
 ```

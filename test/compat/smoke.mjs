@@ -27,14 +27,14 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
   check("日本の祝日（Date は日本時間で判定する）", () => {
     equal(jp.isHoliday("2026-11-23"), true, "isHoliday");
     equal(jp.isHoliday(new Date("2026-11-22T15:30:00Z")), true, "isHoliday(Date)");
-    equal(jp.getHoliday("2026-09-22")?.kind, "citizens", "getHoliday");
+    equal(jp.holidayOn("2026-09-22")?.kind, "citizens", "holidayOn");
   });
 
   check("営業日カレンダー（年末年始の休業・タイムゾーンの変換・期日）", () => {
     const calendar = root.createCalendar({
-      holidays: jp.jp,
+      holidayProvider: jp.jp,
       closedWeekdays: [0],
-      closedAnnual: [{ from: "12-31", to: "01-03" }],
+      closedAnnualDates: [{ from: "12-31", to: "01-03" }],
     });
     equal(calendar.addBusinessDays("2026-12-30", 1), "2027-01-04", "addBusinessDays");
     equal(
@@ -43,20 +43,22 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
       "civilOf",
     );
     const due = calendar.dueDate(root.monthOf(root.closingMonth("2026-10-21", 20), 1), {
-      day: -1,
+      dayOfMonth: -1,
       convention: "preceding",
     });
     equal(due, "2026-12-30", "dueDate");
   });
 
   check("英国の地域ごとの祝日（Europe/London の夏時間）", () => {
-    const edinburgh = root.createCalendar({ holidays: uk.scotland, closedWeekdays: [0, 6] });
+    const edinburgh = root.createCalendar({ holidayProvider: uk.scotland, closedWeekdays: [0, 6] });
     equal(edinburgh.addBusinessDays("2026-06-12", 1), "2026-06-16", "addBusinessDays");
     equal(uk.wales.holidaysInYear(2026)[0]?.names?.cy, "Dydd Calan", "names.cy");
-    const ukWide = root.createCalendar({ holidays: [uk.england, uk.northernIreland] });
+    const ukWide = root.createCalendar({ holidayProvider: [uk.england, uk.northernIreland] });
     equal(ukWide.isHoliday("2026-07-13"), true, "union");
     equal(
-      root.createCalendar({ holidays: uk.england }).isHoliday(new Date("2026-08-30T23:30:00Z")),
+      root
+        .createCalendar({ holidayProvider: uk.england })
+        .isHoliday(new Date("2026-08-30T23:30:00Z")),
       true,
       "BST",
     );
@@ -64,12 +66,16 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
 
   check("日ごとの値・診断・エラーコード", () => {
     const schedule = root.createSchedule({
-      holidays: jp.jp,
-      weekly: [0, 1, 1, 1, 1, 1, 0],
-      holiday: { sameAs: 0 },
+      holidayProvider: jp.jp,
+      weekdayValues: [0, 1, 1, 1, 1, 1, 0],
+      holidayPolicy: { sameAs: 0 },
     });
     equal(schedule.valueOn("2026-11-03"), 0, "valueOn");
-    equal(diagnose.diagnoseCalendar({ holidays: jp.jp, closedWeekdays: [0] }), [], "diagnose");
+    equal(
+      diagnose.diagnoseCalendar({ holidayProvider: jp.jp, closedWeekdays: [0] }),
+      [],
+      "diagnose",
+    );
     let code;
     try {
       root.createCalendar({ closedDates: ["2026-12-32"] });
@@ -80,7 +86,7 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
   });
 
   check("フランスの祝日（本土と Alsace-Moselle、Europe/Paris での判定、連帯の日）", () => {
-    const paris = root.createCalendar({ holidays: fr.metropole, closedWeekdays: [0, 6] });
+    const paris = root.createCalendar({ holidayProvider: fr.metropole, closedWeekdays: [0, 6] });
     equal(paris.isBusinessDay("2026-05-14"), false, "Ascension");
     equal(
       paris.isHoliday(new Date("2026-05-24T22:30:00Z")),
@@ -90,25 +96,28 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     equal(fr.alsaceMoselle.holidaysInYear(2026).length, 13, "Alsace-Moselle");
     equal(fr.metropole.holidaysInYear(2026).length, 11, "metropole");
     const solidarity = root.createCalendar({
-      holidays: fr.metropole,
+      holidayProvider: fr.metropole,
       closedWeekdays: [0, 6],
-      openRecurring: [{ holiday: true, keys: ["pentecost-monday"] }],
+      openRecurringRules: [{ holiday: true, keys: ["pentecost-monday"] }],
     });
     equal(solidarity.isBusinessDay("2026-05-25"), true, "Journée de solidarité");
   });
 
   check("シンガポールの祝日（振替と Asia/Singapore での判定）、未確定の祝日のガード", () => {
-    const calendar = root.createCalendar({ holidays: sg.sg, closedWeekdays: [0, 6] });
+    const calendar = root.createCalendar({ holidayProvider: sg.sg, closedWeekdays: [0, 6] });
     equal(calendar.isBusinessDay("2026-08-10"), false, "National Day (Observed)");
     equal(calendar.isHoliday(new Date("2026-08-09T17:00:00Z")), true, "SGT");
-    const strict = root.createCalendar({ holidays: jp.jp, unconfirmedHolidays: "throw" });
+    const strict = root.createCalendar({
+      holidayProvider: jp.jp,
+      unconfirmedHolidayPolicy: "throw",
+    });
     let code;
     try {
       strict.isBusinessDay(`${jp.jp.confirmedThrough + 1}-03-20`);
     } catch (e) {
       code = root.isBizdaysError(e) ? e.code : "not a bizdays error";
     }
-    equal(code, "unconfirmed-holiday", "unconfirmedHolidays");
+    equal(code, "unconfirmed-holiday", "unconfirmedHolidayPolicy");
     equal(
       diagnose
         .diagnoseCalendar({ closedDates: ["2020-01-02"] }, { asOf: "2026-01-01" })
@@ -122,7 +131,7 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     equal(provider.nthWeekdayOfMonth(2026, 11, 4, 4), "2026-11-26", "nthWeekdayOfMonth");
     equal(provider.nthWeekdayOfMonth(2026, 5, 1, -1), "2026-05-25", "last Monday");
     equal(root.addDays(provider.easterSunday(2026), -2), "2026-04-03", "Good Friday");
-    equal(provider.isLeapYear(2028) && provider.daysInMonth(2028, 2) === 29, true, "leap year");
+    equal(provider.isLeapYear(2028) && provider.lengthOfMonth(2028, 2) === 29, true, "leap year");
   });
 
   const T = globalThis.Temporal;
@@ -135,7 +144,7 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
         true,
         "ZonedDateTime",
       );
-      const calendar = root.createCalendar({ holidays: jp.jp });
+      const calendar = root.createCalendar({ holidayProvider: jp.jp });
       equal(
         calendar.civilOf(T.PlainDateTime.from("2026-11-23T10:00")),
         {

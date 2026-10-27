@@ -35,7 +35,7 @@ export function parseDate(value: string): { year: number; month: number; day: nu
   const year = Number(m[1]);
   const month = Number(m[2]);
   const day = Number(m[3]);
-  if (year < 1000 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) {
+  if (year < 1000 || month < 1 || month > 12 || day < 1 || day > lengthOfMonth(year, month)) {
     throw rangeError("invalid-date", `Invalid date: ${value}`);
   }
   return { year, month, day };
@@ -45,10 +45,10 @@ export function parseDate(value: string): { year: number; month: number; day: nu
  * "YYYY-MM-DD" として正しい暦日か。
  * @public
  */
-export function isValidDate(value: unknown): value is DateString {
-  if (typeof value !== "string") return false;
+export function isValidDate(input: unknown): input is DateString {
+  if (typeof input !== "string") return false;
   try {
-    parseDate(value);
+    parseDate(input);
     return true;
   } catch {
     return false;
@@ -71,7 +71,7 @@ export function isLeapYear(year: number): boolean {
 }
 
 /** その月の日数 */
-export function daysInMonth(year: number, month: number): number {
+export function lengthOfMonth(year: number, month: number): number {
   if (month === 2) return isLeapYear(year) ? 29 : 28;
   const days = MONTH_DAYS[month - 1];
   if (days === undefined) throw rangeError("invalid-date", `Invalid month: ${month}`);
@@ -94,11 +94,11 @@ export function fromDayNumber(dayNumber: number): DateString {
  * n 日後（負なら前）の日付。
  * @public
  */
-export function addDays(date: DateString, days: number): DateString {
-  if (!Number.isInteger(days)) {
-    throw rangeError("invalid-argument", `days must be an integer: ${days}`);
+export function addDays(date: DateString, n: number): DateString {
+  if (!Number.isInteger(n)) {
+    throw rangeError("invalid-argument", `n must be an integer: ${n}`);
   }
-  return fromDayNumber(toDayNumber(date) + days);
+  return fromDayNumber(toDayNumber(date) + n);
 }
 
 /**

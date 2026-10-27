@@ -16,7 +16,7 @@ test("瞬間は祝日の提供元のタイムゾーン（日本時間）で暦�
 
 test("オフセットのない日時は、カレンダーのタイムゾーンの壁時計として扱う", () => {
   assert.equal(toJapanDate("2026-11-23T23:59"), "2026-11-23");
-  const ny = createCalendar({ holidays: jp, timeZone: "America/New_York" });
+  const ny = createCalendar({ holidayProvider: jp, timeZone: "America/New_York" });
   assert.equal(ny.dateOf("2026-11-23T23:59"), "2026-11-23");
   assert.equal(ny.dateOf(new Date("2026-11-23T03:00:00Z")), "2026-11-22");
 });

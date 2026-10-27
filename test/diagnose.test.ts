@@ -4,7 +4,7 @@ import {
   createCalendar,
   createSchedule,
   type HolidayProvider,
-  type OnHolidayRule,
+  type HolidayOverlapPolicy,
   type RecurringRule,
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
@@ -23,20 +23,20 @@ const brief = (list: readonly Diagnostic[]) =>
   });
 
 const recurring = (rules: RecurringRule[], extra: object = {}) =>
-  brief(diagnoseCalendar({ holidays: jp, closedRecurring: rules, ...extra }));
+  brief(diagnoseCalendar({ holidayProvider: jp, closedRecurringRules: rules, ...extra }));
 
 test("問題のない設定は空の配列", () => {
   const options = {
-    holidays: jp,
+    holidayProvider: jp,
     closedWeekdays: [0] as const,
-    closedAnnual: [{ from: "12-31", to: "01-03" }],
+    closedAnnualDates: [{ from: "12-31", to: "01-03" }],
     closedDates: [{ from: "2027-08-12", to: "2027-08-16" }],
     openDates: ["2026-12-27" as const],
-    closedRecurring: [{ weekday: 3, nth: 3 } as const],
+    closedRecurringRules: [{ weekday: 3, nth: 3 } as const],
   };
   assert.deepEqual(diagnoseCalendar(options), []);
   assert.deepEqual(diagnoseCalendar(), []);
-  assert.deepEqual(diagnoseSchedule({ weekly: [0, 1, 1, 1, 1, 1, 0] }), []);
+  assert.deepEqual(diagnoseSchedule({ weekdayValues: [0, 1, 1, 1, 1, 1, 0] }), []);
 });
 
 test("結果は変更できない", () => {
@@ -57,8 +57,8 @@ test("error: 作成で例外になる誤りを、最初の 1 件だけでなく�
   assert.deepEqual(brief(diagnoseCalendar(null as unknown as object)), [
     { severity: "error", code: "invalid-option", path: "" },
   ]);
-  assert.deepEqual(brief(diagnoseSchedule({ weekly: [1, 2, 3] })), [
-    { severity: "error", code: "invalid-option", path: "weekly" },
+  assert.deepEqual(brief(diagnoseSchedule({ weekdayValues: [1, 2, 3] })), [
+    { severity: "error", code: "invalid-option", path: "weekdayValues" },
   ]);
 });
 
@@ -77,7 +77,7 @@ test("unknown-option: 近い既知のキーを候補に挙げる（判定は cod
   const list = diagnoseCalendar({
     closeWeekdays: [0], // 打ち間違い
     timezone: "Asia/Tokyo", // 大文字・小文字の違い
-    closedRecurring: [{ weekday: 1, onHoliday: "after-holiday" }], // 先頭部分
+    closedRecurringRules: [{ weekday: 1, onHoliday: "after-holiday" }], // 先頭部分
     color: "red", // 近いキーなし
   });
   assert.deepEqual(
@@ -86,13 +86,13 @@ test("unknown-option: 近い既知のキーを候補に挙げる（判定は cod
       ["unknown-option", "closeWeekdays", "warning"],
       ["unknown-option", "timezone", "warning"],
       ["unknown-option", "color", "warning"],
-      ["unknown-option", "closedRecurring[0].onHoliday", "warning"],
+      ["unknown-option", "closedRecurringRules[0].onHoliday", "warning"],
     ],
   );
   assert.match(list[0]!.message, /"closedWeekdays"/);
   assert.match(list[1]!.message, /"timeZone"/);
   assert.doesNotMatch(list[2]!.message, /did you mean/);
-  assert.match(list[3]!.message, /"onHolidayRule"/);
+  assert.match(list[3]!.message, /"holidayOverlapPolicy"/);
   // 作成時は無視される（前方互換）
   assert.doesNotThrow(() => createCalendar({ closeWeekdays: [0] } as object));
 });
@@ -102,7 +102,11 @@ test("shadowed: 個別の日付・毎年の月日（年をまたぐ期間）", (
     brief(
       diagnoseCalendar({
         closedDates: [{ from: "2026-12-01", to: "2026-12-31" }, "2026-12-24", "2027-01-05"],
-        closedAnnual: [{ from: "12-29", to: "01-03" }, "01-01", { from: "12-30", to: "01-04" }],
+        closedAnnualDates: [
+          { from: "12-29", to: "01-03" },
+          "01-01",
+          { from: "12-30", to: "01-04" },
+        ],
       }),
     ),
     [
@@ -115,8 +119,8 @@ test("shadowed: 個別の日付・毎年の月日（年をまたぐ期間）", (
       {
         severity: "warning",
         code: "shadowed",
-        path: "closedAnnual[1]",
-        relatedPath: "closedAnnual[0]",
+        path: "closedAnnualDates[1]",
+        relatedPath: "closedAnnualDates[0]",
       },
     ],
   );
@@ -147,11 +151,11 @@ test("shadowed: 繰り返しの規則（当てはまる日の包含で判定す�
       .filter((d) => d.code === "shadowed")
       .map((d) => `${d.path}<${d.relatedPath}`);
   assert.deepEqual(shadowed([{ weekday: 3 }, { weekday: 3, nth: 3, months: [1, 2] }]), [
-    "closedRecurring[1]<closedRecurring[0]",
+    "closedRecurringRules[1]<closedRecurringRules[0]",
   ]);
   assert.deepEqual(
-    shadowed([{ day: [1, 2, 3, 4, 5, 6, 7] }, { weekday: 2, nth: 1 }]),
-    ["closedRecurring[1]<closedRecurring[0]"],
+    shadowed([{ dayOfMonth: [1, 2, 3, 4, 5, 6, 7] }, { weekday: 2, nth: 1 }]),
+    ["closedRecurringRules[1]<closedRecurringRules[0]"],
     "1〜7 日は、第 1 の曜日をすべて含む",
   );
   assert.deepEqual(
@@ -159,7 +163,7 @@ test("shadowed: 繰り返しの規則（当てはまる日の包含で判定す�
       { weekday: 5, nth: [4, 5] },
       { weekday: 5, nth: -1 },
     ]),
-    ["closedRecurring[1]<closedRecurring[0]"],
+    ["closedRecurringRules[1]<closedRecurringRules[0]"],
     "最終の金曜日は、第 4 か第 5 の金曜日",
   );
   assert.deepEqual(
@@ -173,10 +177,10 @@ test("shadowed: 繰り返しの規則（当てはまる日の包含で判定す�
 });
 
 test("shadowed: 祝日の扱いの組み合わせ", () => {
-  const shadowedBy = (earlier: OnHolidayRule, later: OnHolidayRule) =>
+  const shadowedBy = (earlier: HolidayOverlapPolicy, later: HolidayOverlapPolicy) =>
     recurring([
-      { weekday: 1, onHolidayRule: earlier },
-      { weekday: 1, nth: 2, onHolidayRule: later },
+      { weekday: 1, holidayOverlapPolicy: earlier },
+      { weekday: 1, nth: 2, holidayOverlapPolicy: later },
     ]).some((d) => d.code === "shadowed");
   assert.equal(shadowedBy("over-holiday", "over-holiday"), true);
   assert.equal(shadowedBy("over-holiday", "under-holiday"), true);
@@ -191,16 +195,16 @@ test("shadowed: 繰り返しの営業日は、同じ日の繰り返しの休業�
   assert.deepEqual(
     brief(
       diagnoseCalendar({
-        openRecurring: [{ weekday: 6 }],
-        closedRecurring: [{ weekday: 6, nth: 2 }],
+        openRecurringRules: [{ weekday: 6 }],
+        closedRecurringRules: [{ weekday: 6, nth: 2 }],
       }),
     ),
     [
       {
         severity: "warning",
         code: "shadowed",
-        path: "closedRecurring[0]",
-        relatedPath: "openRecurring[0]",
+        path: "closedRecurringRules[0]",
+        relatedPath: "openRecurringRules[0]",
       },
     ],
   );
@@ -209,31 +213,31 @@ test("shadowed: 繰り返しの営業日は、同じ日の繰り返しの休業�
 test("never-matches: 当てはまる日がない繰り返しの規則", () => {
   assert.deepEqual(
     recurring([
-      { day: 30, months: [2] },
-      { day: [30, 31], months: [2] },
+      { dayOfMonth: 30, months: [2] },
+      { dayOfMonth: [30, 31], months: [2] },
     ]),
     [
-      { severity: "warning", code: "never-matches", path: "closedRecurring[0]" },
-      { severity: "warning", code: "never-matches", path: "closedRecurring[1]" },
+      { severity: "warning", code: "never-matches", path: "closedRecurringRules[0]" },
+      { severity: "warning", code: "never-matches", path: "closedRecurringRules[1]" },
     ],
   );
   // うるう年の 2 月 29 日・2 月の第 5 曜日はありうる
-  assert.deepEqual(recurring([{ day: 29, months: [2] }]), []);
+  assert.deepEqual(recurring([{ dayOfMonth: 29, months: [2] }]), []);
   assert.deepEqual(recurring([{ weekday: 0, nth: 5, months: [2] }]), []);
 });
 
 test("out-of-range: 個別の日付が祝日の提供元の対応年の外", () => {
-  assert.deepEqual(brief(diagnoseCalendar({ holidays: jp, closedDates: ["2100-01-05"] })), [
+  assert.deepEqual(brief(diagnoseCalendar({ holidayProvider: jp, closedDates: ["2100-01-05"] })), [
     {
       severity: "warning",
       code: "out-of-range",
       path: "closedDates[0]",
-      relatedPath: "holidays",
+      relatedPath: "holidayProvider",
     },
   ]);
   const ignore = diagnoseCalendar({
-    holidays: jp,
-    outOfRange: "ignore",
+    holidayProvider: jp,
+    outOfRangePolicy: "ignore",
     closedWeekdays: [0, 1, 2, 3, 4, 5, 6],
     openDates: [{ from: "2099-12-30", to: "2100-01-02" }],
   });
@@ -243,7 +247,7 @@ test("out-of-range: 個別の日付が祝日の提供元の対応年の外", () 
   );
   assert.notEqual(
     ignore[0]!.message,
-    diagnoseCalendar({ holidays: jp, closedDates: ["2100-01-05"] })[0]!.message,
+    diagnoseCalendar({ holidayProvider: jp, closedDates: ["2100-01-05"] })[0]!.message,
     "例外になるか、祝日を考えないかで説明が変わる",
   );
   const other: HolidayProvider = {
@@ -254,10 +258,10 @@ test("out-of-range: 個別の日付が祝日の提供元の対応年の外", () 
     holidaysInYear: () => [],
   };
   assert.deepEqual(
-    brief(diagnoseCalendar({ holidays: [other, jp], closedDates: ["2150-01-05"] })).map(
+    brief(diagnoseCalendar({ holidayProvider: [other, jp], closedDates: ["2150-01-05"] })).map(
       (d) => d.relatedPath,
     ),
-    ["holidays[1]"],
+    ["holidayProvider[1]"],
   );
   assert.deepEqual(
     diagnoseCalendar({ closedDates: ["2100-01-05"] }),
@@ -271,14 +275,20 @@ test("no-business-day: 営業日が 1 日もない設定", () => {
   const codes = (options: object) => diagnoseCalendar(options).map((d) => d.code);
   assert.deepEqual(codes({ closedWeekdays: all }), ["no-business-day"]);
   assert.deepEqual(
-    codes({ holidays: jp, closedWeekdays: [0, 1, 2, 3, 4, 5], closedRecurring: [{ weekday: 6 }] }),
+    codes({
+      holidayProvider: jp,
+      closedWeekdays: [0, 1, 2, 3, 4, 5],
+      closedRecurringRules: [{ weekday: 6 }],
+    }),
     ["no-business-day"],
   );
-  assert.deepEqual(codes({ closedAnnual: [{ from: "01-01", to: "12-31" }] }), ["no-business-day"]);
+  assert.deepEqual(codes({ closedAnnualDates: [{ from: "01-01", to: "12-31" }] }), [
+    "no-business-day",
+  ]);
   // 臨時営業日・繰り返しの営業日・祝日は営業なら、営業日がある
   assert.deepEqual(codes({ closedWeekdays: all, openDates: ["2026-12-27"] }), []);
-  assert.deepEqual(codes({ closedWeekdays: all, openRecurring: [{ day: 1 }] }), []);
-  assert.deepEqual(codes({ holidays: jp, closedWeekdays: all, holidayPolicy: "open" }), []);
+  assert.deepEqual(codes({ closedWeekdays: all, openRecurringRules: [{ dayOfMonth: 1 }] }), []);
+  assert.deepEqual(codes({ holidayProvider: jp, closedWeekdays: all, holidayPolicy: "open" }), []);
   // 実際に営業日を探すと例外になる
   assert.throws(() => createCalendar({ closedWeekdays: all }).nextBusinessDay("2026-10-16"), {
     code: "no-business-day",
@@ -289,15 +299,15 @@ test("redundant: 取り除いても結果が変わらない規則（info）", ()
   assert.deepEqual(
     brief(
       diagnoseCalendar({
-        holidays: jp,
+        holidayProvider: jp,
         closedWeekdays: [0, 6],
-        closedRecurring: [{ weekday: 0 }, { weekday: 1, nth: 2 }],
+        closedRecurringRules: [{ weekday: 0 }, { weekday: 1, nth: 2 }],
         closedDates: ["2026-11-01", "2026-11-02"], // 日曜日・月曜日
       }),
     ),
     [
       { severity: "info", code: "redundant", path: "closedDates[0]" },
-      { severity: "info", code: "redundant", path: "closedRecurring[0]" },
+      { severity: "info", code: "redundant", path: "closedRecurringRules[0]" },
     ],
   );
   // 複数の先の規則を合わせると覆われる個別の日付
@@ -321,10 +331,10 @@ test("redundant: スケジュールの値は配列・普通のオブジェクト
   assert.deepEqual(
     brief(
       diagnoseSchedule({
-        holidays: jp,
-        weekly,
-        holiday: { sameAs: 0 },
-        recurring: [
+        holidayProvider: jp,
+        weekdayValues: weekly,
+        holidayPolicy: { sameAs: 0 },
+        recurringRules: [
           { weekday: 1, value: { open: "10:00", close: "19:00" } }, // 曜日の値と同じ
           { weekday: 2, nth: 1, value: null }, // 第 1 火曜日は休み
           { weekday: 3, value: { close: "19:00", open: "10:00" } }, // キーの順番は問わない
@@ -333,16 +343,16 @@ test("redundant: スケジュールの値は配列・普通のオブジェクト
       }),
     ),
     [
-      { severity: "info", code: "redundant", path: "recurring[0]" },
-      { severity: "info", code: "redundant", path: "recurring[2]" },
+      { severity: "info", code: "redundant", path: "recurringRules[0]" },
+      { severity: "info", code: "redundant", path: "recurringRules[2]" },
     ],
   );
   // 普通のオブジェクトでない値は同じものかで比べる
   const day = new Date(0);
   assert.deepEqual(
     diagnoseSchedule({
-      weekly: [day, day, day, day, day, day, day],
-      recurring: [{ day: 1, value: new Date(0) }],
+      weekdayValues: [day, day, day, day, day, day, day],
+      recurringRules: [{ dayOfMonth: 1, value: new Date(0) }],
     }).map((d) => d.code),
     [],
   );
@@ -355,13 +365,13 @@ test("提供元が返したデータの誤りを、使っていない年も含�
     holidaysInYear: (year) =>
       year === 2000 ? ([{ date: "2000-01-01" }] as never) : jp.holidaysInYear(year),
   };
-  const list = diagnoseCalendar({ holidays: broken });
+  const list = diagnoseCalendar({ holidayProvider: broken });
   assert.deepEqual(brief(list), [
-    { severity: "error", code: "invalid-provider-data", path: "holidays" },
+    { severity: "error", code: "invalid-provider-data", path: "holidayProvider" },
   ]);
   assert.match(list[0]!.message, /2000/);
   // 作成はでき、その年を使ったときに例外になる
-  const calendar = createCalendar({ holidays: broken });
+  const calendar = createCalendar({ holidayProvider: broken });
   assert.equal(calendar.isBusinessDay("2026-10-16"), true);
   assert.throws(() => calendar.isBusinessDay("2000-01-04"), { code: "invalid-provider-data" });
 
@@ -372,7 +382,9 @@ test("提供元が返したデータの誤りを、使っていない年も含�
     },
   };
   assert.deepEqual(
-    diagnoseSchedule({ holidays: throwing, weekly: [0, 0, 0, 0, 0, 0, 0] }).map((d) => d.code),
+    diagnoseSchedule({ holidayProvider: throwing, weekdayValues: [0, 0, 0, 0, 0, 0, 0] }).map(
+      (d) => d.code,
+    ),
     ["invalid-provider-data"],
     "提供元が例外を投げても、診断は例外を投げない",
   );
@@ -380,13 +392,13 @@ test("提供元が返したデータの誤りを、使っていない年も含�
 
 test("診断した設定でも、作成の結果は変わらない", () => {
   const options = {
-    holidays: jp,
+    holidayProvider: jp,
     closedWeekdays: [0] as const,
-    closedRecurring: [{ weekday: 0 } as const],
+    closedRecurringRules: [{ weekday: 0 } as const],
   };
   diagnoseCalendar(options);
   assert.equal(createCalendar(options).isBusinessDay("2026-10-18"), false);
-  assert.equal(createSchedule({ weekly: [0, 1, 1, 1, 1, 1, 0] }).valueOn("2026-10-18"), 0);
+  assert.equal(createSchedule({ weekdayValues: [0, 1, 1, 1, 1, 1, 0] }).valueOn("2026-10-18"), 0);
 });
 
 test("shadowed・never-matches・out-of-range: 有効期間", () => {
@@ -404,7 +416,7 @@ test("shadowed・never-matches・out-of-range: 有効期間", () => {
   );
   assert.deepEqual(
     shadowed([{ weekday: 1 }, { weekday: 1, effectiveFrom: "2027-04-01" }]),
-    ["closedRecurring[1]<closedRecurring[0]"],
+    ["closedRecurringRules[1]<closedRecurringRules[0]"],
     "期限のない規則は、期間付きの同じ規則を覆う",
   );
   assert.deepEqual(
@@ -417,14 +429,14 @@ test("shadowed・never-matches・out-of-range: 有効期間", () => {
       { weekday: 1, effectiveFrom: "2026-01-01", effectiveTo: "2027-12-31" },
       { weekday: 1, nth: 1, effectiveFrom: "2026-04-01", effectiveTo: "2027-03-31" },
     ]),
-    ["closedRecurring[1]<closedRecurring[0]"],
+    ["closedRecurringRules[1]<closedRecurringRules[0]"],
     "期間と形の両方で含まれる",
   );
   // 毎年の月日も同じ
   assert.deepEqual(
     brief(
       diagnoseCalendar({
-        closedAnnual: [
+        closedAnnualDates: [
           { from: "12-29", to: "01-03", effectiveTo: "2027-12-31" },
           { date: "01-02", effectiveFrom: "2027-01-01", effectiveTo: "2027-12-31" },
           { date: "01-03", effectiveFrom: "2028-01-01" },
@@ -435,15 +447,15 @@ test("shadowed・never-matches・out-of-range: 有効期間", () => {
       {
         severity: "warning",
         code: "shadowed",
-        path: "closedAnnual[1]",
-        relatedPath: "closedAnnual[0]",
+        path: "closedAnnualDates[1]",
+        relatedPath: "closedAnnualDates[0]",
       },
     ],
   );
   // 期間の中に当てはまる日がない
   assert.deepEqual(
     recurring([{ weekday: 3, nth: 5, effectiveFrom: "2027-04-01", effectiveTo: "2027-04-20" }]),
-    [{ severity: "warning", code: "never-matches", path: "closedRecurring[0]" }],
+    [{ severity: "warning", code: "never-matches", path: "closedRecurringRules[0]" }],
   );
   assert.deepEqual(
     recurring([{ weekday: 3, nth: 5, effectiveFrom: "2027-03-01", effectiveTo: "2027-03-31" }]),
@@ -451,38 +463,40 @@ test("shadowed・never-matches・out-of-range: 有効期間", () => {
     "2027 年 3 月には第 5 水曜日（3/31）がある",
   );
   assert.deepEqual(
-    recurring([{ day: 29, months: [2], effectiveFrom: "2029-01-01", effectiveTo: "2031-12-31" }]),
-    [{ severity: "warning", code: "never-matches", path: "closedRecurring[0]" }],
+    recurring([
+      { dayOfMonth: 29, months: [2], effectiveFrom: "2029-01-01", effectiveTo: "2031-12-31" },
+    ]),
+    [{ severity: "warning", code: "never-matches", path: "closedRecurringRules[0]" }],
     "期間にうるう年がない",
   );
   // 有効期間が提供元の対応年の外（対応年の外で例外になる設定では、その規則は使われない）
   assert.deepEqual(
     recurring([{ weekday: 1, effectiveTo: "1950-12-31" }], {
-      closedAnnual: [{ date: "01-02", effectiveFrom: "2100-01-01" }],
+      closedAnnualDates: [{ date: "01-02", effectiveFrom: "2100-01-01" }],
     }),
     [
       {
         severity: "warning",
         code: "out-of-range",
-        path: "closedAnnual[0]",
-        relatedPath: "holidays",
+        path: "closedAnnualDates[0]",
+        relatedPath: "holidayProvider",
       },
       {
         severity: "warning",
         code: "out-of-range",
-        path: "closedRecurring[0]",
-        relatedPath: "holidays",
+        path: "closedRecurringRules[0]",
+        relatedPath: "holidayProvider",
       },
     ],
   );
   assert.deepEqual(
-    recurring([{ weekday: 1, effectiveFrom: "2100-01-01" }], { outOfRange: "ignore" }),
+    recurring([{ weekday: 1, effectiveFrom: "2100-01-01" }], { outOfRangePolicy: "ignore" }),
     [
       {
         severity: "warning",
         code: "out-of-range",
-        path: "closedRecurring[0]",
-        relatedPath: "holidays",
+        path: "closedRecurringRules[0]",
+        relatedPath: "holidayProvider",
       },
     ],
   );
@@ -491,22 +505,28 @@ test("shadowed・never-matches・out-of-range: 有効期間", () => {
 test("redundant: 走査の範囲は、固定の範囲と規則の有効期間を合わせたもの", () => {
   // 提供元がない設定の固定範囲（2001〜2028 年）の外にある規則を、使われないと誤診しない
   assert.deepEqual(
-    brief(diagnoseCalendar({ closedRecurring: [{ weekday: 1, effectiveFrom: "2030-01-01" }] })),
+    brief(
+      diagnoseCalendar({ closedRecurringRules: [{ weekday: 1, effectiveFrom: "2030-01-01" }] }),
+    ),
     [],
   );
   assert.deepEqual(
     brief(
       diagnoseCalendar({
         closedWeekdays: [1],
-        closedRecurring: [{ weekday: 1, effectiveFrom: "2030-01-01", effectiveTo: "2031-12-31" }],
+        closedRecurringRules: [
+          { weekday: 1, effectiveFrom: "2030-01-01", effectiveTo: "2031-12-31" },
+        ],
       }),
     ),
-    [{ severity: "info", code: "redundant", path: "closedRecurring[0]" }],
+    [{ severity: "info", code: "redundant", path: "closedRecurringRules[0]" }],
   );
   // 期限のない側は、当てはまり方がそろう周期（28 年）の長さを調べる
   assert.deepEqual(
     brief(
-      diagnoseCalendar({ closedRecurring: [{ weekday: 3, nth: 5, effectiveTo: "1990-12-31" }] }),
+      diagnoseCalendar({
+        closedRecurringRules: [{ weekday: 3, nth: 5, effectiveTo: "1990-12-31" }],
+      }),
     ),
     [],
   );
@@ -514,7 +534,7 @@ test("redundant: 走査の範囲は、固定の範囲と規則の有効期間を
     /checked 1963-1990, 2001-2028/.test(
       diagnoseCalendar({
         closedWeekdays: [3],
-        closedRecurring: [{ weekday: 3, nth: 5, effectiveTo: "1990-12-31" }],
+        closedRecurringRules: [{ weekday: 3, nth: 5, effectiveTo: "1990-12-31" }],
       })[0]!.message,
     ),
   );
@@ -532,7 +552,7 @@ test("shadowed・never-matches・redundant: 周期（interval）", () => {
   });
   assert.deepEqual(
     shadowed([{ weekday: 3 }, wed(2, "2026-01-07")]),
-    ["closedRecurring[1]<closedRecurring[0]"],
+    ["closedRecurringRules[1]<closedRecurringRules[0]"],
     "毎週は隔週を覆う",
   );
   assert.deepEqual(shadowed([wed(2, "2026-01-07"), { weekday: 3 }]), [], "隔週は毎週を覆わない");
@@ -543,12 +563,12 @@ test("shadowed・never-matches・redundant: 周期（interval）", () => {
   );
   assert.deepEqual(
     shadowed([wed(2, "2026-01-07"), wed(2, "2026-01-21")]),
-    ["closedRecurring[1]<closedRecurring[0]"],
+    ["closedRecurringRules[1]<closedRecurringRules[0]"],
     "同じ位相の隔週",
   );
   assert.deepEqual(
     shadowed([wed(2, "2026-01-07"), wed(4, "2026-02-04")]),
-    ["closedRecurring[1]<closedRecurring[0]"],
+    ["closedRecurringRules[1]<closedRecurringRules[0]"],
     "4 週おきは、同じ位相の隔週に覆われる",
   );
   assert.deepEqual(shadowed([wed(2, "2026-01-07"), wed(4, "2026-01-14")]), []);
@@ -565,14 +585,14 @@ test("shadowed・never-matches・redundant: 周期（interval）", () => {
   // 周期のある規則の redundant は、28 年の固定範囲では確かめられない（隔週の位相は 28 年で反転する）ので 56 年を調べる
   const list = diagnoseCalendar({
     closedWeekdays: [3],
-    closedRecurring: [wed(2, "2026-01-07")],
+    closedRecurringRules: [wed(2, "2026-01-07")],
   });
   assert.deepEqual(brief(list), [
-    { severity: "info", code: "redundant", path: "closedRecurring[0]" },
+    { severity: "info", code: "redundant", path: "closedRecurringRules[0]" },
   ]);
   assert.ok(/checked 2001-2056/.test(list[0]!.message), list[0]!.message);
   assert.deepEqual(
-    brief(diagnoseCalendar({ closedRecurring: [wed(2, "2026-01-07"), wed(2, "2026-01-14")] })),
+    brief(diagnoseCalendar({ closedRecurringRules: [wed(2, "2026-01-07"), wed(2, "2026-01-14")] })),
     [],
     "位相の違う隔週を 2 つ書いても、毎週とは別の規則として扱う（どちらも使われる）",
   );
@@ -587,7 +607,7 @@ test("shadowed・never-matches・redundant: 周期（interval）", () => {
         effectiveTo: "2027-02-28",
       },
     ]),
-    [{ severity: "warning", code: "never-matches", path: "closedRecurring[0]" }],
+    [{ severity: "warning", code: "never-matches", path: "closedRecurringRules[0]" }],
     "2027 年 2 月の水曜は起点から 56〜59 週で、6 週おきの日がない",
   );
   assert.deepEqual(

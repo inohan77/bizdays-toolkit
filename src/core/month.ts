@@ -5,7 +5,7 @@
  * （月の第 n 営業日・期日）は営業日カレンダーのメソッドにある。
  */
 
-import { addDays, daysInMonth, formatDate, parseDate, type DateString } from "./date.ts";
+import { addDays, lengthOfMonth, formatDate, parseDate, type DateString } from "./date.ts";
 import { rangeError } from "./errors.ts";
 
 /**
@@ -49,7 +49,7 @@ export function shiftMonth({ year, month }: YearMonth, offset: number): YearMont
 
 /** @internal その月の d 日（その月にない日・-1 は末日に読み替える） */
 export function dayOfMonth({ year, month }: YearMonth, day: number): DateString {
-  const last = daysInMonth(year, month);
+  const last = lengthOfMonth(year, month);
   return formatDate(year, month, day === -1 || day > last ? last : day);
 }
 
@@ -81,7 +81,7 @@ export function monthOf(input: DateString | MonthString, offset = 0): MonthStrin
  * 締め日で区切ったときに、日付が属する月 "YYYY-MM"。
  *
  * 締め日の翌日から次の締め日までを、次の締め日の月とする（例: 20 日締めなら 10 月 21 日〜11 月 20 日が 11 月分）。
- * closingDay が -1 またはその月の日数以上なら、締め日はその月の末日（例: 31 日締めの 2 月は 28 日か 29 日締め）。
+ * closingDayOfMonth が -1 またはその月の日数以上なら、締め日はその月の末日（例: 31 日締めの 2 月は 28 日か 29 日締め）。
  *
  * @example
  * closingMonth("2026-10-20", 20); // "2026-10"
@@ -89,28 +89,28 @@ export function monthOf(input: DateString | MonthString, offset = 0): MonthStrin
  * closingMonth("2026-10-31", -1); // "2026-10"（末日締め）
  * @public
  */
-export function closingMonth(date: DateString, closingDay: number): MonthString {
-  checkClosingDay(closingDay);
+export function closingMonth(date: DateString, closingDayOfMonth: number): MonthString {
+  checkClosingDay(closingDayOfMonth);
   const { year, month, day } = parseDate(date);
   return formatMonth(
-    shiftMonth({ year, month }, day <= closingDayIn({ year, month }, closingDay) ? 0 : 1),
+    shiftMonth({ year, month }, day <= closingDayIn({ year, month }, closingDayOfMonth) ? 0 : 1),
   );
 }
 
 /** @internal 締め日の検証（closingMonth・closingPeriod・営業日カレンダーの締め日で共用） */
-export function checkClosingDay(closingDay: number): void {
-  if (!isDayOfMonthValue(closingDay)) {
+export function checkClosingDay(closingDayOfMonth: number): void {
+  if (!isDayOfMonthValue(closingDayOfMonth)) {
     throw rangeError(
       "invalid-argument",
-      `closingDay must be an integer from 1 to 31, or -1 (last day): ${closingDay}`,
+      `closingDayOfMonth must be an integer from 1 to 31, or -1 (last day): ${closingDayOfMonth}`,
     );
   }
 }
 
 /** @internal その月の締め日（日）。-1 またはその月の日数以上なら末日（decisions.md の 16 番の読み替えはここだけで行う） */
-export function closingDayIn({ year, month }: YearMonth, closingDay: number): number {
-  const last = daysInMonth(year, month);
-  return closingDay === -1 || closingDay > last ? last : closingDay;
+export function closingDayIn({ year, month }: YearMonth, closingDayOfMonth: number): number {
+  const last = lengthOfMonth(year, month);
+  return closingDayOfMonth === -1 || closingDayOfMonth > last ? last : closingDayOfMonth;
 }
 
 /**
@@ -128,15 +128,15 @@ export function closingDayIn({ year, month }: YearMonth, closingDay: number): nu
  */
 export function closingPeriod(
   input: DateString | MonthString,
-  closingDay: number,
+  closingDayOfMonth: number,
 ): { readonly from: DateString; readonly to: DateString } {
-  checkClosingDay(closingDay);
+  checkClosingDay(closingDayOfMonth);
   const month =
     typeof input === "string" && input.split("-").length === 3
-      ? parseMonth(closingMonth(input, closingDay))
+      ? parseMonth(closingMonth(input, closingDayOfMonth))
       : parseMonth(input);
   const previous = shiftMonth(month, -1);
-  const to = dayOfMonth(month, closingDayIn(month, closingDay));
-  const from = addDays(dayOfMonth(previous, closingDayIn(previous, closingDay)), 1);
+  const to = dayOfMonth(month, closingDayIn(month, closingDayOfMonth));
+  const from = addDays(dayOfMonth(previous, closingDayIn(previous, closingDayOfMonth)), 1);
   return Object.freeze({ from, to });
 }

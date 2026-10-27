@@ -16,7 +16,7 @@ export type KnownErrorCode =
   /** 月 "YYYY-MM" の形式・値の誤り */
   | "invalid-month"
   /** 毎年の月日 "MM-DD" の形式・値の誤り */
-  | "invalid-month-day"
+  | "invalid-annual-date"
   /** 時刻・日時の形式・値の誤り */
   | "invalid-time"
   /** 受け付けない種類の入力 */
@@ -35,7 +35,7 @@ export type KnownErrorCode =
   | "time-zone-conflict"
   /** 対応している年の範囲の外 */
   | "out-of-range"
-  /** 判定が未確定の祝日（confirmed: false）に触れた（unconfirmedHolidays: "throw"） */
+  /** 判定が未確定の祝日（confirmed: false）に触れた（unconfirmedHolidayPolicy: "throw"） */
   | "unconfirmed-holiday"
   /** 祝日の提供元の形式の誤り */
   | "invalid-provider"

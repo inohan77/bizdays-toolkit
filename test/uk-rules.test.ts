@@ -23,7 +23,7 @@ test("提供元の ID・タイムゾーン・対応年", () => {
 });
 
 test("対応年の外は out-of-range", () => {
-  const calendar = createCalendar({ holidays: scotland });
+  const calendar = createCalendar({ holidayProvider: scotland });
   assert.throws(
     () => calendar.isHoliday("1973-12-31"),
     (e: unknown) => isBizdaysError(e) && e.code === "out-of-range",
@@ -91,15 +91,15 @@ test("England と Wales は同じ日付で、Wales だけウェールズ語の�
 });
 
 test("複数の地域を和集合で使える（タイムゾーンが同じなので指定は不要）", () => {
-  const calendar = createCalendar({ holidays: [england, scotland] });
+  const calendar = createCalendar({ holidayProvider: [england, scotland] });
   assert.equal(calendar.isHoliday("2026-01-02"), true); // Scotland の 2nd January
   assert.equal(calendar.isHoliday("2026-04-06"), true); // England の Easter Monday
   assert.equal(calendar.isHoliday("2026-06-15"), true); // Scotland の World Cup bank holiday
-  assert.equal(createCalendar({ holidays: england }).isHoliday("2026-06-15"), false);
+  assert.equal(createCalendar({ holidayProvider: england }).isHoliday("2026-06-15"), false);
 });
 
 test("Date は英国時間で暦日に変換する（BST の深夜）", () => {
-  const calendar = createCalendar({ holidays: england });
+  const calendar = createCalendar({ holidayProvider: england });
   // 2026-08-30T23:30Z は英国時間（BST, UTC+1）で 8 月 31 日 0:30（Summer bank holiday）
   assert.equal(calendar.isHoliday(new Date("2026-08-30T23:30:00Z")), true);
 });

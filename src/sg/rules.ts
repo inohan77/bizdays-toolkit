@@ -39,6 +39,7 @@ export type SgHolidayKind = KnownSgHolidayKind | (string & {});
  * シンガポールの毎年の祝日の識別子（Holiday.key。既知の値）。毎年の祝日に 1 つずつ（旧正月の 2 日は同じ key）。
  * 振替日は元の祝日の key を持ち、臨時の祝日（Polling Day）は key を持たない。
  * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * @namingSource holiday-key
  * @public
  */
 export type KnownSgHolidayKey =

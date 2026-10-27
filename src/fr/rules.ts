@@ -37,6 +37,7 @@ export type FrHolidayKind = KnownFrHolidayKind | (string & {});
 /**
  * フランスの祝日の識別子（Holiday.key。既知の値）。英語名から 1 つずつ。
  * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * @namingSource holiday-key
  * @public
  */
 export type KnownFrHolidayKey =

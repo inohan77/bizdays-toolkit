@@ -4,7 +4,7 @@
  * 多くの国・地域の祝日は「月の第 n 何曜日」（米国の連邦祝日など）と「復活祭からの日数」（ヨーロッパの多くの国）で
  * 書ける。この 2 種類の計算と、月の日数・うるう年の判定を、ライブラリ内部で使っている実装のまま公開する
  * （復活祭の計算は、同梱の提供元の公式データとの照合で確かめている）。ルートの addDays・weekdayOf と組み合わせて使う。
- * 週末に当たった祝日の振替（substituteDays）は、振替のある同梱の提供元が使う計算と同じ定義で、同梱の提供元の
+ * 週末に当たった祝日の振替（withSubstituteDays）は、振替のある同梱の提供元が使う計算と同じ定義で、同梱の提供元の
  * 照合済みの結果と一致することをテストで確かめている（同梱の提供元の実装そのものは置き換えていない）。
  * 同梱の提供元の実装とは別に、アプリの本体に不要なものが入らないようサブパスに分けている。
  *
@@ -12,7 +12,7 @@
 
 import {
   addDays,
-  daysInMonth as daysInMonthOf,
+  lengthOfMonth as daysInMonthOf,
   easterSunday as easterSundayOf,
   formatDate,
   isLeapYear as isLeapYearOf,
@@ -23,6 +23,7 @@ import {
   type DateString,
   type Weekday,
 } from "../core/date.ts";
+import { renameKeys } from "../core/renamed.ts";
 import { rangeError, typeError } from "../core/errors.ts";
 import { HOLIDAY_KEY_PATTERN, type Holiday } from "../core/types.ts";
 
@@ -98,7 +99,7 @@ export function nthWeekdayOfMonth(
  * その月の日数（28〜31）。
  * @public
  */
-export function daysInMonth(year: number, month: number): number {
+export function lengthOfMonth(year: number, month: number): number {
   checkYear(year);
   checkMonth(month);
   return daysInMonthOf(year, month);
@@ -120,27 +121,34 @@ export function isLeapYear(year: number): boolean {
 export type SubstituteDirection = "next" | "previous";
 
 /**
- * substituteDays の設定。
+ * withSubstituteDays の設定。
  * @public
  */
-export interface SubstituteDaysOptions<Kind extends string> {
+export interface WithSubstituteDaysOptions<Kind extends string> {
   /**
    * 振り替える曜日と向き（0 = 日曜日〜6 = 土曜日）。書いた曜日に当たる祝日だけを振り替える。
    * 例: 日本・シンガポールは { 0: "next" }、英国は { 6: "next", 0: "next" }、米国の連邦祝日は { 6: "previous", 0: "next" }。
    * 振替先は、入力の祝日でも、それまでに決めた振替日でも、ここに書いた曜日でもない最初の日
    */
-  readonly rules: Readonly<Partial<Record<Weekday, SubstituteDirection>>>;
+  readonly directions: Readonly<Partial<Record<Weekday, SubstituteDirection>>>;
   /** 振替日に付ける種別（Holiday.kind。例: "substitute"、"observed"） */
   readonly kind: Kind;
   /**
    * 振替日の名称。省略時は元の祝日の name・nameEn（と names）を引き継ぐ（GOV.UK・MOM の流儀）。
    * 変えるなら元の祝日を受け取って返す関数で（例: 日本の「振替休日」、米国の "(observed)"）
    */
-  readonly name?: (holiday: Holiday<Kind>) => { readonly name: string; readonly nameEn: string };
+  readonly renameSubstitute?: (holiday: Holiday<Kind>) => {
+    readonly name: string;
+    readonly nameEn: string;
+  };
   /**
    * 元の祝日（振り替えた曜日に当たった日）を結果に残すか。"keep"（既定）は残す（日本・シンガポール）、
    * "drop" は振替日だけにする（GOV.UK の一覧は週末の日を載せない）
    */
+  readonly originalPolicy?: "keep" | "drop";
+  /** @deprecated 0.30.0 で renameSubstitute に改名した。1.0.0 で削除する */
+  readonly name?: (holiday: Holiday<Kind>) => { readonly name: string; readonly nameEn: string };
+  /** @deprecated 0.30.0 で originalPolicy に改名した。1.0.0 で削除する */
   readonly original?: "keep" | "drop";
 }
 
@@ -191,28 +199,39 @@ function checkHolidays<Kind extends string>(holidays: unknown): readonly Holiday
   return holidays as readonly Holiday<Kind>[];
 }
 
-function checkOptions<Kind extends string>(options: unknown): SubstituteDaysOptions<Kind> {
-  if (typeof options !== "object" || options === null) {
+interface CheckedOptions<Kind extends string> {
+  readonly directions: Readonly<Partial<Record<Weekday, SubstituteDirection>>>;
+  readonly kind: Kind;
+  readonly renameSubstitute?: (holiday: Holiday<Kind>) => {
+    readonly name: string;
+    readonly nameEn: string;
+  };
+  readonly originalPolicy?: "keep" | "drop";
+}
+
+function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kind> {
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
     throw typeError("invalid-argument", "options must be an object");
   }
-  const { rules, kind, name, original } = options as Record<string, unknown>;
+  const o = renameKeys("throw", ["substitute"], "options", options as Record<string, unknown>);
+  const { directions: rules, kind, renameSubstitute: name, originalPolicy: original } = o;
   if (typeof rules !== "object" || rules === null) {
     throw typeError(
       "invalid-argument",
-      'options.rules must be an object of { [weekday]: "next" | "previous" }',
+      'options.directions must be an object of { [weekday]: "next" | "previous" }',
     );
   }
   for (const [weekday, direction] of Object.entries(rules)) {
     if (!/^[0-6]$/.test(weekday)) {
       throw rangeError(
         "invalid-weekday",
-        `options.rules has a weekday that is not 0 (Sunday) to 6 (Saturday): ${JSON.stringify(weekday)}`,
+        `options.directions has a weekday that is not 0 (Sunday) to 6 (Saturday): ${JSON.stringify(weekday)}`,
       );
     }
     if (direction !== "next" && direction !== "previous") {
       throw rangeError(
         "invalid-argument",
-        `options.rules[${weekday}] must be "next" or "previous": ${JSON.stringify(direction)}`,
+        `options.directions[${weekday}] must be "next" or "previous": ${JSON.stringify(direction)}`,
       );
     }
   }
@@ -222,20 +241,20 @@ function checkOptions<Kind extends string>(options: unknown): SubstituteDaysOpti
   if (name !== undefined && typeof name !== "function") {
     throw typeError(
       "invalid-argument",
-      "options.name must be a function (holiday) => { name, nameEn }",
+      "options.renameSubstitute must be a function (holiday) => { name, nameEn }",
     );
   }
   if (original !== undefined && original !== "keep" && original !== "drop") {
-    throw rangeError("invalid-argument", 'options.original must be "keep" or "drop"');
+    throw rangeError("invalid-argument", 'options.originalPolicy must be "keep" or "drop"');
   }
-  return options as SubstituteDaysOptions<Kind>;
+  return o as unknown as CheckedOptions<Kind>;
 }
 
 /**
  * 週末などに当たった祝日の振替日を計算し、入力の祝日に振替日を足して日付順に返す（提供元を実装するための道具）。
  *
- * 定義（英国の附則・シンガポールの Holidays Act・日本の祝日法と同じ）: 入力を日付順に走査し、rules の曜日に当たる祝日ごとに、
- * 指定の向きで「入力の祝日でも、それまでに決めた振替日でも、rules の曜日でもない最初の日」を振替日にする。祝日が続く
+ * 定義（英国の附則・シンガポールの Holidays Act・日本の祝日法と同じ）: 入力を日付順に走査し、directions の曜日に当たる祝日ごとに、
+ * 指定の向きで「入力の祝日でも、それまでに決めた振替日でも、directions の曜日でもない最初の日」を振替日にする。祝日が続く
  * 週末（Christmas Day が土曜日、Boxing Day が日曜日）は順に先へ送られる。振替日自身は別の祝日の振替の対象にならない。
  * 振替日は元の祝日の key・names・confirmed を引き継ぎ、kind は options.kind、名称は省略時は元の祝日のもの。
  *
@@ -245,19 +264,24 @@ function checkOptions<Kind extends string>(options: unknown): SubstituteDaysOpti
  * 国民の休日（2 つの祝日に挟まれた日）のような国に固有の規則は含まない。
  *
  * @example 米国の連邦祝日（土曜日は前の金曜日、日曜日は次の月曜日）
- * substituteDays(federal, { rules: { 6: "previous", 0: "next" }, kind: "observed",
- *   name: (h) => ({ name: `${h.name} (observed)`, nameEn: `${h.nameEn} (observed)` }) });
+ * withSubstituteDays(federal, { directions: { 6: "previous", 0: "next" }, kind: "observed",
+ *   renameSubstitute: (h) => ({ name: `${h.name} (observed)`, nameEn: `${h.nameEn} (observed)` }) });
  * @example 日本の振替休日（日曜日の祝日を、その日の後で最も近い祝日でない日へ）
- * substituteDays(holidays, { rules: { 0: "next" }, kind: "substitute",
- *   name: () => ({ name: "振替休日", nameEn: "Substitute Holiday" }) });
+ * withSubstituteDays(holidays, { directions: { 0: "next" }, kind: "substitute",
+ *   renameSubstitute: () => ({ name: "振替休日", nameEn: "Substitute Holiday" }) });
  * @public
  */
-export function substituteDays<Kind extends string>(
+export function withSubstituteDays<Kind extends string>(
   holidays: readonly Holiday<Kind>[],
-  options: SubstituteDaysOptions<Kind>,
+  options: WithSubstituteDaysOptions<Kind>,
 ): Holiday<Kind>[] {
   const input = checkHolidays<Kind>(holidays);
-  const { rules, kind, name, original } = checkOptions<Kind>(options);
+  const {
+    directions: rules,
+    kind,
+    renameSubstitute: name,
+    originalPolicy: original,
+  } = checkOptions<Kind>(options);
   const sorted = [...input].sort((a, b) => (a.date < b.date ? -1 : 1));
   const taken = new Set<DateString>(sorted.map((h) => h.date));
   const result: Holiday<Kind>[] = sorted.filter(
@@ -285,3 +309,21 @@ export function substituteDays<Kind extends string>(
   }
   return result.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
+
+/**
+ * @deprecated 0.30.0 で withSubstituteDays に改名した。1.0.0 で削除する
+ * @public
+ */
+export const substituteDays: typeof withSubstituteDays = withSubstituteDays;
+
+/**
+ * @deprecated 0.30.0 で lengthOfMonth に改名した。1.0.0 で削除する
+ * @public
+ */
+export const daysInMonth: typeof lengthOfMonth = lengthOfMonth;
+
+/**
+ * @deprecated 0.30.0 で WithSubstituteDaysOptions に改名した。1.0.0 で削除する
+ * @public
+ */
+export type SubstituteDaysOptions<Kind extends string> = WithSubstituteDaysOptions<Kind>;

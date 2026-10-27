@@ -153,15 +153,15 @@ test("toInstant・instantOf: 入力の誤り", () => {
 });
 
 test("instantOf: カレンダー・スケジュールのタイムゾーンで。合成・スケジュールからのカレンダーにも付く", () => {
-  const uk = createCalendar({ holidays: england });
+  const uk = createCalendar({ holidayProvider: england });
   assert.equal(uk.instantOf("2026-03-29", "01:30").toISOString(), "2026-03-29T01:30:00.000Z");
   assert.deepEqual(uk.civilOf(uk.instantOf("2026-06-01", "09:00")), {
     date: "2026-06-01",
     time: "09:00",
   });
   const store = createSchedule({
-    holidays: jp,
-    weekly: [null, "09:00", "09:00", "09:00", "09:00", "09:00", null],
+    holidayProvider: jp,
+    weekdayValues: [null, "09:00", "09:00", "09:00", "09:00", "09:00", null],
   });
   // 次に開く瞬間
   const next = store.instantOf(addDays("2026-11-21", 2), store.valueOn("2026-11-24")!);

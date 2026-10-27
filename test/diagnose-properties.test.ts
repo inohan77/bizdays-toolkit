@@ -2,7 +2,7 @@
  * 規則の診断の性質のテスト。種を固定した乱数で、規則が重なりやすい設定を作り、
  * 「使われない・取り除いても結果が変わらない」と診断した規則を実際に取り除いて、結果が変わらないことを確かめる。
  *
- * - shadowed・never-matches … 取り除いても、dayInfo の結果（理由・名前を含む）が変わらない
+ * - shadowed・never-matches … 取り除いても、dayInfoOn の結果（理由・名前を含む）が変わらない
  * - redundant              … 取り除いても、営業日かどうかが変わらない
  *
  * 種を変えて試すには: PROPERTY_SEED=123 node --test test/diagnose-properties.test.ts
@@ -55,7 +55,7 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
             ...(rand() < 0.6 ? { nth: pick([1, 2, -1, [4, 5], [1, 3]]) } : {}),
           }
         : r < 0.8
-          ? { day: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) }
+          ? { dayOfMonth: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) }
           : r < 0.86
             ? {
                 dayAfterHoliday: true as const,
@@ -71,7 +71,7 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
                   ...(rand() < 0.6
                     ? {
                         kinds: pick([
-                          ["national"],
+                          ["regular"],
                           ["substitute"],
                           ["substitute", "citizens"],
                           ["x"],
@@ -92,10 +92,10 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
       ...base,
       ...interval,
       ...(rand() < 0.3 ? { months: pick([[2], [1, 2], [2, 4, 6, 9, 11]]) } : {}),
-      // 祝日・祝日の翌日・祝前日の規則には onHolidayRule を付けられない
+      // 祝日・祝日の翌日・祝前日の規則には holidayOverlapPolicy を付けられない
       ...("dayAfterHoliday" in base || "dayBeforeHoliday" in base || "holiday" in base
         ? {}
-        : { onHolidayRule: pick(["under-holiday", "over-holiday", "after-holiday"]) }),
+        : { holidayOverlapPolicy: pick(["under-holiday", "over-holiday", "after-holiday"]) }),
       ...period(),
     };
   };
@@ -119,18 +119,18 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
   };
   const list = <T>(make: () => T, max: number) => Array.from({ length: int(0, max) }, make);
   return {
-    ...(withHolidays ? { holidays: jp } : {}),
+    ...(withHolidays ? { holidayProvider: jp } : {}),
     closedWeekdays: [0, 1, 2, 3, 4, 5, 6].filter(() => rand() < 0.25),
     holidayPolicy: pick(["closed", "open", "ignore"]),
     openDates: list(dates, 2),
     closedDates: list(dates, 3),
-    closedAnnual: list(annual, 3),
-    openRecurring: list(rule, 2),
-    closedRecurring: list(rule, 4),
+    closedAnnualDates: list(annual, 3),
+    openRecurringRules: list(rule, 2),
+    closedRecurringRules: list(rule, 4),
   };
 }
 
-/** "closedRecurring[2]" の規則を取り除いた設定 */
+/** "closedRecurringRules[2]" の規則を取り除いた設定 */
 function remove(options: Options, path: string): Options {
   const m = /^(\w+)\[(\d+)\]$/.exec(path);
   assert.ok(m, `unexpected path ${path}`);
@@ -147,7 +147,7 @@ test("性質: 使われない・取り除いても変わらないと診断した
   for (let run = 0; run < RUNS; run++) {
     const options = randomOptions(rand, run % 3 === 0);
     const describe = () =>
-      `seed=${SEED} run=${run} ${JSON.stringify({ ...options, holidays: options["holidays"] ? "jp" : undefined })}`;
+      `seed=${SEED} run=${run} ${JSON.stringify({ ...options, holidayProvider: options["holidayProvider"] ? "jp" : undefined })}`;
     const list = diagnoseCalendar(options);
     assert.ok(
       list.every((d) => d.severity !== "error"),
@@ -181,9 +181,9 @@ test("性質: 使われない・取り除いても変わらないと診断した
             `${d.code} ${d.path} ${date}: ${describe()}`,
           );
         } else {
-          // 規則を取り除くと後の規則の位置（rulePath）はずれるので、位置を除いて比べる
-          const { rulePath: _r, ...reducedInfo } = reduced.dayInfo(date);
-          const { rulePath: _o, ...originalInfo } = original.dayInfo(date);
+          // 規則を取り除くと後の規則の位置（optionPath）はずれるので、位置を除いて比べる
+          const { optionPath: _r, rulePath: _r2, ...reducedInfo } = reduced.dayInfoOn(date);
+          const { optionPath: _o, rulePath: _o2, ...originalInfo } = original.dayInfoOn(date);
           assert.deepEqual(reducedInfo, originalInfo, `${d.code} ${d.path} ${date}: ${describe()}`);
         }
       }

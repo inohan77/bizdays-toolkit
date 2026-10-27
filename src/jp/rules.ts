@@ -5,7 +5,7 @@
  * - 皇室行事による休日: 特例法ごとの日付をテーブルで持つ
  * - 振替休日: 1973-04-12 以降。2007 年からは「その日後で最も近い国民の祝日でない日」
  * - 国民の休日: 1985-12-27 以降。前日と翌日が国民の祝日である日
- * - 識別子（key）: 祝日法の各祝日に 1 つ（KnownJapaneseHolidayKey）。振替休日は元の祝日の key、国民の休日・特例の休日は持たない
+ * - 識別子（key）: 祝日法の各祝日に 1 つ（KnownJpHolidayKey）。振替休日は元の祝日の key、国民の休日・特例の休日は持たない
  * - 春分・秋分の日: 天文計算による近似式。官報公表済みの年（CONFIRMED_THROUGH）までは確定値と一致することを
  *   内閣府の CSV で検証している。それより後の年は confirmed: false
  */
@@ -24,9 +24,9 @@ import type { Holiday } from "../core/types.ts";
  * 日本の祝日・休日の種別（既知の値）。
  * @public
  */
-export type KnownJapaneseHolidayKind =
+export type KnownJpHolidayKind =
   /** 国民の祝日 */
-  | "national"
+  | "regular"
   /** 振替休日 */
   | "substitute"
   /** 国民の休日（祝日に挟まれた日） */
@@ -36,19 +36,20 @@ export type KnownJapaneseHolidayKind =
 
 /**
  * 日本の祝日・休日の種別。将来の版で値が増えることがあるので、分岐では「その他」も扱うこと。
- * すべての値を網羅したことを型で確かめたい場合は KnownJapaneseHolidayKind を使う。
+ * すべての値を網羅したことを型で確かめたい場合は KnownJpHolidayKind を使う。
  * @public
  */
-export type JapaneseHolidayKind = KnownJapaneseHolidayKind | (string & {});
+export type JpHolidayKind = KnownJpHolidayKind | (string & {});
 
 /**
  * 日本の国民の祝日の識別子（Holiday.key。既知の値）。祝日法の各祝日に 1 つで、日付の移動や改名があっても同じ祝日なら同じ値
  * （天皇誕生日は 4/29・12/23・2/23 とも "emperors-birthday"、体育の日とスポーツの日は "sports"）。
  * 振替休日は元の祝日の key を持ち、国民の休日と特例の休日は key を持たない。
  * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * @namingSource holiday-key
  * @public
  */
-export type KnownJapaneseHolidayKey =
+export type KnownJpHolidayKey =
   | "new-year"
   | "coming-of-age"
   | "national-foundation"
@@ -81,11 +82,11 @@ interface Entry {
   readonly date: DateString;
   readonly name: string;
   readonly nameEn: string;
-  readonly kind: KnownJapaneseHolidayKind;
+  readonly kind: KnownJpHolidayKind;
   /** 春分・秋分の日、またはそれに由来する休日 */
   readonly equinox: boolean;
   /** 観測している祝日の識別子（振替休日は元の祝日のもの。国民の休日・特例の休日は持たない） */
-  readonly key?: KnownJapaneseHolidayKey;
+  readonly key?: KnownJpHolidayKey;
 }
 
 /** 皇室行事などによる特例の休日（それぞれの特例法による） */
@@ -132,10 +133,10 @@ function baseHolidays(y: number): Entry[] {
     date: DateString,
     name: string,
     nameEn: string,
-    key: KnownJapaneseHolidayKey,
+    key: KnownJpHolidayKey,
     equinox = false,
   ): void => {
-    list.push({ date, name, nameEn, kind: "national", equinox, key });
+    list.push({ date, name, nameEn, kind: "regular", equinox, key });
   };
   const md = (month: number, day: number): DateString => formatDate(y, month, day);
   const monday = (month: number, n: number): DateString => nthWeekdayOfMonth(y, month, 1, n);
@@ -189,7 +190,7 @@ function baseHolidays(y: number): Entry[] {
 }
 
 /** @internal その年の祝日・休日（日付順） */
-export function computeJapaneseHolidays(year: number): Holiday<JapaneseHolidayKind>[] {
+export function computeJapaneseHolidays(year: number): Holiday<JpHolidayKind>[] {
   if (!Number.isInteger(year) || year < SUPPORTED_YEARS.from || year > SUPPORTED_YEARS.to) {
     throw rangeError(
       "out-of-range",

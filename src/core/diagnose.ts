@@ -11,12 +11,12 @@
  *     never-matches  … 当てはまる日がない繰り返しの規則（2 月 30 日、有効期間の中に第 5 水曜日がない、提供元のない設定の祝日の翌日・祝前日、など）
  *     out-of-range   … 個別の日付、または規則の有効期間が祝日の提供元の対応年の外にある（relatedPath に提供元）
  *     no-business-day … 営業日が 1 日もない設定（営業日カレンダーのみ）
- * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidays: "throw" を含む）
+ * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidayPolicy: "throw" を含む）
  *             expired: 第 2 引数の asOf より前に終わった規則・日付（asOf を渡したときだけ）
  *             counting-basis: 第 n 営業日の規則（businessDayOfMonth）の数える基準は繰り返しの規則を除くので、
  *                             同じ設定の毎週の曜日の規則（{ weekday }）の曜日は営業日として数えられる（relatedPath にその規則）
  *
- * 未確定の祝日の扱い（unconfirmedHolidays）は診断では常に "accept" で評価する。診断は設定の形を調べるもので、
+ * 未確定の祝日の扱い（unconfirmedHolidayPolicy）は診断では常に "accept" で評価する。診断は設定の形を調べるもので、
  * 祝日が確定しているかどうかは関係がなく、"throw" のまま評価すると例外を握りつぶして「当てはまらない」と誤判定するため
  *
  * 判定の順番（個別の日付 → 毎年の月日 → 繰り返し（over）→ 祝日 → 繰り返し（under・振替先）→ 曜日）は
@@ -27,7 +27,7 @@
  */
 
 import {
-  daysInMonth,
+  lengthOfMonth,
   fromDayNumber,
   isValidDate,
   parseDate,
@@ -36,6 +36,7 @@ import {
 } from "./date.ts";
 import { compileCalendarOptions, type CalendarOptions } from "./calendar.ts";
 import { IssueCollector, rangeError, type KnownErrorCode } from "./errors.ts";
+import { RENAMED_KEYS } from "./renamed.ts";
 import {
   compileScheduleOptions,
   createBasis,
@@ -77,6 +78,8 @@ export type KnownDiagnosticCode =
   | KnownErrorCode
   /** 知らないキー（作成時は無視される） */
   | "unknown-option"
+  /** 0.30.0 で改名した旧名のキー・値（新しい名前と同じに扱う。1.0.0 で invalid-option になる） */
+  | "deprecated-option"
   /** 同じ種類の先の規則に完全に覆われ、決して使われない */
   | "shadowed"
   /** 当てはまる日がない繰り返しの規則 */
@@ -101,7 +104,7 @@ export type DiagnosticCode = KnownDiagnosticCode | (string & {});
 export interface Diagnostic {
   readonly severity: DiagnosticSeverity;
   readonly code: DiagnosticCode;
-  /** 設定の中の位置（例: "closedRecurring[1]"・"closedDates[0].date"）。設定全体なら "" */
+  /** 設定の中の位置（例: "closedRecurringRules[1]"・"closedDates[0].date"）。設定全体なら "" */
   readonly path: string;
   readonly message: string;
   /** 関係する別の位置（shadowed では覆っている先の規則、out-of-range では祝日の提供元） */
@@ -136,10 +139,17 @@ function editDistance(a: string, b: string): number {
  * 既知のキーの先頭部分（4 文字以上）の順に探す
  */
 function closestKey(key: string, known: readonly string[]): string | undefined {
+  // 改名した旧名（0.30.0）に近い打ち間違いは、旧名の新しい名前を候補に挙げる
+  const renamed = RENAMED_KEYS.filter((r) => known.includes(r.to));
+  const found = closestOf(key, [...known, ...renamed.map((r) => r.from)]);
+  return renamed.find((r) => r.from === found && !known.includes(found))?.to ?? found;
+}
+
+function closestOf(key: string, known: readonly string[]): string | undefined {
   const lower = key.toLowerCase();
   const sameCase = known.find((k) => k.toLowerCase() === lower);
   if (sameCase !== undefined) return sameCase;
-  // 既知のキーの先頭部分（"onHoliday" → "onHolidayRule"）は、短い別のキー（"holiday"）との編集距離より優先する
+  // 既知のキーの先頭部分は、短い別のキーとの編集距離より優先する
   if (key.length >= 4) {
     const prefixOf = known.find((k) => k.toLowerCase().startsWith(lower));
     if (prefixOf !== undefined) return prefixOf;
@@ -230,7 +240,7 @@ function scanWindow(
     const years = source.providers.map((p) => p.supportedYears);
     let from: number;
     let to: number;
-    if (source.outOfRange === "ignore") {
+    if (source.outOfRangePolicy === "ignore") {
       from = Math.min(...years.map((r) => r.from));
       to = Math.max(...years.map((r) => r.to));
     } else {
@@ -301,7 +311,7 @@ function matchesAnyDay(rule: RecurringRuleCompiled<unknown>, cycle: number): boo
 const LEAP_MONTH_DAYS: readonly string[] = (() => {
   const list: string[] = [];
   for (let m = 1; m <= 12; m++) {
-    for (let d = 1; d <= daysInMonth(2028, m); d++) {
+    for (let d = 1; d <= lengthOfMonth(2028, m); d++) {
       list.push(`${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
     }
   }
@@ -365,15 +375,15 @@ function canCover(
   earlier: RecurringRuleCompiled<unknown>,
   later: RecurringRuleCompiled<unknown>,
 ): boolean {
-  switch (later.onHolidayRule) {
+  switch (later.holidayOverlapPolicy) {
     case "over-holiday":
-      return earlier.onHolidayRule === "over-holiday";
+      return earlier.holidayOverlapPolicy === "over-holiday";
     case "under-holiday":
-      return earlier.onHolidayRule !== "after-holiday";
+      return earlier.holidayOverlapPolicy !== "after-holiday";
     case "after-holiday":
-      return earlier.onHolidayRule === "after-holiday";
+      return earlier.holidayOverlapPolicy === "after-holiday";
     default: {
-      const unreachable: never = later.onHolidayRule;
+      const unreachable: never = later.holidayOverlapPolicy;
       return unreachable;
     }
   }
@@ -418,11 +428,11 @@ function sameValue(a: unknown, b: unknown): boolean {
 
 const yearOf = (dayNumber: number): number => parseDate(fromDayNumber(dayNumber)).year;
 
-function without<T, Kind extends string>(
-  compiled: CompiledSchedule<T, Kind>,
-  rule: DecidingRule<T> | null,
+function without<Value, Kind extends string>(
+  compiled: CompiledSchedule<Value, Kind>,
+  rule: DecidingRule<Value> | null,
   dropDates: boolean,
-): CompiledSchedule<T, Kind> {
+): CompiledSchedule<Value, Kind> {
   return {
     ...compiled,
     dates: dropDates ? [] : compiled.dates.filter((r) => r !== rule),
@@ -438,8 +448,12 @@ function without<T, Kind extends string>(
 function checkProviderData(c: IssueCollector, source: HolidaySource<string>): boolean {
   let ok = true;
   source.providers.forEach((provider, i) => {
-    const path = source.providers.length === 1 ? "holidays" : `holidays[${i}]`;
-    const lookup = createHolidayLookup({ ...source, providers: [provider], outOfRange: "ignore" });
+    const path = source.providers.length === 1 ? "holidayProvider" : `holidayProvider[${i}]`;
+    const lookup = createHolidayLookup({
+      ...source,
+      providers: [provider],
+      outOfRangePolicy: "ignore",
+    });
     const [from, to] = clipYears(provider.supportedYears.from, provider.supportedYears.to);
     try {
       for (let y = from; y <= to; y++) lookup.holidaysInYear(y);
@@ -455,19 +469,24 @@ function checkProviderData(c: IssueCollector, source: HolidaySource<string>): bo
   return ok;
 }
 
-function analyze<T, Kind extends string>(
+function analyze<Value, Kind extends string>(
   c: IssueCollector,
-  compiled: CompiledSchedule<T, Kind>,
+  compiled: CompiledSchedule<Value, Kind>,
   isCalendar: boolean,
 ): void {
   const { source, dates, annual, recurring } = compiled;
   if (!checkProviderData(c, source as HolidaySource<string>)) return;
-  const lookup = createHolidayLookup({ ...source, unconfirmedHolidays: "accept" });
+  // 規則どうしの診断は、対応年の外を祝日なしとして扱う（走査の範囲の端で、隣の日を見る規則が例外にならないため）
+  const lookup = createHolidayLookup({
+    ...source,
+    outOfRangePolicy: "ignore",
+    unconfirmedHolidayPolicy: "accept",
+  });
   const basis = createBasis(compiled, lookup);
   const cycle = patternCycle(recurring);
   const window = scanWindow(source as HolidaySource<string>, [...annual, ...recurring], cycle);
   /** 使われないことが分かった規則（redundant を重ねて出さない） */
-  const unused = new Set<DecidingRule<T>>();
+  const unused = new Set<DecidingRule<Value>>();
 
   // --- 個別の日付: 対応年の外・覆われている ---
   dates.forEach((rule, j) => {
@@ -476,12 +495,12 @@ function analyze<T, Kind extends string>(
     source.providers.forEach((p, i) => {
       const { from, to } = p.supportedYears;
       if (fromYear >= from && toYear <= to) return;
-      const related = source.providers.length === 1 ? "holidays" : `holidays[${i}]`;
+      const related = source.providers.length === 1 ? "holidayProvider" : `holidayProvider[${i}]`;
       c.warning(
         "out-of-range",
         rule.path,
         `The date is outside the years supported by holiday provider ${p.id} (${from}-${to}); ` +
-          (source.outOfRange === "throw"
+          (source.outOfRangePolicy === "throw"
             ? "looking up this date throws"
             : "holidays are not considered for this date"),
         related,
@@ -507,15 +526,15 @@ function analyze<T, Kind extends string>(
       const after = rule.effectiveFrom !== null && yearOf(rule.effectiveFrom) > to;
       const before = rule.effectiveTo !== null && yearOf(rule.effectiveTo) < from;
       if (!after && !before) return;
-      if (source.outOfRange === "throw") unused.add(rule);
+      if (source.outOfRangePolicy === "throw") unused.add(rule);
       c.warning(
         "out-of-range",
         rule.path,
         `The effective period is outside the years supported by holiday provider ${p.id} (${from}-${to}); ` +
-          (source.outOfRange === "throw"
+          (source.outOfRangePolicy === "throw"
             ? "looking up these dates throws, so this rule is never used"
             : "holidays are not considered for these dates"),
-        source.providers.length === 1 ? "holidays" : `holidays[${i}]`,
+        source.providers.length === 1 ? "holidayProvider" : `holidayProvider[${i}]`,
       );
     });
   }
@@ -541,7 +560,7 @@ function analyze<T, Kind extends string>(
   /** 祝日・祝日の翌日・祝前日の規則の判定に使う（提供元の対応年の外は祝日でないとみなす） */
   const holidayOfSafe = (date: DateString): Holiday<string> | undefined => {
     try {
-      return lookup.holidayOn(date);
+      return lookup.holidayOfDate(date);
     } catch {
       return undefined;
     }
@@ -607,7 +626,9 @@ function analyze<T, Kind extends string>(
                 ? "This rule matches no day: no day after a holiday of the selected kinds and keys on the selected weekdays and months within its effective period"
                 : "This rule matches no day: no day before a holiday of the selected kinds and keys on the selected weekdays and months within its effective period"
           : businessDayBased
-            ? "This rule matches no day: no month has that many business days of the counting basis in the selected months within its effective period"
+            ? rule.weekStart !== null
+              ? "This rule matches no day: no week has that many business days of the counting basis in the selected months within its effective period"
+              : "This rule matches no day: no month has that many business days of the counting basis in the selected months within its effective period"
             : rule.effectiveFrom === null && rule.effectiveTo === null
               ? "This rule matches no day (for example, a day that does not exist in the selected months)"
               : "This rule matches no day within its effective period",
@@ -618,14 +639,14 @@ function analyze<T, Kind extends string>(
     if (
       businessDayBased &&
       rule.basis === null &&
-      rule.onHolidayRule === "over-holiday" &&
+      rule.holidayOverlapPolicy === "over-holiday" &&
       typeof compiled.holiday === "object" &&
       "value" in compiled.holiday &&
       compiled.holiday.value === false
     ) {
       c.info(
         "redundant",
-        `${rule.path}.onHolidayRule`,
+        `${rule.path}.holidayOverlapPolicy`,
         'This option does not change the result: holidays are closed (holidayPolicy: "closed"), so an nth business day is never a holiday',
       );
     }
@@ -669,6 +690,7 @@ function analyze<T, Kind extends string>(
               ? r.cycle !== null && cycleCovers(r, rule) && setCovers(r.months, rule.months)
               : rule.businessDays !== null
                 ? r.businessDays !== null &&
+                  r.weekStart === rule.weekStart &&
                   r.calendar === rule.calendar &&
                   setCovers(r.businessDays, rule.businessDays) &&
                   setCovers(r.months, rule.months)
@@ -707,7 +729,11 @@ function analyze<T, Kind extends string>(
   }
 
   // --- 取り除いても結果が変わらない ---
-  const redundant = (rule: DecidingRule<T>, base: CompiledSchedule<T, Kind>, days: number[]) => {
+  const redundant = (
+    rule: DecidingRule<Value>,
+    base: CompiledSchedule<Value, Kind>,
+    days: number[],
+  ) => {
     const resolve = createResolver(without(base, rule, false), lookup);
     return days.every((n) => sameValue(rule.value, resolve(fromDayNumber(n)).day.value));
   };
@@ -720,7 +746,7 @@ function analyze<T, Kind extends string>(
     let checked = 0;
     const last = Math.min(rule.to, rule.from + MAX_DATE_RULE_DAYS - 1);
     for (let n = rule.from; n <= last; n++) {
-      let decidedBy: DecidingRule<T> | null;
+      let decidedBy: DecidingRule<Value> | null;
       try {
         decidedBy = full(fromDayNumber(n)).rule;
       } catch {
@@ -746,7 +772,7 @@ function analyze<T, Kind extends string>(
   if (candidates.length === 0) return;
   const base = without(compiled, null, true);
   const resolveBase = createResolver(base, lookup);
-  const decided = new Map<DecidingRule<T>, number[]>(candidates.map((r) => [r, []]));
+  const decided = new Map<DecidingRule<Value>, number[]>(candidates.map((r) => [r, []]));
   eachDay(window, (n) => {
     const rule = resolveBase(fromDayNumber(n)).rule;
     if (rule) decided.get(rule)?.push(n);
@@ -798,9 +824,9 @@ function compileDiagnoseOptions(options: unknown): { asOf: number | null } {
 }
 
 /** 基準日より前に終わった規則・日付を expired にする（暦日の大小比較だけで、祝日は引かない） */
-function checkExpired<T, Kind extends string>(
+function checkExpired<Value, Kind extends string>(
   c: IssueCollector,
-  compiled: CompiledSchedule<T, Kind>,
+  compiled: CompiledSchedule<Value, Kind>,
   asOf: number,
 ): void {
   const ended = (path: string, last: number, what: string): void => {
@@ -819,42 +845,44 @@ function checkExpired<T, Kind extends string>(
 }
 
 /**
- * 判定に祝日を使わない設定（提供元がない、または holidayPolicy: "ignore" / holiday: "weekday" で祝日に従属する規則もない）の
- * unconfirmedHolidays: "throw" は、結果に影響しないので redundant にする。dayInfo が holiday を付けるために祝日を引くので実行時には投げるが、
+ * 判定に祝日を使わない設定（提供元がない、または holidayPolicy: "ignore" で祝日に従属する規則もない）の
+ * unconfirmedHolidayPolicy: "throw" は、結果に影響しないので redundant にする。dayInfoOn が holiday を付けるために祝日を引くので実行時には投げるが、
  * 投げても結果が変わらない設定であることを知らせる
  */
-function checkUnconfirmedOption<T, Kind extends string>(
+function checkUnconfirmedOption<Value, Kind extends string>(
   c: IssueCollector,
-  compiled: CompiledSchedule<T, Kind>,
-  isCalendar: boolean,
+  compiled: CompiledSchedule<Value, Kind>,
 ): void {
-  if (compiled.source.unconfirmedHolidays !== "throw") return;
+  if (compiled.source.unconfirmedHolidayPolicy !== "throw") return;
   const noProvider = compiled.source.providers.length === 0;
   const holidayUnused =
-    compiled.holiday === "weekday" &&
+    compiled.holiday === "ignore" &&
     !compiled.recurring.some(
       (r) =>
-        r.holiday || r.dayAfterHoliday || r.dayBeforeHoliday || r.onHolidayRule === "after-holiday",
+        r.holiday ||
+        r.dayAfterHoliday ||
+        r.dayBeforeHoliday ||
+        r.holidayOverlapPolicy === "after-holiday",
     );
   if (!noProvider && !holidayUnused) return;
   c.info(
     "redundant",
-    "unconfirmedHolidays",
+    "unconfirmedHolidayPolicy",
     noProvider
-      ? 'unconfirmedHolidays: "throw" has no effect: there is no holiday provider'
-      : `unconfirmedHolidays: "throw" has no effect on results: holidays are not used (${isCalendar ? 'holidayPolicy: "ignore"' : 'holiday: "weekday"'} and no holiday-based rule); dayInfo still throws when it looks up the holiday to report`,
+      ? 'unconfirmedHolidayPolicy: "throw" has no effect: there is no holiday provider'
+      : `unconfirmedHolidayPolicy: "throw" has no effect on results: holidays are not used (holidayPolicy: "ignore" and no holiday-based rule); dayInfoOn still throws when it looks up the holiday to report`,
   );
 }
 
-function run<T, Kind extends string>(
+function run<Value, Kind extends string>(
   c: IssueCollector,
-  compiled: CompiledSchedule<T, Kind> | undefined,
+  compiled: CompiledSchedule<Value, Kind> | undefined,
   isCalendar: boolean,
   asOf: number | null,
 ): readonly Diagnostic[] {
   if (compiled && !c.hasErrors) {
     if (asOf !== null) checkExpired(c, compiled, asOf);
-    checkUnconfirmedOption(c, compiled, isCalendar);
+    checkUnconfirmedOption(c, compiled);
     const before = c.issues.length;
     try {
       analyze(c, compiled, isCalendar);
@@ -864,7 +892,7 @@ function run<T, Kind extends string>(
       const code = (error as { code?: unknown } | null)?.code;
       c.error(
         code === "out-of-range" ? "out-of-range" : "invalid-provider-data",
-        "holidays",
+        "holidayProvider",
         error instanceof Error ? error.message : String(error),
       );
     }

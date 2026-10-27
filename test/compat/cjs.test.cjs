@@ -13,10 +13,10 @@ test("すべてのサブパスを require() で読み込める", () => {
   const sg = require("bizdays-toolkit/sg");
   const fr = require("bizdays-toolkit/fr");
 
-  const calendar = root.createCalendar({ holidays: jp.jp, closedWeekdays: [0, 6] });
+  const calendar = root.createCalendar({ holidayProvider: jp.jp, closedWeekdays: [0, 6] });
   assert.equal(calendar.isBusinessDay("2026-11-23"), false);
   assert.equal(uk.scotland.holidaysInYear(2026).length, 10);
-  assert.deepEqual(diagnose.diagnoseCalendar({ holidays: jp.jp }), []);
+  assert.deepEqual(diagnose.diagnoseCalendar({ holidayProvider: jp.jp }), []);
   assert.equal(provider.easterSunday(2026), "2026-04-05");
   assert.equal(sg.sg.holidaysInYear(2026).length, 14);
   assert.equal(fr.metropole.holidaysInYear(2026).length, 11);
