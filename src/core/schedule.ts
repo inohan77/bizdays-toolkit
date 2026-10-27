@@ -123,7 +123,7 @@ export type Month = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
  * 繰り返しの規則が祝日に当たったときの扱い。
  * - "under-holiday": 祝日の下。祝日の扱いに従う（既定）
  * - "over-holiday": 祝日の上。祝日でも当てはめる
- * - "after-holiday": 祝日の後。祝日には当てはめず、祝日でない翌日に振り替える
+ * - "after-holiday": 祝日の後。祝日には当てはめず、その日以降で最初の祝日でない日（土曜日のこともある）に振り替える
  * @public
  */
 export type OnHolidayRule = "under-holiday" | "over-holiday" | "after-holiday";

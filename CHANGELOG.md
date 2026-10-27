@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [0.22.2] - 2026-10-27
+
+### Changed
+
+- ガイド（英日）の「未確定の祝日」で、祝日の翌日・祝前日の規則が見る日を 0.22.1 で「隣の日（`skipWeekdays` があれば塊の全体）」としたのは実装と違っていたので、「隣の日。`skipWeekdays` があれば、そこから飛ばす曜日を越えて最も近い祝日まで」に直した（0.22.1 の節の「実装どおり」は誤り。塊の中で最も近い祝日より遠い日は見ないので、その日が未確定の祝日でも `unconfirmed-holiday` にならない。動作は変わらない）
+- 型定義のコメント（`OnHolidayRule` の `"after-holiday"`）の「祝日でない翌日に振り替える」を「その日以降で最初の祝日でない日（土曜日のこともある）に振り替える」にした（0.22.1 でガイドを直した説明と揃える。`.js` は変わらない）
+- `docs/migration.md`: 0.22.0 の `cycle` への書き換えの注意の「`openRecurring` の規則と重なる日は営業日になる」に、祝日ではその `openRecurring` の規則も `"over-holiday"` の場合だけであることを足した（祝日には `"over-holiday"` の休業の規則が、既定の `"under-holiday"` の `openRecurring` より先に決まる）。祝前日の行に、祝前日は祝日でないので祝日での順番の違いは関係しないことを足した
+- 0.22.1 の節の補足: 言葉どおりの翌平日を `skipWeekdays` で書けると示したのはガイド（英日）で、README（英日）は「土曜日のこともある」を足しただけ。`scripts/bench.ts` のコメントと `test/recurring.test.ts` のテスト名の「翌平日」も直していた（どちらも公開物に含まれない）
+
 ## [0.22.1] - 2026-10-27
 
 ### Changed
@@ -651,7 +660,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.2...HEAD
+[0.22.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.1...v0.22.2
 [0.22.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.4...v0.22.0
 [0.21.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.21.3...v0.21.4

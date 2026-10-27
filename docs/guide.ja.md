@@ -673,7 +673,7 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## 未確定の祝日
 
-提供元の `confirmedThrough` より後の年には、予測の祝日（`confirmed: false`）が含まれることがあります。日本の春分の日・秋分の日（翌年分が毎年 2 月の官報で公表される）と、GOV.UK が公表している最後の年より後の英国の bank holidays です。既定では予測をそのまま使います。`unconfirmedHolidays: "throw"`（`outOfRange` と同じ場所。カレンダー・スケジュール共通）にすると、未確定の祝日を引いた判定は `code: "unconfirmed-holiday"` の `RangeError` になり、5 年の返済予定の期日や契約書に書く日付のように、予測に依存した結果が黙って出ることがなくなります。「引いた判定」には、求めた日だけでなく、探索が途中で通る日（`addBusinessDays`・`adjust`・`dueDate`・`closingMonth` など）や、`dayAfterHoliday`・`dayBeforeHoliday` の規則が見る隣の日（`skipWeekdays` があれば塊の全体）も含みます。`holidaysInYear`・`holidaysBetween` は投げないので、例外を受けたあとに影響する日を列挙する逃げ道になります。
+提供元の `confirmedThrough` より後の年には、予測の祝日（`confirmed: false`）が含まれることがあります。日本の春分の日・秋分の日（翌年分が毎年 2 月の官報で公表される）と、GOV.UK が公表している最後の年より後の英国の bank holidays です。既定では予測をそのまま使います。`unconfirmedHolidays: "throw"`（`outOfRange` と同じ場所。カレンダー・スケジュール共通）にすると、未確定の祝日を引いた判定は `code: "unconfirmed-holiday"` の `RangeError` になり、5 年の返済予定の期日や契約書に書く日付のように、予測に依存した結果が黙って出ることがなくなります。「引いた判定」には、求めた日だけでなく、探索が途中で通る日（`addBusinessDays`・`adjust`・`dueDate`・`closingMonth` など）や、`dayAfterHoliday`・`dayBeforeHoliday` の規則が見る日（隣の日。`skipWeekdays` があれば、そこから飛ばす曜日を越えて最も近い祝日まで）も含みます。`holidaysInYear`・`holidaysBetween` は投げないので、例外を受けたあとに影響する日を列挙する逃げ道になります。
 
 ```ts
 import { createCalendar, isBizdaysError } from "bizdays-toolkit";
