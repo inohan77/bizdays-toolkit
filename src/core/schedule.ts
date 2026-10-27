@@ -2108,8 +2108,10 @@ export function createResolver<Value, Kind extends string>(
    * 振替・祝日の前後の規則が見る隣の日の祝日。outOfRangePolicy: "throw" なら、隣の日が提供元の対応年の外でも
    * out-of-range を投げる（結果が分からない年に依存するため。"ignore" なら外は祝日なし）。docs/decisions.md の 54 番（D2）
    */
-  const holidayOfSafe = (date: DateString): Holiday<Kind> | undefined => lookup.holidayOfDate(date);
-  const isHolidaySafe = (date: DateString): boolean => holidayOfSafe(date) !== undefined;
+  const holidayOfNeighbour = (date: DateString): Holiday<Kind> | undefined =>
+    lookup.holidayOfDate(date);
+  const isHolidayOfNeighbour = (date: DateString): boolean =>
+    holidayOfNeighbour(date) !== undefined;
 
   /**
    * "after-holiday" の規則が、date（祝日でない日）に振り替えられてきたか。
@@ -2122,8 +2124,8 @@ export function createResolver<Value, Kind extends string>(
     for (let k = 1; k <= MAX_HOLIDAY_RUN; k++) {
       const prev = addDays(date, -k);
       // 飛ばす日は祝日と、skipWeekdays の曜日。それ以外の日に達したら、振替元はない
-      if (!isHolidaySafe(prev) && !rule.skipWeekdays?.has(weekdayOf(prev))) return undefined;
-      if (matchRecurring(rule, prev, holidayOfSafe)) return prev;
+      if (!isHolidayOfNeighbour(prev) && !rule.skipWeekdays?.has(weekdayOf(prev))) return undefined;
+      if (matchRecurring(rule, prev, holidayOfNeighbour)) return prev;
     }
     return undefined;
   }
@@ -2165,7 +2167,7 @@ export function createResolver<Value, Kind extends string>(
       const over = recurring.find(
         (r) =>
           r.holidayOverlapPolicy === "over-holiday" &&
-          matchRecurring(r, date, holidayOfSafe, basis),
+          matchRecurring(r, date, holidayOfNeighbour, basis),
       );
       if (over) return make(over.value, "recurring", over, over.name);
       // 4. 祝日
@@ -2178,7 +2180,7 @@ export function createResolver<Value, Kind extends string>(
       const under = recurring.find(
         (r) =>
           r.holidayOverlapPolicy === "under-holiday" &&
-          matchRecurring(r, date, holidayOfSafe, basis),
+          matchRecurring(r, date, holidayOfNeighbour, basis),
       );
       if (under) return make(under.value, "recurring", under, under.name);
       return make(weekly[weekday] as Value, "weekday", null, undefined);
@@ -2188,7 +2190,7 @@ export function createResolver<Value, Kind extends string>(
     for (const rule of recurring) {
       // skipWeekdays の曜日には当てはめない（祝日と同じく振り替える）
       if (rule.skipWeekdays?.has(weekday)) continue;
-      if (matchRecurring(rule, date, holidayOfSafe, basis))
+      if (matchRecurring(rule, date, holidayOfNeighbour, basis))
         return make(rule.value, "recurring", rule, rule.name);
       if (hasShift && rule.holidayOverlapPolicy === "after-holiday") {
         const origin = shiftedOrigin(rule, date);
