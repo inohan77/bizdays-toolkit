@@ -75,7 +75,7 @@ const federal = [
     confirmed: true,
   },
 ];
-// US federal holidayProvider: a Saturday is observed on the Friday before, a Sunday on the Monday after
+// US federal holidays: a Saturday is observed on the Friday before, a Sunday on the Monday after
 withSubstituteDays(federal, {
   directions: { 6: "previous", 0: "next" },
   kind: "observed",

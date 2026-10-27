@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `docs/providers.md` のコード例のコメントに残っていた置き換えの取り残し（"US federal holidayProvider:" → "US federal holidays:"）を直した（npm のパッケージには含まれない文書。動作は変わらない）
+
 ## [0.30.0] - 2026-10-27
 
 公開する名前を 1 つの規則に合わせて改めた版です（`docs/decisions.md` の 54 番）。名前の整理の版を区切るため、版の番号を 0.30.0 にしました（0.23.0〜0.29.0 は欠番）。旧名は 1.0.0 まで受け付けます。作業は「移行」と `docs/migration.md` の 0.30.0 の節にあります。
