@@ -1,5 +1,5 @@
 {
-  "source": "公開済みの bizdays-toolkit@0.22.2 の dist で作った結果（0.22.x の旧名の kinds \"national\" の意味を正とする。docs/decisions.md の 55 番）",
+  "source": "公開済みの bizdays-toolkit@0.22.2 の dist で作った結果（0.22.x の旧名の kinds \"national\" の意味を正とする。docs/decisions.md の 54 番）",
   "generatedWith": "bizdays-toolkit@0.22.2",
   "from": "2020-01-01",
   "to": "2027-12-31",

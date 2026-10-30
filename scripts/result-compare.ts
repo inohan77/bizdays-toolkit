@@ -517,24 +517,52 @@ interface Diff {
   readonly traits: readonly string[];
 }
 
-/** 設定の特徴（意図した差分を許す単位） */
-function traitsOf(c: Case): string[] {
+/** 祝日に従属する規則の形（同じ形の規則どうしを比べるため） */
+const holidayShape = (r: Obj): string | undefined =>
+  r["holiday"] === true
+    ? "holiday"
+    : r["dayAfterHoliday"] === true
+      ? "dayAfterHoliday"
+      : r["dayBeforeHoliday"] === true
+        ? "dayBeforeHoliday"
+        : undefined;
+
+/** 1 つの設定の特徴 */
+function traitsOfOne(one: Case): string[] {
   const traits = new Set<string>();
-  for (const one of [c, c.partner]) {
-    if (one === undefined) continue;
-    const hasJp = one.providers.includes("jp");
-    const jpOnly = hasJp && one.providers.every((p) => p === "jp");
-    for (const key of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {
-      const list = one.options[key];
-      if (!Array.isArray(list)) continue;
-      for (const r of list as Obj[]) {
-        const kinds = Array.isArray(r["kinds"]) ? (r["kinds"] as string[]) : [];
-        if (hasJp && kinds.includes("regular")) traits.add("kinds-regular-with-jp");
-        if (jpOnly && kinds.includes("national")) traits.add("kinds-national-with-jp-only");
-      }
+  const hasJp = one.providers.includes("jp");
+  const jpOnly = hasJp && one.providers.every((p) => p === "jp");
+  for (const key of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {
+    const list = one.options[key];
+    if (!Array.isArray(list)) continue;
+    const kindsOf = (r: Obj): string[] =>
+      Array.isArray(r["kinds"]) ? (r["kinds"] as string[]) : [];
+    for (const r of list as Obj[]) {
+      if (hasJp && kindsOf(r).includes("regular")) traits.add("kinds-regular-with-jp");
+      // 同じ配列に、同じ形で "regular" を含む規則もあるときだけ（覆う関係を比べる組）
+      const shape = holidayShape(r);
+      if (
+        jpOnly &&
+        shape !== undefined &&
+        kindsOf(r).includes("national") &&
+        (list as Obj[]).some(
+          (x) => x !== r && holidayShape(x) === shape && kindsOf(x).includes("regular"),
+        )
+      )
+        traits.add("kinds-national-and-regular-with-jp-only");
     }
   }
   return [...traits];
+}
+
+/**
+ * 比べた対象の特徴（意図した差分を許す単位）。合成は組のカレンダーの両方の設定、ほかはその設定だけから付ける
+ * （相手のカレンダーの特徴で、単独の結果の差分を許さないため）
+ */
+function traitsOf(c: Case, target: string): string[] {
+  const own = traitsOfOne(c);
+  if (target !== "combine" || c.partner === undefined) return own;
+  return [...new Set([...own, ...traitsOfOne(c.partner)])];
 }
 
 function compareDays(
@@ -580,11 +608,15 @@ function diagnosticKeys(list: unknown): Set<string> | string {
 
 function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boolean): Diff[] {
   const diffs: Diff[] = [];
-  const traits = traitsOf(c);
   const written = naming === "old" ? toOld(c) : c.options;
   const opts = (lib: Lib): Obj =>
     naming === "old" ? withProvidersOld(lib, written) : withProviders(lib, written);
-  const meta = (target: string): Omit<Diff, "detail"> => ({ id: c.id, naming, target, traits });
+  const meta = (target: string): Omit<Diff, "detail"> => ({
+    id: c.id,
+    naming,
+    target,
+    traits: traitsOf(c, target),
+  });
   if (c.kind === "calendar") {
     const b = build(() => base.createCalendar(opts(base)));
     const h = build(() => head.createCalendar(opts(head)));

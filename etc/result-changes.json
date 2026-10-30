@@ -9,7 +9,7 @@
       "summary": "日本の祝日の種別を \"regular\" に改めたので、日本の提供元を含む設定の kinds の \"regular\" は日本の国民の祝日にも当たる"
     },
     {
-      "trait": "kinds-national-with-jp-only",
+      "trait": "kinds-national-and-regular-with-jp-only",
       "targets": ["diagnose"],
       "affectedSince": "0.30.1",
       "introducedIn": "0.30.2",
