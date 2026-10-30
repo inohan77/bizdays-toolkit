@@ -883,8 +883,9 @@ import { england } from "bizdays-toolkit/uk";
 
 const { options } = migrateCalendarOptions({
   holidayProvider: [jp, england],
+  timeZone: "Asia/Tokyo",
+  holidayPolicy: "open",
   closedRecurring: [{ holiday: true, kinds: ["national"] }],
 });
-const left = diagnoseCalendar(options).filter((d) => d.code === "deprecated-option");
-left.map((d) => d.path); // ["closedRecurringRules[0].kinds[0]"]
+diagnoseCalendar(options).map((d) => `${d.code} ${d.path}`); // ["deprecated-option closedRecurringRules[0].kinds[0]"]
 ```

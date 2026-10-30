@@ -539,6 +539,8 @@ function traitsOfOne(one: Case): string[] {
       Array.isArray(r["kinds"]) ? (r["kinds"] as string[]) : [];
     for (const r of list as Obj[]) {
       if (hasJp && kindsOf(r).includes("regular")) traits.add("kinds-regular-with-jp");
+      if (hasJp && !jpOnly && kindsOf(r).includes("national"))
+        traits.add("kinds-national-in-union-with-jp");
       // 同じ配列に、同じ形で "regular" を含む規則もあるときだけ（覆う関係を比べる組）
       const shape = holidayShape(r);
       if (
