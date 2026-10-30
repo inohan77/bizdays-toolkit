@@ -1,6 +1,6 @@
 import "./strict-warnings.ts";
 /**
- * 公開する dist をブラウザーで確かめる（CI の browsers・safari ジョブから実行。decisions.md の 26 番）。
+ * 公開する dist をブラウザーで確かめる（CI の browsers・safari ジョブから実行。decisions.md の 35 番）。
  *
  *   node scripts/test-browsers.ts <chrome|firefox|edge|safari> <ドライバーのパス>
  *
@@ -29,7 +29,7 @@ const capabilities: Record<string, Record<string, unknown>> = {
   edge: {
     browserName: "MicrosoftEdge",
     // CI のランナーで、Edge のページの読み込みが止まる（レンダラーが応答しない）ことが続いたため、
-    // 共有メモリ（/dev/shm）の代わりに一時ファイルを使い、GPU の処理を止める（decisions.md の 26 番）
+    // 共有メモリ（/dev/shm）の代わりに一時ファイルを使い、GPU の処理を止める（decisions.md の 35 番）
     "ms:edgeOptions": {
       args: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     },

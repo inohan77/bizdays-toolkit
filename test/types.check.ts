@@ -484,7 +484,7 @@ void withoutNames;
   });
 }
 
-// 規則の形ごとに受ける holidayOverlapPolicy・skipWeekdays・calendar（0.30.0。docs/decisions.md の 33・54 番）
+// 規則の形ごとに受ける holidayOverlapPolicy・skipWeekdays・calendar（0.30.0。docs/decisions.md の 6 番）
 {
   const branch = createCalendar({ holidayProvider: jp });
   createCalendar({

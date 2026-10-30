@@ -1,5 +1,5 @@
 /**
- * 前の版との祝日データの差分（CI の data-compare ジョブ。decisions.md の 51 番）。
+ * 前の版との祝日データの差分（CI の data-compare ジョブ。decisions.md の 37 番）。
  *
  * 前の版と今回の dist の同梱の提供元を、対応年が重なるすべての年について 1 日ずつ比べる。
  * 前の版にない提供元と、前の版の対応年の外の年は比べない。
@@ -162,7 +162,7 @@ const allDiffs = results.flatMap((r) => r.diffs);
 const allKeyChanges = results.flatMap((r) => r.keyChanges);
 if (allKeyChanges.length > 0) {
   failures.push(
-    `key が変わった（${allKeyChanges.length} 件）。key は版をまたいで変えない（decisions.md の 46 番）`,
+    `key が変わった（${allKeyChanges.length} 件）。key は版をまたいで変えない（decisions.md の 25 番）`,
   );
 }
 const changelog = changelogHasData();

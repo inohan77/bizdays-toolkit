@@ -1,6 +1,6 @@
 /**
  * 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダー。
- * 1 日の判定の優先順位は docs/guide.md の「Business-day calendars」と docs/decisions.md の 12 番。
+ * 1 日の判定の優先順位は docs/guide.md の「Business-day calendars」と docs/decisions.md の 11 番。
  *
  * 内部では、営業日かどうか（真偽値）を返すスケジュール（createSchedule）として作っている。
  * 営業日の探索・調整・月の営業日などの機能は buildCalendar に切り出し、作成済みのカレンダーを
@@ -548,7 +548,7 @@ function buildCalendar<Kind extends string>(
     "modified-following",
     "modified-preceding",
   ];
-  /** 月 m の、営業日に調整した締め日 D(m)（decisions.md の 41 番） */
+  /** 月 m の、営業日に調整した締め日 D(m)（decisions.md の 23 番） */
   function closingDate(
     month: { year: number; month: number },
     closingDayOfMonth: number,

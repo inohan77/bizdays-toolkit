@@ -1,5 +1,5 @@
 // 公開する dist を、Node.js 以外の JavaScript の実行環境（Bun・Deno）で確かめる実行ファイル（CI の bun・deno ジョブから実行。
-// decisions.md の 26 番）。確認の中身は smoke.mjs（Node.js・ブラウザー・Cloudflare Workers と共通）。
+// decisions.md の 35 番）。確認の中身は smoke.mjs（Node.js・ブラウザー・Cloudflare Workers と共通）。
 // どの環境でも動くよう、標準の JavaScript だけで書く（node: のモジュールは使わない）。
 // 実行の前に pnpm build が必要
 //   bun run test/compat/runtime.mjs

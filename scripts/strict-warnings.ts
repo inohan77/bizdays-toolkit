@@ -1,5 +1,5 @@
 /**
- * Node.js の警告を失敗として扱う（decisions.md の 24 番）。
+ * Node.js の警告を失敗として扱う（decisions.md の 35 番）。
  *
  * 自前のスクリプトは先頭でこのファイルを import し、テストは node --import で読み込む（--import は node --test が
  * 各テストファイルを動かす子プロセスにも引き継がれる）。

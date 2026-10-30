@@ -1,6 +1,6 @@
 import "./strict-warnings.ts";
 /**
- * 利用者の立場で、公開する型定義を型チェックする（pnpm check から実行。decisions.md の 29・38 番）。
+ * 利用者の立場で、公開する型定義を型チェックする（pnpm check から実行。decisions.md の 35 番）。
  *
  * test/consumer/consumer.mts を、moduleResolution を node16・nodenext・bundler に変えて tsc で確かめ、
  * わざと型エラーを含む test/consumer/consumer-error.mts が失敗することも確かめる。pnpm build の後に実行する。

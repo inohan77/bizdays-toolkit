@@ -1,6 +1,6 @@
 /**
  * 日ごとに値を返すスケジュール（営業時間・受付枠など、曜日・祝日・特定日で変わるもの）。
- * 1 日の値を決める優先順位は docs/guide.md の「Day-by-day values」と docs/decisions.md の 12 番。
+ * 1 日の値を決める優先順位は docs/guide.md の「Day-by-day values」と docs/decisions.md の 11 番。
  * 営業日カレンダー（createCalendar）は、このスケジュールの真偽値版として作られている。
  */
 
@@ -952,7 +952,7 @@ export interface RecurringRuleCompiled<Value> extends CompiledPeriod {
   readonly holiday: boolean;
   /** 祝日・祝日の翌日・祝前日の規則で絞る種別（null はすべての祝日） */
   readonly kinds: ReadonlySet<string> | null;
-  /** kinds の旧名 "national" を、日本の提供元が返した "regular" の祝日にも当てるか（docs/decisions.md の 54 番） */
+  /** kinds の旧名 "national" を、日本の提供元が返した "regular" の祝日にも当てるか（docs/decisions.md の 10 番） */
   readonly nationalOfJp: boolean;
   /** 祝日・祝日の翌日・祝前日の規則で絞る識別子（null はすべての祝日） */
   readonly keys: ReadonlySet<string> | null;
@@ -1676,7 +1676,7 @@ export type JpUsage = "none" | "only" | "mixed";
 
 /**
  * kinds の "national"（0.30.0 で日本の提供元の種別は "regular" に改名）を見つけたら deprecated-option を記録し、
- * 見つけたかを返す。値は読み替えず、判定で日本の提供元が返した "regular" の祝日にも当てる（docs/decisions.md の 54 番）。
+ * 見つけたかを返す。値は読み替えず、判定で日本の提供元が返した "regular" の祝日にも当てる（docs/decisions.md の 10 番）。
  * mixed（ほかの提供元と合わせた設定）では印を付け、当てている祝日と 1.0.0 での扱いは診断で添える
  * （作成時は警告を使わないので、長い文をルートに持たない）
  */
@@ -2140,7 +2140,7 @@ export function createResolver<Value, Kind extends string>(
 
   /**
    * 振替・祝日の前後の規則が見る隣の日の祝日。outOfRangePolicy: "throw" なら、隣の日が提供元の対応年の外でも
-   * out-of-range を投げる（結果が分からない年に依存するため。"ignore" なら外は祝日なし）。docs/decisions.md の 54 番（D2）
+   * out-of-range を投げる（結果が分からない年に依存するため。"ignore" なら外は祝日なし）。docs/decisions.md の 17 番
    */
   const holidayOfNeighbour = (date: DateString): Holiday<Kind> | undefined =>
     lookup.holidayOfDate(date);

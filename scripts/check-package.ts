@@ -6,10 +6,10 @@
  * - ランタイムの依存（dependencies）がないこと
  * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
  * - 英語と日本語のドキュメントの対（README・guide・providers）の構成がそろい、見出しへのリンクが実在すること（checkDocPair・checkDocAnchors）
- * - ライブラリのソース（src）が Node.js 固有の機能を使っていないこと（checkPortableSource。decisions.md の 26 番）
+ * - ライブラリのソース（src）が Node.js 固有の機能を使っていないこと（checkPortableSource。decisions.md の 35 番）
  * - ドキュメントの数値・一覧（対応年・タイムゾーン・confirmedThrough・key の表・コードの一覧・サイズを測った版）が
- *   dist とソースの型に一致し、英日の対で節ごとの数値がそろうこと（checkDocFacts・checkPairNumbers。decisions.md の 51 番）
- * - コメントと文書のファイルのパス・決定の番号の参照が実在すること（checkReferences。decisions.md の 52 番）
+ *   dist とソースの型に一致し、英日の対で節ごとの数値がそろうこと（checkDocFacts・checkPairNumbers。decisions.md の 39 番）
+ * - コメントと文書のファイルのパス・決定の番号の参照が実在すること（checkReferences。decisions.md の 36 番）
  */
 
 import "./strict-warnings.ts";
@@ -135,7 +135,7 @@ if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
 
 /**
  * 英語と日本語のドキュメントの対（README.md と docs/README.ja.md、docs/guide.md と docs/guide.ja.md、
- * docs/providers.md と docs/providers.ja.md）の構成を比べる（decisions.md の 22・45 番）。
+ * docs/providers.md と docs/providers.ja.md）の構成を比べる（decisions.md の 39 番）。
  * 日本語版をルートに置かないのは、npm がルートの README* を files の指定にかかわらず必ず含めるため。
  *
  * - 見出しの数が段ごとに一致し、コードブロックの数が一致すること（節や例の足し忘れを見つける。文章の中身は比べない）
@@ -270,7 +270,7 @@ errors.push(...checkDocAnchors());
 
 /**
  * 出典の記録（docs/sources/*.md）は、README.md と docs/README.ja.md の両方からリンクされていること。
- * 「出典の食い違いまで記録する」という README の説明の裏づけなので、記録を足したら README に足す（decisions.md の 49 番）
+ * 「出典の食い違いまで記録する」という README の説明の裏づけなので、記録を足したら README に足す（decisions.md の 36 番）
  */
 function checkSourceRecordsLinked(): string[] {
   const problems: string[] = [];
@@ -312,7 +312,7 @@ function checkFixtureRecords(): string[] {
 errors.push(...checkFixtureRecords());
 
 // ---------------------------------------------------------------------------------------------
-// ドキュメントの数値・一覧を、ビルド済みの dist とソースの型と照合する（decisions.md の 51 番）。
+// ドキュメントの数値・一覧を、ビルド済みの dist とソースの型と照合する（decisions.md の 39 番）。
 // ---------------------------------------------------------------------------------------------
 
 /** 国のサブパスごとの国名（英語・日本語）。文の中の「for Japan」「日本は」から提供元を決めるのに使う。国を足したらここに足す */
@@ -641,7 +641,7 @@ function checkPairNumbers(enPath: string, jaPath: string): string[] {
 }
 
 /**
- * コメントと文書の参照が実在すること（decisions.md の 52 番）。
+ * コメントと文書の参照が実在すること（decisions.md の 36 番）。
  * - ファイルのパス（scripts/…・src/…・test/…・docs/…・etc/…・.github/…）が実在すること
  * - 「decisions.md の N 番」（decisions.md の中では「N 番」）の N が、決定の文書にある番号であること
  * 対象は今の状態を書いたファイル（ソース・スクリプト・テスト・ワークフロー・README・ガイド・RELEASING.md など）。
@@ -675,21 +675,99 @@ function checkReferences(): string[] {
     }
   }
   const decisions = readFileSync("docs/decisions.md", "utf8");
-  const numbers = new Set([...decisions.matchAll(/^## (\d+)\. /gm)].map((m) => Number(m[1])));
-  const checkNumbers = (file: string, list: string): void => {
+  const numbers = new Set([...decisions.matchAll(/^### (\d+)\. /gm)].map((m) => Number(m[1])));
+  // 0.30.2 の後に番号を振り直した。CHANGELOG の 0.30.2 までの節は旧番号で書かれているので、
+  // 決定の文書の末尾の対応表の旧番号で確かめる（対応表と一緒に 1.0.0 で外す。decisions.md の 10 番）
+  const oldTable =
+    /^## 旧番号との対応[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(decisions)?.[1] ?? "";
+  const oldNumbers = new Set(
+    oldTable
+      .split("\n")
+      .filter((line) => /^\|\s*\d/.test(line))
+      .flatMap((line) =>
+        line
+          .split("|")
+          .slice(1, -1)
+          .filter((_, i) => i % 2 === 0)
+          .map((cell) => Number(cell.trim())),
+      )
+      .filter((n) => Number.isInteger(n) && n > 0),
+  );
+  if (oldNumbers.size === 0)
+    problems.push("docs/decisions.md: the table of old decision numbers was not found");
+  const checkNumbers = (file: string, list: string, known: ReadonlySet<number>): void => {
     for (const n of list.split(/[・、,]/).map((x) => Number(x.trim()))) {
-      if (!numbers.has(n))
+      if (!known.has(n))
         problems.push(`${file}: refers to decision ${n}, which docs/decisions.md does not have`);
     }
   };
-  for (const file of [...current, "CHANGELOG.md", "docs/migration.md"]) {
-    for (const m of readFileSync(file, "utf8").matchAll(
-      /decisions\.md の ([\d・、, ]+?) ?番(?!目)/g,
-    ))
-      checkNumbers(file, m[1]!);
+  const referencePattern = /decisions\.md`? の ([\d・、, ]+?) ?番(?!目)/g;
+  for (const file of [...current, "docs/migration.md"]) {
+    for (const m of readFileSync(file, "utf8").matchAll(referencePattern))
+      checkNumbers(file, m[1]!, numbers);
+  }
+  const renumberedAfter = [0, 30, 2];
+  const isOld = (version: string): boolean => {
+    const v = version.split(".").map(Number);
+    for (let i = 0; i < 3; i++) if (v[i] !== renumberedAfter[i]) return v[i]! < renumberedAfter[i]!;
+    return true;
+  };
+  for (const section of readFileSync("CHANGELOG.md", "utf8")
+    .split(/^## \[/m)
+    .slice(1)) {
+    const version = section.slice(0, section.indexOf("]"));
+    const known = /^\d+\.\d+\.\d+$/.test(version) && isOld(version) ? oldNumbers : numbers;
+    for (const m of section.matchAll(referencePattern))
+      checkNumbers(`CHANGELOG.md [${version}]`, m[1]!, known);
   }
   for (const m of decisions.matchAll(/(?<![\d.])(\d+(?:[・、]\d+)*) ?番(?!目)/g))
-    checkNumbers("docs/decisions.md", m[1]!);
+    checkNumbers("docs/decisions.md", m[1]!, numbers);
+  problems.push(...checkDecisionsToc(decisions));
+  return problems;
+}
+
+/**
+ * 決定の文書の目次が、本文の章と決定の見出しと一致すること（decisions.md の 36 番）。
+ * 目次は「- **章**」と「  - N 番: 題名」、本文は「## 章」と「### N. 題名」。番号の重複も見る（欠番は許す）
+ */
+function checkDecisionsToc(decisions: string): string[] {
+  const problems: string[] = [];
+  const toc = /^## 目次\n([\s\S]*?)(?=^## )/m.exec(decisions)?.[1];
+  if (toc === undefined)
+    return ["docs/decisions.md: the table of contents (## 目次) was not found"];
+  const fromToc: string[] = [];
+  for (const line of toc.split("\n")) {
+    const chapter = /^- \*\*(.+)\*\*$/.exec(line);
+    const item = /^ {2}- (\d+) 番: (.+)$/.exec(line);
+    if (chapter) fromToc.push(`## ${chapter[1]}`);
+    else if (item) fromToc.push(`### ${item[1]}. ${item[2]}`);
+    else if (line.trim() !== "" && !line.startsWith("- 旧番号との対応"))
+      problems.push(`docs/decisions.md: unreadable line in the table of contents: ${line}`);
+  }
+  const body = decisions
+    .slice(decisions.indexOf("\n## ", decisions.indexOf("## 目次") + 1))
+    .split("\n")
+    .filter(
+      (line) =>
+        /^### \d+\. /.test(line) ||
+        (line.startsWith("## ") && !line.startsWith("## 旧番号との対応")),
+    );
+  const max = Math.max(fromToc.length, body.length);
+  for (let i = 0; i < max; i++) {
+    if (fromToc[i] !== body[i]) {
+      problems.push(
+        `docs/decisions.md: the table of contents does not match the headings: ${fromToc[i] ?? "(none)"} vs ${body[i] ?? "(none)"}`,
+      );
+      break;
+    }
+  }
+  const seen = new Set<string>();
+  for (const line of body) {
+    const n = /^### (\d+)\. /.exec(line)?.[1];
+    if (n === undefined) continue;
+    if (seen.has(n)) problems.push(`docs/decisions.md: decision ${n} appears twice`);
+    seen.add(n);
+  }
   return problems;
 }
 

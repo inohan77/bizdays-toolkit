@@ -1,4 +1,4 @@
-// 隣の日を見る規則と対応年の端（0.30.0。docs/decisions.md の 54 番の D2）
+// 隣の日を見る規則と対応年の端（0.30.0。docs/decisions.md の 17 番）
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, createSchedule } from "../src/index.ts";

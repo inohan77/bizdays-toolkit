@@ -14,7 +14,7 @@ name: Watch holiday data (GOV.UK, data.gov.sg, the Cabinet Office and data.gouv.
 # 差分を見つけたら、フィクスチャとその国の src/<国>/rules.ts を 1 つのコミットで直してパッチ版を出す（RELEASING.md）。
 # 照合は 1 回の起動で順に行い、すべてが動いたときだけハートビートを知らせる。
 #
-# 起動のしかた（decisions.md の 28 番）:
+# 起動のしかた（decisions.md の 29 番）:
 # - 主: 外部の cron サービス（cron-job.org）が、毎日 06:00（日本時間）に workflow_dispatch を API で呼ぶ
 # - 予備: GitHub の schedule（時刻をずらして 18:17）。どちらかが動けば確認が入る
 # - 動いたことは、最後にハートビート（healthchecks.io）へ知らせる。知らせが一定時間来なければ、

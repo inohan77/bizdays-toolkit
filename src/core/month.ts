@@ -107,7 +107,7 @@ export function checkClosingDay(closingDayOfMonth: number): void {
   }
 }
 
-/** @internal その月の締め日（日）。-1 またはその月の日数以上なら末日（decisions.md の 16 番の読み替えはここだけで行う） */
+/** @internal その月の締め日（日）。-1 またはその月の日数以上なら末日（decisions.md の 23 番の読み替えはここだけで行う） */
 export function closingDayIn({ year, month }: YearMonth, closingDayOfMonth: number): number {
   const last = lengthOfMonth(year, month);
   return closingDayOfMonth === -1 || closingDayOfMonth > last ? last : closingDayOfMonth;

@@ -1,5 +1,5 @@
 {
-  "$comment": "前の版との設定の結果の比較（scripts/result-compare.ts、decisions.md の 56 番）で許す、意図した差分。trait は scripts/result-compare.ts の traitsOf が付ける設定の特徴。前の版が affectedSince 以上・introducedIn 未満で、今回の版が introducedIn 以上のときだけ許す",
+  "$comment": "前の版との設定の結果の比較（scripts/result-compare.ts、decisions.md の 37 番）で許す、意図した差分。trait は scripts/result-compare.ts の traitsOf が付ける設定の特徴。前の版が affectedSince 以上・introducedIn 未満で、今回の版が introducedIn 以上のときだけ許す",
   "changes": [
     {
       "trait": "kinds-national-in-union-with-jp",

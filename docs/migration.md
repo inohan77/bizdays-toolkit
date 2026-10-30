@@ -29,7 +29,7 @@
 
 ## 0.30.0
 
-0.30.0 は、公開する名前を 1 つの規則（`etc/naming.md`。decisions.md の 54 番）に合わせて改めた版です。0.23.0〜0.29.0 は欠番です。旧名は 1.0.0 まで実行時に受け付けます。ただし、次の 5 つは 0.30.0 に上げた時点で対応が要ります: 返す値の変更（下の「返す値」）、日本の提供元とほかの提供元を合わせた設定の `kinds` の `"regular"`（「返す値」の注 2）、対応年の端の挙動（「対応年の端で隣の日を見る規則」）、TypeScript で必須のキーの旧名（「設定のキーと値」の 2 つ目の箇条）、`dayInfoOn` の結果を丸ごと比べるテスト（「関数・メソッド・型・返す項目」の表の下）。営業日カレンダー・スケジュールの設定の旧名は、TypeScript の取り消し線と診断の `deprecated-option` が書き換え先を示します。`combineCalendars`・`createCalendarFromSchedule`・`dueDate`・`withSubstituteDays` の設定の旧名は診断の対象外で、JavaScript では 1.0.0 で `invalid-option` になるまで黙って動くので、`businessDay:`・`maxSearchDays`・`rules:`・`original:` と、`dueDate` の呼び出しの `day:`、`withSubstituteDays` の呼び出しの `name:` を検索して書き換えてください。保存した設定（JSON など）は `migrateCalendarOptions`・`migrateScheduleOptions`（`bizdays-toolkit/diagnose`）で書き換えられます。
+0.30.0 は、公開する名前を 1 つの規則（`etc/naming.md`。decisions.md の 9 番）に合わせて改めた版です。0.23.0〜0.29.0 は欠番です。旧名は 1.0.0 まで実行時に受け付けます。ただし、次の 5 つは 0.30.0 に上げた時点で対応が要ります: 返す値の変更（下の「返す値」）、日本の提供元とほかの提供元を合わせた設定の `kinds` の `"regular"`（「返す値」の注 2）、対応年の端の挙動（「対応年の端で隣の日を見る規則」）、TypeScript で必須のキーの旧名（「設定のキーと値」の 2 つ目の箇条）、`dayInfoOn` の結果を丸ごと比べるテスト（「関数・メソッド・型・返す項目」の表の下）。営業日カレンダー・スケジュールの設定の旧名は、TypeScript の取り消し線と診断の `deprecated-option` が書き換え先を示します。`combineCalendars`・`createCalendarFromSchedule`・`dueDate`・`withSubstituteDays` の設定の旧名は診断の対象外で、JavaScript では 1.0.0 で `invalid-option` になるまで黙って動くので、`businessDay:`・`maxSearchDays`・`rules:`・`original:` と、`dueDate` の呼び出しの `day:`、`withSubstituteDays` の呼び出しの `name:` を検索して書き換えてください。保存した設定（JSON など）は `migrateCalendarOptions`・`migrateScheduleOptions`（`bizdays-toolkit/diagnose`）で書き換えられます。
 
 ### 設定のキーと値
 
@@ -259,7 +259,7 @@ calendar.civilOf("2026-11-23 10:00");
 calendar.civilOf("2026-11-23T10:00"); // time の型も string になる
 ```
 
-- 型で守れない入力を実行時だけ通していた不具合として直しました（decisions.md の 43 番）
+- 型で守れない入力を実行時だけ通していた不具合として直しました（decisions.md の 6 番）
 - 合成した `dayInfo` に `decidedByPath` が加わりました。`dayInfo` の結果を `deepEqual` で比べているテストは期待値に足してください（`decidedBy` は変わりません）
 
 ## 0.15.0
@@ -279,7 +279,7 @@ shipping.businessDayOnOrAfter(new Date(), { cutoff: "14:00" }); // 受付時刻�
 shipping.businessDayOnOrAfter("2026-10-21"); // 暦日だけで判定する
 ```
 
-- 注文の受付時刻を `Date` で渡すつもりが、フォームの日付文字列をそのまま渡してしまう事故を、出荷が間に合わなかったあとではなく呼び出した時点で分かるようにするためです（decisions.md の 42 番）
+- 注文の受付時刻を `Date` で渡すつもりが、フォームの日付文字列をそのまま渡してしまう事故を、出荷が間に合わなかったあとではなく呼び出した時点で分かるようにするためです（decisions.md の 6 番）
 - `RecurringRule` などに既定値付きの型引数 `Kind` が加わりました。型引数なしの `RecurringRule` は `RecurringRule<string>` と同じで、既存のコードは変わりません
 
 ## 0.14.0
@@ -313,7 +313,7 @@ jp.dataVersion;
 jp.confirmedThrough;
 ```
 
-- 同じ値が定数と提供元の項目の 2 経路にあり、英国は 4 つの提供元に 1 組の定数という歪みがあったため、提供元の項目に集約します（decisions.md の 37 番）
+- 同じ値が定数と提供元の項目の 2 経路にあり、英国は 4 つの提供元に 1 組の定数という歪みがあったため、提供元の項目に集約します（decisions.md の 33 番）
 - `DayInfo`・`ScheduleDay` に省略可能な `rulePath` が加わりました。読む側には影響しません
 
 ## 0.11.0
@@ -346,7 +346,7 @@ calendar.dateOf(new Date());
 calendar.civilOf(new Date()).time;
 ```
 
-- 同じ変換が `bizdays-toolkit/jp` の関数・ルートの関数・カレンダーのメソッドの 3 経路にあり、国ごとの関数は日本だけの特別扱い（英国には対応物がない）だったため、国に依らない 2 経路に集約します（decisions.md の 32 番）
+- 同じ変換が `bizdays-toolkit/jp` の関数・ルートの関数・カレンダーのメソッドの 3 経路にあり、国ごとの関数は日本だけの特別扱い（英国には対応物がない）だったため、国に依らない 2 経路に集約します（decisions.md の 7 番）
 - 規則の診断（`diagnoseCalendar`・`diagnoseSchedule`）で、規則の有効期間が祝日の提供元の対応年の外にあるときも `out-of-range` の warning になります。新しい `code` はありません
 
 ## 0.9.0

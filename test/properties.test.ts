@@ -122,7 +122,7 @@ property(
       calendar.addBusinessDays(onOrAfter, n - 1),
       context,
     );
-    // 休業日の起点は数えないので、diffBusinessDays は n − 1（decisions.md の 31 番）
+    // 休業日の起点は数えないので、diffBusinessDays は n − 1（decisions.md の 22 番）
     assert.equal(calendar.diffBusinessDays(day, calendar.addBusinessDays(day, n)), n - 1, context);
     // 負の方向は、前営業日を −1 と数える
     assert.equal(calendar.addBusinessDays(day, -1), calendar.previousBusinessDay(day), context);

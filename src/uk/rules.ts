@@ -7,7 +7,7 @@
  * - 臨時の祝日・移動: 布告ごとの日付をテーブルで持つ
  * - 識別子（key）: 毎年の祝日に GOV.UK の区分名から 1 つ（KnownUkHolidayKey）。振替日は元の祝日の key、臨時の祝日は持たない
  *
- * 年ごとの正（GOV.UK・当時の政府の一覧・布告）と検証のフィクスチャは decisions.md の 18・49 番。
+ * 年ごとの正（GOV.UK・当時の政府の一覧・布告）と検証のフィクスチャは decisions.md の 28 番。
  * CONFIRMED_THROUGH より後の年は、規則による予測（confirmed: false）。
  */
 

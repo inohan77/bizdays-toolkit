@@ -36,7 +36,7 @@ jobs:
         run: npm pack --dry-run --ignore-scripts
 
   compat:
-    # 公開する dist を、engines の下限と、check で使わない LTS・LTS 入りを控えた系列で確かめる（版は matrix。decisions.md の 23 番）。
+    # 公開する dist を、engines の下限と、check で使わない LTS・LTS 入りを控えた系列で確かめる（版は matrix。decisions.md の 35 番）。
     # これらの版ではテスト（.ts の直接実行）も npm 12 も動かないため、ビルドは固定の Node.js 24 で行い、
     # Node.js を切り替えてから、プレーンな JavaScript の確認（test/compat）だけを実行する
     runs-on: ubuntu-24.04
@@ -62,7 +62,7 @@ jobs:
           node --test test/compat/esm.test.mjs test/compat/cjs.test.cjs
 
   browsers:
-    # 公開する dist を、ランナーに入っている Chrome・Firefox・Edge で確かめる（decisions.md の 26 番）。
+    # 公開する dist を、ランナーに入っている Chrome・Firefox・Edge で確かめる（decisions.md の 35 番）。
     # ブラウザーの版はランナーのイメージの更新で変わる（その時点の最新の安定版で確かめる）
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -95,7 +95,7 @@ jobs:
       - run: node scripts/test-browsers.ts safari /usr/bin/safaridriver
 
   workerd:
-    # 公開する dist を、Cloudflare Workers の実行環境（workerd。本番と同じコード）で確かめる（decisions.md の 26 番）。
+    # 公開する dist を、Cloudflare Workers の実行環境（workerd。本番と同じコード）で確かめる（decisions.md の 35 番）。
     # workerd は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -121,7 +121,7 @@ jobs:
       - run: node scripts/test-workerd.ts "${RUNNER_TEMP}/workerd"
 
   bun:
-    # 公開する dist を Bun で確かめる（decisions.md の 26・43 番）。workerd と同じく npm の依存にせず、
+    # 公開する dist を Bun で確かめる（decisions.md の 35 番）。workerd と同じく npm の依存にせず、
     # 版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -147,7 +147,7 @@ jobs:
         run: '"${RUNNER_TEMP}/bun/bun-linux-x64/bun" run test/compat/runtime.mjs'
 
   deno:
-    # 公開する dist を Deno で確かめる（decisions.md の 26・43 番）。Deno の本物の Temporal でも確かめるため --unstable-temporal を付ける
+    # 公開する dist を Deno で確かめる（decisions.md の 35 番）。Deno の本物の Temporal でも確かめるため --unstable-temporal を付ける
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -172,7 +172,7 @@ jobs:
         run: '"${RUNNER_TEMP}/deno/deno" run --unstable-temporal test/compat/runtime.mjs'
 
   consumer-types:
-    # 公開する型定義を、利用者が使う TypeScript の複数の版で型チェックする（decisions.md の 38 番）。
+    # 公開する型定義を、利用者が使う TypeScript の複数の版で型チェックする（decisions.md の 35 番）。
     # 各版は npm の依存にせず、版と SHA-256 を固定した tgz から一時的に入れる。版の選び方は RELEASING.md
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -258,7 +258,7 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
 
   data-compare:
-    # 同梱の提供元の祝日データを、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 51 番）。
+    # 同梱の提供元の祝日データを、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 37 番）。
     # 失敗の条件は scripts/data-compare.ts。差分は Job Summary に残す
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -286,7 +286,7 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
 
   result-compare:
-    # 同じ設定の結果（カレンダー・スケジュール・診断）を、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 56 番）。
+    # 同じ設定の結果（カレンダー・スケジュール・診断）を、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 37 番）。
     # 改名の前の 0.22.2 とも、旧名の設定で比べる（改名は結果を変えないという約束を確かめるため。1.0.0 で外す）。
     # 失敗の条件と意図した差分の扱いは scripts/result-compare.ts。差分は Job Summary に残す
     runs-on: ubuntu-24.04

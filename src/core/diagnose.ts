@@ -598,7 +598,7 @@ function analyze<Value, Kind extends string>(
   const setCovers = <V>(a: ReadonlySet<V> | null, b: ReadonlySet<V> | null): boolean =>
     a === null || (b !== null && [...b].every((v) => a.has(v)));
   // 日本の提供元だけの設定で、調べる期間に種別 "national" の祝日がなければ、kinds の旧名 "national" は "regular" と
-  // 同じ祝日に当たるので、覆う関係は "regular" として比べる（和集合ではほかの提供元の "regular" があるので比べない。54 番）
+  // 同じ祝日に当たるので、覆う関係は "regular" として比べる（和集合ではほかの提供元の "regular" があるので比べない。docs/decisions.md の 31 番）
   const renamedKind = RENAMED_VALUES.find((x) => x.key === "kinds")!;
   let nationalAsRegular: boolean | undefined;
   const kindsOf = (r: RecurringRuleCompiled<unknown>): ReadonlySet<string> | null => {
@@ -639,7 +639,7 @@ function analyze<Value, Kind extends string>(
     if (!matches) {
       unused.add(rule);
       // kinds の "national" を、ID "JP" の提供元のない設定で書いた（id を変えて包んだ日本の提供元を含む）。
-      // 改名の前の名前の可能性を添える。1.0.0 で旧名を削除した後も残す（docs/decisions.md の 54 番）
+      // 改名の前の名前の可能性を添える。1.0.0 で旧名を削除した後も残す（docs/decisions.md の 10 番）
       const national =
         holidayBased &&
         source.providers.length > 0 &&

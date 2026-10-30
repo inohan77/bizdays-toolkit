@@ -1,6 +1,6 @@
 import "./strict-warnings.ts";
 /**
- * 公開する dist を Cloudflare Workers の実行環境（workerd）で確かめる（CI の workerd ジョブから実行。decisions.md の 26 番）。
+ * 公開する dist を Cloudflare Workers の実行環境（workerd）で確かめる（CI の workerd ジョブから実行。decisions.md の 35 番）。
  *
  *   node scripts/test-workerd.ts <workerd のパス>
  *

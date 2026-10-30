@@ -6,6 +6,9 @@
  * 比率だけを見て、どれかの計測が前の版の RATIO 倍より遅くなったら失敗にする（アルゴリズムの悪化だけを捉える）。
  * 絶対値は記録として表に残す（GitHub の Job Summary に書くには、出力を $GITHUB_STEP_SUMMARY に渡す）。
  *
+ * 正しさのために遅くなることを受け入れる版は、CHANGELOG の今の版（または [Unreleased]）の「### 開発」に「性能の退行」という
+ * 言葉を含めて理由を書く。そのときは上限を超えても表に記録して合格にする（decisions.md の 37 番。サイズの上限と同じ形）。
+ *
  * 使い方: node scripts/bench-compare.ts <base.json> <head.json> [--ratio 2] [--base-label <label>] [--head-label <label>]
  */
 
@@ -58,7 +61,33 @@ lines.push(
   `最も遅くなった計測の比率: ${worst.toFixed(2)}x（上限 ${ratioLimit}x。ランナーの性能のぶれは比率には現れにくい）`,
 );
 console.log(lines.join("\n"));
+/** CHANGELOG の今の版（または [Unreleased]）の「### 開発」に「性能の退行」の記載があるか */
+function performanceNoted(): boolean {
+  let changelog: string;
+  let version: string;
+  try {
+    changelog = readFileSync("CHANGELOG.md", "utf8");
+    version = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
+  } catch {
+    return false;
+  }
+  const sections = changelog.split(/^## \[/m).slice(1);
+  return sections
+    .filter((sec) => sec.startsWith("Unreleased]") || sec.startsWith(`${version}]`))
+    .some((sec) => {
+      const dev = /^### 開発\n([\s\S]*?)(?=^### |(?![\s\S]))/m.exec(sec);
+      return dev !== null && dev[1]!.includes("性能の退行");
+    });
+}
 if (failed) {
-  console.error(`::error::some measurements are more than ${ratioLimit}x slower than ${baseLabel}`);
-  process.exit(1);
+  if (performanceNoted()) {
+    console.log(
+      `\n上限 ${ratioLimit}x を超えた計測があるが、CHANGELOG の「開発」に「性能の退行」の記載があるので合格にする`,
+    );
+  } else {
+    console.error(
+      `::error::some measurements are more than ${ratioLimit}x slower than ${baseLabel} (write the reason with the words 性能の退行 under 開発 in CHANGELOG to accept it)`,
+    );
+    process.exit(1);
+  }
 }

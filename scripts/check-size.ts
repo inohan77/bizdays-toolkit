@@ -7,7 +7,7 @@
  * 上限を上げる（エントリーを足す）ときは、size-limits.json を手で直して、理由を CHANGELOG の
  * 「開発」に「サイズの上限」という言葉を含めて書くこと。前の版のタグの size-limits.json と比べて、
  * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。上限を変えた版では、CHANGELOG の測定値（測定 N）も
- * 1 つ以上照合できなければ失敗する（checkChangelogFigures。decisions.md の 50 番）。
+ * 1 つ以上照合できなければ失敗する（checkChangelogFigures。decisions.md の 36 番）。
  */
 
 import "./strict-warnings.ts";
@@ -134,7 +134,7 @@ function checkLimitChanges(): { ok: boolean; changed: boolean } {
 
 /**
  * CHANGELOG の今の版（または [Unreleased]）の節に書いた測定値（「`<エントリー>` … 測定 N」。ルートは「ルート … 測定 N」）が、
- * 実際の測定と一致するかを確かめる。測り直し忘れを防ぐ（decisions.md の 50 番の納品の手順）。
+ * 実際の測定と一致するかを確かめる。測り直し忘れを防ぐ（decisions.md の 36 番の納品の手順）。
  * required（上限を変えた版）なのに照合できた測定値が 1 つもなければ失敗する（書き方が変わって照合が黙って外れるのを防ぐ）
  */
 function checkChangelogFigures(measured: ReadonlyMap<string, number>, required: boolean): boolean {

@@ -1,6 +1,6 @@
 import "./strict-warnings.ts";
 /**
- * README とドキュメント（docs/guide.md・docs/providers.md。英語・日本語）のコード例を実行し、コメントに書いた結果と比べる（pnpm check から実行。decisions.md の 27・45 番）。
+ * README とドキュメント（docs/guide.md・docs/providers.md。英語・日本語）のコード例を実行し、コメントに書いた結果と比べる（pnpm check から実行。decisions.md の 39 番）。
  *
  * - ts のコードブロックを 1 つずつ別のモジュールにして、ビルド済みの dist（パッケージ名での自己参照）で実行する
  * - 文の後のコメント（`expr; // "2026-11-02"` や、次の行から続く `// { ... }`）の先頭がリテラルなら、実際の値と比べる。

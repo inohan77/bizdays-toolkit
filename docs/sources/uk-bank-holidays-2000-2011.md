@@ -1,6 +1,6 @@
 # 英国の bank holidays 2000〜2011 年の出典
 
-`bizdays-toolkit/uk` の 2000〜2011 年（GOV.UK のデータがない年）の根拠となる出典の記録。当時の政府の公表一覧を正とし、The Gazette の布告で全日を照合する（docs/decisions.md の 49 番）。年ごとの節が、テスト用フィクスチャ `test/fixtures/uk-2000-2011-government-lists.json` の各年の `record` から参照される。収集日は 2026-10-25。
+`bizdays-toolkit/uk` の 2000〜2011 年（GOV.UK のデータがない年）の根拠となる出典の記録。当時の政府の公表一覧を正とし、The Gazette の布告で全日を照合する（docs/decisions.md の 28 番）。年ごとの節が、テスト用フィクスチャ `test/fixtures/uk-2000-2011-government-lists.json` の各年の `record` から参照される。収集日は 2026-10-25。
 
 - 布告・一覧の転記は原文のまま（英語）。OCR の誤りは直さず、明らかな誤読・誤記に [sic] を付けている。
 - 推測で補った日付はない。出典で確かめられなかったものは「見つからない」と書き、第 2 節にまとめている。

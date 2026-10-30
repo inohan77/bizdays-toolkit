@@ -1,5 +1,5 @@
 /**
- * 0.30.0 で改名した設定のキーと値の表（docs/decisions.md の 54 番、docs/migration.md の 0.30.0）。
+ * 0.30.0 で改名した設定のキーと値の表（docs/decisions.md の 10 番、docs/migration.md の 0.30.0）。
  * 検証の入口での読み替え・診断の deprecated-option・migrate… 関数が、この表だけを使う。
  */
 
@@ -58,7 +58,7 @@ export interface RenamedValue {
 
 /**
  * @internal 改名した値の表（0.30.0）。kinds の "national" は、ID が "JP" の祝日の提供元を使う設定でだけ扱いを変える。
- * 作成と診断は値を読み替えずに知らせ（schedule.ts の reportNational）、migrate… は日本の提供元だけの設定で書き換える（docs/decisions.md の 54 番）
+ * 作成と診断は値を読み替えずに知らせ（schedule.ts の reportNational）、migrate… は日本の提供元だけの設定で書き換える（docs/decisions.md の 10 番）
  */
 export const RENAMED_VALUES: readonly RenamedValue[] = [
   { place: "schedule", key: "holidayPolicy", from: "weekday", to: "ignore" },

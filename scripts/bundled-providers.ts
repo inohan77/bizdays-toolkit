@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-/** 比べる・照合するのに使う祝日の項目（提供元の契約の項目。decisions.md の 6・7・46 番） */
+/** 比べる・照合するのに使う祝日の項目（提供元の契約の項目。decisions.md の 24・25 番） */
 export interface BundledHoliday {
   readonly date: string;
   readonly name: string;
