@@ -803,6 +803,7 @@ diagnoseCalendar({
 - `dayAfterHoliday`・`dayBeforeHoliday` の規則の `shadowed` は、同じ種類の規則どうし（`kinds`・`keys`・`weekdays`・`months`・期間と、同じ `skipWeekdays`）でだけ調べます。当てはまる日が年ごとの祝日で変わるためで、曜日の規則との重なりは `redundant` で見つかります。`cycle` の規則の `shadowed` は `cycle` の規則どうしでだけ調べ、後の規則の周期が先の規則の周期の倍数で、後の規則のどの日も先の規則の日に当たるときに覆うとみなします
 - 有効期間のある規則の `shadowed` は、先の規則の期間が後の規則の期間を含むことも条件です。周期（`interval`）のある規則は、先の規則の周期が後の規則を含むことも条件です（毎週は隔週を覆う。位相の違う隔週どうしは互いを覆わない）
 - `redundant` は、規則を取り除いた結果と 1 日ずつ比べます。個別の日付はその期間を、毎年の月日と繰り返しの規則は個別の日付を除いた設定で、祝日の提供元の対応年（日本は 1955〜2099 年）を、提供元がなければ 2001〜2028 年（曜日と月日の組み合わせが一巡する 28 年。周期（`interval`・`cycle`）のある規則があれば、その周期がそろう長さ。隔週なら 56 年、最長 200 年）を調べます。その範囲の外にある有効期間も調べます（`outOfRangePolicy: "throw"` では対応年の中だけ）。調べた年は `message` に書かれます。スケジュールの値は、配列と普通のオブジェクトなら中身で、それ以外（`Date` など）は同じものかで比べます
+- `shadowed` と `redundant` は、規則を 1 つずつ外したときの判定です。同じ規則を 2 つ書くと、後の規則が `shadowed`、前の規則が `redundant` と出ますが、両方を外すと結果が変わります。複数の規則が出たときは、1 つ外すたびに診断をやり直してください
 - 日本の祝日を使う設定では、全日を調べるため数百ミリ秒かかります。リクエストごとではなく、テストや起動時の確認で使ってください。開発・テスト用の道具なので、アプリの本体のバンドルに入らないようサブパスに分けています
 
 **終わった規則を見つける**（`asOf`）: 店舗ごとの設定を JSON で持つ多店舗のサービスなどでは、設定が年を追って溜まります。第 2 引数に `{ asOf: "YYYY-MM-DD" }` を渡すと、`effectiveTo` がその日より前の規則と、その日より前に終わる個別の日付・期間を、`info` の `expired` で返します（`redundant` とは独立です。過去には効いていた規則なので）。`asOf` を渡さなければ `expired` は返さないので、`assert.deepEqual(diagnoseCalendar(options), [])` のようなテストが日付で変わることはありません。`asOf` は暦日の文字列だけを受け付けます（`Date` だとタイムゾーンが要るため）。それ以外の値は `invalid-date`、第 2 引数がオブジェクトでなければ `invalid-argument` の例外になり、知らないキーは無視します。
@@ -862,4 +863,19 @@ const stored = '{"closedRecurring":[{"holiday":true,"kinds":["national"]}]}'; //
 const migrated = migrateCalendarOptions({ ...JSON.parse(stored), holidayProvider: jp });
 const { holidayProvider, ...toSave } = migrated.options; // 保存の前に提供元を外す
 toSave; // { closedRecurringRules: [{ holiday: true, kinds: ["regular"] }] }
+```
+
+書き換えなかった旧名は、書き換えた設定を診断にかけると `deprecated-option` で見つかります。保存した設定を一括で移行するときは、書き換えた後に診断を実行し、`deprecated-option` が残っていないことを確かめてください。ほかの提供元と合わせた設定の `"national"` は、手で書き換える必要があります:
+
+```ts
+import { diagnoseCalendar, migrateCalendarOptions } from "bizdays-toolkit/diagnose";
+import { jp } from "bizdays-toolkit/jp";
+import { england } from "bizdays-toolkit/uk";
+
+const { options } = migrateCalendarOptions({
+  holidayProvider: [jp, england],
+  closedRecurring: [{ holiday: true, kinds: ["national"] }],
+});
+const left = diagnoseCalendar(options).filter((d) => d.code === "deprecated-option");
+left.map((d) => d.path); // ["closedRecurringRules[0].kinds[0]"]
 ```

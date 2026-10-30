@@ -285,6 +285,43 @@ jobs:
             --base-label "${BASE_VERSION}" | tee -a "${GITHUB_STEP_SUMMARY}"
           test "${PIPESTATUS[0]}" -eq 0
 
+  result-compare:
+    # 同じ設定の結果（カレンダー・スケジュール・診断）を、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 56 番）。
+    # 改名の前の 0.22.2 とも、旧名の設定で比べる（改名は結果を変えないという約束を確かめるため。1.0.0 で外す）。
+    # 失敗の条件と意図した差分の扱いは scripts/result-compare.ts。差分は Job Summary に残す
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      LEGACY_BASE_VERSION: "0.22.2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "24.22.0"
+      - run: pnpm build
+      - name: Fetch the published versions for comparison
+        run: |
+          base="$(npm view bizdays-toolkit version)"
+          echo "BASE_VERSION=${base}" >> "${GITHUB_ENV}"
+          for version in "${base}" "${LEGACY_BASE_VERSION}"; do
+            mkdir -p "${RUNNER_TEMP}/${version}"
+            (cd "${RUNNER_TEMP}/${version}" && npm pack "bizdays-toolkit@${version}" --ignore-scripts --silent \
+              && tar -xzf "bizdays-toolkit-${version}.tgz")
+          done
+          echo "comparing with bizdays-toolkit@${base} and @${LEGACY_BASE_VERSION}"
+      - name: Compare the results with the latest version
+        run: |
+          node scripts/result-compare.ts --base "${RUNNER_TEMP}/${BASE_VERSION}/package" --head . \
+            --base-label "${BASE_VERSION}" | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Compare the results with the version before the renaming
+        run: |
+          node scripts/result-compare.ts --base "${RUNNER_TEMP}/${LEGACY_BASE_VERSION}/package" --head . \
+            --base-label "${LEGACY_BASE_VERSION}" | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${PIPESTATUS[0]}" -eq 0
+
   workflows:
     # ワークフローの構文・式・シェルスクリプトの誤りを actionlint で検出する（pnpm check はワークフローを検査しない）。
     # actionlint は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）

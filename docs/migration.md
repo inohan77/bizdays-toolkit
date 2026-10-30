@@ -29,7 +29,7 @@
 
 ## 0.30.0
 
-0.30.0 は、公開する名前を 1 つの規則（`etc/naming.md`。decisions.md の 54 番）に合わせて改めた版です。0.23.0〜0.29.0 は欠番です。旧名は 1.0.0 まで実行時に受け付けます。ただし、次の 4 つは 0.30.0 に上げた時点で対応が要ります: 返す値の変更（下の「返す値」）、対応年の端の挙動（「対応年の端で隣の日を見る規則」）、TypeScript で必須のキーの旧名（「設定のキーと値」の 2 つ目の箇条）、`dayInfoOn` の結果を丸ごと比べるテスト（「関数・メソッド・型・返す項目」の表の下）。営業日カレンダー・スケジュールの設定の旧名は、TypeScript の取り消し線と診断の `deprecated-option` が書き換え先を示します。`combineCalendars`・`createCalendarFromSchedule`・`dueDate`・`withSubstituteDays` の設定の旧名は診断の対象外で、JavaScript では 1.0.0 で `invalid-option` になるまで黙って動くので、`businessDay:`・`maxSearchDays`・`rules:`・`original:` と、`dueDate` の呼び出しの `day:` を検索して書き換えてください。保存した設定（JSON など）は `migrateCalendarOptions`・`migrateScheduleOptions`（`bizdays-toolkit/diagnose`）で書き換えられます。
+0.30.0 は、公開する名前を 1 つの規則（`etc/naming.md`。decisions.md の 54 番）に合わせて改めた版です。0.23.0〜0.29.0 は欠番です。旧名は 1.0.0 まで実行時に受け付けます。ただし、次の 5 つは 0.30.0 に上げた時点で対応が要ります: 返す値の変更（下の「返す値」）、日本の提供元とほかの提供元を合わせた設定の `kinds` の `"regular"`（「返す値」の注 2）、対応年の端の挙動（「対応年の端で隣の日を見る規則」）、TypeScript で必須のキーの旧名（「設定のキーと値」の 2 つ目の箇条）、`dayInfoOn` の結果を丸ごと比べるテスト（「関数・メソッド・型・返す項目」の表の下）。営業日カレンダー・スケジュールの設定の旧名は、TypeScript の取り消し線と診断の `deprecated-option` が書き換え先を示します。`combineCalendars`・`createCalendarFromSchedule`・`dueDate`・`withSubstituteDays` の設定の旧名は診断の対象外で、JavaScript では 1.0.0 で `invalid-option` になるまで黙って動くので、`businessDay:`・`maxSearchDays`・`rules:`・`original:` と、`dueDate` の呼び出しの `day:`、`withSubstituteDays` の呼び出しの `name:` を検索して書き換えてください。保存した設定（JSON など）は `migrateCalendarOptions`・`migrateScheduleOptions`（`bizdays-toolkit/diagnose`）で書き換えられます。
 
 ### 設定のキーと値
 
@@ -109,11 +109,36 @@
 | --------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | 営業日カレンダーの `reason`（どの設定にも当たらなかった営業日）       | `"regular"`              | `"default"`                                                                                                     |
 | `createCalendarFromSchedule` の `reason`（曜日の値で営業日）          | `"regular"`              | `"open-weekday"`                                                                                                |
-| 日本の祝日の `kind`（国民の祝日。下の注）                             | `"national"`             | `"regular"`                                                                                                     |
+| 日本の祝日の `kind`（国民の祝日。下の注 1・注 2）                     | `"national"`             | `"regular"`                                                                                                     |
 | エラーコード（毎年の月日 `"MM-DD"` の誤り）                           | `"invalid-month-day"`    | `"invalid-annual-date"`                                                                                         |
 | 設定の中の位置（`optionPath`・診断の `path`・例外のメッセージの先頭） | `"closedAnnual[0]"` など | `"closedAnnualDates[0]"` など（旧名で書いた設定でも新しい名前。`deprecated-option` の `path` だけは旧名の位置） |
 
-注: 日本の提供元を包んで `id` を変えている場合（`{ ...jp, id: "JP-company" }` など）、`kinds` の `"national"` は扱いの対象にならず、何にも当たらなくなります。`"regular"` に書き換えてください。診断では `never-matches` で見つかり、そのメッセージが改名の可能性を示します。
+注 1: 日本の提供元を包んで `id` を変えている場合（`{ ...jp, id: "JP-company" }` など）、`kinds` の `"national"` は扱いの対象にならず、何にも当たらなくなります。`"regular"` に書き換えてください。診断では `never-matches` で見つかり、そのメッセージが改名の可能性を示します。
+
+注 2: 日本の提供元とほかの提供元を合わせた設定で、規則（祝日・祝日の翌日・祝前日）の `kinds` に `"regular"` を書いていた場合、0.30.0 から日本の国民の祝日にも当たります。0.22.x の `"regular"` はほかの提供元（英国・フランス・シンガポール）の毎年の祝日だけを指していました。旧名を使っていないので、診断も `migrate…` も知らせません。`"regular"` を検索して見つけてください。0.22.x と同じ結果にするには、和集合の `"national"` と同じく日本の提供元を包んで種別を付け替えます（`kinds` は `["regular"]` のまま）:
+
+```ts
+import { createCalendar } from "bizdays-toolkit";
+import { jp } from "bizdays-toolkit/jp";
+import { england } from "bizdays-toolkit/uk";
+
+// 日本の毎年の祝日に別の種別を付けると、"regular" はほかの提供元の祝日だけに当たる
+const jpOnly = {
+  ...jp,
+  holidaysInYear: (year: number) =>
+    jp.holidaysInYear(year).map((h) => (h.kind === "regular" ? { ...h, kind: "jp-regular" } : h)),
+};
+const tokyoAndLondon = createCalendar({
+  holidayProvider: [jpOnly, england],
+  timeZone: "Asia/Tokyo",
+  holidayPolicy: "open",
+  closedRecurringRules: [{ holiday: true, kinds: ["regular"] }], // 英国の毎年の祝日だけ休業
+});
+tokyoAndLondon.isBusinessDay("2026-11-23"); // true（勤労感謝の日は営業）
+tokyoAndLondon.isBusinessDay("2026-05-25"); // false（英国の Spring bank holiday）
+```
+
+日本の提供元だけの設定では、0.22.x の `"regular"` は何にも当たらず、診断が `never-matches` を出していました。そのため、意図して書いた設定はほとんどないはずです。
 
 ### 対応年の端で隣の日を見る規則（挙動の変更）
 

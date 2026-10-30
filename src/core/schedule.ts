@@ -952,7 +952,7 @@ export interface RecurringRuleCompiled<Value> extends CompiledPeriod {
   readonly holiday: boolean;
   /** 祝日・祝日の翌日・祝前日の規則で絞る種別（null はすべての祝日） */
   readonly kinds: ReadonlySet<string> | null;
-  /** kinds の旧名 "national" を、日本の提供元が返した "regular" の祝日にも当てるか（docs/decisions.md の 55 番） */
+  /** kinds の旧名 "national" を、日本の提供元が返した "regular" の祝日にも当てるか（docs/decisions.md の 54 番） */
   readonly nationalOfJp: boolean;
   /** 祝日・祝日の翌日・祝前日の規則で絞る識別子（null はすべての祝日） */
   readonly keys: ReadonlySet<string> | null;
@@ -1676,8 +1676,9 @@ export type JpUsage = "none" | "only" | "mixed";
 
 /**
  * kinds の "national"（0.30.0 で日本の提供元の種別は "regular" に改名）を見つけたら deprecated-option を記録し、
- * 見つけたかを返す。値は読み替えず、判定で日本の提供元が返した "regular" の祝日にも当てる（docs/decisions.md の 55 番）。
- * mixed（ほかの提供元と合わせた設定）では、当てている祝日と 1.0.0 での扱いを添える（54 番）
+ * 見つけたかを返す。値は読み替えず、判定で日本の提供元が返した "regular" の祝日にも当てる（docs/decisions.md の 54 番）。
+ * mixed（ほかの提供元と合わせた設定）では印を付け、当てている祝日と 1.0.0 での扱いは診断で添える
+ * （作成時は警告を使わないので、長い文をルートに持たない）
  */
 function reportNational(c: IssueCollector, path: string, kinds: unknown, mixed: boolean): boolean {
   if (!Array.isArray(kinds)) return false;
@@ -1686,14 +1687,13 @@ function reportNational(c: IssueCollector, path: string, kinds: unknown, mixed: 
   kinds.forEach((v, i) => {
     if (v !== from) return;
     found = true;
-    c.warning(
-      "deprecated-option",
-      `${path}[${i}]`,
-      `"${from}" was renamed to "${to}" in 0.30.0` +
-        (mixed
-          ? `; here it matches Japan's "${to}" and other providers' "${from}" holidays. From 1.0.0 it is an invalid-option with a "JP" provider: wrap the Japanese provider and rename your own "${from}" kind (see the migration guide)`
-          : ""),
-    );
+    c.issues.push({
+      severity: "warning",
+      code: "deprecated-option",
+      path: `${path}[${i}]`,
+      message: `"${from}" was renamed to "${to}" in 0.30.0`,
+      ...(mixed ? { nationalInUnion: true } : {}),
+    });
   });
   return found;
 }

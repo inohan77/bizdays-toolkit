@@ -105,6 +105,8 @@ export interface Issue {
   /** unknown-option の知らないキーと既知のキー（診断で候補を挙げるため。結果には出さない） */
   readonly unknownKey?: string;
   readonly knownKeys?: readonly string[];
+  /** 和集合の設定の kinds の "national"（診断で、当てている祝日と 1.0.0 での扱いを添えるため。結果には出さない） */
+  readonly nationalInUnion?: true;
 }
 
 /** @internal 問題を集める */

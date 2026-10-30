@@ -812,6 +812,7 @@ diagnoseCalendar({
 - `shadowed` for `dayAfterHoliday` and `dayBeforeHoliday` rules is checked only against rules of the same kind (by `kinds`, `keys`, `weekdays`, `months`, period and the same `skipWeekdays`), because which days they match depend on the holidays of each year; overlap with weekday rules is found as `redundant`. `shadowed` for `cycle` rules is checked only against other `cycle` rules: an earlier rule covers a later one when the later cycle is a multiple of the earlier one and every day of the later rule falls on a day of the earlier one
 - `shadowed` for rules with effective periods also requires the earlier rule's period to contain the later rule's period, and for `interval` rules the earlier rule's cycle to contain the later one (a weekly rule covers an every-other-week rule; two every-other-week rules with opposite phases do not cover each other)
 - `redundant` compares the results with and without the rule day by day. Specific dates are checked over their range; annual dates and recurring rules are checked, with specific dates removed, over the holiday provider's supported years (1955–2099 for Japan), or 2001–2028 without a provider (28 years cover every combination of weekday and date; with `interval` or `cycle` rules the range is extended to the length of their cycle, such as 56 years for every other week, up to 200 years). Effective periods outside that range are checked as well (with `outOfRangePolicy: "throw"`, only within the supported years). `message` names the years checked. Schedule values are compared by content for arrays and plain objects, and by identity otherwise (such as `Date`)
+- `shadowed` and `redundant` judge each rule as if only that rule were removed. If you write the same rule twice, the later one is reported as `shadowed` and the earlier one as `redundant`, but removing both changes the results. When several rules are reported, remove one at a time and run the diagnostics again
 - With Japanese holidays, checking every day takes a few hundred milliseconds. Use it in tests or at startup, not per request. As a development and test tool, it lives in a subpath so it stays out of your app's main bundle
 
 **Finding rules that have ended** (`asOf`): options accumulate over the years, for example in a multi-store service that stores each store's options as JSON. Pass `{ asOf: "YYYY-MM-DD" }` as the second argument and every rule with an `effectiveTo` before that day, and every specific date or range that ends before it, is returned as `info` with code `expired` (independent of `redundant`: these rules did affect the past). Without `asOf` nothing is returned as `expired`, so a test such as `assert.deepEqual(diagnoseCalendar(options), [])` does not drift with the date. `asOf` takes only a date string (a `Date` would need a time zone); other values throw `invalid-date`, a second argument that is not an object throws `invalid-argument`, and unknown keys in it are ignored.
@@ -871,4 +872,19 @@ const stored = '{"closedRecurring":[{"holiday":true,"kinds":["national"]}]}'; //
 const migrated = migrateCalendarOptions({ ...JSON.parse(stored), holidayProvider: jp });
 const { holidayProvider, ...toSave } = migrated.options; // take the provider out before saving
 toSave; // { closedRecurringRules: [{ holiday: true, kinds: ["regular"] }] }
+```
+
+Old names that were not rewritten show up as `deprecated-option` when you diagnose the migrated options. When you migrate saved options in bulk, run the diagnostics afterwards and check that no `deprecated-option` is left. `"national"` in options with other providers has to be rewritten by hand:
+
+```ts
+import { diagnoseCalendar, migrateCalendarOptions } from "bizdays-toolkit/diagnose";
+import { jp } from "bizdays-toolkit/jp";
+import { england } from "bizdays-toolkit/uk";
+
+const { options } = migrateCalendarOptions({
+  holidayProvider: [jp, england],
+  closedRecurring: [{ holiday: true, kinds: ["national"] }],
+});
+const left = diagnoseCalendar(options).filter((d) => d.code === "deprecated-option");
+left.map((d) => d.path); // ["closedRecurringRules[0].kinds[0]"]
 ```

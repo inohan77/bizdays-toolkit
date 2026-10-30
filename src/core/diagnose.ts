@@ -597,6 +597,26 @@ function analyze<Value, Kind extends string>(
   /** 集合 a（null はすべて）が集合 b（null はすべて）を含むか */
   const setCovers = <V>(a: ReadonlySet<V> | null, b: ReadonlySet<V> | null): boolean =>
     a === null || (b !== null && [...b].every((v) => a.has(v)));
+  // 日本の提供元だけの設定で、調べる期間に種別 "national" の祝日がなければ、kinds の旧名 "national" は "regular" と
+  // 同じ祝日に当たるので、覆う関係は "regular" として比べる（和集合ではほかの提供元の "regular" があるので比べない。54 番）
+  const renamedKind = RENAMED_VALUES.find((x) => x.key === "kinds")!;
+  let nationalAsRegular: boolean | undefined;
+  const kindsOf = (r: RecurringRuleCompiled<unknown>): ReadonlySet<string> | null => {
+    if (!r.nationalOfJp || r.kinds === null) return r.kinds;
+    if (nationalAsRegular === undefined) {
+      let found = false;
+      if (window && jpUsage(source as HolidaySource<string>) === "only") {
+        eachDay(
+          window,
+          (n) => (found = holidayOfSafe(fromDayNumber(n))?.kind === renamedKind.from),
+        );
+        nationalAsRegular = !found;
+      } else nationalAsRegular = false;
+    }
+    return nationalAsRegular
+      ? new Set([...r.kinds].map((k) => (k === renamedKind.from ? renamedKind.to : k)))
+      : r.kinds;
+  };
   /** 振替で飛ばす曜日が同じか（違えば当てはまる日が違うので覆わない） */
   const sameSkip = (
     a: RecurringRuleCompiled<unknown>,
@@ -689,14 +709,14 @@ function analyze<Value, Kind extends string>(
         sameSkip(r, rule) &&
         (rule.holiday
           ? r.holiday &&
-            setCovers(r.kinds, rule.kinds) &&
+            setCovers(kindsOf(r), kindsOf(rule)) &&
             setCovers(r.keys, rule.keys) &&
             setCovers(r.weekdays, rule.weekdays) &&
             setCovers(r.months, rule.months)
           : rule.dayAfterHoliday || rule.dayBeforeHoliday
             ? r.dayAfterHoliday === rule.dayAfterHoliday &&
               r.dayBeforeHoliday === rule.dayBeforeHoliday &&
-              setCovers(r.kinds, rule.kinds) &&
+              setCovers(kindsOf(r), kindsOf(rule)) &&
               setCovers(r.keys, rule.keys) &&
               setCovers(r.weekdays, rule.weekdays) &&
               setCovers(r.months, rule.months)
@@ -912,7 +932,11 @@ function run<Value, Kind extends string>(
     }
   }
   return Object.freeze(
-    c.issues.map(({ unknownKey, knownKeys, ...issue }) => {
+    c.issues.map(({ unknownKey, knownKeys, nationalInUnion, ...issue }) => {
+      if (nationalInUnion) {
+        const { from, to } = RENAMED_VALUES.find((r) => r.key === "kinds")!;
+        issue.message += `; here it matches Japan's "${to}" and other providers' "${from}" holidays. From 1.0.0 it is an invalid-option with a "JP" provider: wrap the Japanese provider and rename your own "${from}" kind (see the migration guide)`;
+      }
       const suggestion =
         unknownKey === undefined || knownKeys === undefined
           ? undefined

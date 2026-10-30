@@ -995,10 +995,11 @@ const CURRENT_DOCS = [
   "SECURITY.md",
 ];
 /**
- * 見ないスクリプト: 前の版を動かすもの（前の版の名前で呼ぶのが正しい）と、公式データを照合するもの
+ * 見ないスクリプト: 前の版を動かすもの（bench.ts・result-compare.ts。前の版の名前で呼ぶのが正しい）と、公式データを照合するもの
  * （verify-*。オブジェクトは外部のデータの形で、data.gov.sg の day などを持つ）
  */
-const skipScript = (name: string): boolean => name === "bench.ts" || name.startsWith("verify-");
+const skipScript = (name: string): boolean =>
+  name === "bench.ts" || name === "result-compare.ts" || name.startsWith("verify-");
 /** 非推奨であることを説明する行（旧名を書くのが正しい） */
 const DEPRECATION_NOTE = /deprecated|非推奨/i;
 const scanText = (

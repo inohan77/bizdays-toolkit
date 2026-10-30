@@ -1,0 +1,20 @@
+{
+  "$comment": "前の版との設定の結果の比較（scripts/result-compare.ts、decisions.md の 56 番）で許す、意図した差分。trait は scripts/result-compare.ts の traitsOf が付ける設定の特徴。前の版が affectedSince 以上・introducedIn 未満で、今回の版が introducedIn 以上のときだけ許す",
+  "changes": [
+    {
+      "trait": "kinds-regular-with-jp",
+      "targets": ["calendar", "combine", "schedule", "from-schedule", "diagnose"],
+      "introducedIn": "0.30.0",
+      "source": "docs/migration.md",
+      "summary": "日本の祝日の種別を \"regular\" に改めたので、日本の提供元を含む設定の kinds の \"regular\" は日本の国民の祝日にも当たる"
+    },
+    {
+      "trait": "kinds-national-with-jp-only",
+      "targets": ["diagnose"],
+      "affectedSince": "0.30.1",
+      "introducedIn": "0.30.2",
+      "source": "CHANGELOG.md",
+      "summary": "日本の提供元だけの設定で、\"regular\" と旧名の \"national\" の同じ規則を shadowed で見つける（0.30.1 で失われた結果を戻す）"
+    }
+  ]
+}

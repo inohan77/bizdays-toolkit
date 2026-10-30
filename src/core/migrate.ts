@@ -59,7 +59,7 @@ const join = (path: string, key: string): string => (path ? `${path}.${key}` : k
 
 /**
  * kinds の "national" を書き換えるか。祝日の提供元がすべて ID "JP" のときだけ書き換える。
- * ほかの提供元と合わせて使う設定では、新しい名前の "regular" がほかの提供元の祝日にも当たるので書き換えない（docs/decisions.md の 55 番）
+ * ほかの提供元と合わせて使う設定では、新しい名前の "regular" がほかの提供元の祝日にも当たるので書き換えない（docs/decisions.md の 54 番）
  */
 function onlyJp(options: Record<string, unknown>): boolean {
   const raw = options["holidayProvider"] ?? options["holidays"];

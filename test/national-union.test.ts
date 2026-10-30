@@ -1,4 +1,4 @@
-// 日本の提供元とほかの提供元の和集合での、kinds の旧名 "national"（docs/decisions.md の 55 番）。
+// 日本の提供元とほかの提供元の和集合での、kinds の旧名 "national"（docs/decisions.md の 54 番）。
 // 主の検査は、日本の提供元を包んで種別を付け替えた設定との関係（祝日データに依存しないので、データの反映で壊れない）。
 // 錨は公開済みの 0.22.2 で作ったフィクスチャ（0.22.x の意味を正とする。確定した年だけ）。データのパッチ版が錨の範囲の
 // 過去の祝日を変えたとき（法改正・臨時の祝日）は、0.22.2 では作り直せないので、影響する日付を錨から外し、CHANGELOG の「開発」に記録する
@@ -179,6 +179,58 @@ test('先に "regular"、後に "national" の規則は、shadowed ではなく 
   assert.deepEqual(
     list.map((d) => [d.code, d.path]),
     [["redundant", "closedRecurringRules[1]"]],
+  );
+});
+
+test('日本の提供元だけの設定では、"regular" と旧名の "national" の同じ規則は shadowed で見つかる（0.30.0 と同じ結果）', () => {
+  const codes = (closedRecurringRules: CalendarOptions["closedRecurringRules"]) =>
+    diagnoseCalendar({ holidayProvider: jp, closedRecurringRules }).map((d) => [
+      d.code,
+      d.path,
+      d.relatedPath,
+    ]);
+  const regular = { holiday: true, kinds: ["regular"] } as const;
+  const national = { holiday: true, kinds: ["national" as "regular"] } as const;
+  assert.deepEqual(codes([regular, national]), [
+    ["deprecated-option", "closedRecurringRules[1].kinds[0]", undefined],
+    ["shadowed", "closedRecurringRules[1]", "closedRecurringRules[0]"],
+    ["redundant", "closedRecurringRules[0]", undefined],
+  ]);
+  assert.deepEqual(codes([national, regular]), [
+    ["deprecated-option", "closedRecurringRules[0].kinds[0]", undefined],
+    ["shadowed", "closedRecurringRules[1]", "closedRecurringRules[0]"],
+    ["redundant", "closedRecurringRules[0]", undefined],
+  ]);
+  // 祝日の翌日・祝前日の規則も同じ（種別の集合の包含として比べる）
+  assert.deepEqual(
+    codes([
+      { dayAfterHoliday: true, kinds: ["national" as "regular", "substitute"] },
+      { dayAfterHoliday: true, kinds: ["regular"] },
+    ]),
+    [
+      ["deprecated-option", "closedRecurringRules[0].kinds[0]", undefined],
+      ["shadowed", "closedRecurringRules[1]", "closedRecurringRules[0]"],
+    ],
+  );
+});
+
+test('ID "JP" の提供元が種別 "national" の祝日を返すなら、"national" と "regular" を同じものとして比べない', () => {
+  const custom: HolidayProvider<string> = {
+    ...jp,
+    holidaysInYear: (y) =>
+      jp.holidaysInYear(y).map((h) => (h.date.endsWith("-01-01") ? { ...h, kind: "national" } : h)),
+  };
+  const list = diagnoseCalendar({
+    holidayProvider: custom,
+    holidayPolicy: "open",
+    closedRecurringRules: [
+      { holiday: true, kinds: ["national"] },
+      { holiday: true, kinds: ["regular"] },
+    ],
+  });
+  assert.equal(
+    list.some((d) => d.code === "shadowed"),
+    false,
   );
 });
 
