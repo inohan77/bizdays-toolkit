@@ -7,7 +7,7 @@
  * @example
  * import { createCalendar } from "bizdays-toolkit";
  * import { scotland } from "bizdays-toolkit/uk";
- * const calendar = createCalendar({ holidays: scotland, closedWeekdays: [0, 6] });
+ * const calendar = createCalendar({ holidayProvider: scotland, closedWeekdays: [0, 6] });
  */
 
 import type { Holiday, HolidayProvider } from "../core/types.ts";

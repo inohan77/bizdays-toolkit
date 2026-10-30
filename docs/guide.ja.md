@@ -554,9 +554,9 @@ calendar.dueDate(monthOf(billing, 1), { dayOfMonth: -1, convention: "preceding" 
 
 **月の計算**（ルートの関数。営業日は考えません）
 
-- `monthOf(dateOrMonth, offset?)`: 日付または月 `"YYYY-MM"` の、`offset` か月後（負なら前）の月
-- `closingMonth(date, closingDay)`: 締め日（1〜31、`-1` は末日）で区切ったときに日付が属する月。締め日の翌日から次の締め日までを、次の締め日の月とします。締め日がその月にない日（31 日締めの 2 月など）は末日締めです
-- `closingPeriod(monthOrDate, closingDay)`: その逆算で、その月分の期間 `{ from, to }`（両端を含む。前月の締め日の翌日から締め日まで）。暦日を渡すと、その日が属する期間です。日付の期間の形なので、`closedDates` や `businessDatesBetween` にそのまま渡せます
+- `monthOf(input, offset?)`: 日付または月 `"YYYY-MM"` の、`offset` か月後（負なら前）の月
+- `closingMonth(date, closingDayOfMonth)`: 締め日（1〜31、`-1` は末日）で区切ったときに日付が属する月。締め日の翌日から次の締め日までを、次の締め日の月とします。締め日がその月にない日（31 日締めの 2 月など）は末日締めです
+- `closingPeriod(input, closingDayOfMonth)`: その逆算で、その月分の期間 `{ from, to }`（両端を含む。前月の締め日の翌日から締め日まで）。暦日を渡すと、その日が属する期間です。日付の期間の形なので、`closedDates` や `businessDatesBetween` にそのまま渡せます
 
 ```ts
 closingPeriod("2026-11", 20); // { from: "2026-10-21", to: "2026-11-20" }
@@ -566,7 +566,7 @@ const office = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
 office.businessDatesBetween(from, to).length; // 22（11 月分の営業日数）
 ```
 
-**営業日に動く締め日**: 「20 日締め、締め日が休業日なら前営業日締め」のような契約は、カレンダーの `closingMonth(date, closingDay, { convention })`・`closingPeriod(monthOrDate, closingDay, { convention })` で扱います。各月の締め日（その月にない日は末日）を `adjust` と同じ `convention`（必須、既定値なし）で営業日に調整し、日付は「調整後の締め日がその日以降になる最初の月」に属します。ルートの関数は暦日のまま区切ります。
+**営業日に動く締め日**: 「20 日締め、締め日が休業日なら前営業日締め」のような契約は、カレンダーの `closingMonth(date, closingDayOfMonth, { convention })`・`closingPeriod(input, closingDayOfMonth, { convention })` で扱います。各月の締め日（その月にない日は末日）を `adjust` と同じ `convention`（必須、既定値なし）で営業日に調整し、日付は「調整後の締め日がその日以降になる最初の月」に属します。ルートの関数は暦日のまま区切ります。
 
 ```ts
 const office = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
@@ -705,7 +705,7 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## 対応年の外
 
-祝日の提供元の対応年（日本は 1955〜2099 年、英国は 1974〜2099 年、フランスは 2000〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRangePolicy: "ignore"` を指定してください。隣の日を見る規則（`dayAfterHoliday`・`dayBeforeHoliday`・`skipWeekdays`、`"after-holiday"` の規則がさかのぼる日）も、その日が対応年の外なら投げます。結果が分からない年の祝日に依存するためです（シンガポールの対応年の最後の 12 月 31 日に、元日の前日の規則を当てた場合など）。`"ignore"` では外は祝日なしです。設定の診断は、走査の端で例外にならないよう、外を祝日なしとして扱います。
+祝日の提供元の対応年（日本は 1955〜2099 年、英国は 1974〜2099 年、フランスは 2000〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。祝日がない日として扱いたい場合は `outOfRangePolicy: "ignore"` を指定してください。隣の日を見る規則（`dayAfterHoliday`・`dayBeforeHoliday`・`skipWeekdays`、`"after-holiday"` の規則がさかのぼる日）も、その日が対応年の外なら投げます。週の第 n 営業日の規則（`businessDayOfWeek`）も、その週が対応年の外にかかれば投げます。結果が分からない年の祝日に依存するためです（シンガポールでは、対応年の最後の 12 月 31 日に元日の前日の規則を当てた場合や、対応年の最後の年の 12 月の最後の週と 2020 年の最初の週に `businessDayOfWeek` の規則を当てた場合など）。`"ignore"` では外は祝日なしです。設定の診断は、走査の端で例外にならないよう、外を祝日なしとして扱います。
 
 ## 未確定の祝日
 
@@ -850,4 +850,16 @@ const { options, changes } = migrateCalendarOptions({
 });
 options; // { closedAnnualDates: [{ date: "12-31" }], closedRecurringRules: [{ dayOfMonth: 25 }] }
 changes.map((c) => c.path); // ["closedAnnual", "closedRecurring", "closedRecurring[0].day"]
+```
+
+保存した設定には、ふつう祝日の提供元が入っていません（関数を持つオブジェクトのため）。日本の祝日の種別 `"national"`（今は `"regular"`）は、設定のすべての祝日の提供元の ID が `"JP"` のときだけ書き換えるので、読み込み時に付ける提供元を書き換えの前に入れ、保存の前に外します。提供元がなければ `"national"` はそのまま残り、`changes` にも出ません。ほかの提供元と合わせて使う設定でも、`"regular"` がほかの提供元の祝日にも当たるので書き換えません（そのような設定の書き方は移行ガイド）:
+
+```ts
+import { migrateCalendarOptions } from "bizdays-toolkit/diagnose";
+import { jp } from "bizdays-toolkit/jp";
+
+const stored = '{"closedRecurring":[{"holiday":true,"kinds":["national"]}]}'; // 0.30.0 より前に保存した設定
+const migrated = migrateCalendarOptions({ ...JSON.parse(stored), holidayProvider: jp });
+const { holidayProvider, ...toSave } = migrated.options; // 保存の前に提供元を外す
+toSave; // { closedRecurringRules: [{ holiday: true, kinds: ["regular"] }] }
 ```

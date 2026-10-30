@@ -25,11 +25,11 @@
 | `getHoliday`・`JapaneseHoliday`・`JapaneseHolidayKind`・`KnownJapaneseHolidayKind`・`KnownJapaneseHolidayKey`（`bizdays-toolkit/jp`）                                                                                   | 0.30.0           | `getHoliday` → `holidayOn`、`JapaneseHoliday` → `JpHoliday`、`JapaneseHolidayKind` → `JpHolidayKind`、`KnownJapaneseHolidayKind` → `KnownJpHolidayKind`、`KnownJapaneseHolidayKey` → `KnownJpHolidayKey`                                                                                                                                                                                                                                                                                                                            |
 | `substituteDays`・`daysInMonth`・`SubstituteDaysOptions`（`bizdays-toolkit/provider`）                                                                                                                                  | 0.30.0           | `substituteDays` → `withSubstituteDays`、`daysInMonth` → `lengthOfMonth`、`SubstituteDaysOptions` → `WithSubstituteDaysOptions`                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-次の旧名は型にはなく、実行時だけ 1.0.0 まで受け付けます: スケジュールの `weekly`（→ `weekdayValues`）、規則の `day`（→ `dayOfMonth`）、合成の `businessDay`（→ `open`）、期日の `day`（→ `dayOfMonth`）、振替の `rules`（→ `directions`）、値では、スケジュールの `holidayPolicy` の `"weekday"`（→ `"ignore"`）と日本の祝日を使う設定の `kinds` の `"national"`（→ `"regular"`）。
+次の旧名は型にはなく、実行時だけ 1.0.0 まで受け付けます: スケジュールの `weekly`（→ `weekdayValues`）、規則の `day`（→ `dayOfMonth`）、合成の `businessDay`（→ `open`）、期日の `day`（→ `dayOfMonth`）、振替の `rules`（→ `directions`）、値では、スケジュールの `holidayPolicy` の `"weekday"`（→ `"ignore"`）と日本の祝日を使う設定の `kinds` の `"national"`（→ `"regular"`。ほかの提供元と合わせた設定では、上の 0.30.0 の節の書き方）。1.0.0 では、ID `"JP"` の提供元を含む設定の `"national"` は `invalid-option` になり、含まない設定では普通の種別の文字列として扱います。
 
 ## 0.30.0
 
-0.30.0 は、公開する名前を 1 つの規則（`etc/naming.md`。decisions.md の 54 番）に合わせて改めた版です。0.23.0〜0.29.0 は欠番です。旧名は 1.0.0 まで実行時に受け付けます。ただし、次の 4 つは 0.30.0 に上げた時点で対応が要ります: 返す値の変更（下の「返す値」）、対応年の端の挙動（「対応年の端で隣の日を見る規則」）、TypeScript で必須のキーの旧名（「設定のキーと値」の 2 つ目の箇条）、`dayInfoOn` の結果を丸ごと比べるテスト（「関数・メソッド・型・返す項目」の表の下）。それ以外の旧名は、TypeScript の取り消し線と診断の `deprecated-option` が書き換え先を示します。保存した設定（JSON など）は `migrateCalendarOptions`・`migrateScheduleOptions`（`bizdays-toolkit/diagnose`）で書き換えられます。
+0.30.0 は、公開する名前を 1 つの規則（`etc/naming.md`。decisions.md の 54 番）に合わせて改めた版です。0.23.0〜0.29.0 は欠番です。旧名は 1.0.0 まで実行時に受け付けます。ただし、次の 4 つは 0.30.0 に上げた時点で対応が要ります: 返す値の変更（下の「返す値」）、対応年の端の挙動（「対応年の端で隣の日を見る規則」）、TypeScript で必須のキーの旧名（「設定のキーと値」の 2 つ目の箇条）、`dayInfoOn` の結果を丸ごと比べるテスト（「関数・メソッド・型・返す項目」の表の下）。営業日カレンダー・スケジュールの設定の旧名は、TypeScript の取り消し線と診断の `deprecated-option` が書き換え先を示します。`combineCalendars`・`createCalendarFromSchedule`・`dueDate`・`withSubstituteDays` の設定の旧名は診断の対象外で、JavaScript では 1.0.0 で `invalid-option` になるまで黙って動くので、`businessDay:`・`maxSearchDays`・`rules:`・`original:` と、`dueDate` の呼び出しの `day:` を検索して書き換えてください。保存した設定（JSON など）は `migrateCalendarOptions`・`migrateScheduleOptions`（`bizdays-toolkit/diagnose`）で書き換えられます。
 
 ### 設定のキーと値
 
@@ -48,7 +48,30 @@
 
 - 旧名と新しい名前の両方を書くと `invalid-option` です（どちらを使うか読み取れないため）
 - TypeScript の型が旧名を持つのは、省略可能なキーだけです。必須のキー（スケジュールの `weekly`・合成の `businessDay`・期日の `day`・振替の `rules`）と規則の `day` は、型では新しい名前に書き換える必要があります（実行時は受け付けます）。旧名の `onHolidayRule` に `skipWeekdays` を組み合わせた規則も同じです（`skipWeekdays` は `holidayOverlapPolicy: "after-holiday"` とだけ書けるため）
-- `kinds` の `"national"` を読み替えるのは、ID が `"JP"` の提供元（包んだ `jp` を含む）を使う設定だけです
+- `kinds` の `"national"` を扱うのは、ID が `"JP"` の提供元（包んだ `jp` を含む。ID は大文字・小文字を区別して比べる）を使う設定だけです。その設定では、0.22.x と同じく「種別が `"national"` の祝日と、日本の提供元が返した `"regular"` の祝日」に当てます（0.30.0 では日本と他国の提供元を合わせた設定で他国の `"regular"` にも当たっていました。0.30.1 で直しました）
+- 日本の提供元だけの設定では、`"national"` を `"regular"` に書き換えれば同じ結果です。`migrate…` もこの場合だけ書き換えます。保存した設定に提供元が入っていなければ書き換えないので、読み込み時に付ける提供元を入れてから呼び、保存の前に外します（ガイドの「0.30.0 より前に保存した設定」）
+- 日本の提供元とほかの提供元を合わせた設定では、`"regular"` がほかの提供元の祝日にも当たるので、`"national"` は新しい名前では書けず、`migrate…` も書き換えません（自動では移行できません）。1.0.0 では ID `"JP"` の提供元を含む設定の `"national"` は `invalid-option` になるので、日本の提供元を包んで種別を付け替えてください。自作の提供元が `"national"` を返している場合は、その種別の名前を変えてください:
+
+  ```ts
+  import { createCalendar } from "bizdays-toolkit";
+  import { jp } from "bizdays-toolkit/jp";
+  import { england } from "bizdays-toolkit/uk";
+
+  // 日本の毎年の祝日だけに別の種別を付ける（ID は "JP" のまま）
+  const jpOnly = {
+    ...jp,
+    holidaysInYear: (year: number) =>
+      jp.holidaysInYear(year).map((h) => (h.kind === "regular" ? { ...h, kind: "jp-regular" } : h)),
+  };
+  const tokyoAndLondon = createCalendar({
+    holidayProvider: [jpOnly, england],
+    timeZone: "Asia/Tokyo",
+    holidayPolicy: "open",
+    closedRecurringRules: [{ holiday: true, kinds: ["jp-regular"] }], // 日本の国民の祝日だけ休業
+  });
+  tokyoAndLondon.isBusinessDay("2026-11-23"); // false（勤労感謝の日）
+  tokyoAndLondon.isBusinessDay("2026-05-25"); // true（英国の Spring bank holiday）
+  ```
 
 ### 関数・メソッド・型・返す項目
 
@@ -68,6 +91,16 @@
 
 旧名は `@deprecated` の別名として残り、新しい名前と同じ結果を返します。`DayInfo` などの返す項目は 0.30.x の間、新旧の両方を同じ値で持つので、`dayInfoOn` の結果を `deepEqual` で比べているテストは、期待値に `open` と、`rulePath` があれば `optionPath` を足し、`reason` が `"regular"` なら `"default"`（`createCalendarFromSchedule` のカレンダーでは `"open-weekday"`）に直す必要があります。
 
+### 引数の名前
+
+引数の名前は呼び出しに影響しませんが、エディターの補完に出ます。
+
+| 関数・メソッド                                        | 旧名         | 新しい名前          |
+| ----------------------------------------------------- | ------------ | ------------------- |
+| `addDays`                                             | `days`       | `n`                 |
+| `isValidDate`                                         | `value`      | `input`             |
+| `closingMonth`・`closingPeriod`（ルートとカレンダー） | `closingDay` | `closingDayOfMonth` |
+
 ### 返す値（移行期間なし）
 
 2 つの値を同時には返せないので、次の値は 0.30.0 で変わります。TypeScript では `KnownDayReason`・`KnownJpHolidayKind`・`KnownErrorCode` から旧値が消えて型エラーになります。JavaScript では `"regular"`・`"national"`・`"invalid-month-day"` を検索してください。
@@ -76,13 +109,15 @@
 | --------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | 営業日カレンダーの `reason`（どの設定にも当たらなかった営業日）       | `"regular"`              | `"default"`                                                                                                     |
 | `createCalendarFromSchedule` の `reason`（曜日の値で営業日）          | `"regular"`              | `"open-weekday"`                                                                                                |
-| 日本の祝日の `kind`（国民の祝日）                                     | `"national"`             | `"regular"`                                                                                                     |
+| 日本の祝日の `kind`（国民の祝日。下の注）                             | `"national"`             | `"regular"`                                                                                                     |
 | エラーコード（毎年の月日 `"MM-DD"` の誤り）                           | `"invalid-month-day"`    | `"invalid-annual-date"`                                                                                         |
 | 設定の中の位置（`optionPath`・診断の `path`・例外のメッセージの先頭） | `"closedAnnual[0]"` など | `"closedAnnualDates[0]"` など（旧名で書いた設定でも新しい名前。`deprecated-option` の `path` だけは旧名の位置） |
 
+注: 日本の提供元を包んで `id` を変えている場合（`{ ...jp, id: "JP-company" }` など）、`kinds` の `"national"` は扱いの対象にならず、何にも当たらなくなります。`"regular"` に書き換えてください。診断では `never-matches` で見つかり、そのメッセージが改名の可能性を示します。
+
 ### 対応年の端で隣の日を見る規則（挙動の変更）
 
-`outOfRangePolicy: "throw"`（既定）のとき、隣の日を見る規則（`dayAfterHoliday`・`dayBeforeHoliday`・`skipWeekdays`・`"after-holiday"` の振替元）が対応年の外の日を見ると、`out-of-range` を投げるようになりました。0.22.x までは外を黙って「祝日でない」とみなしていました。シンガポール（対応年の終わりが毎年動く）の最後の 12 月 31 日の祝前日などが該当します。これまでの結果のままでよければ `outOfRangePolicy: "ignore"` にしてください。
+`outOfRangePolicy: "throw"`（既定）のとき、隣の日を見る規則（`dayAfterHoliday`・`dayBeforeHoliday`・`skipWeekdays`・`"after-holiday"` の振替元）が対応年の外の日を見ると、`out-of-range` を投げるようになりました。0.22.x までは外を黙って「祝日でない」とみなしていました。シンガポール（対応年の終わりが毎年動く）の最後の 12 月 31 日の祝前日などが該当します。週の第 n 営業日の規則（0.30.0 で追加）も、週が対応年の外にかかる日（シンガポールでは対応年の最後の年の 12 月の最後の週と、2020 年の最初の週）は投げます。これまでの結果のままでよければ `outOfRangePolicy: "ignore"` にしてください。
 
 ### 型の整理
 

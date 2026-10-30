@@ -563,9 +563,9 @@ calendar.dueDate(monthOf(billing, 1), { dayOfMonth: -1, convention: "preceding" 
 
 **Month helpers** (root functions; business days are not considered)
 
-- `monthOf(dateOrMonth, offset?)`: the month `offset` months after (before, if negative) a date or a month `"YYYY-MM"`
-- `closingMonth(date, closingDay)`: the month a date belongs to when months are closed on `closingDay` (1–31, `-1` for the last day). The day after a closing day up to the next closing day belongs to the month of the next closing day. If the closing day does not exist in a month (closing on the 31st in February), the last day is used
-- `closingPeriod(monthOrDate, closingDay)`: the inverse: the period `{ from, to }` (both ends included) that belongs to the month, from the day after the previous closing day to the closing day. Given a date, the period that date belongs to. The result has the shape of a date range, so it can go straight into `closedDates` or `businessDatesBetween`
+- `monthOf(input, offset?)`: the month `offset` months after (before, if negative) a date or a month `"YYYY-MM"`
+- `closingMonth(date, closingDayOfMonth)`: the month a date belongs to when months are closed on `closingDayOfMonth` (1–31, `-1` for the last day). The day after a closing day up to the next closing day belongs to the month of the next closing day. If the closing day does not exist in a month (closing on the 31st in February), the last day is used
+- `closingPeriod(input, closingDayOfMonth)`: the inverse: the period `{ from, to }` (both ends included) that belongs to the month, from the day after the previous closing day to the closing day. Given a date, the period that date belongs to. The result has the shape of a date range, so it can go straight into `closedDates` or `businessDatesBetween`
 
 ```ts
 closingPeriod("2026-11", 20); // { from: "2026-10-21", to: "2026-11-20" }
@@ -575,7 +575,7 @@ const office = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
 office.businessDatesBetween(from, to).length; // 22 (business days in the November period)
 ```
 
-**Closing days that move to a business day**: when the contract says "closed on the 20th, or the previous business day if the 20th is not one", use the calendar's `closingMonth(date, closingDay, { convention })` and `closingPeriod(monthOrDate, closingDay, { convention })`. Each month's closing day (the last day when it does not exist) is adjusted with the `convention` of `adjust` (required, no default), and a date belongs to the first month whose adjusted closing day is on or after it. The root functions keep closing on calendar days.
+**Closing days that move to a business day**: when the contract says "closed on the 20th, or the previous business day if the 20th is not one", use the calendar's `closingMonth(date, closingDayOfMonth, { convention })` and `closingPeriod(input, closingDayOfMonth, { convention })`. Each month's closing day (the last day when it does not exist) is adjusted with the `convention` of `adjust` (required, no default), and a date belongs to the first month whose adjusted closing day is on or after it. The root functions keep closing on calendar days.
 
 ```ts
 const office = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
@@ -714,7 +714,7 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## Outside the supported years
 
-Evaluating a date outside the holiday provider's supported years (1955–2099 for Japan, 1974–2099 for the UK, 2000–2099 for France, 2020–2027 for Singapore) throws a `RangeError`. To treat such dates as having no holidays, set `outOfRangePolicy: "ignore"`. The rules that look at a neighbouring day (`dayAfterHoliday`, `dayBeforeHoliday`, `skipWeekdays` and the days an `"after-holiday"` rule looks back on) also throw when that day is outside the supported years, since the result would depend on unknown holidays (the last December 31 of Singapore's supported years with a rule on the day before New Year's Day, for example). With `"ignore"`, days outside have no holidays. The option diagnostics treat days outside as having no holidays so that the edges of their scan do not throw.
+Evaluating a date outside the holiday provider's supported years (1955–2099 for Japan, 1974–2099 for the UK, 2000–2099 for France, 2020–2027 for Singapore) throws a `RangeError`. To treat such dates as having no holidays, set `outOfRangePolicy: "ignore"`. The rules that look at a neighbouring day (`dayAfterHoliday`, `dayBeforeHoliday`, `skipWeekdays` and the days an `"after-holiday"` rule looks back on) also throw when that day is outside the supported years, and so does the nth business day of the week (`businessDayOfWeek`) when its week runs past them, since the result would depend on unknown holidays (with Singapore's provider, the last December 31 with a rule on the day before New Year's Day, and the last week of December of the last supported year and the first week of 2020 with a `businessDayOfWeek` rule, for example). With `"ignore"`, days outside have no holidays. The option diagnostics treat days outside as having no holidays so that the edges of their scan do not throw.
 
 ## Unconfirmed holidays
 
@@ -859,4 +859,16 @@ const { options, changes } = migrateCalendarOptions({
 });
 options; // { closedAnnualDates: [{ date: "12-31" }], closedRecurringRules: [{ dayOfMonth: 25 }] }
 changes.map((c) => c.path); // ["closedAnnual", "closedRecurring", "closedRecurring[0].day"]
+```
+
+Saved options rarely contain the holiday provider (it is an object with functions). The Japanese kind `"national"` (now `"regular"`) is rewritten only when every holiday provider in the options has the ID `"JP"`, so add the provider you attach when loading before migrating, and take it out again before saving. Without a provider, `"national"` is left as it is and is not listed in `changes`. With other providers as well, it is not rewritten either, since `"regular"` would also match their holidays (see the migration guide for how to write such options):
+
+```ts
+import { migrateCalendarOptions } from "bizdays-toolkit/diagnose";
+import { jp } from "bizdays-toolkit/jp";
+
+const stored = '{"closedRecurring":[{"holiday":true,"kinds":["national"]}]}'; // saved before 0.30.0
+const migrated = migrateCalendarOptions({ ...JSON.parse(stored), holidayProvider: jp });
+const { holidayProvider, ...toSave } = migrated.options; // take the provider out before saving
+toSave; // { closedRecurringRules: [{ holiday: true, kinds: ["regular"] }] }
 ```

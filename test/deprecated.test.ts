@@ -116,7 +116,7 @@ test("旧名: 診断は deprecated-option で旧名の位置（利用者が書�
   ]);
 });
 
-test('旧名: kinds の "national" は、日本の祝日の提供元を使う設定でだけ読み替える', () => {
+test('旧名: kinds の "national" は、日本の祝日の提供元を使う設定でだけ知らせる', () => {
   const other = { ...jp, id: "XX" };
   const list = diagnoseCalendar({
     holidayProvider: other,

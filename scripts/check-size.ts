@@ -6,7 +6,8 @@
  *
  * 上限を上げる（エントリーを足す）ときは、size-limits.json を手で直して、理由を CHANGELOG の
  * 「開発」に「サイズの上限」という言葉を含めて書くこと。前の版のタグの size-limits.json と比べて、
- * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。
+ * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。上限を変えた版では、CHANGELOG の測定値（測定 N）も
+ * 1 つ以上照合できなければ失敗する（checkChangelogFigures。decisions.md の 50 番）。
  */
 
 import "./strict-warnings.ts";
@@ -70,9 +71,10 @@ function tagIsHead(tag: string): boolean {
  *   タグがある最新のものと比べ、[Unreleased] と現在の版の節を探す
  *
  * タグを読めないときは、手元では確認を飛ばし、CI（環境変数 CI が設定されている）では失敗する。
- * CI のワークフローは履歴とタグを取得する（fetch-depth: 0）ので、読めないのは設定の誤り
+ * CI のワークフローは履歴とタグを取得する（fetch-depth: 0）ので、読めないのは設定の誤り。
+ * changed は、上限が上がったか、探した節に「サイズの上限」があるか（測定値の記載が必須の版か）
  */
-function checkLimitChanges(): boolean {
+function checkLimitChanges(): { ok: boolean; changed: boolean } {
   const changelog = readFileSync("CHANGELOG.md", "utf8");
   const sections = new Map<string, string>();
   const parts = changelog.split(/^## \[([^\]]+)\][^\n]*$/m);
@@ -102,50 +104,53 @@ function checkLimitChanges(): boolean {
       console.error(
         "Cannot read release tags with git in CI; check out with fetch-depth: 0 to compare size limits",
       );
-      return false;
+      return { ok: false, changed: false };
     }
     console.log("SKIP limit changes: no release tag readable with git (run git fetch --tags)");
-    return true;
+    return { ok: true, changed: false };
   }
+  const noted = searched.some((name) => sections.get(name)?.includes("サイズの上限"));
   const raised = Object.entries(limits).filter(([entry, limit]) => {
     const before = baseLimits[entry];
     return before === undefined || limit > before;
   });
   if (raised.length === 0) {
     console.log(`OK   limits are not raised since ${base}`);
-    return true;
+    return { ok: true, changed: noted };
   }
   const detail = raised
     .map(([entry, limit]) => `${entry} ${baseLimits[entry] ?? "(new)"} -> ${limit}`)
     .join(", ");
-  const noted = searched.some((name) => sections.get(name)?.includes("サイズの上限"));
   if (noted) {
     console.log(`OK   limits raised since ${base} (${detail}); reason is in CHANGELOG`);
-    return true;
+    return { ok: true, changed: true };
   }
   console.error(
     `Size limits raised since ${base} (${detail}), but CHANGELOG [${searched.join("] / [")}] ` +
       'has no entry mentioning "サイズの上限". Write the reason under 開発.',
   );
-  return false;
+  return { ok: false, changed: true };
 }
 
 /**
  * CHANGELOG の今の版（または [Unreleased]）の節に書いた測定値（「`<エントリー>` … 測定 N」。ルートは「ルート … 測定 N」）が、
- * 実際の測定と一致するかを確かめる。測り直し忘れを防ぐ（decisions.md の 49 番の納品の手順）
+ * 実際の測定と一致するかを確かめる。測り直し忘れを防ぐ（decisions.md の 50 番の納品の手順）。
+ * required（上限を変えた版）なのに照合できた測定値が 1 つもなければ失敗する（書き方が変わって照合が黙って外れるのを防ぐ）
  */
-function checkChangelogFigures(measured: ReadonlyMap<string, number>): boolean {
+function checkChangelogFigures(measured: ReadonlyMap<string, number>, required: boolean): boolean {
   const changelog = readFileSync("CHANGELOG.md", "utf8");
   const parts = changelog.split(/^## \[([^\]]+)\][^\n]*$/m);
   const sections = new Map<string, string>();
   for (let i = 1; i < parts.length; i += 2) sections.set(parts[i]!, parts[i + 1] ?? "");
   const text = `${sections.get("Unreleased") ?? ""}\n${sections.get(pkg.version) ?? ""}`;
   let ok = true;
+  let compared = 0;
   for (const m of text.matchAll(/(?:`(\.\/[a-z]+|\.)`|ルート)[^\n（(]*?[（(]測定 ([\d,]+)/g)) {
     const entry = m[1] ?? ".";
     const stated = Number(m[2]!.replaceAll(",", ""));
     const actual = measured.get(entry);
     if (actual === undefined) continue;
+    compared++;
     if (actual !== stated) {
       console.error(
         `CHANGELOG states 測定 ${m[2]} for ${entry}, but the measurement is ${actual}; re-measure after the last change`,
@@ -153,10 +158,19 @@ function checkChangelogFigures(measured: ReadonlyMap<string, number>): boolean {
       ok = false;
     }
   }
+  if (compared === 0 && required) {
+    console.error(
+      'CHANGELOG has no figure written as "（測定 N）" for this version, though the size limits changed; ' +
+        "write the measured sizes in that form under 開発",
+    );
+    return false;
+  }
+  console.log(`OK   CHANGELOG figures compared: ${compared}`);
   return ok;
 }
 
-let failed = !checkLimitChanges();
+const limitChanges = checkLimitChanges();
+let failed = !limitChanges.ok;
 const measured = new Map<string, number>();
 for (const [subpath, target] of Object.entries(pkg.exports)) {
   if (typeof target === "string") continue;
@@ -180,5 +194,5 @@ for (const [subpath, target] of Object.entries(pkg.exports)) {
     `${ok ? "OK  " : "OVER"} ${subpath.padEnd(10)} gzip ${String(size).padStart(6)} bytes / limit ${limit} (${Math.round((size / limit) * 100)}%, ${files.length} files)`,
   );
 }
-if (!checkChangelogFigures(measured)) failed = true;
+if (!checkChangelogFigures(measured, limitChanges.changed)) failed = true;
 process.exit(failed ? 1 : 0);

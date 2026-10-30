@@ -4,7 +4,7 @@
  * @example
  * import { createCalendar } from "bizdays-toolkit";
  * import { sg } from "bizdays-toolkit/sg";
- * const calendar = createCalendar({ holidays: sg, closedWeekdays: [0, 6] });
+ * const calendar = createCalendar({ holidayProvider: sg, closedWeekdays: [0, 6] });
  */
 
 import type { Holiday, HolidayProvider } from "../core/types.ts";

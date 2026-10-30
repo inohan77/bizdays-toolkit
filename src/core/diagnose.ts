@@ -36,13 +36,14 @@ import {
 } from "./date.ts";
 import { compileCalendarOptions, type CalendarOptions } from "./calendar.ts";
 import { IssueCollector, rangeError, type KnownErrorCode } from "./errors.ts";
-import { RENAMED_KEYS } from "./renamed.ts";
+import { RENAMED_KEYS, RENAMED_VALUES } from "./renamed.ts";
 import {
   compileScheduleOptions,
   createBasis,
   createHolidayLookup,
   createResolver,
   inPeriod,
+  jpUsage,
   matchMonthDay,
   matchPattern,
   type AnnualRule,
@@ -571,7 +572,10 @@ function analyze<Value, Kind extends string>(
     let found = false;
     eachDay(
       window,
-      (n) => (found = inPeriod(rule, n) && matchPattern(rule, fromDayNumber(n), holidayOfSafe)),
+      (n) =>
+        (found =
+          inPeriod(rule, n) &&
+          matchPattern(rule, fromDayNumber(n), holidayOfSafe, undefined, lookup.fromJp)),
     );
     return found;
   };
@@ -582,7 +586,7 @@ function analyze<Value, Kind extends string>(
     eachDay(window, (n) => {
       if (!inPeriod(rule, n)) return false;
       try {
-        found = matchPattern(rule, fromDayNumber(n), holidayOfSafe, basis);
+        found = matchPattern(rule, fromDayNumber(n), holidayOfSafe, basis, lookup.fromJp);
       } catch {
         found = false;
       }
@@ -614,10 +618,17 @@ function analyze<Value, Kind extends string>(
         : matchesAnyDay(rule, cycle);
     if (!matches) {
       unused.add(rule);
+      // kinds の "national" を、ID "JP" の提供元のない設定で書いた（id を変えて包んだ日本の提供元を含む）。
+      // 改名の前の名前の可能性を添える。1.0.0 で旧名を削除した後も残す（docs/decisions.md の 54 番）
+      const national =
+        holidayBased &&
+        source.providers.length > 0 &&
+        jpUsage(source as HolidaySource<string>) === "none" &&
+        rule.kinds?.has(RENAMED_VALUES.find((x) => x.key === "kinds")!.from) === true;
       c.warning(
         "never-matches",
         rule.path,
-        holidayBased
+        (holidayBased
           ? source.providers.length === 0
             ? "This rule matches no day: there are no holidays without a holiday provider"
             : rule.holiday
@@ -631,7 +642,10 @@ function analyze<Value, Kind extends string>(
               : "This rule matches no day: no month has that many business days of the counting basis in the selected months within its effective period"
             : rule.effectiveFrom === null && rule.effectiveTo === null
               ? "This rule matches no day (for example, a day that does not exist in the selected months)"
-              : "This rule matches no day within its effective period",
+              : "This rule matches no day within its effective period") +
+          (national
+            ? '; "national" was renamed to "regular" in 0.30.0 and is not read so without a provider whose ID is "JP"'
+            : ""),
       );
       return;
     }

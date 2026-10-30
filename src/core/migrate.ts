@@ -57,11 +57,16 @@ function clone(v: unknown): unknown {
 
 const join = (path: string, key: string): string => (path ? `${path}.${key}` : key);
 
-function usesJp(options: Record<string, unknown>): boolean {
+/**
+ * kinds の "national" を書き換えるか。祝日の提供元がすべて ID "JP" のときだけ書き換える。
+ * ほかの提供元と合わせて使う設定では、新しい名前の "regular" がほかの提供元の祝日にも当たるので書き換えない（docs/decisions.md の 55 番）
+ */
+function onlyJp(options: Record<string, unknown>): boolean {
   const raw = options["holidayProvider"] ?? options["holidays"];
-  const list = Array.isArray(raw) ? raw : [raw];
-  return list.some(
-    (p) => typeof p === "object" && p !== null && (p as { id?: unknown }).id === "JP",
+  const list: unknown[] = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
+  return (
+    list.length > 0 &&
+    list.every((p) => typeof p === "object" && p !== null && (p as { id?: unknown }).id === "JP")
   );
 }
 
@@ -115,7 +120,7 @@ function migrate<Options>(
   if (!isPlain(input)) throw typeError("invalid-argument", "options must be a plain object");
   const changes: OptionChange[] = [];
   const copied = clone(input) as Record<string, unknown>;
-  const jp = usesJp(copied);
+  const jp = onlyJp(copied);
   // 旧名の位置を保つため、書き換える前のキーで位置を作る
   const written = new Map<string, string>();
   for (const key of Object.keys(copied)) {

@@ -7,10 +7,10 @@
  * @example
  * import { createCalendar } from "bizdays-toolkit";
  * import { metropole } from "bizdays-toolkit/fr";
- * const paris = createCalendar({ holidays: metropole, closedWeekdays: [0, 6] });
+ * const paris = createCalendar({ holidayProvider: metropole, closedWeekdays: [0, 6] });
  *
  * @example Lundi de Pentecôte を「連帯の日」として出勤日にする企業（法律上は祝日のまま。既定の扱いの例外として書く）
- * createCalendar({ holidays: metropole, closedWeekdays: [0, 6],
+ * createCalendar({ holidayProvider: metropole, closedWeekdays: [0, 6],
  *   openRecurringRules: [{ holiday: true, keys: ["pentecost-monday"], name: "Journée de solidarité" }] });
  */
 

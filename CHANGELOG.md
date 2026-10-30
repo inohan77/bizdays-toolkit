@@ -4,9 +4,30 @@
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-10-30
+
+0.30.0 の改名の後始末の版です。新しい設定・関数・診断コードはありません。公開物の `.js` の挙動が変わるのは Fixed の 1 つだけです。
+
+### Fixed
+
+- 日本の祝日の提供元とほかの提供元を合わせた設定（`holidayProvider: [jp, england]` など）で、旧名の `kinds: ["national"]` が、ほかの提供元の `"regular"` の祝日（英国の bank holidays など）にも当たっていた。0.30.0 の退行で、改名は結果を変えないという約束（`docs/decisions.md` の 54 番）から外れていた。0.22.x と同じく、「種別が `"national"` の祝日、または ID が `"JP"` の提供元が返した `"regular"` の祝日」に当てる。日本の提供元だけの設定の結果は変わらない。パッチで出す根拠は `docs/decisions.md` の 55 番。`id` を変えて包んだ日本の提供元は ID `"JP"` の提供元とみなさないので、`"national"` は 0.30.0 と同じく何にも当たらない（下の Changed の診断のメッセージが理由を示す。`docs/migration.md`）
+
 ### Changed
 
-- `docs/providers.md` のコード例のコメントに残っていた置き換えの取り残し（"US federal holidayProvider:" → "US federal holidays:"）を直した（npm のパッケージには含まれない文書。動作は変わらない）
+- 診断: 和集合の設定の `"national"` の `deprecated-option` のメッセージに、当てている祝日と、1.0.0 で ID `"JP"` の提供元を含む設定の `"national"` が `invalid-option` になることを添えた。ID `"JP"` の提供元がない設定で `"national"` の規則が何にも当たらないときは、`never-matches` のメッセージに改名の前の名前の可能性を添えた（`code` は変わらない）
+- `migrateCalendarOptions`・`migrateScheduleOptions`: `kinds` の `"national"` は、祝日の提供元がすべて ID `"JP"` のときだけ書き換える。和集合では、新しい名前の `"regular"` がほかの提供元の祝日にも当たるので書き換えず、`changes` にも出さない（0.30.0 は和集合でも書き換えていた）
+- ガイド（英日）: 保存した設定の `"national"` を `migrate…` で書き換えるには、読み込み時に付ける提供元を入れてから呼ぶこと（提供元がなければ書き換えない）、週の第 n 営業日（`businessDayOfWeek`）も週が対応年の外にかかる日は `out-of-range` になることを足した。月の関数の引数名を `closingDayOfMonth`・`input` に直した
+- `docs/migration.md`: 和集合での `"national"` の扱いと 1.0.0 以降の書き方（日本の提供元を包んで種別を付け替える）、`id` を変えて包んだ提供元の注、週の第 n 営業日と対応年の端、0.30.0 の引数の名前の表を足した。「旧名は取り消し線と診断が示す」を、`combineCalendars`・`createCalendarFromSchedule`・`dueDate`・`withSubstituteDays` の設定の旧名は示さないので検索すること、に直した
+- 型定義の説明: `skipWeekdays` の説明が書けない項目（`WeekdayPattern.dayOfMonth`・`DayOfMonthPattern.weekday`）に付いていたのを正しい項目に移し、例の旧名 `day` を `dayOfMonth` に直した。`@example`・TSDoc の旧名（`holidays`・`recurring` など）を直し、`BusinessDayOfWeekPattern` に対応年の端の挙動を、`HolidayProvider.id` に ISO にない地域の ID（`"FR-AM"`）を書いた。`.js` は変わらない
+- README の祝日の種別の説明を今の値に直した。README（英日）の minify + gzip のサイズを測り直した（ルート 12.7 → 13.0 KB、日本込み 14.4 → 14.7 KB、英国込み 14.8 → 15.1 KB、フランス込み・シンガポール込み 13.6 → 13.9 KB）。`docs/providers.md` のコード例のコメントに残っていた置き換えの取り残し（"US federal holidayProvider:" → "US federal holidays:"）を直した
+- `docs/decisions.md`: 55 番（直前の版で入った退行の修正はパッチ）を足し、42・50・52・54 番に追記した。`RELEASING.md`: パッチの区分に退行の修正を足し、互換性の約束から型の名前の列挙をやめ、旧名（`outOfRange`）を直した。`src/core/schedule.ts`・`calendar.ts` の冒頭の判定の順番の写しを削り、ガイドと 12 番を指すようにした
+
+### 開発
+
+- `scripts/check-names.ts` に、形を分けるための `?: never` の項目に TSDoc が付いていないこと（C13）と、今の状態を書いた文書・スクリプト・型定義の TSDoc に 0.30.0 の旧名が残っていないこと（C14）の検査を足した（`etc/naming.md`）。0.30.0 に当てると、C13 は 2 か所、C14 はガイドの引数名・RELEASING.md・`check-readme-examples.ts` の補い・型定義の `@example` と `day:` を検出する
+- `scripts/check-size.ts`: 上限を変えた版で、CHANGELOG の測定値（「（測定 N）」の形）を 1 つも照合できなければ失敗にし、照合した件数を出すようにした。0.30.0 の節は測定値をこの形で書いておらず、照合が 0 件のまま合格していた（記載の値は、測定の後の内部の関数名の変更で公開物と 6〜7 バイト違っていた）
+- 和集合の `"national"` のテスト（`test/national-union.test.ts`）を足した。日本の提供元を包んだ設定との関係を対応年のすべてで確かめ、公開済みの 0.22.2 の結果（2020〜2027 年）を錨にする（`test/fixtures/national-union-0.22.2.json`）
+- サイズ（gzip）: ルート 17,646 → 18,054（測定 18,054）、`./jp` 19,890 → 20,288（測定 20,288）、`./diagnose` 23,919 → 24,492（測定 24,492）。和集合の `"national"` の判定とメッセージのため。上限は変えていない（ルート・`./jp`・`./diagnose` は上限の 97〜98%）
 
 ## [0.30.0] - 2026-10-27
 
@@ -708,7 +729,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.1...HEAD
+[0.30.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.0...v0.30.1
 [0.30.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.2...v0.30.0
 [0.22.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.1...v0.22.2
 [0.22.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.22.0...v0.22.1

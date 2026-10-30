@@ -32,7 +32,7 @@ const FIXTURES: Record<string, string> = {
   weekday: 'const weekday = { open: "10:00", close: "21:00" };',
   sunday: 'const sunday = { open: "10:00", close: "19:00" };',
   storeHours:
-    "const storeHours = createSchedule<Hours>({ holidays: jp, weekly: [sunday, weekday, null, weekday, weekday, weekday, weekday], holiday: { sameAs: 0 } });",
+    "const storeHours = createSchedule<Hours>({ holidayProvider: jp, weekdayValues: [sunday, weekday, null, weekday, weekday, weekday, weekday], holidayPolicy: { sameAs: 0 } });",
 };
 const FIXTURE_ORDER = ["Hours", "weekday", "sunday", "storeHours"];
 

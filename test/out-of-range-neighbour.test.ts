@@ -52,3 +52,26 @@ test("診断は対応年の外を祝日なしとして扱い、走査の端で o
     [],
   );
 });
+
+test('週の第 n 営業日は、週が対応年の外にかかる日を outOfRangePolicy: "throw" で out-of-range にする（週の 7 日を数えるため）', () => {
+  const make = (outOfRangePolicy: "throw" | "ignore") =>
+    createCalendar({
+      holidayProvider: sg,
+      outOfRangePolicy,
+      closedWeekdays: [0, 6],
+      closedRecurringRules: [{ businessDayOfWeek: 1, weekStart: 1 }],
+    });
+  const first = sg.supportedYears.from;
+  // 最後の年の 12 月の最後の週（週が翌年にかかる）と、最初の年の最初の週（週が前年から始まる）
+  const lastWeek = [27, 28, 29, 30, 31].map((d) => `${last}-12-${d}`);
+  for (const date of [...lastWeek, `${first}-01-02`]) {
+    assert.throws(() => make("throw").dayInfoOn(date), isOutOfRange, date);
+    assert.doesNotThrow(() => make("ignore").dayInfoOn(date), date);
+  }
+  assert.throws(() => make("throw").lastBusinessDayOfMonth(`${last}-12`), isOutOfRange);
+  assert.equal(
+    make("throw").dayInfoOn(`${last}-12-20`).reason,
+    "closed-recurring",
+    "週が対応年の中",
+  );
+});

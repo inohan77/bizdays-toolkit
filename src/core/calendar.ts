@@ -1,18 +1,6 @@
 /**
  * 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダー。
- *
- * 1 日の判定は次の優先順位で行う（上が優先）:
- *   1. openDates      … 臨時営業日（個別の日付・期間）
- *   2. closedDates    … 臨時休業日（個別の日付・期間）
- *   3. closedAnnualDates   … 毎年の休業日（月日・月日の期間。年をまたぐ期間も可）
- *   4. openRecurringRules・closedRecurringRules（holidayOverlapPolicy: "over-holiday"）… 祝日でも当てはめる繰り返しの規則
- *   5. 祝日            … holidayPolicy に従う（closed: 休業 / open: 営業 / ignore: 判定に使わない）
- *   6. openRecurringRules・closedRecurringRules（"under-holiday"・"after-holiday" の振替先）… 繰り返しの規則
- *   7. closedWeekdays … 定休日の曜日
- *   8. それ以外は営業日
- *
- * 繰り返しの規則は openRecurringRules が closedRecurringRules より優先。"after-holiday" の規則は、
- * 祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）
+ * 1 日の判定の優先順位は docs/guide.md の「Business-day calendars」と docs/decisions.md の 12 番。
  *
  * 内部では、営業日かどうか（真偽値）を返すスケジュール（createSchedule）として作っている。
  * 営業日の探索・調整・月の営業日などの機能は buildCalendar に切り出し、作成済みのカレンダーを
@@ -53,7 +41,7 @@ import {
   isWeekday,
   mapDays,
   RECURRING_RULE_KEYS,
-  usesJp,
+  jpUsage,
   type CompiledSchedule,
   type DayOfMonth,
   type EffectivePeriod,
@@ -423,7 +411,7 @@ export function compileCalendarOptions<Kind extends string>(
     RECURRING_RULE_KEYS,
     "calendar",
     writtenKey(places, written, "openRecurringRules"),
-    usesJp(source),
+    jpUsage(source),
   );
   const closedRecurringRules = compileRecurringRules<boolean>(
     c,
@@ -433,7 +421,7 @@ export function compileCalendarOptions<Kind extends string>(
     RECURRING_RULE_KEYS,
     "calendar",
     writtenKey(places, written, "closedRecurringRules"),
-    usesJp(source),
+    jpUsage(source),
   );
 
   return {
@@ -877,7 +865,7 @@ export interface CalendarFromScheduleOptions {
  * （営業日カレンダーを別に書いて同期を取る必要がなくなる）。
  *
  * - isOpen は値だけで決まる純粋な関数であること（日付・時刻・外部の状態を見ない）。営業日の探索は isOpen を繰り返し呼ぶので、
- *   結果が変わる関数を渡すと探索の結果が呼ぶたびに変わる。日付で変えたい条件は、スケジュールの規則（dates・recurring）に書く
+ *   結果が変わる関数を渡すと探索の結果が呼ぶたびに変わる。日付で変えたい条件は、スケジュールの規則（dates・recurringRules）に書く
  * - dayInfoOn の reason は、スケジュールの reason と営業・休業の組み合わせ（date → "open-date"/"closed-date"、annual → "open-annual"/
  *   "closed-annual"、recurring → "open-recurring"/"closed-recurring"、holiday → "holiday"、weekday → "open-weekday"/"closed-weekday"）。
  *   name・holiday・shiftedFrom・optionPath はスケジュールの結果をそのまま引き継ぐ

@@ -1,21 +1,6 @@
 /**
  * 日ごとに値を返すスケジュール（営業時間・受付枠など、曜日・祝日・特定日で変わるもの）。
- *
- * 1 日の値は次の優先順位で決まる（上が優先）:
- *   1. dates   … 個別の日付・期間（配列で先に書いたものが優先）
- *   2. annual  … 毎年の月日・月日の期間（年をまたぐ期間も可。配列で先に書いたものが優先）
- *   3. recurring（holidayOverlapPolicy: "over-holiday"）… 祝日でも当てはめる繰り返しの規則
- *   4. 祝日     … holiday の規則（"weekday": 曜日どおり / { sameAs: 曜日 }: その曜日の値 / { value }: 指定の値）
- *   5. recurring（"under-holiday"・"after-holiday" の振替先）… 繰り返しの規則（配列で先に書いたものが優先）
- *   6. weekly  … 曜日ごとの値
- *
- * "under-holiday" の規則は、祝日の扱いが "weekday"（曜日どおり）なら祝日にも当てはまる。
- * "after-holiday" の規則は、祝日には当てはめず、その日以降で最初の祝日でない日に当てはめる（振替）。
- * 毎年の月日・繰り返しの規則の有効期間（effectiveFrom・effectiveTo）の外では、その規則は書かれていないのと同じ。
- * 祝日の翌日の規則（dayAfterHoliday）は、前日が祝日でその日自身は祝日でない日に当てはまる（提供元の祝日だけで判定）。
- * 祝前日の規則（dayBeforeHoliday）は、翌日が祝日でその日自身は祝日でない日に当てはまる（同じく提供元の祝日だけ）。
- * 祝日の規則（holiday: true。kinds で種別を、keys で個別の祝日を絞れる）は、「祝日の上」の段階で判定する
- *
+ * 1 日の値を決める優先順位は docs/guide.md の「Day-by-day values」と docs/decisions.md の 12 番。
  * 営業日カレンダー（createCalendar）は、このスケジュールの真偽値版として作られている。
  */
 
@@ -32,7 +17,7 @@ import {
   type Weekday,
 } from "./date.ts";
 import { checkUnknownKeys, IssueCollector, rangeError, type KnownErrorCode } from "./errors.ts";
-import { renameKeys, renameValue, writtenKey } from "./renamed.ts";
+import { RENAMED_VALUES, renameKeys, renameValue, writtenKey } from "./renamed.ts";
 import {
   instantToCivil,
   toCivil,
@@ -164,12 +149,6 @@ export interface WeekdayPattern {
   readonly anchor?: DateString;
   /** 当てはめる月（省略時はすべての月） */
   readonly months?: readonly Month[];
-  /**
-   * holidayOverlapPolicy: "after-holiday" と組で、祝日に加えて飛ばす曜日（0 = 日曜日〜6 = 土曜日）。
-   * 本来の日が祝日かこの曜日なら、その日以降で最初の、祝日でもこの曜日でもない日に振り替える
-   * （例: 月曜定休で、月曜が祝日なら翌平日（土曜日には落とさない）は { weekday: 1, holidayOverlapPolicy: "after-holiday", skipWeekdays: [6] }）。
-   * weekday 自身は含められない。"after-holiday" 以外と組にすると invalid-option
-   */
   readonly dayOfMonth?: never;
   readonly businessDayOfMonth?: never;
   readonly calendar?: never;
@@ -194,11 +173,6 @@ export interface DayOfMonthPattern {
   readonly dayOfMonth: DayOfMonth | readonly DayOfMonth[];
   /** 当てはめる月（省略時はすべての月） */
   readonly months?: readonly Month[];
-  /**
-   * holidayOverlapPolicy: "after-holiday" と組で、祝日に加えて飛ばす曜日。本来の日が祝日かこの曜日なら、その日以降で最初の、
-   * 祝日でもこの曜日でもない日に振り替える（例: 「6 月 15 日は創立記念日。土日祝なら翌営業日」は
-   * { day: 15, months: [6], holidayOverlapPolicy: "after-holiday", skipWeekdays: [0, 6] }）。"after-holiday" 以外と組にすると invalid-option
-   */
   readonly weekday?: never;
   readonly nth?: never;
   readonly interval?: never;
@@ -229,7 +203,7 @@ export interface DayOfMonthPattern {
  * 祝日の段階が先に決めてこの規則は当てはまらない（曜日の規則と同じ優先順位）。「第 1 営業日は祝日でも休業」は "over-holiday" で書く。
  * holidayPolicy: "closed" では祝日が基準の営業日にならないので "over-holiday" は結果を変えない（診断が info で知らせる）。
  *
- * スケジュール（createSchedule の recurring）では、スケジュール自身に営業・休業の概念がないので、数える基準にする作成済みの
+ * スケジュール（createSchedule の recurringRules）では、スケジュール自身に営業・休業の概念がないので、数える基準にする作成済みの
  * カレンダーを calendar で指定する（必須。タイムゾーンはスケジュールと同じであること）。カレンダー（closedRecurringRules・openRecurringRules）
  * では calendar は指定できない（invalid-option。基準は自分の設定で決まる）。
  * @public
@@ -266,6 +240,7 @@ export interface BusinessDayOfMonthPattern {
  * その週にない回は当てはまらない。数える基準・calendar・holidayOverlapPolicy の扱いは businessDayOfMonth と同じ
  * （カレンダーでは自分の設定の「繰り返しの規則をすべて除いた判定」、スケジュールでは必須の calendar で数える）。
  * 週の始まりは地域・業種で違うので、weekStart は省略できない。months は当てはまる日の月で絞る。
+ * 週の 7 日をすべて数えるので、週の一部が祝日の提供元の対応年の外にかかる日は、outOfRangePolicy: "throw" では out-of-range になる。
  * @public
  */
 export interface BusinessDayOfWeekPattern {
@@ -407,7 +382,7 @@ export interface CyclePattern {
 
 /**
  * 祝日（提供元の祝日である日）。kinds で祝日の種別を、keys で個別の祝日を絞れる（省略時はすべての祝日）。
- * 「祝日の上」の段階（holidayPolicy・スケジュールの holiday より先）で判定し、祝日の既定の扱いの例外を書く
+ * 「祝日の上」の段階（holidayPolicy より先）で判定し、祝日の既定の扱いの例外を書く
  * （例: 「2027 年 4 月から祝日も営業」「振替休日は診療」「5 月の祝日は特別営業時間」）。
  * 当てはまる日は祝日なので、holidayOverlapPolicy は指定できない（指定すると invalid-option）。
  * @public
@@ -455,7 +430,11 @@ export type RecurringPattern<Kind extends string = string> =
         | {
             /** 祝日に当たったら、その日以降で最初の祝日でない日に振り替える */
             readonly holidayOverlapPolicy: "after-holiday";
-            /** 振替先を探すときに、祝日に加えて飛ばす曜日 */
+            /**
+             * 振替先を探すときに、祝日に加えて飛ばす曜日（0 = 日曜日〜6 = 土曜日）。本来の日が祝日かこの曜日なら、その日以降で最初の、
+             * 祝日でもこの曜日でもない日に振り替える（例: 月曜定休で、月曜が祝日なら翌平日（土曜日には落とさない）は
+             * { weekday: 1, holidayOverlapPolicy: "after-holiday", skipWeekdays: [6] }）。weekday 自身は含められない
+             */
             readonly skipWeekdays?: readonly Weekday[];
           }
         | {
@@ -469,7 +448,11 @@ export type RecurringPattern<Kind extends string = string> =
         | {
             /** 祝日に当たったら、その日以降で最初の祝日でない日に振り替える */
             readonly holidayOverlapPolicy: "after-holiday";
-            /** 振替先を探すときに、祝日に加えて飛ばす曜日 */
+            /**
+             * 振替先を探すときに、祝日に加えて飛ばす曜日（0 = 日曜日〜6 = 土曜日）。本来の日が祝日かこの曜日なら、その日以降で最初の、
+             * 祝日でもこの曜日でもない日に振り替える（例: 「6 月 15 日は創立記念日。土日祝なら翌営業日」は
+             * { dayOfMonth: 15, months: [6], holidayOverlapPolicy: "after-holiday", skipWeekdays: [0, 6] }）
+             */
             readonly skipWeekdays?: readonly Weekday[];
           }
         | {
@@ -969,6 +952,8 @@ export interface RecurringRuleCompiled<Value> extends CompiledPeriod {
   readonly holiday: boolean;
   /** 祝日・祝日の翌日・祝前日の規則で絞る種別（null はすべての祝日） */
   readonly kinds: ReadonlySet<string> | null;
+  /** kinds の旧名 "national" を、日本の提供元が返した "regular" の祝日にも当てるか（docs/decisions.md の 55 番） */
+  readonly nationalOfJp: boolean;
   /** 祝日・祝日の翌日・祝前日の規則で絞る識別子（null はすべての祝日） */
   readonly keys: ReadonlySet<string> | null;
   /** 祝日・祝日の翌日・祝前日の規則で絞る曜日（null はすべての曜日） */
@@ -1048,7 +1033,7 @@ export function compileRecurringRules<Value>(
   keys: readonly string[],
   context: "calendar" | "schedule",
   writtenPath: string = path,
-  jp: boolean = false,
+  jp: JpUsage = "none",
 ): RecurringRuleCompiled<Value>[] {
   if (entries === undefined) return [];
   if (!Array.isArray(entries)) {
@@ -1064,8 +1049,8 @@ export function compileRecurringRules<Value>(
     }
     const written = `${writtenPath}[${i}]`;
     const entry = renameKeys(c, ["rule"], written, rawEntry);
-    if (jp && entry["kinds"] !== undefined)
-      entry["kinds"] = renameValue(c, "rule", "kinds", `${written}.kinds`, entry["kinds"]);
+    const nationalOfJp =
+      jp !== "none" && reportNational(c, `${written}.kinds`, entry["kinds"], jp === "mixed");
     checkUnknownKeys(c, p, entry, keys);
     const value = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
@@ -1507,6 +1492,7 @@ export function compileRecurringRules<Value>(
           dayBeforeHoliday: hasBefore,
           holiday: hasHoliday,
           kinds,
+          nationalOfJp,
           keys: holidayKeys,
           weekdays,
           months,
@@ -1524,6 +1510,9 @@ export function compileRecurringRules<Value>(
 /** @internal その日の祝日を返す関数（祝日・祝日の翌日・祝前日の規則の判定に使う。提供元の対応年の外は祝日でないとみなすこと） */
 export type HolidayOf = (date: DateString) => Holiday<string> | undefined;
 
+/** @internal その日の祝日（HolidayOf が返したもの）が、ID が "JP" の提供元のものか */
+export type FromJp = (date: DateString) => boolean;
+
 /**
  * @internal 繰り返しの規則の形（曜日・第 n 回目・周期・日・第 n 営業日・祝日・祝日の翌日・祝前日・月）がその日に当てはまるか。
  * 有効期間は考えない（規則の診断で、形どうしの包含を調べるために分けている）。
@@ -1535,6 +1524,7 @@ export function matchPattern(
   date: DateString,
   holidayOf?: HolidayOf,
   basis?: BasisOfMonth,
+  fromJp?: FromJp,
 ): boolean {
   const { year, month, day } = parseDate(date);
   if (rule.months && !rule.months.has(month)) return false;
@@ -1564,7 +1554,9 @@ export function matchPattern(
     if (holidayOf === undefined) return false;
     if (rule.weekdays && !rule.weekdays.has(weekdayOf(date))) return false;
     const selected = (h: Holiday<string>): boolean =>
-      (rule.kinds === null || rule.kinds.has(h.kind)) &&
+      (rule.kinds === null ||
+        rule.kinds.has(h.kind) ||
+        (rule.nationalOfJp && h.kind === "regular" && fromJp?.(h.date) === true)) &&
       (rule.keys === null || (h.key !== undefined && rule.keys.has(h.key)));
     if (rule.holiday) {
       const h = holidayOf(date);
@@ -1604,8 +1596,9 @@ export function matchRecurring(
   date: DateString,
   holidayOf: HolidayOf,
   basis?: BasisOfMonth,
+  fromJp?: FromJp,
 ): boolean {
-  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date, holidayOf, basis);
+  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date, holidayOf, basis, fromJp);
 }
 
 /**
@@ -1675,9 +1668,40 @@ export interface HolidaySource<Kind extends string> {
   readonly unconfirmedHolidayPolicy: "accept" | "throw";
 }
 
-/** @internal 日本の祝日の提供元（ID が "JP"。包んだものを含む）を使うか（0.30.0 で改名した kinds の "national" を読み替えるため） */
-export function usesJp(source: HolidaySource<string>): boolean {
-  return source.providers.some((p) => p.id === "JP");
+/**
+ * @internal 日本の祝日の提供元（ID が "JP"。包んだものを含む）の使い方（kinds の旧名 "national" の扱いを決めるため）。
+ * "mixed" はほかの ID の提供元と合わせて使う設定
+ */
+export type JpUsage = "none" | "only" | "mixed";
+
+/**
+ * kinds の "national"（0.30.0 で日本の提供元の種別は "regular" に改名）を見つけたら deprecated-option を記録し、
+ * 見つけたかを返す。値は読み替えず、判定で日本の提供元が返した "regular" の祝日にも当てる（docs/decisions.md の 55 番）。
+ * mixed（ほかの提供元と合わせた設定）では、当てている祝日と 1.0.0 での扱いを添える（54 番）
+ */
+function reportNational(c: IssueCollector, path: string, kinds: unknown, mixed: boolean): boolean {
+  if (!Array.isArray(kinds)) return false;
+  const { from, to } = RENAMED_VALUES.find((r) => r.key === "kinds")!;
+  let found = false;
+  kinds.forEach((v, i) => {
+    if (v !== from) return;
+    found = true;
+    c.warning(
+      "deprecated-option",
+      `${path}[${i}]`,
+      `"${from}" was renamed to "${to}" in 0.30.0` +
+        (mixed
+          ? `; here it matches Japan's "${to}" and other providers' "${from}" holidays. From 1.0.0 it is an invalid-option with a "JP" provider: wrap the Japanese provider and rename your own "${from}" kind (see the migration guide)`
+          : ""),
+    );
+  });
+  return found;
+}
+
+/** @internal 設定の祝日の提供元の、日本の提供元の使い方 */
+export function jpUsage(source: HolidaySource<string>): JpUsage {
+  const jp = source.providers.filter((p) => p.id === "JP").length;
+  return jp === 0 ? "none" : jp === source.providers.length ? "only" : "mixed";
 }
 
 /** @internal 祝日の提供元とタイムゾーンの設定を検証する */
@@ -1827,14 +1851,20 @@ function checkNames(names: unknown): string | undefined {
 /** @internal 祝日を調べる機能を作る（設定は検証済みであること） */
 export function createHolidayLookup<Kind extends string>(
   source: HolidaySource<Kind>,
-): HolidayLookup<Kind> & { holidayOfDate(date: DateString): Holiday<Kind> | undefined } {
+): HolidayLookup<Kind> & {
+  holidayOfDate(date: DateString): Holiday<Kind> | undefined;
+  fromJp: FromJp;
+} {
   const { providers, timeZone, outOfRangePolicy, unconfirmedHolidayPolicy } = source;
   const yearCache = new Map<number, Map<DateString, Holiday<Kind>>>();
+  /** 年ごとの、ID が "JP" の提供元の祝日が残った日付（同じ日に複数の提供元の祝日があれば先の提供元のもの） */
+  const jpCache = new Map<number, Set<DateString>>();
 
   function holidayMap(year: number): Map<DateString, Holiday<Kind>> {
     let map = yearCache.get(year);
     if (!map) {
       map = new Map();
+      const jpDates = new Set<DateString>();
       for (const provider of providers) {
         const { from, to } = provider.supportedYears;
         if (year < from || year > to) {
@@ -1846,10 +1876,13 @@ export function createHolidayLookup<Kind extends string>(
         }
         for (const h of loadProviderYear(provider, year)) {
           // 同じ日に複数の提供元の祝日がある場合は、先に渡した提供元を優先する
-          if (!map.has(h.date)) map.set(h.date, h);
+          if (map.has(h.date)) continue;
+          map.set(h.date, h);
+          if (provider.id === "JP") jpDates.add(h.date);
         }
       }
       yearCache.set(year, map);
+      jpCache.set(year, jpDates);
     }
     return map;
   }
@@ -1898,6 +1931,7 @@ export function createHolidayLookup<Kind extends string>(
     outOfRange: outOfRangePolicy,
     unconfirmedHolidays: unconfirmedHolidayPolicy,
     holidayOfDate,
+    fromJp: (date) => jpCache.get(parseDate(date).year)?.has(date) === true,
     dateOf,
     civilOf: ((input: DateInput) =>
       toDateTimeParts(input, timeZone)) as HolidayLookup<Kind>["civilOf"],
@@ -2043,7 +2077,7 @@ export function compileScheduleOptions<Value, Kind extends string>(
     [...RECURRING_RULE_KEYS, "value"],
     "schedule",
     writtenKey(["source", "schedule"], written, "recurringRules"),
-    usesJp(source),
+    jpUsage(source),
   );
   // 第 n 営業日の規則の基準のカレンダーは、スケジュールと同じタイムゾーンであること（合成と同じ理由。瞬間の暦日が食い違うため）
   for (const rule of recurring) {
@@ -2125,7 +2159,7 @@ export function createResolver<Value, Kind extends string>(
       const prev = addDays(date, -k);
       // 飛ばす日は祝日と、skipWeekdays の曜日。それ以外の日に達したら、振替元はない
       if (!isHolidayOfNeighbour(prev) && !rule.skipWeekdays?.has(weekdayOf(prev))) return undefined;
-      if (matchRecurring(rule, prev, holidayOfNeighbour)) return prev;
+      if (matchRecurring(rule, prev, holidayOfNeighbour, undefined, lookup.fromJp)) return prev;
     }
     return undefined;
   }
@@ -2167,7 +2201,7 @@ export function createResolver<Value, Kind extends string>(
       const over = recurring.find(
         (r) =>
           r.holidayOverlapPolicy === "over-holiday" &&
-          matchRecurring(r, date, holidayOfNeighbour, basis),
+          matchRecurring(r, date, holidayOfNeighbour, basis, lookup.fromJp),
       );
       if (over) return make(over.value, "recurring", over, over.name);
       // 4. 祝日
@@ -2180,7 +2214,7 @@ export function createResolver<Value, Kind extends string>(
       const under = recurring.find(
         (r) =>
           r.holidayOverlapPolicy === "under-holiday" &&
-          matchRecurring(r, date, holidayOfNeighbour, basis),
+          matchRecurring(r, date, holidayOfNeighbour, basis, lookup.fromJp),
       );
       if (under) return make(under.value, "recurring", under, under.name);
       return make(weekly[weekday] as Value, "weekday", null, undefined);
@@ -2190,7 +2224,7 @@ export function createResolver<Value, Kind extends string>(
     for (const rule of recurring) {
       // skipWeekdays の曜日には当てはめない（祝日と同じく振り替える）
       if (rule.skipWeekdays?.has(weekday)) continue;
-      if (matchRecurring(rule, date, holidayOfNeighbour, basis))
+      if (matchRecurring(rule, date, holidayOfNeighbour, basis, lookup.fromJp))
         return make(rule.value, "recurring", rule, rule.name);
       if (hasShift && rule.holidayOverlapPolicy === "after-holiday") {
         const origin = shiftedOrigin(rule, date);

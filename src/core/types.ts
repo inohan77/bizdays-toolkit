@@ -48,7 +48,10 @@ export interface Holiday<Kind extends string = string> {
  * @public
  */
 export interface HolidayProvider<Kind extends string = string> {
-  /** ISO 3166-1 alpha-2（国）または ISO 3166-2（地域）のコード。例: "JP", "US-CA" */
+  /**
+   * ISO 3166-1 alpha-2（国）・ISO 3166-2（地域）のコード、または該当するコードがない地域ではその形に合わせた独自のコード
+   * （大文字で書く）。例: "JP", "US-CA", "FR-AM"
+   */
   readonly id: string;
   /** 祝日を判定する基準のタイムゾーン（IANA 名）。例: "Asia/Tokyo" */
   readonly timeZone: string;

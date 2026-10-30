@@ -11,8 +11,10 @@ import "./strict-warnings.ts";
  *   node scripts/check-names.ts --words   … 集めた語を名前とともに一覧にする（用語集を書くときの補助）
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import ts from "typescript";
+import { RENAMED_KEYS } from "../src/core/renamed.ts";
 
 // ---------------------------------------------------------------------------
 // 入力
@@ -63,12 +65,14 @@ interface Word {
 
 const naming = readFileSync("etc/naming.md", "utf8");
 
-/** 見出し（## …）の下にある最初の表を、行ごとのセルの配列で返す */
+/** 見出し（## … か ### …）の下にある表を、行ごとのセルの配列で返す（同じか上の階層の次の見出しまで） */
 function tableUnder(text: string, heading: string): string[][] {
-  const start = text.indexOf(`\n## ${heading}\n`);
-  if (start < 0) throw new Error(`heading "${heading}" not found`);
-  const rest = text.slice(start + heading.length + 5);
-  const end = rest.search(/\n## /);
+  const found = new RegExp(`\\n(#{2,3}) ${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n`).exec(
+    text,
+  );
+  if (!found) throw new Error(`heading "${heading}" not found`);
+  const rest = text.slice(found.index + found[0].length);
+  const end = rest.search(new RegExp(`\\n#{2,${found[1]!.length}} `));
   const body = end < 0 ? rest : rest.slice(0, end);
   const rows = body
     .split("\n")
@@ -492,6 +496,14 @@ function itemType(n: Name): ts.TypeNode | undefined {
 for (const n of names) {
   if (n.kind !== "property" && n.kind !== "parameter") continue;
   const type = itemType(n);
+  if (type && isNever(type) && ts.getJSDocCommentsAndTags(n.node).length > 0) {
+    // 書けない項目に説明は要らない。説明が付いているのは、別の項目の説明が型の分割でずれたとき（C13）
+    report(
+      "C13",
+      n.where,
+      "?: never の項目に TSDoc が付いている（別の項目の説明がずれていないか）",
+    );
+  }
   if (!type || isNever(type)) continue; // 形を分けるための ?: never は項目ではない
   const words = split(n.name);
   const last = words[words.length - 1]!;
@@ -930,6 +942,146 @@ for (const name of exportedTypes.keys()) {
 }
 
 // ---------------------------------------------------------------------------
+// 旧名の残り（C14）
+// ---------------------------------------------------------------------------
+
+/**
+ * 今の状態を書いたファイルと、型定義の TSDoc（@deprecated の付いていないもの）に、0.30.0 で改名した旧名が残っていないか。
+ * 旧名は 1.0.0 まで動くので、コード例の実行（27 番）では見つからない。履歴を書いたファイル（CHANGELOG・decisions.md・
+ * migration.md）と、文書の版の番号を見出しに持つ節（移行の説明）は見ない（52 番）。旧名の出どころは改名の表
+ * （src/core/renamed.ts のキー）・削除予定の表・migration.md の「引数の名前」の表で、今の公開名と同じ綴りのものは除く。
+ * 値（"national" など）は英語の語としても現れるので、人の確認で見る（RELEASING.md の「品質の確認」）
+ */
+const currentNames = new Set(names.map((n) => n.name));
+const currentProperties = new Set(names.filter((n) => n.kind === "property").map((n) => n.name));
+/**
+ * 設定のキーの旧名。今の項目と同じ綴り（規則の目印の holiday など）は除く（引数と同じ綴りの holidays は除かない）。
+ * 「{ 名前:」「, 名前:」「`名前:」の形と、コードの行頭の「名前:」で探す（英文の「federal holidays:」は拾わない）
+ */
+const oldKeys = [...new Set(RENAMED_KEYS.map((r) => r.from))].filter(
+  (k) => !currentProperties.has(k),
+);
+/** 関数・メソッド・型・返す項目の旧名。語の境界で探す */
+const oldWords = [...scheduledRemovals]
+  .map((q) => q.split(".").pop()!)
+  .filter((w, i, all) => all.indexOf(w) === i)
+  .filter((w) => !currentNames.has(w) && !RENAMED_KEYS.some((r) => r.from === w));
+/** 引数の旧名。「関数(… 旧名」の形で探す */
+const oldParams = tableUnder(migration, "引数の名前").flatMap((r) => {
+  const [fns, old] = [code(r[0] ?? ""), code(r[1] ?? "")[0]];
+  return old ? fns.map((fn) => ({ fn, old })) : [];
+});
+const escape = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const patterns: { name: string; re: RegExp; codeOnly?: RegExp }[] = [
+  ...oldKeys.map((k) => ({
+    name: `${k}:`,
+    re: new RegExp(`(?:[{,]\\s*|\`)${escape(k)}\\s*:`),
+    codeOnly: new RegExp(`^\\s*(?:\\*\\s*)?${escape(k)}\\s*:`),
+  })),
+  ...oldWords.map((w) => ({ name: w, re: new RegExp(`\\b${escape(w)}\\b`) })),
+  ...oldParams.map((p) => ({
+    name: `${p.fn}(… ${p.old}`,
+    re: new RegExp(`\\b${escape(p.fn)}\\([^)]*\\b${escape(p.old)}\\b`),
+  })),
+];
+const CURRENT_DOCS = [
+  "README.md",
+  "docs/README.ja.md",
+  "docs/guide.md",
+  "docs/guide.ja.md",
+  "docs/providers.md",
+  "docs/providers.ja.md",
+  "RELEASING.md",
+  "SECURITY.md",
+];
+/**
+ * 見ないスクリプト: 前の版を動かすもの（前の版の名前で呼ぶのが正しい）と、公式データを照合するもの
+ * （verify-*。オブジェクトは外部のデータの形で、data.gov.sg の day などを持つ）
+ */
+const skipScript = (name: string): boolean => name === "bench.ts" || name.startsWith("verify-");
+/** 非推奨であることを説明する行（旧名を書くのが正しい） */
+const DEPRECATION_NOTE = /deprecated|非推奨/i;
+const scanText = (
+  file: string,
+  lines: readonly string[],
+  skip: (i: number) => boolean,
+  isCode: (i: number) => boolean,
+): void => {
+  lines.forEach((line, i) => {
+    if (skip(i) || DEPRECATION_NOTE.test(line)) return;
+    for (const p of patterns) {
+      if (p.re.test(line) || (isCode(i) && p.codeOnly?.test(line)))
+        report("C14", `${file}:${i + 1}`, `旧名 ${p.name} が残っている`);
+    }
+  });
+};
+for (const file of CURRENT_DOCS) {
+  const lines = readFileSync(file, "utf8").split("\n");
+  // 版の番号（0.30.0 など）を見出しに持つ節は移行の説明なので見ない
+  let inVersionSection = false;
+  let level = 0;
+  const skipped = lines.map((line) => {
+    const h = /^(#{1,6})\s/.exec(line);
+    if (h) {
+      if (/\b\d+\.\d+\.\d+\b/.test(line)) {
+        inVersionSection = true;
+        level = h[1]!.length;
+      } else if (inVersionSection && h[1]!.length <= level) inVersionSection = false;
+    }
+    return inVersionSection;
+  });
+  let fence = false;
+  const code = lines.map((line) => {
+    if (line.startsWith("```")) {
+      fence = !fence;
+      return false;
+    }
+    return fence;
+  });
+  scanText(
+    file,
+    lines,
+    (i) => skipped[i]!,
+    (i) => code[i]!,
+  );
+}
+for (const name of readdirSync("scripts")) {
+  const file = `scripts/${name}`;
+  if (!name.endsWith(".ts") || skipScript(name)) continue;
+  scanText(
+    file,
+    readFileSync(file, "utf8").split("\n"),
+    () => false,
+    () => true,
+  );
+}
+/** dist の型定義の TSDoc（@deprecated の付いたものを除く） */
+const dtsFiles = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory()
+      ? dtsFiles(join(dir, e.name))
+      : e.name.endsWith(".d.ts")
+        ? [join(dir, e.name)]
+        : [],
+  );
+for (const file of dtsFiles("dist")) {
+  const text = readFileSync(file, "utf8");
+  for (const m of text.matchAll(/\/\*\*[\s\S]*?\*\//g)) {
+    if (m[0].includes("@deprecated")) continue;
+    const first = text.slice(0, m.index).split("\n").length;
+    const lines = text.split("\n").map((_, i) => i);
+    void lines;
+    scanText(
+      file,
+      [...Array<string>(first - 1).fill(""), ...m[0].split("\n")],
+      () => false,
+      () => true,
+    );
+  }
+}
+const scanned = `${CURRENT_DOCS.length} documents, scripts and dist type definitions for ${patterns.length} old names`;
+
+// ---------------------------------------------------------------------------
 // 出力
 // ---------------------------------------------------------------------------
 
@@ -940,6 +1092,7 @@ console.log(
   `checked ${names.length} names (functions ${count("function")}, types ${count("type")}, constants ${count("const")}, ` +
     `properties ${count("property")}, methods ${count("method")}, parameters ${count("parameter")}, ` +
     `type parameters ${count("type-parameter")}, values ${count("value")}); glossary ${glossary.size} words; ` +
+    `scanned ${scanned}; ` +
     `${violations.length} violation(s)`,
 );
 if (violations.length > 0 || glossaryErrors.length > 0) process.exit(1);
