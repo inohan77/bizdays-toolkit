@@ -29,7 +29,8 @@ const capabilities: Record<string, Record<string, unknown>> = {
   edge: {
     browserName: "MicrosoftEdge",
     // CI のランナーで、Edge のページの読み込みが止まる（レンダラーが応答しない）ことが続いたため、
-    // 共有メモリ（/dev/shm）の代わりに一時ファイルを使い、GPU の処理を止める（decisions.md の 35 番）
+    // 共有メモリ（/dev/shm）の代わりに一時ファイルを使い、GPU の処理を止める（CI のコンテナでレンダラーが応答しなくなる
+    // 原因としてよく知られる 2 つへの対策。効いたかはログの RETRY の有無で見る）
     "ms:edgeOptions": {
       args: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     },

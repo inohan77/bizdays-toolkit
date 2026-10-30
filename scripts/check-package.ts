@@ -703,8 +703,11 @@ function checkReferences(): string[] {
   };
   const referencePattern = /decisions\.md`? の ([\d・、, ]+?) ?番(?!目)/g;
   for (const file of [...current, "docs/migration.md"]) {
-    for (const m of readFileSync(file, "utf8").matchAll(referencePattern))
-      checkNumbers(file, m[1]!, numbers);
+    const text = readFileSync(file, "utf8");
+    for (const m of text.matchAll(referencePattern)) checkNumbers(file, m[1]!, numbers);
+    // 「番」を書き忘れた参照は上の検査にかからないので、形の誤りとして止める
+    for (const m of text.matchAll(/decisions\.md`? の ([\d・、, ]*\d)(?![\d・、, ]*番)/g))
+      problems.push(`${file}: write the decision reference as "decisions.md の ${m[1]} 番"`);
   }
   const renumberedAfter = [0, 30, 2];
   const isOld = (version: string): boolean => {

@@ -66,7 +66,7 @@ import type { Holiday } from "./types.ts";
  * - "warning": 作れるが、意図と違う可能性が高い
  * - "info": 結果には影響しないが、整理できる
  *
- * 出力の列挙だが、重さの段階は増やさないため閉じた型にしている（docs/decisions.md の 15）。
+ * 出力の列挙だが、重さの段階は増やさないため閉じた型にしている（docs/decisions.md の 2 番）。
  * @public
  */
 export type DiagnosticSeverity = "error" | "warning" | "info";
