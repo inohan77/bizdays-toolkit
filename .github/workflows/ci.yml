@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         # npm の動作要件を満たす版（RELEASING.md の「開発環境の版」）
-        node: ["22.23.4", "24.22.1", "26.13.0"]
+        node: ["22.23.4", "24.22.2", "26.13.0"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
