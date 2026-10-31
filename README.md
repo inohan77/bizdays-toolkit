@@ -7,7 +7,6 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/bizdays-toolkit"><img src="https://img.shields.io/npm/v/bizdays-toolkit" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/bizdays-toolkit"><img src="https://img.shields.io/npm/d18m/bizdays-toolkit" alt="npm downloads"></a>
   <a href="https://github.com/inohan77/bizdays-toolkit/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/inohan77/bizdays-toolkit/ci.yml?branch=main&amp;label=CI" alt="CI status"></a>
   <a href="https://github.com/inohan77/bizdays-toolkit/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/bizdays-toolkit" alt="license"></a>
   <img src="https://img.shields.io/node/v/bizdays-toolkit" alt="Node.js version">
