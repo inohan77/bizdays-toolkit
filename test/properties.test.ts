@@ -21,23 +21,14 @@ import {
   type Weekday,
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
+import { picker, random, randomRules } from "./support/catalog.ts";
 
 const SEED = Number(process.env["PROPERTY_SEED"] ?? 20261015);
 const RUNS = 300;
 
 /** mulberry32: 種から決まる、再現可能な乱数 */
-function random(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 interface Gen {
+  readonly rand: () => number;
   int(min: number, max: number): number;
   date(): string;
   pick<T>(items: readonly T[]): T;
@@ -46,6 +37,7 @@ interface Gen {
 function gen(rand: () => number): Gen {
   const int = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
   return {
+    rand,
     int,
     // 日本の祝日の対応年に収め、端で探索が範囲を出ないよう余裕を取る
     date: () => addDays("1960-01-01", int(0, 365 * 130)),
@@ -63,6 +55,15 @@ function randomCalendar(g: Gen): { calendar: Calendar; describe: string } {
   const openDates = Array.from({ length: g.int(0, 3) }, () => g.date());
   const closedAnnualDates = g.int(0, 1) ? [{ from: "12-29", to: "01-03" }] : [];
   const holidayPolicy = g.pick(["closed", "open", "ignore"] as const);
+  // 繰り返しの規則は目録から作る（規則のすべての形を試すため。test/support/catalog.ts）
+  const p = picker(g.rand);
+  const ctx = {
+    holidays: true,
+    kinds: ["regular", "substitute", "citizens"],
+    keys: ["new-year", "vernal-equinox", "culture"],
+    year: 2026,
+    newShapes: true,
+  };
   const options = {
     holidayProvider: jp,
     closedWeekdays: weekdays,
@@ -70,6 +71,12 @@ function randomCalendar(g: Gen): { calendar: Calendar; describe: string } {
     openDates,
     closedAnnualDates,
     holidayPolicy,
+    ...(g.int(0, 2) > 0
+      ? { closedRecurringRules: randomRules(p, ctx, 3) as unknown as RecurringRule[] }
+      : {}),
+    ...(g.int(0, 3) === 0
+      ? { openRecurringRules: randomRules(p, ctx, 2) as unknown as RecurringRule[] }
+      : {}),
   };
   return {
     calendar: createCalendar(options),
@@ -81,15 +88,23 @@ function randomCalendar(g: Gen): { calendar: Calendar; describe: string } {
 function property(name: string, check: (g: Gen) => string | void): void {
   test(`性質: ${name}`, () => {
     const g = gen(random(SEED));
+    let skipped = 0;
     for (let run = 0; run < RUNS; run++) {
       let context = "";
       try {
         context = check(g) ?? "";
       } catch (error) {
+        // 目録の規則で、営業日が（ほとんど）ないカレンダーもできる。その試行は性質の前提を満たさないので数えずに飛ばす
+        if ((error as { code?: unknown } | null)?.code === "no-business-day") {
+          skipped++;
+          continue;
+        }
         const detail = error instanceof Error ? error.message : String(error);
         assert.fail(`seed=${SEED} run=${run} ${context}\n${detail}`);
       }
     }
+    // 飛ばした試行が多すぎると性質が空振りするので、1 割までにする
+    assert.ok(skipped <= RUNS / 10, `skipped ${skipped} of ${RUNS} runs (no business day)`);
   });
 }
 

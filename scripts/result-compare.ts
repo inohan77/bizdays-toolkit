@@ -25,6 +25,7 @@ import "./strict-warnings.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { picker, randomRules } from "../test/support/catalog.ts";
 
 type Obj = Record<string, unknown>;
 type Fn = (...args: unknown[]) => unknown;
@@ -205,111 +206,13 @@ function rangeOf(providers: readonly ProviderName[]): [string, string] {
   return [iso(from, 1, 1), iso(to, 12, 31)];
 }
 
-function effective(g: Gen, rule: Obj): Obj {
-  if (g.chance(0.15)) rule["effectiveFrom"] = iso(g.int(2021, 2024), g.int(1, 12), g.int(1, 28));
-  if (g.chance(0.15)) rule["effectiveTo"] = iso(g.int(2024, 2026), g.int(1, 12), g.int(1, 28));
-  if (
-    typeof rule["effectiveFrom"] === "string" &&
-    typeof rule["effectiveTo"] === "string" &&
-    rule["effectiveFrom"] > rule["effectiveTo"]
-  )
-    delete rule["effectiveTo"];
-  return rule;
-}
-
-function filters(g: Gen, rule: Obj): Obj {
-  if (g.chance(0.6)) rule["kinds"] = g.some(KINDS, 2);
-  if (g.chance(0.15)) rule["keys"] = g.some(KEYS, 3);
-  if (g.chance(0.2)) rule["weekdays"] = g.some([0, 1, 2, 3, 4, 5, 6], 3);
-  if (g.chance(0.15)) rule["months"] = g.some([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 4);
-  return rule;
-}
-
-/** 繰り返しの規則 1 つ（新しい名前）。newShapes は改名と同時に入った形（週の第 n 営業日）を使うか */
-function makeRule(g: Gen, newShapes: boolean, withHolidays: boolean): Obj {
-  const shapes = ["weekday", "dayOfMonth", "businessDayOfMonth", "cycle"];
-  if (withHolidays) shapes.push("holiday", "holiday", "dayAfterHoliday", "dayBeforeHoliday");
-  if (newShapes) shapes.push("businessDayOfWeek");
-  const shape = g.pick(shapes);
-  const policy = (all: boolean): void => {
-    if (g.chance(0.4))
-      rule["holidayOverlapPolicy"] = g.pick(
-        all
-          ? ["under-holiday", "over-holiday", "after-holiday"]
-          : ["under-holiday", "over-holiday"],
-      );
-    if (rule["holidayOverlapPolicy"] === "after-holiday" && g.chance(0.4))
-      rule["skipWeekdays"] = g.some([0, 6, 3], 2);
-  };
-  const rule: Obj = {};
-  switch (shape) {
-    case "weekday":
-      rule["weekday"] = g.int(0, 6);
-      if (g.chance(0.4))
-        rule["nth"] = g.chance(0.5) ? g.pick([1, 2, 3, 4, -1]) : g.some([1, 2, 3, 4, 5, -1], 2);
-      else if (g.chance(0.25)) {
-        rule["interval"] = 2;
-        rule["anchor"] = iso(2024, 1, g.int(1, 14));
-      }
-      if (g.chance(0.2)) rule["months"] = g.some([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 4);
-      policy(true);
-      break;
-    case "dayOfMonth":
-      rule["dayOfMonth"] = g.chance(0.5)
-        ? g.pick([1, 5, 10, 15, 20, 25, 31, -1])
-        : g.some([1, 10, 20, 31, -1], 2);
-      if (g.chance(0.2)) rule["months"] = g.some([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 4);
-      policy(true);
-      break;
-    case "businessDayOfMonth":
-      rule["businessDayOfMonth"] = g.chance(0.6)
-        ? g.pick([1, 2, 3, 5, -1, -2])
-        : g.some([1, 2, -1], 2);
-      if (g.chance(0.2)) rule["months"] = g.some([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 4);
-      policy(false);
-      break;
-    case "businessDayOfWeek":
-      rule["businessDayOfWeek"] = g.chance(0.6) ? g.pick([1, 2, -1]) : g.some([1, 3, -1], 2);
-      rule["weekStart"] = g.pick([0, 1]);
-      policy(false);
-      break;
-    case "cycle":
-      rule["cycle"] = g.pick([3, 4, 5, 10]);
-      rule["anchor"] = iso(2024, g.int(1, 12), g.int(1, 28));
-      rule["positions"] = g.some([1, 2, 3], 2);
-      break;
-    case "holiday":
-      rule["holiday"] = true;
-      filters(g, rule);
-      break;
-    default:
-      rule[shape] = true;
-      filters(g, rule);
-      if (g.chance(0.3)) rule["skipWeekdays"] = g.some([0, 6], 2);
-  }
-  if (g.chance(0.3)) rule["name"] = `r${g.int(1, 9)}`;
-  return effective(g, rule);
-}
-
-/** 祝日の規則を 1 つ、種別だけ変えて写す（覆う関係を作るため） */
-function variant(g: Gen, rules: Obj[]): Obj | undefined {
-  const holidayRules = rules.filter(
-    (r) => r["holiday"] === true || r["dayAfterHoliday"] === true || r["dayBeforeHoliday"] === true,
-  );
-  if (holidayRules.length === 0) return undefined;
-  const copy = { ...g.pick(holidayRules) };
-  copy["kinds"] = g.some(KINDS, 2);
-  return copy;
-}
-
+/** 規則の並び（目録から作る。test/support/catalog.ts。規則の形を足したら目録に足せば、ここでも試す） */
 function rules(g: Gen, newShapes: boolean, withHolidays: boolean, max: number): Obj[] {
-  const out: Obj[] = [];
-  const n = g.int(1, max);
-  for (let i = 0; i < n; i++) {
-    const v = withHolidays && g.chance(0.25) ? variant(g, out) : undefined;
-    out.push(v ?? makeRule(g, newShapes, withHolidays));
-  }
-  return out;
+  return randomRules(
+    picker(g.next),
+    { holidays: withHolidays, kinds: KINDS, keys: KEYS, year: 2024, newShapes },
+    max,
+  );
 }
 
 function providersOf(g: Gen): ProviderName[] {

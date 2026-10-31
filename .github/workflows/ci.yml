@@ -285,6 +285,22 @@ jobs:
             --base-label "${BASE_VERSION}" | tee -a "${GITHUB_STEP_SUMMARY}"
           test "${PIPESTATUS[0]}" -eq 0
 
+  oracle:
+    # 診断の総当たりのオラクル（test/diagnose-oracle.test.ts）を、すべての組み合わせで動かす（約 2.5 分）。
+    # pnpm check は決まった抜き出しだけを試す。完全性の報告（取り除けるのに何も出ない項目）を Job Summary に残す
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "26.13.0"
+      - run: pnpm test:oracle
+        env:
+          ORACLE_FULL: "1"
+
   result-compare:
     # 同じ設定の結果（カレンダー・スケジュール・診断）を、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 37 番）。
     # 改名の前の 0.22.2 とも、旧名の設定で比べる（改名は結果を変えないという約束を確かめるため。1.0.0 で外す）。

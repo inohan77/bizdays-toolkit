@@ -28,7 +28,8 @@ for (const tz of ZONES) {
       "test/**/*.test.ts",
     ],
     {
-      env: { ...process.env, TZ: tz },
+      // 暦日だけで決まるテスト（診断のオラクル）は、BIZDAYS_TZ_RUN を見て飛ばす（時間を抑えるため）
+      env: { ...process.env, TZ: tz, BIZDAYS_TZ_RUN: "1" },
       encoding: "utf8",
     },
   );

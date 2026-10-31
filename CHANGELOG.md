@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [0.30.4] - 2026-11-01
+
+品質基盤の整備の第 1 段（正解の定義）です。規則と設定の目録と、診断の総当たりのオラクルを入れました。オラクルで見つけた診断の文の誤りを 1 つ直しました（判定の結果は変わりません）。
+
+### Fixed
+
+- 診断: 第 n 営業日の規則と、毎週の曜日を開く繰り返しの規則がある設定で、`counting-basis` の文が「その曜日の規則は数を減らさない」と、閉じる規則のときの説明をしていた。開く規則のときは「その規則が開いた日は数えない」と説明する。メッセージは API ではないので、診断の `code`・`path` は変わらない（総当たりのオラクルで約束を確かめるときに見つけた。種類は文章の主張の未検証）
+
+### 開発
+
+- 規則と設定の目録 `test/support/catalog.ts` を置き、乱数のテスト（`test/properties.test.ts`・`test/diagnose-properties.test.ts`）と `scripts/result-compare.ts` の生成器を目録に切り替えた。`test/catalog.test.ts` が、目録を `etc/api.md` の公開の型（繰り返しの規則の形・設定のキー・選択肢の値）と突き合わせ、生成器が目録のすべての形・キー・値を作ることを確かめる（生成器の偏りの穴を塞ぐ。第 n 営業日の規則が生成器になく、誤った `redundant` を見逃した種類）
+- `test/properties.test.ts` のカレンダーに、目録の繰り返しの規則を入れた（これまでは繰り返しの規則のないカレンダーだけを試していた）。営業日のないカレンダーになった試行は、性質の前提を満たさないので飛ばす（1 割まで）
+- `test/diagnose-properties.test.ts` は、対応年の短い自作の提供元（`test/support/provider.ts`）で全日を比べる（400 日の抜き出しをやめた）
+- 診断の総当たりのオラクル `test/diagnose-oracle.test.ts` を入れた。目録の規則の形の代表と個別の日付・毎年の月日の 2 つまでの組み合わせで、出た項目を取り除いて全日の結果を比べ、`expired`・`no-business-day`・`counting-basis` の約束も確かめる。`pnpm check` は決まった抜き出し、CI の `oracle` ジョブはすべての組み合わせを試し、完全性（取り除けるのに何も出ない項目）を Job Summary に報告する。出た項目をまとめて取り除いても変わらない性質（0.31.0 の P1 の正解の定義）は、印を付けて用意した（`ORACLE_JOINT=1` で試せる）。0.30.2 に向けると、すべての組み合わせで第 n 営業日の誤った `redundant` を検出する（正解と突き合わせる仕組みの不在の穴を塞ぐ）
+- `scripts/test-tz.ts`: タイムゾーンを変えた実行では、オラクルを飛ばす（暦日だけで決まるので）
+- `RELEASING.md`: 品質の確認に目録とオラクルを足し、手元の確認は前の版のタグを読める状態で通すことを書いた
+- サイズ（gzip）: `./diagnose` 25,321 → 25,360（測定 25,360。上の Fixed の文の分）。上限は変えていない
+
 ## [0.30.3] - 2026-11-01
 
 診断の不具合を直すパッチ版です。あわせて、0.30.2 の後に main で整えた決定の文書・規約・CI を含みます。カレンダー・スケジュールの判定の結果は変わりません。
@@ -787,7 +805,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.3...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.4...HEAD
+[0.30.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.3...v0.30.4
 [0.30.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.2...v0.30.3
 [0.30.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.1...v0.30.2
 [0.30.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.0...v0.30.1

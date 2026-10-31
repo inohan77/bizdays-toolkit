@@ -694,8 +694,10 @@ function analyze<Value, Kind extends string>(
         c.info(
           "counting-basis",
           rule.path,
-          `The business days are counted without recurring rules, so the weekday rule ${weekly.path} does not reduce the count; ` +
-            "write regular closed weekdays as closedWeekdays if they should not be counted",
+          weekly.value === true
+            ? `The business days are counted without recurring rules, so the days opened by the weekday rule ${weekly.path} are not counted`
+            : `The business days are counted without recurring rules, so the weekday rule ${weekly.path} does not reduce the count; ` +
+                "write regular closed weekdays as closedWeekdays if they should not be counted",
           weekly.path,
         );
       }

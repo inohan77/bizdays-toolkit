@@ -1,6 +1,6 @@
 {
   "name": "bizdays-toolkit",
-  "version": "0.30.3",
+  "version": "0.30.4",
   "description": "Holidays, business-day calendar and day-by-day schedules (e.g. store hours) with time zone support. Japanese holidays verified against the Cabinet Office data; UK bank holidays (England, Wales, Scotland, Northern Ireland) verified against GOV.UK and The Gazette; French public holidays (metropole, Alsace-Moselle) verified against data.gouv.fr; Singapore public holidays verified against data.gov.sg. / 祝日と営業日のカレンダー（タイムゾーン対応・日本の祝日は内閣府、英国の bank holidays は GOV.UK と The Gazette、フランスの祝日は data.gouv.fr、シンガポールの祝日は data.gov.sg のデータで全日照合）",
   "keywords": [
     "bank-holidays",
@@ -71,6 +71,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --deny-warnings src scripts test",
     "test": "node --import ./scripts/strict-warnings.ts --test \"test/**/*.test.ts\"",
+    "test:oracle": "node --import ./scripts/strict-warnings.ts --test test/diagnose-oracle.test.ts",
     "test:tz": "node scripts/test-tz.ts",
     "test:compat": "node --test test/compat/esm.test.mjs test/compat/cjs.test.cjs",
     "bench": "node scripts/bench.ts",
