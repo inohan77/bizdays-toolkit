@@ -677,7 +677,7 @@ function checkReferences(): string[] {
   const decisions = readFileSync("docs/decisions.md", "utf8");
   const numbers = new Set([...decisions.matchAll(/^### (\d+)\. /gm)].map((m) => Number(m[1])));
   // 0.30.2 の後に番号を振り直した。CHANGELOG の 0.30.2 までの節は旧番号で書かれているので、
-  // 決定の文書の末尾の対応表の旧番号で確かめる（対応表と一緒に 1.0.0 で外す。decisions.md の 10 番）
+  // 決定の文書の末尾の対応表の旧番号で確かめる（対応表は残し続ける。decisions.md の冒頭）
   const oldTable =
     /^## 旧番号との対応[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(decisions)?.[1] ?? "";
   const oldNumbers = new Set(
