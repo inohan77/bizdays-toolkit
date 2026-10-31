@@ -1,6 +1,14 @@
 {
-  "$comment": "前の版との設定の結果の比較（scripts/result-compare.ts、decisions.md の 37 番）で許す、意図した差分。trait は scripts/result-compare.ts の traitsOf が付ける設定の特徴。前の版が affectedSince 以上・introducedIn 未満で、今回の版が introducedIn 以上のときだけ許す",
+  "$comment": "前の版との設定の結果の比較（scripts/result-compare.ts、decisions.md の 37 番）で許す、意図した差分。trait は scripts/result-compare.ts の traitsOf が付ける設定の特徴。removedCodes は、診断の差分を消えた結果のコードで絞る。前の版が affectedSince 以上・introducedIn 未満で、今回の版が introducedIn 以上のときだけ許す",
   "changes": [
+    {
+      "trait": "counting-rules-with-dates",
+      "targets": ["diagnose"],
+      "removedCodes": ["redundant"],
+      "introducedIn": "0.30.3",
+      "source": "CHANGELOG.md",
+      "summary": "第 n 営業日を数える規則がある設定で、数え方を変える個別の日付・毎年の月日を redundant としていた誤りを直す"
+    },
     {
       "trait": "kinds-national-in-union-with-jp",
       "targets": ["calendar", "combine", "schedule", "from-schedule", "diagnose"],

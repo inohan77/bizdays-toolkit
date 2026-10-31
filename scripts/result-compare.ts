@@ -9,7 +9,8 @@
  * 設定の名前: 前の版が改名の前（0.30.0 より前）なら旧名だけ、そうでなければ新しい名前と旧名の両方で書く。
  * 改名の前の版と比べるときは、返す値の改名（reason の "regular" → "default"）と設定の位置のキーの改名をそろえてから比べる。
  *
- * 意図した差分は etc/result-changes.json に、設定の特徴（trait）・入った版・出典を書いて許す。
+ * 意図した差分は etc/result-changes.json に、設定の特徴（trait）・入った版・出典を書いて許す。診断の差分は、消えた結果のコード
+ * （removedCodes）でも絞れる。
  * 許すのは、前の版がその変更より前（affectedSince 以上・introducedIn 未満）で、今回の版がその変更を含むときだけ。
  * 失敗にする条件: 許していない差分がある。
  *
@@ -183,6 +184,8 @@ interface Case {
   readonly options: Obj;
   readonly from: string;
   readonly to: string;
+  /** この版より前の版とは比べない（その版で入った形を使う固定の設定） */
+  readonly minBase?: string;
   /** 合成するときのもう 1 つのカレンダー */
   readonly partner?: Case;
   readonly combine?: "all" | "any";
@@ -378,6 +381,15 @@ function fixedCases(): Case[] {
       to,
     };
   };
+  /** 提供元のないカレンダー */
+  const cal0 = (id: string, options: Obj): Case => ({
+    id,
+    kind: "calendar",
+    providers: [],
+    options,
+    from: "2021-01-01",
+    to: "2026-12-31",
+  });
   return [
     // 和集合の旧名 "national" は、日本の提供元の毎年の祝日だけに当たる（ほかの提供元の "regular" には当たらない）
     cal("fixed-union-national", ["jp", "england"], {
@@ -396,6 +408,22 @@ function fixedCases(): Case[] {
     cal("fixed-jp-national-regular", ["jp"], {
       closedRecurringRules: [holiday(["national"]), holiday(["regular"])],
     }),
+    // 第 n 営業日を数える規則があると、数え方を変える個別の日付・毎年の月日は redundant にならない
+    cal0("fixed-counting-date", {
+      closedDates: ["2026-05-01"],
+      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
+    }),
+    cal0("fixed-counting-annual", {
+      closedAnnualDates: ["05-01"],
+      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
+    }),
+    {
+      ...cal0("fixed-counting-week", {
+        closedDates: ["2026-05-04"],
+        closedRecurringRules: [{ weekday: 1 }, { businessDayOfWeek: 1, weekStart: 1 }],
+      }),
+      minBase: "0.30.0",
+    },
   ];
 }
 
@@ -515,6 +543,8 @@ interface Diff {
   readonly target: string;
   readonly detail: string;
   readonly traits: readonly string[];
+  /** 診断の差分で、前の版にあって今回の版にない結果のコード */
+  readonly removedCodes?: readonly string[];
 }
 
 /** 祝日に従属する規則の形（同じ形の規則どうしを比べるため） */
@@ -532,6 +562,22 @@ function traitsOfOne(one: Case): string[] {
   const traits = new Set<string>();
   const hasJp = one.providers.includes("jp");
   const jpOnly = hasJp && one.providers.every((p) => p === "jp");
+  // 自分の設定を基準に第 n 営業日を数える規則と、数え方を変える個別の日付・毎年の月日を持つカレンダー
+  const counts = ["closedRecurringRules", "openRecurringRules"].some(
+    (key) =>
+      Array.isArray(one.options[key]) &&
+      (one.options[key] as Obj[]).some(
+        (r) => "businessDayOfMonth" in r || "businessDayOfWeek" in r,
+      ),
+  );
+  if (
+    one.kind === "calendar" &&
+    counts &&
+    ["closedDates", "openDates", "closedAnnualDates"].some(
+      (k) => Array.isArray(one.options[k]) && (one.options[k] as unknown[]).length > 0,
+    )
+  )
+    traits.add("counting-rules-with-dates");
   for (const key of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {
     const list = one.options[key];
     if (!Array.isArray(list)) continue;
@@ -671,8 +717,13 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
       if (bk !== hk) diffs.push({ ...meta("diagnose"), detail: `${String(bk)} → ${String(hk)}` });
     } else {
       const missing = [...bk].filter((k) => !hk.has(k));
-      if (missing.length > 0)
-        diffs.push({ ...meta("diagnose"), detail: `前の版の結果がない: ${missing.join(" ")}` });
+      if (missing.length > 0) {
+        diffs.push({
+          ...meta("diagnose"),
+          detail: `前の版の結果がない: ${missing.join(" ")}`,
+          removedCodes: missing.map((k) => String((JSON.parse(k) as unknown[])[1])),
+        });
+      }
     }
   }
   return diffs;
@@ -689,6 +740,8 @@ interface KnownChange {
   readonly introducedIn: string;
   readonly source: string;
   readonly summary: string;
+  /** 診断の差分を、前の版の結果が消えたもので、消えた結果のコードがすべてこの中にあるものだけに絞る */
+  readonly removedCodes?: readonly string[];
 }
 
 function knownChanges(): KnownChange[] {
@@ -708,6 +761,9 @@ const allowedBy = (known: readonly KnownChange[], d: Diff): KnownChange | undefi
     (k) =>
       d.traits.includes(k.trait) &&
       k.targets.includes(d.target) &&
+      (k.removedCodes === undefined ||
+        (d.removedCodes !== undefined &&
+          d.removedCodes.every((code) => k.removedCodes!.includes(code)))) &&
       cmp(baseVersion, k.introducedIn) < 0 &&
       (k.affectedSince === undefined || cmp(baseVersion, k.affectedSince) >= 0) &&
       cmp(headVersion, k.introducedIn) >= 0,
@@ -739,7 +795,9 @@ try {
 const g = new Gen(seed);
 const newShapes = !baseIsBeforeRename;
 const counts = { calendars: Math.round(240 * scale), schedules: Math.round(100 * scale) };
-const cases: Case[] = [...fixedCases()];
+const cases: Case[] = fixedCases().filter(
+  (c) => c.minBase === undefined || cmp(baseVersion, c.minBase) >= 0,
+);
 for (let i = 0; i < counts.calendars; i++) {
   const c = calendarCase(g, `calendar-${i}`, newShapes);
   if (g.chance(0.25)) {

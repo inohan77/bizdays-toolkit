@@ -54,32 +54,36 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
             weekday: pick([1, 3, 6]),
             ...(rand() < 0.6 ? { nth: pick([1, 2, -1, [4, 5], [1, 3]]) } : {}),
           }
-        : r < 0.8
+        : r < 0.72
           ? { dayOfMonth: pick([1, 7, 30, 31, -1, [1, 2, 3, 4, 5, 6, 7], [30, 31]]) }
-          : r < 0.86
-            ? {
-                dayAfterHoliday: true as const,
-                ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
-              }
-            : r < 0.9
-              ? {
-                  dayBeforeHoliday: true as const,
-                  ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
-                }
-              : {
-                  holiday: true as const,
-                  ...(rand() < 0.6
-                    ? {
-                        kinds: pick([
-                          ["regular"],
-                          ["substitute"],
-                          ["substitute", "citizens"],
-                          ["x"],
-                        ]),
-                      }
-                    : {}),
-                  ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
-                };
+          : r < 0.76
+            ? { businessDayOfMonth: pick([1, 2, -1, [1, -1]]) }
+            : r < 0.8
+              ? { businessDayOfWeek: pick([1, -1, [1, 2]]), weekStart: pick([0, 1]) }
+              : r < 0.86
+                ? {
+                    dayAfterHoliday: true as const,
+                    ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
+                  }
+                : r < 0.9
+                  ? {
+                      dayBeforeHoliday: true as const,
+                      ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
+                    }
+                  : {
+                      holiday: true as const,
+                      ...(rand() < 0.6
+                        ? {
+                            kinds: pick([
+                              ["regular"],
+                              ["substitute"],
+                              ["substitute", "citizens"],
+                              ["x"],
+                            ]),
+                          }
+                        : {}),
+                      ...(rand() < 0.4 ? { weekdays: pick([[1, 2, 3, 4, 5], [6], [0, 6]]) } : {}),
+                    };
     // 周期（nth とは併用できない。起点は曜日に合わせる）
     const interval =
       "weekday" in base && base.nth === undefined && rand() < 0.4
@@ -95,7 +99,9 @@ function randomOptions(rand: () => number, withHolidays: boolean): Options {
       // 祝日・祝日の翌日・祝前日の規則には holidayOverlapPolicy を付けられない
       ...("dayAfterHoliday" in base || "dayBeforeHoliday" in base || "holiday" in base
         ? {}
-        : { holidayOverlapPolicy: pick(["under-holiday", "over-holiday", "after-holiday"]) }),
+        : "businessDayOfMonth" in base || "businessDayOfWeek" in base
+          ? { holidayOverlapPolicy: pick(["under-holiday", "over-holiday"]) }
+          : { holidayOverlapPolicy: pick(["under-holiday", "over-holiday", "after-holiday"]) }),
       ...period(),
     };
   };
@@ -196,4 +202,43 @@ test("性質: 使われない・取り除いても変わらないと診断した
     withPeriod > 0,
     `有効期間のある規則にも診断が出ている: ${withPeriod} (interval: ${withInterval})`,
   );
+});
+
+test("性質: 第 n 営業日の規則がある設定でも、取り除いても変わらないと診断した項目は、取り除いても結果が変わらない", () => {
+  const rand = random(SEED + 2);
+  let checkedItems = 0;
+  for (let run = 0; run < RUNS; run++) {
+    // 日本の祝日を使うと診断に時間がかかるので、祝日なしの設定で試す（祝日ありは上の性質で試す）
+    const options = randomOptions(rand, false);
+    // 第 n 営業日の規則（月・週）を必ず入れ、個別の日付か毎年の月日も必ず入れる（数え方が変わる組み合わせ）
+    const counting = [
+      { businessDayOfMonth: [1, 2, -1][Math.floor(rand() * 3)]! },
+      { businessDayOfWeek: [1, -1][Math.floor(rand() * 2)]!, weekStart: Math.floor(rand() * 2) },
+    ][Math.floor(rand() * 2)]!;
+    const key = rand() < 0.5 ? "closedRecurringRules" : "openRecurringRules";
+    options[key] = [...(options[key] as unknown[]), counting];
+    // 個別の日付を、規則が当てはまりやすい月初・週の始まりの近くに 1 つ足す
+    options["closedDates"] = [
+      ...(options["closedDates"] as unknown[]),
+      addDays("2026-01-01", 30 * Math.floor(rand() * 12) + Math.floor(rand() * 7)),
+    ];
+    const describe = () =>
+      `seed=${SEED + 2} run=${run} ${JSON.stringify({ ...options, holidayProvider: options["holidayProvider"] ? "jp" : undefined })}`;
+    const original = createCalendar(options as CalendarOptions);
+    for (const d of diagnoseCalendar(options)) {
+      if (d.code !== "redundant" || !/^\w+\[\d+\]$/.test(d.path)) continue;
+      checkedItems++;
+      const reduced = createCalendar(remove(options, d.path) as CalendarOptions);
+      for (let i = 0; i < SAMPLES / 4; i++) {
+        const date = addDays("2025-11-01", Math.floor(rand() * 500));
+        assert.equal(
+          reduced.isBusinessDay(date),
+          original.isBusinessDay(date),
+          `${d.path} ${date}: ${describe()}`,
+        );
+      }
+    }
+  }
+  // 性質が空振りしていない（redundant が実際に出ている）ことも確かめる
+  assert.ok(checkedItems > 0, `checked: ${checkedItems}`);
 });

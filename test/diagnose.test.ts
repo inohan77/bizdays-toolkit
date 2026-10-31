@@ -625,3 +625,53 @@ test("shadowed・never-matches・redundant: 周期（interval）", () => {
     "隔週なら 2027-02-03（56 週後）が当てはまる",
   );
 });
+
+test("第 n 営業日の規則があると、数え方を変える個別の日付・毎年の月日は redundant にしない", () => {
+  const brief = (options: Parameters<typeof diagnoseCalendar>[0]) =>
+    diagnoseCalendar(options)
+      .filter((d) => d.code === "redundant" || d.code === "shadowed")
+      .map((d) => [d.code, d.path]);
+  // 個別の日付・毎年の月日を取り除くと、第 n 営業日がずれて同じ月・週の別の日が変わる（5 月 2 日・5 日など）
+  assert.deepEqual(
+    brief({
+      closedDates: ["2026-05-01"],
+      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
+    }),
+    [["redundant", "closedRecurringRules[0]"]],
+  );
+  assert.deepEqual(
+    brief({
+      closedAnnualDates: ["05-01"],
+      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
+    }),
+    [["redundant", "closedRecurringRules[0]"]],
+  );
+  assert.deepEqual(
+    brief({
+      closedDates: ["2026-05-04"],
+      closedRecurringRules: [{ weekday: 1 }, { businessDayOfWeek: 1, weekStart: 1 }],
+    }),
+    [["redundant", "closedRecurringRules[0]"]],
+  );
+  // 開く規則の第 n 営業日も、同じく数え方を使う
+  assert.deepEqual(
+    brief({
+      closedDates: ["2026-05-01"],
+      openRecurringRules: [{ businessDayOfMonth: 2 }],
+      closedRecurringRules: [{ dayOfMonth: [1, 2, 3, 4, 5] }],
+    }),
+    [],
+  );
+});
+
+test("スケジュールの第 n 営業日の規則は別のカレンダーで数えるので、個別の日付の redundant は変わらない", () => {
+  const calendar = createCalendar({ closedWeekdays: [0, 6] });
+  assert.deepEqual(
+    diagnoseSchedule({
+      weekdayValues: ["closed", "A", "A", "A", "A", "A", "closed"],
+      dates: [{ date: "2026-05-01", value: "B" }],
+      recurringRules: [{ businessDayOfMonth: 1, calendar, value: "B" }],
+    }).map((d) => [d.code, d.path]),
+    [["redundant", "dates[0]"]],
+  );
+});
