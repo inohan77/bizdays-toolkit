@@ -89,7 +89,7 @@
 | `RecurringValue`・`AnnualValue`・`AnnualRangeValue`・`DateValue`・`DateRangeValue`              | `ScheduleRecurringRule`・`ScheduleAnnualDate`・`ScheduleAnnualRange`・`ScheduleSpecificDate`・`ScheduleDateRange` |
 | `ScheduleDay`・`ScheduleReason`・`KnownScheduleReason`                                          | `ScheduleDayInfo`・`ScheduleDayReason`・`KnownScheduleDayReason`                                                  |
 
-旧名は `@deprecated` の別名として残り、新しい名前と同じ結果を返します。`DayInfo` などの返す項目は 0.30.x の間、新旧の両方を同じ値で持つので、`dayInfoOn` の結果を `deepEqual` で比べているテストは、期待値に `open` と、`rulePath` があれば `optionPath` を足し、`reason` が `"regular"` なら `"default"`（`createCalendarFromSchedule` のカレンダーでは `"open-weekday"`）に直す必要があります。
+旧名は `@deprecated` の別名として残り、新しい名前と同じ結果を返します。`DayInfo` などの返す項目は 1.0.0 より前の版では新旧の両方を同じ値で持つので、`dayInfoOn` の結果を `deepEqual` で比べているテストは、期待値に `open` と、`rulePath` があれば `optionPath` を足し、`reason` が `"regular"` なら `"default"`（`createCalendarFromSchedule` のカレンダーでは `"open-weekday"`）に直す必要があります。
 
 ### 引数の名前
 

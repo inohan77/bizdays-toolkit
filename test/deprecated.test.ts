@@ -1,4 +1,4 @@
-// 0.30.0 で改名した旧名（0.30.x の間だけ受け付ける）。1.0.0 では、旧名が invalid-option になることを確かめるテストに置き換える
+// 0.30.0 で改名した旧名（1.0.0 より前の版でだけ受け付ける）。1.0.0 では、旧名が invalid-option になることを確かめるテストに置き換える
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
