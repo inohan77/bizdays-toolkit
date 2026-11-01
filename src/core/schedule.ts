@@ -1612,7 +1612,7 @@ export function createBasis<Value, Kind extends string>(
   if (!compiled.recurring.some((r) => r.businessDays !== null && r.basis === null))
     return undefined;
   const resolve = createResolver({ ...compiled, recurring: [] }, lookup);
-  return basisFromPredicate((date) => resolve(date).day.value === true);
+  return basisFromPredicate((date) => resolve(date, false).day.value === true);
 }
 
 /** 規則の value を取り出す（value が必須の規則用） */
@@ -1852,7 +1852,8 @@ function checkNames(names: unknown): string | undefined {
 export function createHolidayLookup<Kind extends string>(
   source: HolidaySource<Kind>,
 ): HolidayLookup<Kind> & {
-  holidayOfDate(date: DateString): Holiday<Kind> | undefined;
+  /** allowUnconfirmed なら、未確定の祝日でも unconfirmedHolidayPolicy: "throw" で投げない（結果が祝日に依存しない判定） */
+  holidayOfDate(date: DateString, allowUnconfirmed?: boolean): Holiday<Kind> | undefined;
   fromJp: FromJp;
 } {
   const { providers, timeZone, outOfRangePolicy, unconfirmedHolidayPolicy } = source;
@@ -1887,11 +1888,16 @@ export function createHolidayLookup<Kind extends string>(
     return map;
   }
 
-  function holidayOfDate(date: DateString): Holiday<Kind> | undefined {
+  function holidayOfDate(date: DateString, allowUnconfirmed = false): Holiday<Kind> | undefined {
     if (providers.length === 0) return undefined;
     const h = holidayMap(parseDate(date).year).get(date);
     // 判定に使う祝日が未確定なら止める（holidaysInYear・holidaysBetween はこの経路を通らないので投げない）
-    if (h !== undefined && unconfirmedHolidayPolicy === "throw" && !h.confirmed) {
+    if (
+      h !== undefined &&
+      !allowUnconfirmed &&
+      unconfirmedHolidayPolicy === "throw" &&
+      !h.confirmed
+    ) {
       // どの提供元の予測かを添える（提供元の confirmedThrough は、利用者が再計算の時期を知る手がかり）
       const year = parseDate(date).year;
       const provider = providers.find(
@@ -2126,6 +2132,40 @@ export interface Resolution<Value, Kind extends string> {
 
 type HolidayLookupInternal<Kind extends string> = ReturnType<typeof createHolidayLookup<Kind>>;
 
+/** @internal 祝日に従属する規則か（祝日・祝日の翌日・祝前日。祝日を見て当てはまるかが決まる） */
+export const isHolidayBasedRule = (rule: {
+  readonly holiday?: boolean;
+  readonly dayAfterHoliday?: boolean;
+  readonly dayBeforeHoliday?: boolean;
+}): boolean =>
+  rule.holiday === true || rule.dayAfterHoliday === true || rule.dayBeforeHoliday === true;
+
+/**
+ * @internal 結果が祝日に依存しない設定か。祝日の扱いが "ignore" で、祝日に従属する規則（isHolidayBasedRule）も、
+ * 祝日に当たると振り替える規則（"after-holiday"）も、祝日の日だけ先に判定する規則（"over-holiday"）もないとき、
+ * 祝日の日と祝日でない日の判定は同じになる。判定（未確定の祝日で投げるか。createResolver）と、設定の診断
+ * （unconfirmedHolidayPolicy: "throw" が redundant か）の両方がこの関数を使う
+ */
+export function resultIgnoresHolidays(compiled: {
+  readonly holiday: unknown;
+  readonly recurring: readonly {
+    readonly holiday?: boolean;
+    readonly dayAfterHoliday?: boolean;
+    readonly dayBeforeHoliday?: boolean;
+    readonly holidayOverlapPolicy?: string;
+  }[];
+}): boolean {
+  return (
+    compiled.holiday === "ignore" &&
+    !compiled.recurring.some(
+      (r) =>
+        isHolidayBasedRule(r) ||
+        r.holidayOverlapPolicy === "after-holiday" ||
+        r.holidayOverlapPolicy === "over-holiday",
+    )
+  );
+}
+
 /**
  * @internal 検証済みの規則から、1 日分の値と値を決めた規則を返す関数を作る。
  * 規則の診断では、規則を取り除いた版と結果を比べるために、祝日を調べる機能（lookup）を共有して作る
@@ -2133,9 +2173,15 @@ type HolidayLookupInternal<Kind extends string> = ReturnType<typeof createHolida
 export function createResolver<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
   lookup: HolidayLookupInternal<Kind>,
-): (date: DateString) => Resolution<Value, Kind> {
+): (date: DateString, withHoliday?: boolean) => Resolution<Value, Kind> {
   const { weekly, holiday: holidayRule, annual, dates, recurring } = compiled;
   const hasShift = recurring.some((r) => r.holidayOverlapPolicy === "after-holiday");
+  /**
+   * 結果が祝日に依存しない設定なら、値だけを求める判定（営業日か・第 n 営業日の数え方・探索）は、未確定の祝日でも
+   * unconfirmedHolidayPolicy: "throw" で投げない（祝日の日と祝日でない日の判定が同じなので、結果に影響しない。
+   * 対応年の外・提供元のデータの誤りは、今までどおり投げる）。dayInfoOn などのその日の情報は holiday を付けるので投げる
+   */
+  const holidayUnused = resultIgnoresHolidays(compiled);
   const basis = createBasis(compiled, lookup);
 
   /**
@@ -2164,10 +2210,10 @@ export function createResolver<Value, Kind extends string>(
     return undefined;
   }
 
-  return function resolve(date: DateString): Resolution<Value, Kind> {
+  return function resolve(date: DateString, withHoliday = true): Resolution<Value, Kind> {
     const dayNumber = toDayNumber(date);
     const weekday = weekdayOf(date);
-    const holiday = lookup.holidayOfDate(date);
+    const holiday = lookup.holidayOfDate(date, holidayUnused && !withHoliday);
     const make = (
       value: Value,
       reason: KnownScheduleDayReason,
@@ -2292,7 +2338,8 @@ export function buildSchedule<Value, Kind extends string>(
     getHoliday: lookup.holidayOn,
     holidaysInYear: lookup.holidaysInYear,
     holidaysBetween: lookup.holidaysBetween,
-    valueOn: (input) => info(lookup.dateOf(input)).value,
+    // 値だけを求める判定は、結果が祝日に依存しない設定なら未確定の祝日で投げない（祝日は引くので、対応年の外は今までどおり投げる。createResolver）
+    valueOn: (input) => resolve(lookup.dateOf(input), false).day.value,
     dayInfoOn: (input) => info(lookup.dateOf(input)),
     dayInfo: (input) => info(lookup.dateOf(input)),
     daysBetween: (from, to) => mapDays(lookup.dateOf(from), lookup.dateOf(to), info),

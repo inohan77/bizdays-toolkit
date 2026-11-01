@@ -892,7 +892,8 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {
     throw rangeError("invalid-option", "searchDayLimit must be a positive integer");
   }
-  const open = (date: DateString): boolean => isOpen(info(date).value) === true;
+  // 値だけを求める判定（結果が祝日に依存しない設定なら未確定の祝日で投げない。祝日は引くので、対応年の外は今までどおり投げる）
+  const open = (date: DateString): boolean => isOpen(schedule.valueOn(date)) === true;
   return buildCalendar(
     schedule,
     open,

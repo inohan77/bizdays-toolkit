@@ -112,3 +112,10 @@ const jpWithNames = {
 };
 createCalendar({ holidayProvider: jpWithNames }).holidayOn("2026-01-01")?.names; // { "zh-Hant": "元日" }
 ```
+
+### 提供元の約束と誤りの扱い
+
+- `holidaysInYear` は、同じ年には毎回同じ結果を返してください（呼び出しの回数や時刻で結果や例外が変わらないこと）。この約束を守らない提供元（途中から投げる・結果が変わる）では、判定・診断の結果は決まりません
+- 返したデータの誤り（日付の書式の誤り・同じ日の重複・オブジェクトでない項目など）: その年を使う判定は `invalid-provider-data` の例外になります。作成時は使った年だけを調べます。合成したカレンダーも、どれかのカレンダーが投げるなら投げます（[ガイド](./guide.ja.md)の「未確定の祝日」の既知の不具合を除く）。設定の診断は対応年のすべての年を調べて、`error` の `invalid-provider-data` を返します
+- `holidaysInYear` が投げた例外: その年を使う判定・合成は、例外を包まずにそのまま投げます（`code` も提供元の例外のまま）。設定の診断は `error` の `invalid-provider-data` を返します（`message` は例外のメッセージ）
+- 未確定の祝日（`confirmed: false`）: 設定の診断は未確定の祝日を常にそのまま使って調べるので、`unconfirmedHolidayPolicy: "throw"` でも未確定の祝日を報告しません。判定で投げる日は `holidaysBetween` で列挙できます

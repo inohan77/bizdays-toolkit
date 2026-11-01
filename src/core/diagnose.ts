@@ -54,6 +54,8 @@ import {
   type HolidaySource,
   type RecurringRuleCompiled,
   type ScheduleOptions,
+  isHolidayBasedRule,
+  resultIgnoresHolidays,
 } from "./schedule.ts";
 import type { Holiday } from "./types.ts";
 
@@ -630,7 +632,7 @@ function analyze<Value, Kind extends string>(
         [...a.skipWeekdays].every((w) => b.skipWeekdays!.has(w));
   recurring.forEach((rule, j) => {
     const bits = recurringBits[j]!;
-    const holidayBased = rule.holiday || rule.dayAfterHoliday || rule.dayBeforeHoliday;
+    const holidayBased = isHolidayBasedRule(rule);
     const businessDayBased = rule.businessDays !== null;
     const matches = holidayBased
       ? holidayRuleMatches(rule)
@@ -967,8 +969,8 @@ function checkExpired<Value, Kind extends string>(
 }
 
 /**
- * 判定に祝日を使わない設定（提供元がない、または holidayPolicy: "ignore" で祝日に従属する規則もない）の
- * unconfirmedHolidayPolicy: "throw" は、結果に影響しないので redundant にする。dayInfoOn が holiday を付けるために祝日を引くので実行時には投げるが、
+ * 判定に祝日を使わない設定（提供元がない、または結果が祝日に依存しない設定。schedule.ts の resultIgnoresHolidays。
+ * 判定が未確定の祝日で投げるかも同じ関数で決める）の unconfirmedHolidayPolicy: "throw" は、結果に影響しないので redundant にする。dayInfoOn が holiday を付けるために祝日を引くので実行時には投げるが、
  * 投げても結果が変わらない設定であることを知らせる
  */
 function checkUnconfirmedOption<Value, Kind extends string>(
@@ -977,22 +979,14 @@ function checkUnconfirmedOption<Value, Kind extends string>(
 ): void {
   if (compiled.source.unconfirmedHolidayPolicy !== "throw") return;
   const noProvider = compiled.source.providers.length === 0;
-  const holidayUnused =
-    compiled.holiday === "ignore" &&
-    !compiled.recurring.some(
-      (r) =>
-        r.holiday ||
-        r.dayAfterHoliday ||
-        r.dayBeforeHoliday ||
-        r.holidayOverlapPolicy === "after-holiday",
-    );
+  const holidayUnused = resultIgnoresHolidays(compiled);
   if (!noProvider && !holidayUnused) return;
   c.info(
     "redundant",
     "unconfirmedHolidayPolicy",
     noProvider
       ? 'unconfirmedHolidayPolicy: "throw" has no effect: there is no holiday provider'
-      : `unconfirmedHolidayPolicy: "throw" has no effect on results: holidays are not used (holidayPolicy: "ignore" and no holiday-based rule); dayInfoOn still throws when it looks up the holiday to report`,
+      : `unconfirmedHolidayPolicy: "throw" has no effect on results: holidays are not used (holidayPolicy: "ignore" and no holiday-based, "after-holiday" or "over-holiday" rule); dayInfoOn still throws when it looks up the holiday to report`,
   );
 }
 

@@ -54,10 +54,11 @@ interface Configs {
 }
 type Obj = Record<string, unknown>;
 
-function configsFor(name: string, used: Set<PropertyConfigKind>): Configs {
+function configsFor(name: string, used: Set<PropertyConfigKind>, made: { count: number }): Configs {
   const g = propertyGen(random(propertyConfigSeed(SEED, name)));
   const make = (kind: PropertyConfigKind) => {
     used.add(kind);
+    made.count++;
     return propertyConfig(kind, g);
   };
   return {
@@ -82,13 +83,18 @@ test("飛ばした試行の上限: 件数が上限以下なら件数の行を返
   assert.throws(() => checkSkipped(1, 300, 0, "理由"), /上限（0）を超えた/);
 });
 
+/** 登録した性質の名前（PROPERTY_CONFIGS に古い名前が残っていないかを、ファイルの最後のテストで確かめる） */
+const declared = new Set<string>();
+
 /** 性質を RUNS 回確かめる。失敗したら種・試行・入力を出す */
 function property(name: string, check: (g: Gen, c: Configs) => string | void): void {
+  declared.add(name);
   test(`性質: ${name}`, () => {
     // 日付などを引く乱数と、設定を作る乱数（性質の名前から決まる種）を分ける
     const g = propertyGen(random(SEED));
     const used = new Set<PropertyConfigKind>();
-    const c = configsFor(name, used);
+    const made = { count: 0 };
+    const c = configsFor(name, used, made);
     let skipped = 0;
     for (let run = 0; run < RUNS; run++) {
       let context = "";
@@ -118,6 +124,13 @@ function property(name: string, check: (g: Gen, c: Configs) => string | void): v
       PROPERTY_CONFIGS[name] === undefined ? [] : [PROPERTY_CONFIGS[name]],
       `性質「${name}」の設定の作り方が test/support/sites.ts の PROPERTY_CONFIGS と違う`,
     );
+    // 設定を作る性質は、1 回の試行で 1 回だけ作る（生成範囲の検査は、試行の数だけ作ると数えている）
+    if (used.size > 0)
+      assert.equal(
+        made.count,
+        RUNS,
+        `性質「${name}」が作った設定の数が試行の数（${RUNS}）と違う: ${made.count}`,
+      );
   });
 }
 
@@ -351,4 +364,12 @@ property("closingMonth は、日付が進むと同じか後の月になり、締
   const b = g.int(-30, 30);
   assert.equal(monthOf(monthOf(date, a), b), monthOf(date, a + b), `${context} a=${a} b=${b}`);
   return context;
+});
+
+test("PROPERTY_CONFIGS の名前は、すべて実際の性質（古い名前が残っていない）", () => {
+  assert.deepEqual(
+    Object.keys(PROPERTY_CONFIGS).filter((name) => !declared.has(name)),
+    [],
+    "test/support/sites.ts の PROPERTY_CONFIGS に、test/properties.test.ts にない性質の名前がある",
+  );
 });

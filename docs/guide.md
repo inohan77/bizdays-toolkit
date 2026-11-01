@@ -742,8 +742,8 @@ try {
 }
 ```
 
-- It matters only when the results depend on holidays. With `holidayPolicy: "ignore"` (in a calendar or a schedule) and no holiday-based rule (`holiday`, `dayAfterHoliday`, `dayBeforeHoliday`, `"after-holiday"`), the results do not change, but `dayInfoOn` still looks up the holiday it reports and throws. Option diagnostics flag such options as `redundant`
-- Combined calendars throw if any of their calendars throws; a calendar made from a schedule follows the schedule
+- It matters only when the results depend on holidays. With `holidayPolicy: "ignore"` (in a calendar or a schedule), no holiday-based rule (`holiday`, `dayAfterHoliday`, `dayBeforeHoliday`, `"after-holiday"`) and no rule judged on top of holidays (`"over-holiday"`), the results do not depend on holidays, so business-day checks, counting the nth business day and searches (`isBusinessDay`, `valueOn`, `addBusinessDays` and so on) do not throw (up to 0.30.5 they did). `dayInfoOn` and `daysBetween` still look up the holiday they report and throw. Option diagnostics flag such options as `redundant`
+- Combined calendars throw if any of their calendars throws; a calendar made from a schedule follows the schedule. **Known bug** (to be fixed in 0.31.0): business-day checks (`isBusinessDay` and searches) stop as soon as the result is decided, at the first closed calendar with `open: "all"` or the first open one with `open: "any"`, so they may not throw on a day when a later calendar would (it depends on the order). `dayInfoOn` evaluates every calendar
 - The option catches holidays that are predicted, not holidays that are unknown: a one-off UK bank holiday announced later is absent from the predictions, and Singapore has no predictions at all (later years are `out-of-range`)
 
 ## Errors

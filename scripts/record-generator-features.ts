@@ -75,8 +75,24 @@ if (check === update || (givenRef === undefined) === !worktree || (update && wor
   console.error(usage);
   process.exit(2);
 }
-/** 呼び出し側を読む版（作業ツリーなら "worktree"） */
-const ref = worktree ? "worktree" : givenRef!;
+// 参照は最初に確かめる（存在しない参照で git show などのエラーのまま止まらず、何を指せばよいかを案内する）
+if (givenRef !== undefined) {
+  const found = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${givenRef}^{commit}`], {
+    cwd: resolve("."),
+    encoding: "utf8",
+  });
+  if (found.status !== 0) {
+    console.error(
+      `--ref ${givenRef}: not a commit in this repository (use a tag such as v0.30.4, or --worktree for the working tree)`,
+    );
+    console.error(usage);
+    process.exit(2);
+  }
+}
+/** 呼び出し側を読む git の参照（作業ツリーのときは使わない。作業ツリーは真偽値 worktree で持ち、"worktree" という名前の参照と取り違えない） */
+const ref = givenRef ?? "";
+/** 報告に出す名前 */
+const label = worktree ? "作業ツリー" : ref;
 // 記録は基準の版（v0.30.3）からだけ作る。今の版から作ると、包含の検査が今の生成器と自分自身の比較になって意味を失う
 if (update && ref !== RECORD_REF) {
   console.error(`--update records only from ${RECORD_REF} (the baseline), not from ${ref}`);
@@ -110,14 +126,13 @@ try {
     "test/properties.test.ts",
     "test/diagnose-properties.test.ts",
   ];
-  const support =
-    ref === "worktree"
-      ? ["test/support"]
-      : git("ls-tree", "-r", "--name-only", ref, "test/support").split("\n").filter(Boolean);
+  const support = worktree
+    ? ["test/support"]
+    : git("ls-tree", "-r", "--name-only", ref, "test/support").split("\n").filter(Boolean);
   for (const file of [...files, ...support]) {
     const dest = join(work, file);
     mkdirSync(dirname(dest), { recursive: true });
-    if (ref === "worktree") cpSync(join(repo, file), dest, { recursive: true });
+    if (worktree) cpSync(join(repo, file), dest, { recursive: true });
     else writeFileSync(dest, git("show", `${ref}:${file}`));
   }
   const version = (
@@ -308,7 +323,7 @@ registerHooks({
     } else {
       const missing = missingFeatures(recorded, record);
       const total = Object.values(missing).reduce((n, list) => n + list.length, 0);
-      console.log(`## ${ref}（${version}）の呼び出し側と、v0.30.3 の記録の比較\n`);
+      console.log(`## ${label}（${version}）の呼び出し側と、v0.30.3 の記録の比較\n`);
       for (const [site, list] of Object.entries(missing))
         console.log(
           `- ${site}: 拾えた特徴 ${record[site]?.length ?? 0} 件、落ちた特徴 ${list.length} 件` +

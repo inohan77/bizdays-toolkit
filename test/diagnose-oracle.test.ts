@@ -7,7 +7,8 @@
  * - 判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。docs/decisions.md の 31 番）
  * - pnpm check では決まった抜き出しだけを試す。すべての組み合わせは ORACLE_FULL=1 で（CI の oracle ジョブ。時間の決まりと
  *   行列の分け方は RELEASING.md の「品質の確認」）
- * - 判定は暦日でタイムゾーンに依存しないので、タイムゾーンを変えた実行（scripts/test-tz.ts）では飛ばす
+ * - 判定は暦日でタイムゾーンに依存しないので、タイムゾーンを変えた実行（scripts/test-tz.ts）では総当たりを飛ばす
+ *   （カナリアの 2 件は 1 つの設定だけで費用が小さいので、そこでも動かす）
  * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別の版（公開済みの版など）を試せる。ORACLE_SHARD=k/n で、
  *   全件の組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。ORACLE_FULL=1 と組み合わせたときだけ。
  *   書式の誤り・k >= n・ORACLE_FULL なしは例外）
@@ -376,6 +377,14 @@ test("オラクル: カナリアが取り除けるのは、開く規則が祝日
       CANARY.list[1]!,
     ],
   };
+  // 開く規則を実際に取り除くと、全日の結果が元の設定と変わる（その祝日が閉じに戻る）
+  const removed = [overHoliday.list[1]!];
+  const before = snapshot(build(overHoliday.list, overHoliday.policy, overHoliday.weekdays), false);
+  const after = snapshot(build(removed, overHoliday.policy, overHoliday.weekdays), false);
+  assert.ok(
+    !same(after, before),
+    `"over-holiday" の開く規則を取り除いても結果が変わらない（カナリアの理由が違う）: ${describeConfig(overHoliday.list, overHoliday.policy, overHoliday.weekdays, "openRecurringRules[0]")}`,
+  );
   const report = run(checkRemovals, [overHoliday]);
   assert.equal(report.configs, 1);
   assert.deepEqual(
