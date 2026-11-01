@@ -323,7 +323,7 @@ jobs:
           node-version: "26.13.0"
       - name: Check the generators of the callers against the record
         run: |
-          node scripts/record-generator-features.ts --ref HEAD --check | tee -a "${GITHUB_STEP_SUMMARY}"
+          node scripts/record-generator-features.ts --worktree --check | tee -a "${GITHUB_STEP_SUMMARY}"
           test "${PIPESTATUS[0]}" -eq 0
 
   result-compare:

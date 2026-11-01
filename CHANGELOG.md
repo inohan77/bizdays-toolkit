@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [0.30.6] - 2026-11-01
+
+テスト拡充案の第 2 段です。公開物の `.js` は 0.30.5 と同じです。
+
+### 開発
+
+- 診断のオラクル: カナリア（完全性の報告に必ず出る設定）が取り除ける理由を確かめた。開く規則「5・7 月の月曜」が開きうる祝日（自作の提供元の 5・7 月の月曜の祝日）を、`holidayOverlapPolicy` の既定（`"under-holiday"`）では開かないため。`"over-holiday"` にすると取り除けなくなることを確かめるテストを足し、コメントの理由を直した（コメントの主張を確かめていなかった穴。種類 C）
+- 診断のオラクル: `ORACLE_FULL` なしの `ORACLE_SHARD` を例外にした（`pnpm check` の抜き出しの間隔 111 と分ける数の公約数で、分が 0 件になっていた）。どのテストも、試した設定が 0 件なら失敗にする。失敗のメッセージを 1 つの関数にまとめ、設定を作り直せる情報（項目・休業日の扱いの方針・定休日・取り除いた項目）を入れた（黙って空振りする穴。種類 C）
+- 生成範囲: 危険の分かっている組み合わせ（第 n 営業日（月・週）× 個別の日付、第 n 営業日（月）× 毎年の月日、祝日の規則 × 臨時営業日、祝日の翌日・前日 × `skipWeekdays` × 個別の日付、和集合の提供元 × `kinds`）の一覧（`test/support/combinations.ts`）を作り、呼び出し側ごとに 1 回以上作ることを確かめる（作れない組み合わせは事実の理由を付けて除く）。個々の特徴の包含だけでは組み合わせを守れなかった（生成器の偏りの穴。種類 A）
+- 生成範囲: `test/properties.test.ts` の性質は、設定を作る乱数（性質の名前から決まる種の列）と、日付などを引く乱数を分けた。性質と設定の作り方の対応は `test/support/sites.ts` の `PROPERTY_CONFIGS` に書き、性質が実際に使った作り方と同じかを確かめる。これで生成範囲の包含のテストが properties の設定を並びまで再現し、テストとスクリプトの特徴が一致する（どちらも 414 件。0.30.5 は近似でテスト 408 件・スクリプト 413 件）（種類 A）
+- `scripts/record-generator-features.ts`: 作業ツリーは `--worktree` で指すようにした。`--ref HEAD`（git ではコミットを指す名前）は、`--worktree` を案内する使い方の誤りにした。CI の `generator-features` ジョブも `--worktree --check` にした
+- `RELEASING.md`: オラクルと生成範囲の行を実装と 1 文ずつ突き合わせ、消えていた「タイムゾーンを変えた実行では、オラクルと日本の全範囲の走査を飛ばす」を戻し、組み合わせの一覧の検査・カナリアの理由の確認・0 件の検査・`ORACLE_SHARD` の条件・CI の実測の時間を書いた
+
 ## [0.30.5] - 2026-11-01
 
 0.30.4 の品質基盤の補修です。公開物の `.js` は 0.30.4 と同じです。0.30.4 で、品質基盤が「動いているように見えて、実は見ていない」箇所と、乱数のテストの生成範囲が縮んだ箇所が見つかったので、それだけを直しました。テスト拡充案の段の番号を 1 つずつずらし、第 2 段は 0.30.6、第 3 段は 0.30.7 で出します。
@@ -826,7 +839,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.5...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.6...HEAD
+[0.30.6]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.5...v0.30.6
 [0.30.5]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.4...v0.30.5
 [0.30.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.3...v0.30.4
 [0.30.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.2...v0.30.3

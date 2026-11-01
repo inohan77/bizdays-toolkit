@@ -23,13 +23,12 @@ import { random } from "./support/catalog.ts";
 import { intEnv } from "./support/env.ts";
 import {
   PROPERTY,
+  PROPERTY_CONFIGS,
   checkSkipped,
-  propertyCalendarOptions,
+  propertyConfig,
+  propertyConfigSeed,
   propertyGen,
-  propertyMoveOptions,
-  propertyPairOptions,
-  propertyShiftOptions,
-  propertyWeeklyOptions,
+  type PropertyConfigKind,
   type PropertyGen as Gen,
 } from "./support/sites.ts";
 
@@ -41,12 +40,38 @@ const RUNS = PROPERTY.runs;
  */
 const SKIP_LIMIT = RUNS / 10;
 
-/** 乱数で営業日カレンダーを作る（設定の作り方は test/support/sites.ts） */
-function randomCalendar(g: Gen): { calendar: Calendar; describe: string } {
-  const options = { holidayProvider: jp, ...propertyCalendarOptions(g) };
+/**
+ * 性質の設定を作る道具。設定は、性質の名前から決まる種の乱数の列で作り、日付などを引く乱数（g）とは分ける。
+ * 使った作り方を覚えておき、test/support/sites.ts の PROPERTY_CONFIGS と同じかを確かめる
+ * （生成範囲の包含の検査が、性質と同じ設定を同じ並びで作るため）
+ */
+interface Configs {
+  calendar(): { calendar: Calendar; describe: string };
+  weekly(): { calendar: Obj; schedule: Obj };
+  shift(): Obj;
+  move(): Obj;
+  pair(): { calendar: Obj; schedule: Obj };
+}
+type Obj = Record<string, unknown>;
+
+function configsFor(name: string, used: Set<PropertyConfigKind>): Configs {
+  const g = propertyGen(random(propertyConfigSeed(SEED, name)));
+  const make = (kind: PropertyConfigKind) => {
+    used.add(kind);
+    return propertyConfig(kind, g);
+  };
   return {
-    calendar: createCalendar(options as CalendarOptions),
-    describe: JSON.stringify({ ...options, holidayProvider: "jp" }),
+    calendar: () => {
+      const options = { holidayProvider: jp, ...make("calendar").calendar };
+      return {
+        calendar: createCalendar(options as CalendarOptions),
+        describe: JSON.stringify({ ...options, holidayProvider: "jp" }),
+      };
+    },
+    weekly: () => make("weekly") as { calendar: Obj; schedule: Obj },
+    shift: () => make("shift").calendar,
+    move: () => make("move").calendar,
+    pair: () => make("pair") as { calendar: Obj; schedule: Obj },
   };
 }
 
@@ -58,14 +83,17 @@ test("飛ばした試行の上限: 件数が上限以下なら件数の行を返
 });
 
 /** 性質を RUNS 回確かめる。失敗したら種・試行・入力を出す */
-function property(name: string, check: (g: Gen) => string | void): void {
+function property(name: string, check: (g: Gen, c: Configs) => string | void): void {
   test(`性質: ${name}`, () => {
+    // 日付などを引く乱数と、設定を作る乱数（性質の名前から決まる種）を分ける
     const g = propertyGen(random(SEED));
+    const used = new Set<PropertyConfigKind>();
+    const c = configsFor(name, used);
     let skipped = 0;
     for (let run = 0; run < RUNS; run++) {
       let context = "";
       try {
-        context = check(g) ?? "";
+        context = check(g, c) ?? "";
       } catch (error) {
         // 目録の規則で、営業日が（ほとんど）ないカレンダーもできる。その試行は性質の前提を満たさないので数えずに飛ばす
         if ((error as { code?: unknown } | null)?.code === "no-business-day") {
@@ -84,11 +112,17 @@ function property(name: string, check: (g: Gen) => string | void): void {
       assert.fail((error as Error).message);
     }
     console.log(`# ${name}: ${line}`);
+    // 使った設定の作り方が、生成範囲の包含の検査の一覧（PROPERTY_CONFIGS）と同じ
+    assert.deepEqual(
+      [...used],
+      PROPERTY_CONFIGS[name] === undefined ? [] : [PROPERTY_CONFIGS[name]],
+      `性質「${name}」の設定の作り方が test/support/sites.ts の PROPERTY_CONFIGS と違う`,
+    );
   });
 }
 
-property("addBusinessDays の結果は営業日で、n 進めて −n 戻ると元の営業日に戻る", (g) => {
-  const { calendar, describe } = randomCalendar(g);
+property("addBusinessDays の結果は営業日で、n 進めて −n 戻ると元の営業日に戻る", (g, c) => {
+  const { calendar, describe } = c.calendar();
   const start = calendar.businessDayOnOrAfter(g.date());
   const n = g.int(1, 40);
   const forward = calendar.addBusinessDays(start, n);
@@ -102,8 +136,8 @@ property("addBusinessDays の結果は営業日で、n 進めて −n 戻ると�
 
 property(
   "休業日を起点にした addBusinessDays は、翌営業日を 1 と数える（diffBusinessDays は起点が営業日のときだけ逆算になる）",
-  (g) => {
-    const { calendar, describe } = randomCalendar(g);
+  (g, c) => {
+    const { calendar, describe } = c.calendar();
     const day = g.date();
     if (calendar.isBusinessDay(day)) return `${describe} ${day} は営業日（対象外）`;
     const n = g.int(1, 20);
@@ -124,8 +158,8 @@ property(
   },
 );
 
-property("nextBusinessDay との間に営業日はなく、previousBusinessDay で戻る", (g) => {
-  const { calendar, describe } = randomCalendar(g);
+property("nextBusinessDay との間に営業日はなく、previousBusinessDay で戻る", (g, c) => {
+  const { calendar, describe } = c.calendar();
   const day = g.date();
   const next = calendar.nextBusinessDay(day);
   const context = `${describe} day=${day} next=${next}`;
@@ -140,8 +174,8 @@ property("nextBusinessDay との間に営業日はなく、previousBusinessDay �
   return context;
 });
 
-property("businessDatesBetween の件数は diffBusinessDays と一致する", (g) => {
-  const { calendar, describe } = randomCalendar(g);
+property("businessDatesBetween の件数は diffBusinessDays と一致する", (g, c) => {
+  const { calendar, describe } = c.calendar();
   const from = g.date();
   const to = addDays(from, g.int(0, 120));
   const context = `${describe} from=${from} to=${to}`;
@@ -153,8 +187,8 @@ property("businessDatesBetween の件数は diffBusinessDays と一致する", (
   return context;
 });
 
-property("営業日カレンダーと、同じ規則の真偽値のスケジュールは一致する", (g) => {
-  const { calendar: c, schedule: s } = propertyWeeklyOptions(g);
+property("営業日カレンダーと、同じ規則の真偽値のスケジュールは一致する", (g, configs) => {
+  const { calendar: c, schedule: s } = configs.weekly();
   const calendar = createCalendar({ holidayProvider: jp, ...c } as CalendarOptions);
   const schedule = createSchedule({ holidayProvider: jp, ...s } as ScheduleOptions<boolean>);
   const day = g.date();
@@ -178,8 +212,8 @@ property("瞬間の入力は、カレンダーのタイムゾーンで暦日に�
 // 繰り返しの規則と振替
 // ------------------------------------------------------------
 
-property("振替先は振替元より後の祝日でない日で、その間はすべて祝日", (g) => {
-  const options = propertyShiftOptions(g);
+property("振替先は振替元より後の祝日でない日で、その間はすべて祝日", (g, c) => {
+  const options = c.shift();
   const calendar = createCalendar({ holidayProvider: jp, ...options } as CalendarOptions);
   const day = g.date();
   const info = calendar.dayInfoOn(day);
@@ -195,8 +229,8 @@ property("振替先は振替元より後の祝日でない日で、その間は�
   return context;
 });
 
-property("繰り返しの規則があっても、営業日の移動と数え上げの性質は保たれる", (g) => {
-  const options = propertyMoveOptions(g);
+property("繰り返しの規則があっても、営業日の移動と数え上げの性質は保たれる", (g, c) => {
+  const options = c.move();
   const calendar = createCalendar({ holidayProvider: jp, ...options } as CalendarOptions);
   const start = calendar.businessDayOnOrAfter(g.date());
   const n = g.int(1, 30);
@@ -208,8 +242,8 @@ property("繰り返しの規則があっても、営業日の移動と数え上�
   return context;
 });
 
-property("繰り返しの規則でも、営業日カレンダーと真偽値のスケジュールは一致する", (g) => {
-  const { calendar: c, schedule: s } = propertyPairOptions(g);
+property("繰り返しの規則でも、営業日カレンダーと真偽値のスケジュールは一致する", (g, configs) => {
+  const { calendar: c, schedule: s } = configs.pair();
   const calendar = createCalendar({ holidayProvider: jp, ...c } as CalendarOptions);
   const schedule = createSchedule({ holidayProvider: jp, ...s } as ScheduleOptions<boolean>);
   const day = g.date();
@@ -225,8 +259,8 @@ property("繰り返しの規則でも、営業日カレンダーと真偽値の�
 
 const CONVENTIONS = ["following", "preceding", "modified-following", "modified-preceding"] as const;
 
-property("adjust の結果は営業日で、方法ごとの定義どおり。もう一度調整しても変わらない", (g) => {
-  const { calendar, describe } = randomCalendar(g);
+property("adjust の結果は営業日で、方法ごとの定義どおり。もう一度調整しても変わらない", (g, c) => {
+  const { calendar, describe } = c.calendar();
   const day = g.date();
   const month = day.slice(0, 7);
   const following = calendar.businessDayOnOrAfter(day);
@@ -260,8 +294,8 @@ property("adjust の結果は営業日で、方法ごとの定義どおり。も
   return context;
 });
 
-property("月の第 n 営業日は、その月の営業日の一覧の n 番目（負なら後ろから）", (g) => {
-  const { calendar, describe } = randomCalendar(g);
+property("月の第 n 営業日は、その月の営業日の一覧の n 番目（負なら後ろから）", (g, c) => {
+  const { calendar, describe } = c.calendar();
   const month = g.date().slice(0, 7);
   const last = addDays(monthOf(month, 1) + "-01", -1);
   const days = calendar.businessDatesBetween(`${month}-01`, last);
@@ -281,8 +315,8 @@ property("月の第 n 営業日は、その月の営業日の一覧の n 番目�
   return context;
 });
 
-property("dueDate は、末日に読み替えた日付を adjust したもの", (g) => {
-  const { calendar, describe } = randomCalendar(g);
+property("dueDate は、末日に読み替えた日付を adjust したもの", (g, c) => {
+  const { calendar, describe } = c.calendar();
   const month = g.date().slice(0, 7);
   const day = g.pick([1, 10, 15, 20, 25, 28, 29, 30, 31, -1] as const);
   const convention = g.pick(CONVENTIONS);

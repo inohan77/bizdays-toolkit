@@ -18,10 +18,10 @@ import "./strict-warnings.ts";
  * 使い方:
  *   node scripts/record-generator-features.ts --update --ref v0.30.3  # v0.30.3 を記録して test/fixtures/generator-features-0.30.3/ に書く
  *   node scripts/record-generator-features.ts --ref v0.30.4 --check   # v0.30.4 の呼び出し側が記録の特徴を作るかを確かめる
- *   node scripts/record-generator-features.ts --ref HEAD --check      # 作業ツリーの呼び出し側で同じことを確かめる（CI の generator-features ジョブ）
+ *   node scripts/record-generator-features.ts --worktree --check      # 作業ツリーの呼び出し側で同じことを確かめる（CI の generator-features ジョブ）
  * --check は、記録との差を test/generator-features.test.ts と同じ関数（test/support/features-compare.ts の missingFeatures）で比べ、
  * 落ちた特徴があれば終了コード 1。呼び出し側ごとに拾えた特徴が記録の半分に満たなければ、比べる前に失敗にする
- * （呼び出し側が関数の呼び方を変えて、差し替えた部品が何も拾わないまま合格するのを防ぐ）。--ref HEAD は作業ツリーのファイルを使う。
+ * （呼び出し側が関数の呼び方を変えて、差し替えた部品が何も拾わないまま合格するのを防ぐ）。--worktree は作業ツリーのファイル（コミットしていない変更を含む）を使う。--ref HEAD は使い方の誤り（git の HEAD はコミットを指すため）。
  * 記録はコミットしておき、作り直す（--update）のは比べ方（特徴の取り出し方。test/support/features.ts）を変えたときだけにする
  * （RELEASING.md の「品質の確認」）。
  * --update は --ref v0.30.3 でだけ動く（今の版から作ると、包含の検査が自分自身との比較になるため）。
@@ -57,15 +57,26 @@ const argValue = (name: string): string | undefined => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const ref = argValue("--ref");
+const worktree = args.includes("--worktree");
 const check = args.includes("--check");
 const update = args.includes("--update");
-if (check === update || ref === undefined) {
+const usage =
+  "usage: node scripts/record-generator-features.ts (--update --ref v0.30.3 | --check (--ref <git ref> | --worktree)) [--out <dir>]";
+// HEAD は git ではコミットを指すので、作業ツリーを指す名前には使わない（取り違えを防ぐため、黙って読み替えずに案内する）
+if (argValue("--ref") === "HEAD") {
   console.error(
-    "usage: node scripts/record-generator-features.ts (--update --ref v0.30.3 | --check --ref <git ref | HEAD>) [--out <dir>]",
+    "--ref HEAD is not accepted: use --worktree to check the working tree (uncommitted files included)",
   );
+  console.error(usage);
   process.exit(2);
 }
+const givenRef = argValue("--ref");
+if (check === update || (givenRef === undefined) === !worktree || (update && worktree)) {
+  console.error(usage);
+  process.exit(2);
+}
+/** 呼び出し側を読む版（作業ツリーなら "worktree"） */
+const ref = worktree ? "worktree" : givenRef!;
 // 記録は基準の版（v0.30.3）からだけ作る。今の版から作ると、包含の検査が今の生成器と自分自身の比較になって意味を失う
 if (update && ref !== RECORD_REF) {
   console.error(`--update records only from ${RECORD_REF} (the baseline), not from ${ref}`);
@@ -100,13 +111,13 @@ try {
     "test/diagnose-properties.test.ts",
   ];
   const support =
-    ref === "HEAD"
+    ref === "worktree"
       ? ["test/support"]
       : git("ls-tree", "-r", "--name-only", ref, "test/support").split("\n").filter(Boolean);
   for (const file of [...files, ...support]) {
     const dest = join(work, file);
     mkdirSync(dirname(dest), { recursive: true });
-    if (ref === "HEAD") cpSync(join(repo, file), dest, { recursive: true });
+    if (ref === "worktree") cpSync(join(repo, file), dest, { recursive: true });
     else writeFileSync(dest, git("show", `${ref}:${file}`));
   }
   const version = (

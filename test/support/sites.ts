@@ -1,7 +1,7 @@
 // 乱数のテストの呼び出し側（test/properties.test.ts・test/diagnose-properties.test.ts）が使う設定の作り方と、
 // 3 つの呼び出し側（result-compare を含む）が作る設定の一覧。呼び出し側はここの関数で設定を作り、
 // 生成範囲の包含の検査（test/generator-features.test.ts）は、同じ関数を同じ種と試行の数で呼んで特徴を数える
-// （properties は性質の中で日付なども同じ乱数から引くので、siteTrials の並びは近似）。
+// （3 つの呼び出し側とも、設定の並びまで呼び出し側と同じ）。
 // 提供元は名前（"jp"）か、自作の提供元のオブジェクトで持つ（呼び出し側が本物の提供元に置き換える）。
 
 import {
@@ -151,6 +151,58 @@ export function propertyPairOptions(g: PropertyGen): { calendar: Obj; schedule: 
   };
 }
 
+/** 性質のテストの設定の作り方の種類（性質ごとに 1 つ） */
+export type PropertyConfigKind = "calendar" | "weekly" | "shift" | "move" | "pair";
+
+/**
+ * 設定を作る性質と、その設定の作り方。性質は、設定を作る乱数（性質の名前から決まる種の列）と、日付などを引く乱数を
+ * 分けて持つので、siteTrials はこの一覧から、性質と同じ設定を同じ並びで作れる。test/properties.test.ts は、
+ * 性質が実際に使った作り方がこの一覧と同じかを確かめる（一覧にない性質が設定を作ると失敗する）
+ */
+export const PROPERTY_CONFIGS: Readonly<Record<string, PropertyConfigKind>> = {
+  "addBusinessDays の結果は営業日で、n 進めて −n 戻ると元の営業日に戻る": "calendar",
+  "休業日を起点にした addBusinessDays は、翌営業日を 1 と数える（diffBusinessDays は起点が営業日のときだけ逆算になる）":
+    "calendar",
+  "nextBusinessDay との間に営業日はなく、previousBusinessDay で戻る": "calendar",
+  "businessDatesBetween の件数は diffBusinessDays と一致する": "calendar",
+  "営業日カレンダーと、同じ規則の真偽値のスケジュールは一致する": "weekly",
+  "振替先は振替元より後の祝日でない日で、その間はすべて祝日": "shift",
+  "繰り返しの規則があっても、営業日の移動と数え上げの性質は保たれる": "move",
+  "繰り返しの規則でも、営業日カレンダーと真偽値のスケジュールは一致する": "pair",
+  "adjust の結果は営業日で、方法ごとの定義どおり。もう一度調整しても変わらない": "calendar",
+  "月の第 n 営業日は、その月の営業日の一覧の n 番目（負なら後ろから）": "calendar",
+  "dueDate は、末日に読み替えた日付を adjust したもの": "calendar",
+};
+
+/** 性質の設定を作る乱数の種（テストの種と性質の名前から決まる。FNV-1a） */
+export function propertyConfigSeed(seed: number, name: string): number {
+  let h = 0x811c9dc5;
+  for (const ch of name) {
+    h ^= ch.codePointAt(0)!;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return (h ^ seed) >>> 0;
+}
+
+/** 設定の作り方の種類ごとの、1 回分の設定（カレンダーとスケジュール。提供元は持たない） */
+export function propertyConfig(
+  kind: PropertyConfigKind,
+  g: PropertyGen,
+): { calendar: Obj; schedule?: Obj } {
+  switch (kind) {
+    case "calendar":
+      return { calendar: propertyCalendarOptions(g) };
+    case "weekly":
+      return propertyWeeklyOptions(g);
+    case "shift":
+      return { calendar: propertyShiftOptions(g) };
+    case "move":
+      return { calendar: propertyMoveOptions(g) };
+    case "pair":
+      return propertyPairOptions(g);
+  }
+}
+
 // ------------------------------------------------------------
 // test/diagnose-properties.test.ts
 // ------------------------------------------------------------
@@ -241,23 +293,14 @@ export function siteTrials(site: string): Trial[] {
       wide: false,
     };
     const jp = (o: Obj): Obj => ({ holidayProvider: "jp", ...o });
-    const each = (make: (g: PropertyGen) => void): void => {
-      const g = propertyGen(random(PROPERTY.seed));
-      for (let run = 0; run < PROPERTY.runs; run++) make(g);
-    };
-    each((g) => out.push({ kind: "calendar", options: jp(propertyCalendarOptions(g)), scan }));
-    each((g) => {
-      const w = propertyWeeklyOptions(g);
-      out.push({ kind: "calendar", options: jp(w.calendar), scan });
-      out.push({ kind: "schedule", options: jp(w.schedule), scan });
-    });
-    each((g) => out.push({ kind: "calendar", options: jp(propertyShiftOptions(g)), scan }));
-    each((g) => out.push({ kind: "calendar", options: jp(propertyMoveOptions(g)), scan }));
-    each((g) => {
-      const pair = propertyPairOptions(g);
-      out.push({ kind: "calendar", options: jp(pair.calendar), scan });
-      out.push({ kind: "schedule", options: jp(pair.schedule), scan });
-    });
+    for (const [name, kind] of Object.entries(PROPERTY_CONFIGS)) {
+      const g = propertyGen(random(propertyConfigSeed(PROPERTY.seed, name)));
+      for (let run = 0; run < PROPERTY.runs; run++) {
+        const made = propertyConfig(kind, g);
+        out.push({ kind: "calendar", options: jp(made.calendar), scan });
+        if (made.schedule) out.push({ kind: "schedule", options: jp(made.schedule), scan });
+      }
+    }
     out.push({ kind: "calendar", options: jp({}), scan });
   } else if (site === "diagnose-properties") {
     const short = { ...SHORT_RANGE, wide: true };

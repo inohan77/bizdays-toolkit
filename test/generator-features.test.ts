@@ -1,16 +1,18 @@
 // 生成範囲を減らさない。3 つの呼び出し側が今作る設定の特徴が、v0.30.3 の呼び出し側が実際に作った設定の特徴
 // （test/fixtures/generator-features-0.30.3/。作り方は scripts/record-generator-features.ts）を、呼び出し側ごとに
 // すべて含むことを確かめる。比べ方は test/support/features-compare.ts の 1 か所で、スクリプトの --check と同じ。
-// 呼び出し側の設定は test/support/sites.ts の関数で、呼び出し側と同じ種と試行の数で作る。diagnose-properties と
-// result-compare は乱数の並びまで呼び出し側と同じだが、properties は近似（性質の中で日付なども同じ乱数から引くので、
-// 並びが呼び出し側とずれる）。実際の呼び出し側の包含は、CI の generator-features ジョブ（スクリプトの --check）で確かめる。
-// 拾える特徴の数は、スクリプトのほうが多い。result-compare（テスト 487 件・スクリプト 563 件、0.30.5 で調べた差 76 件）は、
+// 呼び出し側の設定は test/support/sites.ts の関数で、呼び出し側と同じ種と試行の数で作り、3 つの呼び出し側とも設定の並びまで
+// 呼び出し側と同じ（properties は、設定を作る乱数を性質の名前から決まる種の列に分けている）。実際の呼び出し側が
+// その関数を同じ文脈で呼んでいることは、CI の generator-features ジョブ（スクリプトの --worktree --check）で確かめる。
+// 拾える特徴の数は、properties（414 件）と diagnose-properties（425 件）はテストとスクリプトで同じ。result-compare
+// （テスト 487 件・スクリプト 563 件、0.30.5 で調べた差 76 件）は、
 // 差がすべて問い合わせた日付の特徴（scan[…]）で、スクリプトだけが、スケジュールの第 n 営業日の規則の基準のカレンダー
 // （result-compare が作る提供元だけのカレンダー）にライブラリが問い合わせた日付（提供元の対応年に広がる）を拾うため。
 // 設定だけを作るこのテストには、その問い合わせが出ない。設定の特徴（scan 以外）は両方で同じ。
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { jp } from "../src/jp/index.ts";
+import { COMBINATIONS, NOT_APPLICABLE } from "./support/combinations.ts";
 import { featuresOf } from "./support/features.ts";
 import {
   DROPPED_FEATURES,
@@ -59,3 +61,21 @@ test("日本の提供元の全範囲を走査するテストの範囲は、日�
     to: `${jp.supportedYears.to}-12-31`,
   });
 });
+
+for (const site of SITES)
+  test(`必ず作る組み合わせ（${site}）: 一覧の組み合わせを、作れないと理由を書いたものを除いて 1 回以上作る`, () => {
+    const trials = siteTrials(site);
+    const skipped = NOT_APPLICABLE[site] ?? {};
+    const problems: string[] = [];
+    for (const c of COMBINATIONS) {
+      const made = trials.filter((t) => c.matches(t.options)).length;
+      if (c.name in skipped) {
+        if (made > 0)
+          problems.push(`${c.name} は作れないはず（${skipped[c.name]}）なのに ${made} 件作った`);
+      } else if (made === 0) problems.push(`${c.name} の組み合わせを作らない（理由: ${c.reason}）`);
+    }
+    for (const name of Object.keys(skipped))
+      if (!COMBINATIONS.some((c) => c.name === name))
+        problems.push(`NOT_APPLICABLE の ${name} は一覧にない`);
+    assert.deepEqual(problems, []);
+  });

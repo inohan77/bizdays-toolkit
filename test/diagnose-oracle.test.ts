@@ -9,7 +9,8 @@
  *   行列の分け方は RELEASING.md の「品質の確認」）
  * - 判定は暦日でタイムゾーンに依存しないので、タイムゾーンを変えた実行（scripts/test-tz.ts）では飛ばす
  * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別の版（公開済みの版など）を試せる。ORACLE_SHARD=k/n で、
- *   試す組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。書式の誤りと k >= n は例外）
+ *   全件の組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。ORACLE_FULL=1 と組み合わせたときだけ。
+ *   書式の誤り・k >= n・ORACLE_FULL なしは例外）
  */
 
 import assert from "node:assert/strict";
@@ -34,9 +35,8 @@ const diag = (await import(
 
 const FULL = flagEnv("ORACLE_FULL");
 /**
- * "k/n": 試す組み合わせを n 個に分けた k 番目（0 始まり）だけを試す（長い実行を分けるため）。ORACLE_FULL=1 なら
- * すべての組み合わせを、そうでなければ決まった抜き出しを、さらに n 個に分ける。書式の誤りと k >= n は、何も試さずに
- * 合格しないよう例外にする
+ * "k/n": 全件の組み合わせを n 個に分けた k 番目（0 始まり）だけを試す（長い実行を分けるため。CI の oracle ジョブ）。
+ * 書式の誤り・k >= n・ORACLE_FULL なしは、何も試さずに合格しないよう例外にする
  */
 const SHARD = ((): { k: number; n: number } | undefined => {
   const text = process.env["ORACLE_SHARD"];
@@ -47,6 +47,12 @@ const SHARD = ((): { k: number; n: number } | undefined => {
   const n = Number(m[2]);
   if (n === 0 || k >= n)
     throw new Error(`ORACLE_SHARD ${text}: k must be less than n (0 <= k < n)`);
+  // 全件なしの分け方は例外にする: pnpm check の決まった抜き出し（111 件に 1 件）をさらに分けると、間隔と n の公約数で
+  // 分が 0 件になりうる（111 と 3 なら 1/3・2/3 が 0 件）。分けるのは全件（CI の oracle ジョブ）のときだけ
+  if (!FULL)
+    throw new Error(
+      `ORACLE_SHARD ${text} needs ORACLE_FULL=1 (the sample of pnpm check is not split)`,
+    );
   return { k, n };
 })();
 const SKIP = flagEnv("BIZDAYS_TZ_RUN") && "タイムゾーンに依存しないので、TZ を変えた実行では飛ばす";
@@ -117,6 +123,24 @@ interface Config {
   readonly list: readonly Item[];
   readonly policy: string;
   readonly weekdays: readonly number[];
+}
+
+/**
+ * 失敗のメッセージに入れる、設定を作り直せる情報（項目・休業日の扱いの方針・定休日・取り除いた項目）。
+ * build(items, holidayPolicy, closedWeekdays) に渡せば、同じ設定ができる
+ */
+function describeConfig(
+  list: readonly Item[],
+  policy: string,
+  weekdays: readonly number[],
+  removed?: string | readonly string[],
+): string {
+  return JSON.stringify({
+    items: list,
+    holidayPolicy: policy,
+    closedWeekdays: weekdays,
+    ...(removed === undefined ? {} : { removed }),
+  });
 }
 
 /** 全件の設定（決まった順。定休日 [0]・[] との 2 つの組み合わせは、種で決まる抜き出し）と、その内訳 */
@@ -250,14 +274,13 @@ function checkRemovals(
       weekdays,
     );
     const restOpen = snapshot(rest, false);
-    const where = `${policy} ${JSON.stringify(weekdays)} ${JSON.stringify(list)}`;
     if (
       (codes.includes("shadowed") || codes.includes("never-matches")) &&
       !same(snapshot(rest, true), baseFull)
     )
-      r.unsound.push(`${codes.join(",")} ${path} ${where}`);
+      r.unsound.push(`${codes.join(",")} ${describeConfig(list, policy, weekdays, path)}`);
     if (codes.includes("redundant") && !same(restOpen, baseOpen))
-      r.unsound.push(`redundant ${path} ${where}`);
+      r.unsound.push(`redundant ${describeConfig(list, policy, weekdays, path)}`);
     if (
       same(restOpen, baseOpen) &&
       !codes.some((c) => ["redundant", "shadowed", "never-matches", "expired"].includes(c))
@@ -269,9 +292,11 @@ function checkRemovals(
 }
 
 /**
- * 完全性の報告に必ず出る設定（カナリア）。開く規則「5・7 月の月曜」は、定休日が土日なので月曜を開く意味がなく、
- * 閉じる規則「2026 年からの毎月 1 日」と重なる日（5・7 月の 1 日が月曜）も、対応年（2025〜2027 年）にない。
- * そのため取り除いても全日の結果は変わらないが、診断は redundant と言わない。redundant は、祝日・暦の並びの
+ * 完全性の報告に必ず出る設定（カナリア）。開く規則「5・7 月の月曜」が開きうる日は、もともと営業日の月曜（定休日は土日）と、
+ * 5・7 月の月曜の祝日（自作の提供元では 2025-05-05・2026-05-04 や 7 月の第 3 月曜など）だけ。祝日のほうは、
+ * holidayOverlapPolicy の既定（"under-holiday"。祝日が優先）なので開かない（次のテストが、"over-holiday" にすると
+ * 取り除けなくなることで確かめる）。閉じる規則「2026 年からの毎月 1 日」と重なる日（5・7 月の 1 日が月曜）も、
+ * 対応年（2025〜2027 年）にない。そのため取り除いても全日の結果は変わらないが、診断は redundant と言わない。redundant は、祝日・暦の並びの
  * 偶然で取り除ける項目まで見つけることを約束していないため（docs/decisions.md の 31 番）。報告の仕組みが壊れて
  * 何も数えなくなれば、ここで止まる
  */
@@ -327,13 +352,46 @@ test(
 // 診断のコードごとの約束
 // ------------------------------------------------------------
 
+test("オラクル: カナリアが取り除けるのは、開く規則が祝日を開かない（holidayOverlapPolicy の既定）ため", () => {
+  // 前提: 自作の提供元に、5・7 月の月曜の祝日がある
+  const calendar = lib["createCalendar"]!({
+    holidayProvider: SHORT_PROVIDER,
+    timeZone: "UTC",
+  }) as Record<string, (d: string) => unknown>;
+  const mondayHolidays = SHORT_DAYS.filter(
+    (d) =>
+      ["05", "07"].includes(d.slice(5, 7)) &&
+      new Date(`${d}T00:00:00Z`).getUTCDay() === 1 &&
+      calendar["isHoliday"]!(d) === true,
+  );
+  assert.ok(
+    mondayHolidays.length > 0,
+    "自作の提供元に 5・7 月の月曜の祝日がない（カナリアの理由の前提が変わった）",
+  );
+  // 祝日より開く規則を優先（"over-holiday"）にすると、その祝日を開くので、取り除くと結果が変わる（報告に出ない）
+  const overHoliday: Config = {
+    ...CANARY,
+    list: [
+      ["openRecurringRules", { weekday: 1, months: [5, 7], holidayOverlapPolicy: "over-holiday" }],
+      CANARY.list[1]!,
+    ],
+  };
+  const report = run(checkRemovals, [overHoliday]);
+  assert.equal(report.configs, 1);
+  assert.deepEqual(
+    [...report.incomplete],
+    [],
+    `"over-holiday" でも取り除けると報告された（カナリアの理由が違う）: ${mondayHolidays.join(",")}`,
+  );
+});
+
 test(
   "オラクル: expired は、終わりが基準日より前で、基準日以降の結果に影響しない",
   { skip: SKIP },
   () => {
     const fromIndex = SHORT_DAYS.indexOf(AS_OF);
     let checked = 0;
-    run((list, policy, _d, r, weekdays) => {
+    const report = run((list, policy, _d, r, weekdays) => {
       const d = diag["diagnoseCalendar"]!(build(list, policy, weekdays), { asOf: AS_OF }) as Obj[];
       const paths = pathsOf(list);
       const base = snapshot(build(list, policy, weekdays), false);
@@ -344,7 +402,9 @@ test(
         const end =
           typeof v === "string" ? v : ((v["effectiveTo"] ?? v["to"]) as string | undefined);
         if (end === undefined || end >= AS_OF)
-          r.unsound.push(`expired の終わりが基準日以降 ${path} ${JSON.stringify(list)}`);
+          r.unsound.push(
+            `expired の終わりが基準日以降 ${describeConfig(list, policy, weekdays, path)}`,
+          );
         if (
           !same(
             snapshot(
@@ -359,10 +419,13 @@ test(
             fromIndex,
           )
         )
-          r.unsound.push(`expired を取り除くと基準日以降が変わる ${path} ${JSON.stringify(list)}`);
+          r.unsound.push(
+            `expired を取り除くと基準日以降が変わる ${describeConfig(list, policy, weekdays, path)}`,
+          );
       });
       assert.deepEqual(r.unsound, []);
     });
+    assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
     assert.ok(checked > 0, "expired が 1 件も出ていない（オラクルが空振りしている）");
   },
 );
@@ -371,12 +434,14 @@ test(
   "オラクル: no-business-day は営業日が本当にない設定だけ、counting-basis は数え方の限界がある設定だけに出る",
   { skip: SKIP },
   () => {
-    run((list, policy, d, r, weekdays) => {
+    const report = run((list, policy, d, r, weekdays) => {
       if (
         d.some((x) => x["code"] === "no-business-day") &&
         snapshot(build(list, policy, weekdays), false).includes("true")
       )
-        r.unsound.push(`no-business-day なのに営業日がある ${JSON.stringify(list)}`);
+        r.unsound.push(
+          `no-business-day なのに営業日がある ${describeConfig(list, policy, weekdays)}`,
+        );
       if (d.some((x) => x["code"] === "counting-basis")) {
         // 数え方の限界: 第 n 営業日の規則があり、毎週の曜日（第 n 曜日・隔週・月の絞り込みのない曜日の規則）を
         // 繰り返しの規則で閉じている・開いている（数える基準は繰り返しの規則を除くので、その曜日は数え方に入らない。16 番）
@@ -386,10 +451,11 @@ test(
           (v) => "weekday" in v && !("nth" in v) && !("interval" in v) && !("months" in v),
         );
         if (!counts || !weekly)
-          r.unsound.push(`counting-basis の前提がない ${JSON.stringify(list)}`);
+          r.unsound.push(`counting-basis の前提がない ${describeConfig(list, policy, weekdays)}`);
       }
       assert.deepEqual(r.unsound, []);
     });
+    assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
   },
 );
 
@@ -417,8 +483,11 @@ test(
         weekdays,
       );
       if (!same(snapshot(rest, false), snapshot(build(list, policy, weekdays), false)))
-        r.unsound.push(`${[...removable].join(",")} ${policy} ${JSON.stringify(list)}`);
+        r.unsound.push(
+          `まとめて取り除くと変わる ${describeConfig(list, policy, weekdays, [...removable] as string[])}`,
+        );
     });
+    assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
     assert.deepEqual(report.unsound, []);
   },
 );
