@@ -1,5 +1,5 @@
 // 飛ばしの決まり（テスト拡充案の T3）。前提がそろわないときに飛ばす箇所（テストの skip・todo、スクリプトの SKIP の行）は、
-// この関数を通し、理由を下の意図した飛ばしの一覧から引く。CI（環境変数 CI が設定されている）では、一覧にない理由や、
+// この関数を通し、理由を下の意図した飛ばしの一覧から引く。CI（環境変数 CI が空でも "false" でもないとき）では、一覧にない理由や、
 // CI では飛ばさない理由（ci: false）の飛ばしを失敗にする。この関数を通さない飛ばしは test/skip-policy.test.ts が止める。
 
 interface IntendedSkip {
@@ -59,11 +59,15 @@ export function skipWhen(id: string, active: boolean): string | false {
   const entry = INTENDED_SKIPS[id];
   if (entry === undefined)
     throw new Error(`意図した飛ばしの一覧（test/support/skip.ts）にない理由: ${id}`);
+  // skip と todo の取り違えも、飛ばす条件にかかわらずいつも確かめる
+  if (entry.todo ?? false) throw new Error(`${id} は飛ばし（skip）の理由ではない`);
   if (!active) return false;
   return entryOf(id, false)?.reason ?? entry.reason;
 }
 
-/** 既知の不具合のテストの理由（node:test の todo に渡す） */
+/** 既知の不具合のテストの理由（node:test の todo に渡す）。一覧にない理由は、CI でなくても投げる（skipWhen と同じ） */
 export function todoFor(id: string): string {
+  if (INTENDED_SKIPS[id] === undefined)
+    throw new Error(`意図した飛ばしの一覧（test/support/skip.ts）にない理由: ${id}`);
   return entryOf(id, true)?.reason ?? `意図した飛ばしの一覧にない理由: ${id}`;
 }

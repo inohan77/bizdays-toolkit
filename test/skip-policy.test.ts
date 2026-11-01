@@ -36,7 +36,8 @@ test("飛ばしの決まり: テストの skip・todo とスクリプトの SKIP
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
         if (/\b(test|t|it|describe)\.(skip|todo)\(/.test(line))
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
-        // 省略記法（{ skip }・{ todo }）は、何を入れたかが行から読めないので使わない
+        // 省略記法（{ skip }・{ todo }）は、何を入れたかが行から読めないので使わない。この grep は 1 行の中の省略記法だけを拾い、
+        // 複数行に分けたオブジェクトの「skip,」だけの行は拾わない（拾うには TypeScript のコンパイラーの API で読む必要がある。0.30.7 で検討）
         if (!/^\s*(\/\/|\*)/.test(line) && /[{,]\s*(skip|todo)\s*[,}]/.test(line))
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
         // 飛ばしの理由を入れる定数（SKIP・SKIP_TZ）は、補助の関数の結果だけを入れる
@@ -83,6 +84,12 @@ test("飛ばしの決まり: CI では、一覧にない理由と CI では飛�
     assert.throws(() => skipWhen("no-such-reason", true), /にない理由: no-such-reason/);
     assert.equal(skipWhen("no-release-tag", true), INTENDED_SKIPS["no-release-tag"]!.reason);
     assert.throws(() => todoFor("tz-run"), /既知の不具合（todo）の理由ではない/);
+    // skip と todo の取り違え・一覧にない todo の理由も、CI でなくても、飛ばす条件がそろわなくても投げる
+    assert.throws(
+      () => skipWhen("known-bug-combine-short-circuit", false),
+      /飛ばし（skip）の理由ではない/,
+    );
+    assert.throws(() => todoFor("no-such-reason"), /にない理由: no-such-reason/);
   } finally {
     if (saved === undefined) delete process.env["CI"];
     else process.env["CI"] = saved;

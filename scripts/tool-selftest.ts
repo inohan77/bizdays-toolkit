@@ -3,8 +3,9 @@ import "./strict-warnings.ts";
  * 検査のスクリプトそのものの検査（テスト拡充案の T3。CI の tool-selftest ジョブ。pnpm check には入れない）。
  *
  * リポジトリの写しを一時ディレクトリに作り、検査のスクリプトを写した先で動かす。まず誤りを入れずに動かして合格することを
- * 確かめ（対照の実行。失敗が環境によるものでないことを示す）、次に誤りを 1 つずつ入れて、終了コード 0 以外で終わり、
- * 入れた誤りを指す文（検査が実際に出す文の一部）を出すことを確かめる。誤りは 1 つ確かめるごとに元に戻す。
+ * 確かめ（対照の実行。失敗が環境によるものでないことを示す。SKIP の行が出ても失敗にする）、次に誤りを 1 つずつ入れて、終了コード 0 以外で終わり、
+ * 入れた誤りを指す文（検査が誤りの理由として出す文の一部。別の理由の失敗では合格にしない）を出すことを確かめる。誤りは 1 つ確かめる
+ * ごとに元に戻す。写し・ビルドの途中で例外が出ても、そこまでの表と後始末の問題を出してから失敗で終わる。
  *
  * 写し方: `git worktree add --detach` で HEAD の作業ツリーを作り、取り込み中の変更（git status の変更・追加・削除）を写す。
  * 作業ツリーなら、git の履歴とタグを元のリポジトリと共有するので、前の版のタグを読む検査（check-size）も写した先でそのまま動く。
@@ -182,7 +183,7 @@ const CASES: readonly Case[] = [
           'calendar.addBusinessDays("2026-12-28", 1); // "2027-01-05"',
         ),
       ),
-    expect: "2027-01-05",
+    expect: 'expected "2027-01-05"',
   },
   {
     tool: "check-names",
@@ -219,7 +220,7 @@ const CASES: readonly Case[] = [
           "const weekday = (weekdayOf(date) + 1) % 7;",
         ),
       ),
-    expect: "**失敗**",
+    expect: "**失敗**（意図した変更なら",
   },
   {
     tool: "data-compare",
@@ -234,6 +235,8 @@ const git = (args: readonly string[], cwd = repo): string =>
   execFileSync("git", args, { cwd, encoding: "utf8" });
 let failed = false;
 const rows: string[] = [];
+/** 表の前に出す覚え書き（写した取り込み中の変更） */
+const notes: string[] = [];
 /** 後始末の問題（リンクを外せない・作業ツリーを外せない・リポジトリの node_modules が消えた） */
 const cleanupProblems: string[] = [];
 /** 作ったもの（後始末で外すもの） */
@@ -243,10 +246,12 @@ try {
   // 1. 写しを作る（HEAD の作業ツリー + 取り込み中の変更）
   git(["worktree", "add", "--detach", "--quiet", copy, "HEAD"]);
   worktreeAdded = true;
-  for (const line of git(["status", "--porcelain=v1", "-uall", "--no-renames"])
-    .split("\n")
+  // -z で読む（日本語やスペースを含むパスが引用符付き・エスケープ付きで出ず、そのまま読める。項目は NUL で区切られる）
+  const copied: string[] = [];
+  for (const entry of git(["status", "--porcelain=v1", "-z", "-uall", "--no-renames"])
+    .split("\0")
     .filter(Boolean)) {
-    const file = line.slice(3);
+    const file = entry.slice(3);
     if (file.startsWith("node_modules/") || file.startsWith("dist/")) continue;
     const from = join(repo, file);
     const to = join(copy, file);
@@ -254,7 +259,11 @@ try {
       mkdirSync(dirname(to), { recursive: true });
       cpSync(from, to);
     } else rmSync(to, { force: true });
+    copied.push(file);
   }
+  notes.push(
+    `写した取り込み中の変更: ${copied.length} 件${copied.length > 0 ? `（${copied.join("、")}）` : ""}`,
+  );
   symlinkSync(join(repo, "node_modules"), join(copy, "node_modules"), "junction");
   linked = true;
   // 2. 写した先でビルドする（package.json の build と同じ）
@@ -273,10 +282,16 @@ try {
   for (const [tool, args] of Object.entries(TOOLS)) {
     const started = Date.now();
     const r = node(args);
-    const ok = r.status === 0;
+    // 対照は、どの検査も飛ばさずに合格することを確かめる（SKIP の行が出れば失敗）
+    const skipped = r.output.split("\n").filter((l) => /\bSKIP\b|skipped \(/.test(l));
+    const ok = r.status === 0 && skipped.length === 0;
     if (!ok) failed = true;
+    const why =
+      r.status !== 0
+        ? r.output.trim().split("\n").slice(-3).join(" / ").slice(0, 200)
+        : `対照で飛ばした: ${skipped.join(" / ").slice(0, 200)}`;
     rows.push(
-      `| ${tool} | （対照: 誤りなし） | ${r.status} | ${ok ? "合格" : `**失敗**: ${r.output.trim().split("\n").slice(-3).join(" / ").slice(0, 200)}`} | ${Math.round((Date.now() - started) / 1000)}s |`,
+      `| ${tool} | （対照: 誤りなし） | ${r.status} | ${ok ? "合格" : `**失敗**: ${why}`} | ${Math.round((Date.now() - started) / 1000)}s |`,
     );
   }
 
@@ -303,6 +318,12 @@ try {
       `| ${c.tool} | ${c.name} | ${ok ? "≠ 0" : "—"} | ${note} | ${Math.round((Date.now() - started) / 1000)}s |`,
     );
   }
+} catch (error) {
+  // 写し・ビルドなどの途中の例外でも、そこまでの表と後始末の問題を出してから失敗で終わる
+  failed = true;
+  rows.push(
+    `| （途中の例外） | — | — | **失敗**: ${(error as Error).message.split("\n").slice(0, 3).join(" / ").slice(0, 300)} | — |`,
+  );
 } finally {
   // リンクを先に外す（ジャンクションの先の node_modules を消さないため）。外せなかったら（まだ作っていない ENOENT のほかは）、
   // 作業ツリーと一時ディレクトリを消さずに残し、場所を出して失敗にする（消すとリンクの先まで消えるおそれがある）
@@ -339,6 +360,7 @@ try {
 console.log("## 検査のスクリプトの検査\n");
 console.log("| 検査 | 入れた誤り | 終了コード | 結果 | 時間 |\n| --- | --- | --- | --- | --- |");
 console.log(rows.join("\n"));
+if (notes.length > 0) console.log(`\n${notes.join("\n")}`);
 console.log(`\n一時ディレクトリ: ${existsSync(work) ? `**残っている**: ${work}` : "消えた"}`);
 if (existsSync(work)) failed = true;
 if (cleanupProblems.length > 0) {
