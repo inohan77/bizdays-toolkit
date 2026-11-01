@@ -307,6 +307,24 @@ jobs:
           ORACLE_FULL: "1"
           ORACLE_SHARD: ${{ matrix.shard }}
 
+  tool-selftest:
+    # 検査のスクリプトが、入れた誤りで実際に失敗することを確かめる（scripts/tool-selftest.ts）。リポジトリの写しを作業ツリーで作り、
+    # check-size が前の版のタグを読むので、履歴とタグを取得する
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "26.13.0"
+      - name: Check that the check scripts fail on injected errors
+        run: |
+          node scripts/tool-selftest.ts | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${PIPESTATUS[0]}" -eq 0
+
   catch-coverage:
     # src/core の catch 節がテストで 1 回以上通ることを、Node.js の組み込みのカバレッジで確かめる（scripts/check-catch-coverage.ts）。
     # 全体のカバレッジの率は目標にしないので出さない

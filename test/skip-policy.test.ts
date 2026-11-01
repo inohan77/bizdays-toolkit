@@ -23,13 +23,21 @@ const filesIn = (dir: string, ext: RegExp): string[] =>
 
 test("飛ばしの決まり: テストの skip・todo とスクリプトの SKIP の行は、補助の関数（skipWhen・todoFor）を通る", () => {
   const problems: string[] = [];
-  for (const file of filesIn("test", /\.test\.ts$/)) {
+  // テストと、テストの道具（test/support。飛ばしの一覧を定める skip.ts は除く）
+  const testFiles = [
+    ...filesIn("test", /\.test\.ts$/),
+    ...filesIn("test/support", /\.ts$/).filter((f) => !f.endsWith("/skip.ts")),
+  ];
+  for (const file of testFiles) {
     readFileSync(file, "utf8")
       .split("\n")
       .forEach((line, i) => {
         if (/\b(skip|todo)\s*:/.test(line) && !/skipWhen\(|todoFor\(|\bSKIP(_TZ)?\b/.test(line))
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
         if (/\b(test|t|it|describe)\.(skip|todo)\(/.test(line))
+          problems.push(`${file}:${i + 1}: ${line.trim()}`);
+        // 省略記法（{ skip }・{ todo }）は、何を入れたかが行から読めないので使わない
+        if (!/^\s*(\/\/|\*)/.test(line) && /[{,]\s*(skip|todo)\s*[,}]/.test(line))
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
         // 飛ばしの理由を入れる定数（SKIP・SKIP_TZ）は、補助の関数の結果だけを入れる
         if (/\bconst SKIP(_TZ)?\s*=/.test(line) && !/skipWhen\(/.test(line))
@@ -65,14 +73,14 @@ test("飛ばしの決まり: CI では、一覧にない理由と CI では飛�
       /飛ばし（skip）の理由ではない/,
     );
     assert.equal(skipWhen("tz-run", true), INTENDED_SKIPS["tz-run"]!.reason);
-    assert.equal(skipWhen("no-such-reason", false), false);
     assert.equal(
       todoFor("known-bug-combine-short-circuit"),
       INTENDED_SKIPS["known-bug-combine-short-circuit"]!.reason,
     );
     delete process.env["CI"];
-    // 手元では、一覧にない理由も飛ばす（理由にその旨を出す）。一覧の誤用（skip と todo の取り違え）は手元でも失敗
-    assert.match(String(skipWhen("no-such-reason", true)), /一覧にない理由: no-such-reason/);
+    // 一覧にない理由は、CI でなくても、飛ばす条件がそろわなくても失敗（打ち間違いを早く見つける）
+    assert.throws(() => skipWhen("no-such-reason", false), /にない理由: no-such-reason/);
+    assert.throws(() => skipWhen("no-such-reason", true), /にない理由: no-such-reason/);
     assert.equal(skipWhen("no-release-tag", true), INTENDED_SKIPS["no-release-tag"]!.reason);
     assert.throws(() => todoFor("tz-run"), /既知の不具合（todo）の理由ではない/);
   } finally {

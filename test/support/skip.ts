@@ -51,10 +51,16 @@ function entryOf(id: string, todo: boolean): IntendedSkip | undefined {
   return entry;
 }
 
-/** active なら飛ばす理由（node:test の skip に渡す）、そうでなければ false */
+/**
+ * active なら飛ばす理由（node:test の skip に渡す）、そうでなければ false。理由（id）が一覧にあるかは、active にかかわらず
+ * いつも確かめる（打ち間違いを、飛ばす条件がそろう前に見つけるため。一覧にない理由は CI でなくても失敗）
+ */
 export function skipWhen(id: string, active: boolean): string | false {
+  const entry = INTENDED_SKIPS[id];
+  if (entry === undefined)
+    throw new Error(`意図した飛ばしの一覧（test/support/skip.ts）にない理由: ${id}`);
   if (!active) return false;
-  return entryOf(id, false)?.reason ?? `意図した飛ばしの一覧にない理由: ${id}`;
+  return entryOf(id, false)?.reason ?? entry.reason;
 }
 
 /** 既知の不具合のテストの理由（node:test の todo に渡す） */

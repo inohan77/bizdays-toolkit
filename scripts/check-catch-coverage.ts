@@ -7,7 +7,11 @@ import "./strict-warnings.ts";
  * 3. 通らない catch 節は、理由付きの除外の一覧（EXCLUDED。「ファイル・関数・節の中の最初の文」で引く。行がずれても壊れない）に
  *    載せない限り失敗にする。除外の一覧にあるのに見つからない・通っている項目も、古い除外として失敗にする
  *
+ * 4. 除外の一覧の名前（ファイル・関数・節の中の最初の文）が 2 つ以上の catch 節で重なれば失敗にする（片方だけを除外しようとして
+ *    両方が外れるのを防ぐ）。catch 節の文が try と同じ行にあれば、lcov は行で数えるので到達を判定できず、失敗にする
+ *
  * 全体のカバレッジの率は目標にしないので出さない。結果は標準出力（CI では Job Summary）に表で出す。
+ * --lcov <file> は検査そのものを試すための引数で（作った lcov を渡して、テストを動かさずに判定だけを試す）、CI は使わない。
  */
 
 import { spawnSync } from "node:child_process";
@@ -46,6 +50,8 @@ interface CatchClause {
   readonly line: number;
   /** 節の中の文の行（1 始まり） */
   readonly lines: readonly number[];
+  /** catch 節の文が try の行（try の文・try の中の文）と同じ行にあるか（行で数える lcov では判定できない） */
+  readonly sameLineAsTry: boolean;
 }
 
 /** 節を囲む関数の名前（関数の宣言・メソッド・変数に入れた関数。なければ "(top)"） */
@@ -81,8 +87,15 @@ function findCatches(): CatchClause[] {
           const b = lineOf(s.getEnd());
           return Array.from({ length: b - a + 1 }, (_, i) => a + i);
         });
+        const tryStatement = node.parent as ts.TryStatement;
+        const tryLines = new Set<number>([
+          lineOf(tryStatement.getStart(source)),
+          ...tryStatement.tryBlock.statements.map((s) => lineOf(s.getEnd())),
+          lineOf(tryStatement.tryBlock.getEnd()),
+        ]);
         out.push({
           file: `src/core/${name}`,
+          sameLineAsTry: lines.some((n) => tryLines.has(n)),
           fn: enclosingName(node),
           first: statements[0]
             ? statements[0].getText(source).replace(/\s+/g, " ").slice(0, 80)
@@ -131,9 +144,21 @@ try {
   const rows: string[] = [];
   const problems: string[] = [];
   const seen = new Set<string>();
+  const keyCount = new Map<string, number>();
+  for (const c of catches)
+    keyCount.set(
+      `${c.file}|${c.fn}|${c.first}`,
+      (keyCount.get(`${c.file}|${c.fn}|${c.first}`) ?? 0) + 1,
+    );
   for (const c of catches) {
     const key = `${c.file}|${c.fn}|${c.first}`;
     seen.add(key);
+    if ((keyCount.get(key) ?? 0) > 1)
+      problems.push(`名前が重なる（除外の一覧で見分けられない）: ${c.file}:${c.line} ${key}`);
+    if (c.sameLineAsTry)
+      problems.push(
+        `1 行の catch 節は判定できない（文を try と別の行に書く）: ${c.file}:${c.line}`,
+      );
     const hits = lcov.get(c.file);
     if (hits === undefined)
       problems.push(`${c.file}: not in the coverage (the file was not loaded by the tests)`);
