@@ -27,7 +27,13 @@ if (files.length !== 2) {
   console.error("usage: node scripts/bench-compare.ts <base.json> <head.json> [--ratio 2]");
   process.exit(2);
 }
-const ratioLimit = Number(argValue("--ratio", "2"));
+const ratioText = argValue("--ratio", "2");
+const ratioLimit = Number(ratioText);
+// 数でない値は比べる条件がすべて偽になり、黙って合格するので使い方の誤りにする
+if (ratioText.trim() === "" || !Number.isFinite(ratioLimit) || ratioLimit <= 1) {
+  console.error(`--ratio: invalid value ${JSON.stringify(ratioText)} (a number greater than 1)`);
+  process.exit(2);
+}
 const baseLabel = argValue("--base-label", "base");
 const headLabel = argValue("--head-label", "head");
 const base = JSON.parse(readFileSync(files[0]!, "utf8")) as Record<string, number>;

@@ -1,0 +1,398 @@
+{
+  "note": "診断のオラクルの項目（test/diagnose-oracle.test.ts）。0.30.4 で目録の乱数（種 20261101）から選んだ項目を写して固定したもの。目録の値の候補を変えても、この一覧は意図して変えない限り変わらない",
+  "items": [
+    [
+      "closedRecurringRules",
+      {
+        "weekday": 4,
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "weekday": 4,
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "weekday": 5
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "weekday": 5
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "weekday": 6,
+        "interval": 2,
+        "anchor": "2026-01-10"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "weekday": 6,
+        "interval": 2,
+        "anchor": "2026-01-10"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayOfMonth": 31,
+        "holidayOverlapPolicy": "after-holiday",
+        "skipWeekdays": [6, 3]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayOfMonth": 31,
+        "holidayOverlapPolicy": "after-holiday",
+        "skipWeekdays": [6, 3]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayOfMonth": 31,
+        "months": [3, 1, 4, 10]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayOfMonth": 31,
+        "months": [3, 1, 4, 10]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayOfMonth": [31, -1, 30],
+        "holidayOverlapPolicy": "after-holiday"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayOfMonth": [31, -1, 30],
+        "holidayOverlapPolicy": "after-holiday"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "businessDayOfMonth": [2],
+        "months": [2, 5, 8, 9],
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "businessDayOfMonth": [2],
+        "months": [2, 5, 8, 9],
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "businessDayOfMonth": 2,
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "businessDayOfMonth": 2,
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "businessDayOfMonth": -1
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "businessDayOfMonth": -1
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "businessDayOfWeek": [1],
+        "weekStart": 1,
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "businessDayOfWeek": [1],
+        "weekStart": 1,
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "businessDayOfWeek": 2,
+        "weekStart": 1
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "businessDayOfWeek": 2,
+        "weekStart": 1
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "businessDayOfWeek": [2, -1],
+        "weekStart": 0
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "businessDayOfWeek": [2, -1],
+        "weekStart": 0
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "cycle": 6,
+        "anchor": "2026-10-02",
+        "positions": [1],
+        "months": [9],
+        "holidayOverlapPolicy": "over-holiday"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "cycle": 6,
+        "anchor": "2026-10-02",
+        "positions": [1],
+        "months": [9],
+        "holidayOverlapPolicy": "over-holiday"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "cycle": 10,
+        "anchor": "2026-12-15",
+        "positions": [9],
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "cycle": 10,
+        "anchor": "2026-12-15",
+        "positions": [9],
+        "holidayOverlapPolicy": "under-holiday"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "cycle": 10,
+        "anchor": "2026-01-18",
+        "positions": [9]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "cycle": 10,
+        "anchor": "2026-01-18",
+        "positions": [9]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "holiday": true,
+        "kinds": ["substitute"],
+        "keys": ["mon"]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "holiday": true,
+        "kinds": ["substitute"],
+        "keys": ["mon"]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "holiday": true,
+        "keys": ["new-year"]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "holiday": true,
+        "keys": ["new-year"]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "holiday": true,
+        "kinds": ["regular", "substitute"],
+        "weekdays": [2, 1]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "holiday": true,
+        "kinds": ["regular", "substitute"],
+        "weekdays": [2, 1]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayAfterHoliday": true
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayAfterHoliday": true
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayAfterHoliday": true,
+        "kinds": ["substitute"],
+        "keys": ["new-year"],
+        "months": [1, 5, 12, 4]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayAfterHoliday": true,
+        "kinds": ["substitute"],
+        "keys": ["new-year"],
+        "months": [1, 5, 12, 4]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayAfterHoliday": true,
+        "weekdays": [0, 3],
+        "skipWeekdays": [0, 6]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayAfterHoliday": true,
+        "weekdays": [0, 3],
+        "skipWeekdays": [0, 6]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayBeforeHoliday": true,
+        "skipWeekdays": [0, 6]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayBeforeHoliday": true,
+        "skipWeekdays": [0, 6]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayBeforeHoliday": true,
+        "keys": ["mon", "b"],
+        "months": [12, 10, 5, 9]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayBeforeHoliday": true,
+        "keys": ["mon", "b"],
+        "months": [12, 10, 5, 9]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayBeforeHoliday": true,
+        "kinds": ["regular"],
+        "skipWeekdays": [6]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayBeforeHoliday": true,
+        "kinds": ["regular"],
+        "skipWeekdays": [6]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayOfMonth": 1,
+        "effectiveTo": "2025-12-31"
+      }
+    ],
+    ["closedDates", "2026-05-01"],
+    ["openDates", "2026-05-01"],
+    ["closedDates", "2026-05-04"],
+    ["openDates", "2026-05-04"],
+    ["closedDates", "2026-07-20"],
+    ["openDates", "2026-07-20"],
+    [
+      "closedDates",
+      {
+        "from": "2026-04-30",
+        "to": "2026-05-06"
+      }
+    ],
+    ["closedAnnualDates", "05-01"],
+    ["closedAnnualDates", "12-31"],
+    [
+      "closedAnnualDates",
+      {
+        "from": "12-29",
+        "to": "01-03"
+      }
+    ]
+  ]
+}

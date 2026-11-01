@@ -1,23 +1,24 @@
 /**
  * 診断の総当たりのオラクルテスト（テスト拡充案の T1）。診断は「最適化した判定」なので、正しさを素朴な定義と突き合わせる:
  * 診断が shadowed・never-matches・redundant と出した項目を、設定から実際に取り除き、対応年の短い自作の提供元の全日で
- * 結果を比べる。項目は目録（test/support/catalog.ts）の規則の形の代表と、個別の日付・毎年の月日で、その 2 つまでの
- * 組み合わせを総当たりする（乱数の種による当たり外れがない）。
+ * 結果を比べる。項目は明示した一覧（test/fixtures/oracle-items.json。目録の規則の形の代表と、個別の日付・毎年の月日）で、
+ * その 2 つまでの組み合わせを総当たりする（乱数の種による当たり外れがなく、目録を変えても項目は変わらない）。
  *
  * - 判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。docs/decisions.md の 31 番）
  * - pnpm check では決まった抜き出しだけを試す。すべての組み合わせ（約 2.5 分）は ORACLE_FULL=1 で（CI の test:oracle ジョブ）
  * - 判定は暦日でタイムゾーンに依存しないので、タイムゾーンを変えた実行（scripts/test-tz.ts）では飛ばす
  * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別の版（公開済みの版など）を試せる。ORACLE_SHARD=k/n で、
- *   組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため）
+ *   試す組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。書式の誤りと k >= n は例外）
  */
 
 import assert from "node:assert/strict";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { SHAPES, picker, random, type Context, type Obj } from "./support/catalog.ts";
-import { SHORT_DAYS, SHORT_KEYS, SHORT_KINDS, SHORT_PROVIDER } from "./support/provider.ts";
+import { COMMON_RULE_KEYS, SHAPES, shapeOf, type Obj } from "./support/catalog.ts";
+import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
+import { flagEnv } from "./support/env.ts";
 
 type Fn = (...args: unknown[]) => unknown;
 const target = process.env["ORACLE_TARGET"];
@@ -30,47 +31,52 @@ const diag = (await import(
     : "../src/diagnose/index.ts"
 )) as Record<string, Fn>;
 
-const FULL = process.env["ORACLE_FULL"] === "1";
-/** "k/n": 組み合わせを n 個に分けた k 番目（0 始まり）だけを試す（長い実行を分けるため） */
-const SHARD = /^(\d+)\/(\d+)$/.exec(process.env["ORACLE_SHARD"] ?? "");
-const SKIP =
-  process.env["BIZDAYS_TZ_RUN"] === "1" &&
-  "タイムゾーンに依存しないので、TZ を変えた実行では飛ばす";
+const FULL = flagEnv("ORACLE_FULL");
+/**
+ * "k/n": 試す組み合わせを n 個に分けた k 番目（0 始まり）だけを試す（長い実行を分けるため）。ORACLE_FULL=1 なら
+ * すべての組み合わせを、そうでなければ決まった抜き出しを、さらに n 個に分ける。書式の誤りと k >= n は、何も試さずに
+ * 合格しないよう例外にする
+ */
+const SHARD = ((): { k: number; n: number } | undefined => {
+  const text = process.env["ORACLE_SHARD"];
+  if (text === undefined || text === "") return undefined;
+  const m = /^(\d+)\/(\d+)$/.exec(text);
+  if (!m) throw new Error(`ORACLE_SHARD must be "k/n" (e.g. 0/4), got ${JSON.stringify(text)}`);
+  const k = Number(m[1]);
+  const n = Number(m[2]);
+  if (n === 0 || k >= n)
+    throw new Error(`ORACLE_SHARD ${text}: k must be less than n (0 <= k < n)`);
+  return { k, n };
+})();
+const SKIP = flagEnv("BIZDAYS_TZ_RUN") && "タイムゾーンに依存しないので、TZ を変えた実行では飛ばす";
 const AS_OF = "2026-07-01";
 
 // ------------------------------------------------------------
-// 項目の一覧（目録の規則の形ごとに、種で決まる代表を 3 つずつ。閉じる・開く規則の両方に置く）
+// 項目の一覧（test/fixtures/oracle-items.json に明示した一覧。閉じる・開く規則の両方に置く）
 // ------------------------------------------------------------
 
-const ctx: Context = {
-  holidays: true,
-  kinds: SHORT_KINDS,
-  keys: SHORT_KEYS,
-  year: 2026,
-  newShapes: true,
-};
 type Item = readonly [key: string, value: unknown];
-const items: Item[] = [];
-{
-  const p = picker(random(20261101));
-  for (const shape of SHAPES) {
-    const seen = new Set<string>();
-    for (let i = 0; seen.size < 3 && i < 50; i++) {
-      const rule = shape.make(p, ctx);
-      const text = JSON.stringify(rule);
-      if (seen.has(text)) continue;
-      seen.add(text);
-      items.push(["closedRecurringRules", rule], ["openRecurringRules", rule]);
-    }
+const items: readonly Item[] = (
+  JSON.parse(readFileSync(new URL("./fixtures/oracle-items.json", import.meta.url), "utf8")) as {
+    items: Item[];
   }
-  // 終わった規則（expired の約束を試すため）
-  items.push(["closedRecurringRules", { dayOfMonth: 1, effectiveTo: "2025-12-31" }]);
-  for (const d of ["2026-05-01", "2026-05-04", "2026-07-20"])
-    items.push(["closedDates", d], ["openDates", d]);
-  items.push(["closedDates", { from: "2026-04-30", to: "2026-05-06" }]);
-  for (const a of ["05-01", "12-31", { from: "12-29", to: "01-03" }])
-    items.push(["closedAnnualDates", a]);
-}
+).items;
+
+/**
+ * 項目の一覧がまだ持っていない形のキーと、その理由。test/catalog.test.ts の到達性と同じ形で、一覧が目録のすべての形と
+ * キーを含むかを確かめ、ここに載っていない不足は失敗にする（載っているのに不足していない項目も、古い記載として失敗）
+ */
+const ITEM_GAPS: Readonly<Record<string, string>> = {
+  "WeekdayPattern.nth":
+    "項目を足すと組み合わせが約 1.4 倍になり、全件の実行が CI の時間（10 分）を超えるため、全件の実行を行列に分けてから足す",
+  "WeekdayPattern.months": "同上",
+  "WeekdayPattern.skipWeekdays": "同上",
+  "BusinessDayOfWeekPattern.months": "同上",
+  "HolidayPattern.months": "同上",
+  "DayBeforeHolidayPattern.weekdays": "同上",
+  "*.effectiveFrom": "同上",
+  "*.name": "同上",
+};
 
 const build = (list: readonly Item[], holidayPolicy: string): Obj => {
   const o: Obj = {
@@ -112,7 +118,7 @@ function* configs(): Generator<{ list: Item[]; policy: string }> {
       for (const policy of i === j ? ["closed"] : ["closed", "open"]) {
         n++;
         if (!FULL && n % 37 !== 0) continue;
-        if (SHARD && n % Number(SHARD[2]) !== Number(SHARD[1])) continue;
+        if (SHARD && n % SHARD.n !== SHARD.k) continue;
         yield { list: i === j ? [items[i]!] : [items[i]!, items[j]!], policy };
       }
 }
@@ -153,6 +159,26 @@ const summarize = (name: string, report: Report): void => {
   if (FULL && process.env["GITHUB_STEP_SUMMARY"])
     appendFileSync(process.env["GITHUB_STEP_SUMMARY"], `${lines.join("\n")}\n`);
 };
+
+test("オラクル: 項目の一覧は目録のすべての形とキーを含む（不足は ITEM_GAPS に理由付きで載せたものだけ）", () => {
+  const made = new Map<string, Set<string>>();
+  for (const [key, value] of items) {
+    if (!key.endsWith("RecurringRules")) continue;
+    const shape = shapeOf(value as Obj);
+    assert.ok(shape, `形の分からない項目: ${JSON.stringify(value)}`);
+    const set = made.get(shape.pattern) ?? new Set<string>();
+    for (const k of Object.keys(value as Obj)) set.add(k);
+    made.set(shape.pattern, set);
+  }
+  const all = new Set([...made.values()].flatMap((s) => [...s]));
+  const gaps: string[] = [];
+  for (const s of SHAPES) {
+    if (!made.has(s.pattern)) gaps.push(`${s.pattern}`);
+    for (const k of s.keys) if (!made.get(s.pattern)?.has(k)) gaps.push(`${s.pattern}.${k}`);
+  }
+  for (const k of COMMON_RULE_KEYS) if (!all.has(k)) gaps.push(`*.${k}`);
+  assert.deepEqual(gaps, Object.keys(ITEM_GAPS), "項目の一覧の不足と ITEM_GAPS が食い違う");
+});
 
 // ------------------------------------------------------------
 // 健全性: 出た項目を取り除いても、結果が変わらない
@@ -278,9 +304,7 @@ test(
 test(
   "オラクル: 出た項目をまとめて取り除いても、全日の結果が変わらない",
   {
-    skip:
-      SKIP ||
-      (process.env["ORACLE_JOINT"] !== "1" && "0.31.0（P1）で有効にする。ORACLE_JOINT=1 で試せる"),
+    skip: SKIP || (!flagEnv("ORACLE_JOINT") && "0.31.0（P1）で有効にする。ORACLE_JOINT=1 で試せる"),
   },
   () => {
     const report = run((list, policy, d, r) => {

@@ -1,0 +1,214 @@
+// result-compare（scripts/result-compare.ts）が比べる設定の集まり。種で決まる設定と、過去の退行を書き留めた固定の設定。
+// 生成範囲の包含の検査（test/generator-features.test.ts）も、同じ関数で同じ設定を作って特徴を数える。
+// 提供元は名前のまま持ち、比べるときに読み込んだ版の提供元に置き換える。
+
+import {
+  CONTEXTS,
+  beforeRename,
+  picker,
+  random,
+  randomCalendarOptions,
+  randomScheduleOptions,
+  withoutHolidays,
+  type Context,
+  type Obj,
+} from "./catalog.ts";
+
+/** 提供元の名前（読み込んだ版の提供元に置き換える前の形） */
+export type ProviderName = "jp" | "england" | "scotland" | "metropole" | "sg";
+export const PROVIDERS: readonly ProviderName[] = ["jp", "england", "scotland", "metropole", "sg"];
+export const TIME_ZONES: Record<ProviderName, string> = {
+  jp: "Asia/Tokyo",
+  england: "Europe/London",
+  scotland: "Europe/London",
+  metropole: "Europe/Paris",
+  sg: "Asia/Singapore",
+};
+export const YEARS: Record<ProviderName, readonly [number, number]> = {
+  jp: [1955, 2099],
+  england: [1974, 2099],
+  scotland: [1974, 2099],
+  metropole: [2000, 2099],
+  sg: [2020, 2027],
+};
+
+export interface Case {
+  readonly id: string;
+  readonly kind: "calendar" | "schedule";
+  readonly providers: readonly ProviderName[];
+  /** 提供元は名前のまま。比べるときに読み込んだ版の提供元に置き換える */
+  readonly options: Obj;
+  readonly from: string;
+  readonly to: string;
+  /** この版より前の版とは比べない（その版で入った形を使う固定の設定） */
+  readonly minBase?: string;
+  /** 合成するときのもう 1 つのカレンダー */
+  readonly partner?: Case;
+  readonly combine?: "all" | "any";
+}
+
+/** 種で決まる乱数（result-compare の既定の種は 20261030） */
+export class Gen {
+  readonly next: () => number;
+  constructor(start: number) {
+    this.next = random(start);
+  }
+  int(lo: number, hi: number): number {
+    return lo + Math.floor(this.next() * (hi - lo + 1));
+  }
+  chance(p: number): boolean {
+    return this.next() < p;
+  }
+  pick<T>(items: readonly T[]): T {
+    return items[Math.floor(this.next() * items.length)]!;
+  }
+  some<T>(items: readonly T[], max: number): T[] {
+    const n = this.int(1, Math.min(max, items.length));
+    const pool = [...items];
+    const out: T[] = [];
+    for (let i = 0; i < n; i++) out.push(pool.splice(Math.floor(this.next() * pool.length), 1)[0]!);
+    return out;
+  }
+}
+
+const pad = (n: number): string => String(n).padStart(2, "0");
+const iso = (y: number, m: number, d: number): string => `${y}-${pad(m)}-${pad(d)}`;
+
+/** 比べる期間: 提供元の対応年が重なる範囲の内側（隣の日を見る規則が対応年の端に触れない）を、最大 6 年 */
+export function rangeOf(providers: readonly ProviderName[]): [string, string] {
+  let from = 2021;
+  let to = 2026;
+  for (const p of providers) {
+    from = Math.max(from, YEARS[p][0] + 1);
+    to = Math.min(to, YEARS[p][1] - 1);
+  }
+  return [iso(from, 1, 1), iso(to, 12, 31)];
+}
+
+/** 文脈（提供元があるか・改名の前の版と比べるか）。名前は生成器の到達性のテストの名前に出る */
+export function contextOf(
+  withHolidays: boolean,
+  newShapes: boolean,
+): { name: string; ctx: Context } {
+  let ctx: Context = CONTEXTS["result-compare"];
+  if (!withHolidays) ctx = withoutHolidays(ctx);
+  if (!newShapes) ctx = beforeRename(ctx);
+  const notes = [
+    ...(newShapes ? [] : ["0.22.2 と比べる"]),
+    ...(withHolidays ? [] : ["提供元なし"]),
+  ];
+  return { name: `result-compare${notes.length > 0 ? `（${notes.join("・")}）` : ""}`, ctx };
+}
+
+function providersOf(g: Gen): ProviderName[] {
+  const n = g.pick([0, 1, 1, 2, 2]);
+  return n === 0 ? [] : g.some(PROVIDERS, n);
+}
+
+function sourceOptions(g: Gen, providers: readonly ProviderName[]): Obj {
+  const o: Obj = {};
+  if (providers.length > 0) {
+    o["holidayProvider"] = providers.length === 1 && g.chance(0.5) ? providers[0] : [...providers];
+    o["timeZone"] = TIME_ZONES[providers[0]!];
+  }
+  return o;
+}
+
+export function calendarCase(g: Gen, id: string, newShapes: boolean): Case {
+  const providers = providersOf(g);
+  const { ctx } = contextOf(providers.length > 0, newShapes);
+  const options = { ...sourceOptions(g, providers), ...randomCalendarOptions(picker(g.next), ctx) };
+  const [from, to] = rangeOf(providers);
+  return { id, kind: "calendar", providers, options, from, to };
+}
+
+export function scheduleCase(g: Gen, id: string, newShapes: boolean): Case {
+  const providers = providersOf(g);
+  const { ctx } = contextOf(providers.length > 0, newShapes);
+  const options = { ...sourceOptions(g, providers), ...randomScheduleOptions(picker(g.next), ctx) };
+  const [from, to] = rangeOf(providers);
+  return { id, kind: "schedule", providers, options, from, to };
+}
+
+/** 種で決まる設定の集まり（カレンダー 240 件・スケジュール 100 件に倍率を掛ける。合成の組は 4 件に 1 件） */
+export function generateCases(seed: number, scale: number, newShapes: boolean): Case[] {
+  const g = new Gen(seed);
+  const cases: Case[] = [];
+  const counts = { calendars: Math.round(240 * scale), schedules: Math.round(100 * scale) };
+  for (let i = 0; i < counts.calendars; i++) {
+    const c = calendarCase(g, `calendar-${i}`, newShapes);
+    if (g.chance(0.25)) {
+      cases.push({
+        ...c,
+        partner: calendarCase(g, `calendar-${i}-partner`, newShapes),
+        combine: g.pick(["all", "any"]),
+      });
+    } else cases.push(c);
+  }
+  for (let i = 0; i < counts.schedules; i++)
+    cases.push(scheduleCase(g, `schedule-${i}`, newShapes));
+  return cases;
+}
+
+/**
+ * 過去の退行を書き留めた固定の設定（乱数では当たりにくい形）。新しい退行を見つけたら、その最小の設定を足す
+ * （直した版を出した後も残す。同じ退行が戻ったら止めるため）
+ */
+export function fixedCases(): Case[] {
+  const holiday = (kinds: string[]): Obj => ({ holiday: true, kinds });
+  const cal = (id: string, providers: ProviderName[], options: Obj): Case => {
+    const [from, to] = rangeOf(providers);
+    return {
+      id,
+      kind: "calendar",
+      providers,
+      options: { holidayProvider: providers, timeZone: TIME_ZONES[providers[0]!], ...options },
+      from,
+      to,
+    };
+  };
+  /** 提供元のないカレンダー */
+  const cal0 = (id: string, options: Obj): Case => ({
+    id,
+    kind: "calendar",
+    providers: [],
+    options,
+    from: "2021-01-01",
+    to: "2026-12-31",
+  });
+  return [
+    // 和集合の旧名 "national" は、日本の提供元の毎年の祝日だけに当たる（ほかの提供元の "regular" には当たらない）
+    cal("fixed-union-national", ["jp", "england"], {
+      holidayPolicy: "open",
+      closedRecurringRules: [holiday(["national"])],
+    }),
+    // 日本を含む和集合の "regular" は、日本の国民の祝日にも当たる（改名で意味が広がった。etc/result-changes.json で許す）
+    cal("fixed-union-regular", ["jp", "england"], {
+      holidayPolicy: "open",
+      closedRecurringRules: [holiday(["regular"])],
+    }),
+    // 日本の提供元だけの設定の "regular" と旧名の "national" の同じ規則は、後の規則が shadowed になる
+    cal("fixed-jp-regular-national", ["jp"], {
+      closedRecurringRules: [holiday(["regular"]), holiday(["national"])],
+    }),
+    cal("fixed-jp-national-regular", ["jp"], {
+      closedRecurringRules: [holiday(["national"]), holiday(["regular"])],
+    }),
+    // 第 n 営業日を数える規則があると、数え方を変える個別の日付・毎年の月日は redundant にならない
+    cal0("fixed-counting-date", {
+      closedDates: ["2026-05-01"],
+      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
+    }),
+    cal0("fixed-counting-annual", {
+      closedAnnualDates: ["05-01"],
+      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
+    }),
+    {
+      ...cal0("fixed-counting-week", {
+        closedDates: ["2026-05-04"],
+        closedRecurringRules: [{ weekday: 1 }, { businessDayOfWeek: 1, weekStart: 1 }],
+      }),
+      minBase: "0.30.0",
+    },
+  ];
+}

@@ -301,6 +301,25 @@ jobs:
         env:
           ORACLE_FULL: "1"
 
+  generator-features:
+    # 実際の呼び出し側（乱数のテストと result-compare）を動かし、作った設定の特徴が生成範囲の記録
+    # （test/fixtures/generator-features-0.30.3/）をすべて含むことを確かめる（scripts/record-generator-features.ts）。
+    # 読み込みのフックで部品を差し替えるので、Node.js の版は 1 つに固定する。前の版の番号をタグから求めるので履歴とタグを取得する
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "26.13.0"
+      - name: Check the generators of the callers against the record
+        run: |
+          node scripts/record-generator-features.ts --ref HEAD --check | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${PIPESTATUS[0]}" -eq 0
+
   result-compare:
     # 同じ設定の結果（カレンダー・スケジュール・診断）を、公開済みの前の版（npm の latest）と 1 日ずつ比べる（decisions.md の 37 番）。
     # 改名の前の 0.22.2 とも、旧名の設定で比べる（改名は結果を変えないという約束を確かめるため。1.0.0 で外す）。

@@ -6,8 +6,9 @@ import { test } from "node:test";
 import * as root from "../src/index.ts";
 import * as provider from "../src/provider/index.ts";
 import { jp } from "../src/jp/index.ts";
+import { intEnv } from "./support/env.ts";
 
-const SEED = Number(process.env["PROPERTY_SEED"] ?? 20261101);
+const SEED = intEnv("PROPERTY_SEED", 20261101);
 const RUNS = 150;
 
 /** mulberry32: 種から決まる、再現可能な乱数 */

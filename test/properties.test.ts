@@ -15,79 +15,52 @@ import {
   monthOf,
   createSchedule,
   type Calendar,
-  type Month,
-  type RecurringRule,
-  type ScheduleRecurringRule,
-  type Weekday,
+  type CalendarOptions,
+  type ScheduleOptions,
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
-import { picker, random, randomRules } from "./support/catalog.ts";
+import { random } from "./support/catalog.ts";
+import { intEnv } from "./support/env.ts";
+import {
+  PROPERTY,
+  checkSkipped,
+  propertyCalendarOptions,
+  propertyGen,
+  propertyMoveOptions,
+  propertyPairOptions,
+  propertyShiftOptions,
+  propertyWeeklyOptions,
+  type PropertyGen as Gen,
+} from "./support/sites.ts";
 
-const SEED = Number(process.env["PROPERTY_SEED"] ?? 20261015);
-const RUNS = 300;
+const SEED = intEnv("PROPERTY_SEED", PROPERTY.seed);
+const RUNS = PROPERTY.runs;
+/**
+ * 営業日が見つからない試行を飛ばしてよい上限（試行の 1 割）。目録の規則で営業日が（ほとんど）ないカレンダーもでき、
+ * その試行は性質の前提を満たさないので飛ばす。飛ばした試行が 1 割を超えると、性質を確かめた試行が 9 割を切るので失敗にする
+ */
+const SKIP_LIMIT = RUNS / 10;
 
-/** mulberry32: 種から決まる、再現可能な乱数 */
-interface Gen {
-  readonly rand: () => number;
-  int(min: number, max: number): number;
-  date(): string;
-  pick<T>(items: readonly T[]): T;
-}
-
-function gen(rand: () => number): Gen {
-  const int = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
-  return {
-    rand,
-    int,
-    // 日本の祝日の対応年に収め、端で探索が範囲を出ないよう余裕を取る
-    date: () => addDays("1960-01-01", int(0, 365 * 130)),
-    pick: (items) => items[int(0, items.length - 1)]!,
-  };
-}
-
-/** 乱数で営業日カレンダーの設定を作る（営業日が必ず残るよう、定休日は最大 5 曜日） */
+/** 乱数で営業日カレンダーを作る（設定の作り方は test/support/sites.ts） */
 function randomCalendar(g: Gen): { calendar: Calendar; describe: string } {
-  const weekdays = [0, 1, 2, 3, 4, 5, 6].filter(() => g.int(0, 3) === 0).slice(0, 5) as Weekday[];
-  const closedDates = Array.from({ length: g.int(0, 5) }, () => {
-    const from = g.date();
-    return { from, to: addDays(from, g.int(0, 10)) };
-  });
-  const openDates = Array.from({ length: g.int(0, 3) }, () => g.date());
-  const closedAnnualDates = g.int(0, 1) ? [{ from: "12-29", to: "01-03" }] : [];
-  const holidayPolicy = g.pick(["closed", "open", "ignore"] as const);
-  // 繰り返しの規則は目録から作る（規則のすべての形を試すため。test/support/catalog.ts）
-  const p = picker(g.rand);
-  const ctx = {
-    holidays: true,
-    kinds: ["regular", "substitute", "citizens"],
-    keys: ["new-year", "vernal-equinox", "culture"],
-    year: 2026,
-    newShapes: true,
-  };
-  const options = {
-    holidayProvider: jp,
-    closedWeekdays: weekdays,
-    closedDates,
-    openDates,
-    closedAnnualDates,
-    holidayPolicy,
-    ...(g.int(0, 2) > 0
-      ? { closedRecurringRules: randomRules(p, ctx, 3) as unknown as RecurringRule[] }
-      : {}),
-    ...(g.int(0, 3) === 0
-      ? { openRecurringRules: randomRules(p, ctx, 2) as unknown as RecurringRule[] }
-      : {}),
-  };
+  const options = { holidayProvider: jp, ...propertyCalendarOptions(g) };
   return {
-    calendar: createCalendar(options),
+    calendar: createCalendar(options as CalendarOptions),
     describe: JSON.stringify({ ...options, holidayProvider: "jp" }),
   };
 }
 
+test("飛ばした試行の上限: 件数が上限以下なら件数の行を返し、上限を超えたら失敗する（種に頼らずに確かめる）", () => {
+  assert.equal(checkSkipped(0, 300, 30, "理由"), "飛ばした試行: 0 / 300（理由）");
+  assert.equal(checkSkipped(30, 300, 30, "理由"), "飛ばした試行: 30 / 300（理由）");
+  assert.throws(() => checkSkipped(31, 300, 30, "理由"), /上限（30）を超えた: 31 \/ 300/);
+  assert.throws(() => checkSkipped(1, 300, 0, "理由"), /上限（0）を超えた/);
+});
+
 /** 性質を RUNS 回確かめる。失敗したら種・試行・入力を出す */
 function property(name: string, check: (g: Gen) => string | void): void {
   test(`性質: ${name}`, () => {
-    const g = gen(random(SEED));
+    const g = propertyGen(random(SEED));
     let skipped = 0;
     for (let run = 0; run < RUNS; run++) {
       let context = "";
@@ -103,8 +76,14 @@ function property(name: string, check: (g: Gen) => string | void): void {
         assert.fail(`seed=${SEED} run=${run} ${context}\n${detail}`);
       }
     }
-    // 飛ばした試行が多すぎると性質が空振りするので、1 割までにする
-    assert.ok(skipped <= RUNS / 10, `skipped ${skipped} of ${RUNS} runs (no business day)`);
+    // 飛ばした試行の件数はいつも出し、上限を超えたら失敗にする（黙って飛ばさない。RELEASING.md の「品質の確認」）
+    let line: string;
+    try {
+      line = checkSkipped(skipped, RUNS, SKIP_LIMIT, "営業日が見つからない設定");
+    } catch (error) {
+      assert.fail((error as Error).message);
+    }
+    console.log(`# ${name}: ${line}`);
   });
 }
 
@@ -175,20 +154,11 @@ property("businessDatesBetween の件数は diffBusinessDays と一致する", (
 });
 
 property("営業日カレンダーと、同じ規則の真偽値のスケジュールは一致する", (g) => {
-  const weekdays = [0, 1, 2, 3, 4, 5, 6].map(() => g.int(0, 2) > 0);
-  const holidayValue = g.int(0, 1) === 1;
-  const calendar = createCalendar({
-    holidayProvider: jp,
-    closedWeekdays: [0, 1, 2, 3, 4, 5, 6].filter((w) => !weekdays[w]) as Weekday[],
-    holidayPolicy: holidayValue ? "open" : "closed",
-  });
-  const schedule = createSchedule({
-    holidayProvider: jp,
-    weekdayValues: weekdays as [boolean, boolean, boolean, boolean, boolean, boolean, boolean],
-    holidayPolicy: { value: holidayValue },
-  });
+  const { calendar: c, schedule: s } = propertyWeeklyOptions(g);
+  const calendar = createCalendar({ holidayProvider: jp, ...c } as CalendarOptions);
+  const schedule = createSchedule({ holidayProvider: jp, ...s } as ScheduleOptions<boolean>);
   const day = g.date();
-  const context = `weekly=${JSON.stringify(weekdays)} holiday=${holidayValue} day=${day}`;
+  const context = `calendar=${JSON.stringify(c)} schedule=${JSON.stringify(s)} day=${day}`;
   assert.equal(calendar.isBusinessDay(day), schedule.valueOn(day), context);
   return context;
 });
@@ -208,43 +178,12 @@ property("瞬間の入力は、カレンダーのタイムゾーンで暦日に�
 // 繰り返しの規則と振替
 // ------------------------------------------------------------
 
-const ON_HOLIDAY = ["under-holiday", "over-holiday", "after-holiday"] as const;
-
-/** 乱数で繰り返しの規則を作る */
-function randomRecurring(g: Gen): RecurringRule[] {
-  return Array.from({ length: g.int(1, 3) }, (): RecurringRule => {
-    const holidayOverlapPolicy = g.pick(ON_HOLIDAY);
-    const months = g.int(0, 3) === 0 ? { months: [g.int(1, 12) as Month] } : {};
-    if (g.int(0, 1) === 0) {
-      const nth = g.int(0, 2) === 0 ? {} : { nth: g.pick([1, 2, 3, 4, 5, -1] as const) };
-      // 規則の形ごとの型（holidayOverlapPolicy と skipWeekdays の組み合わせ）は乱数の合併では表せないので、規則の型として渡す
-      return {
-        weekday: g.int(0, 6) as Weekday,
-        ...nth,
-        ...months,
-        holidayOverlapPolicy,
-      } as RecurringRule;
-    }
-    return {
-      dayOfMonth: g.pick([1, 10, 15, 20, 28, 31, -1] as const),
-      ...months,
-      holidayOverlapPolicy,
-    } as RecurringRule;
-  });
-}
-
 property("振替先は振替元より後の祝日でない日で、その間はすべて祝日", (g) => {
-  const rules = randomRecurring(g).map(
-    (r) => ({ ...r, holidayOverlapPolicy: "after-holiday" as const }) as RecurringRule,
-  );
-  const calendar = createCalendar({
-    holidayProvider: jp,
-    holidayPolicy: g.pick(["open", "closed"] as const),
-    closedRecurringRules: rules,
-  });
+  const options = propertyShiftOptions(g);
+  const calendar = createCalendar({ holidayProvider: jp, ...options } as CalendarOptions);
   const day = g.date();
   const info = calendar.dayInfoOn(day);
-  const context = `rules=${JSON.stringify(rules)} day=${day}`;
+  const context = `options=${JSON.stringify(options)} day=${day}`;
   if (info.shiftedFrom !== undefined) {
     assert.ok(info.shiftedFrom < day, context);
     assert.equal(calendar.isHoliday(day), false, context);
@@ -257,16 +196,12 @@ property("振替先は振替元より後の祝日でない日で、その間は�
 });
 
 property("繰り返しの規則があっても、営業日の移動と数え上げの性質は保たれる", (g) => {
-  const calendar = createCalendar({
-    holidayProvider: jp,
-    holidayPolicy: g.pick(["open", "closed", "ignore"] as const),
-    closedRecurringRules: randomRecurring(g),
-    openRecurringRules: g.int(0, 2) === 0 ? randomRecurring(g) : [],
-  });
+  const options = propertyMoveOptions(g);
+  const calendar = createCalendar({ holidayProvider: jp, ...options } as CalendarOptions);
   const start = calendar.businessDayOnOrAfter(g.date());
   const n = g.int(1, 30);
   const forward = calendar.addBusinessDays(start, n);
-  const context = `start=${start} n=${n}`;
+  const context = `options=${JSON.stringify(options)} start=${start} n=${n}`;
   assert.ok(calendar.isBusinessDay(forward), context);
   assert.equal(calendar.addBusinessDays(forward, -n), start, context);
   assert.equal(calendar.diffBusinessDays(start, forward), n, context);
@@ -274,26 +209,11 @@ property("繰り返しの規則があっても、営業日の移動と数え上�
 });
 
 property("繰り返しの規則でも、営業日カレンダーと真偽値のスケジュールは一致する", (g) => {
-  const open = g.int(0, 1) ? randomRecurring(g) : [];
-  const closed = randomRecurring(g);
-  const holidayOpen = g.int(0, 1) === 1;
-  const calendar = createCalendar({
-    holidayProvider: jp,
-    holidayPolicy: holidayOpen ? "open" : "closed",
-    openRecurringRules: open,
-    closedRecurringRules: closed,
-  });
-  const schedule = createSchedule({
-    holidayProvider: jp,
-    weekdayValues: [true, true, true, true, true, true, true],
-    holidayPolicy: { value: holidayOpen },
-    recurringRules: [
-      ...open.map((r) => ({ ...r, value: true }) as ScheduleRecurringRule<boolean>),
-      ...closed.map((r) => ({ ...r, value: false }) as ScheduleRecurringRule<boolean>),
-    ],
-  });
+  const { calendar: c, schedule: s } = propertyPairOptions(g);
+  const calendar = createCalendar({ holidayProvider: jp, ...c } as CalendarOptions);
+  const schedule = createSchedule({ holidayProvider: jp, ...s } as ScheduleOptions<boolean>);
   const day = g.date();
-  const context = `open=${JSON.stringify(open)} closed=${JSON.stringify(closed)} holidayOpen=${holidayOpen} day=${day}`;
+  const context = `calendar=${JSON.stringify(c)} day=${day}`;
   assert.equal(calendar.isBusinessDay(day), schedule.valueOn(day), context);
   assert.equal(calendar.dayInfoOn(day).shiftedFrom, schedule.dayInfoOn(day).shiftedFrom, context);
   return context;

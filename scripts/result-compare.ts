@@ -12,7 +12,8 @@
  * 意図した差分は etc/result-changes.json に、設定の特徴（trait）・入った版・出典を書いて許す。診断の差分は、消えた結果のコード
  * （removedCodes）でも絞れる。
  * 許すのは、前の版がその変更より前（affectedSince 以上・introducedIn 未満）で、今回の版がその変更を含むときだけ。
- * 失敗にする条件: 許していない差分がある。
+ * 失敗にする条件: 許していない差分がある。今回の版で、意図せず作成に失敗した設定がある（生成器が意図して混ぜた入力の誤り
+ * （test/support/catalog.ts の印を付けた規則を含む設定）は数えて Job Summary に出し（0 件なら空振りとして失敗）、それ以外の作成の失敗は、結果を比べられていないので失敗にする）。
  *
  * 使い方: node scripts/result-compare.ts --base <dir> [--head .] [--base-label <label>] [--seed <n>] [--scale <n>] [--changes <file>]
  *   --base は前の版を展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回のリポジトリ（pnpm build 済み）。
@@ -25,7 +26,8 @@ import "./strict-warnings.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { picker, randomRules } from "../test/support/catalog.ts";
+import { CALENDAR_REF, isIntendedInvalid } from "../test/support/catalog.ts";
+import { TIME_ZONES, fixedCases, generateCases, type Case } from "../test/support/result-cases.ts";
 
 type Obj = Record<string, unknown>;
 type Fn = (...args: unknown[]) => unknown;
@@ -43,8 +45,18 @@ if (baseDir === undefined) {
   process.exit(2);
 }
 const headDir = argValue("--head") ?? ".";
-const seed = Number(argValue("--seed") ?? "20261030");
-const scale = Number(argValue("--scale") ?? "1");
+/** 数の引数（数でない値や範囲の外の値は、比べる設定が 0 件になって黙って合格しないよう使い方の誤りにする） */
+const numberArg = (name: string, fallback: string, valid: (n: number) => boolean): number => {
+  const text = argValue(name) ?? fallback;
+  const n = Number(text);
+  if (text.trim() === "" || !Number.isFinite(n) || !valid(n)) {
+    console.error(`${name}: invalid value ${JSON.stringify(text)}`);
+    process.exit(2);
+  }
+  return n;
+};
+const seed = numberArg("--seed", "20261030", Number.isInteger);
+const scale = numberArg("--scale", "1", (n) => n > 0);
 const versionOf = (dir: string): string =>
   (JSON.parse(readFileSync(resolve(dir, "package.json"), "utf8")) as { version: string }).version;
 const headVersion = versionOf(headDir);
@@ -102,232 +114,6 @@ async function load(dir: string): Promise<Lib> {
     diagnoseSchedule: diagnose["diagnoseSchedule"] as Fn,
     providers,
   };
-}
-
-// ------------------------------------------------------------
-// 乱数（種で決まる。decisions.md の 34 番: 依存を足さない）
-// ------------------------------------------------------------
-
-function random(start: number): () => number {
-  let a = start >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-class Gen {
-  readonly next: () => number;
-  constructor(start: number) {
-    this.next = random(start);
-  }
-  int(lo: number, hi: number): number {
-    return lo + Math.floor(this.next() * (hi - lo + 1));
-  }
-  chance(p: number): boolean {
-    return this.next() < p;
-  }
-  pick<T>(items: readonly T[]): T {
-    return items[Math.floor(this.next() * items.length)]!;
-  }
-  some<T>(items: readonly T[], max: number): T[] {
-    const n = this.int(1, Math.min(max, items.length));
-    const pool = [...items];
-    const out: T[] = [];
-    for (let i = 0; i < n; i++) out.push(pool.splice(Math.floor(this.next() * pool.length), 1)[0]!);
-    return out;
-  }
-}
-
-// ------------------------------------------------------------
-// 設定を作る（新しい名前で作り、旧名で書くときは toOld で書き換える）
-// ------------------------------------------------------------
-
-/** 提供元の名前（読み込んだ版の提供元に置き換える前の形） */
-type ProviderName = "jp" | "england" | "scotland" | "metropole" | "sg";
-const PROVIDERS: readonly ProviderName[] = ["jp", "england", "scotland", "metropole", "sg"];
-const TIME_ZONES: Record<ProviderName, string> = {
-  jp: "Asia/Tokyo",
-  england: "Europe/London",
-  scotland: "Europe/London",
-  metropole: "Europe/Paris",
-  sg: "Asia/Singapore",
-};
-const YEARS: Record<ProviderName, readonly [number, number]> = {
-  jp: [1955, 2099],
-  england: [1974, 2099],
-  scotland: [1974, 2099],
-  metropole: [2000, 2099],
-  sg: [2020, 2027],
-};
-const KINDS = ["national", "regular", "substitute", "citizens", "special"] as const;
-const KEYS = [
-  "new-year",
-  "christmas",
-  "boxing-day",
-  "labor-thanksgiving",
-  "culture",
-  "spring",
-  "easter-monday",
-  "labour-day",
-  "national-day",
-  "st-andrews",
-] as const;
-
-interface Case {
-  readonly id: string;
-  readonly kind: "calendar" | "schedule";
-  readonly providers: readonly ProviderName[];
-  /** 提供元は名前のまま。比べるときに読み込んだ版の提供元に置き換える */
-  readonly options: Obj;
-  readonly from: string;
-  readonly to: string;
-  /** この版より前の版とは比べない（その版で入った形を使う固定の設定） */
-  readonly minBase?: string;
-  /** 合成するときのもう 1 つのカレンダー */
-  readonly partner?: Case;
-  readonly combine?: "all" | "any";
-}
-
-const pad = (n: number): string => String(n).padStart(2, "0");
-const iso = (y: number, m: number, d: number): string => `${y}-${pad(m)}-${pad(d)}`;
-
-/** 比べる期間: 提供元の対応年が重なる範囲の内側（隣の日を見る規則が対応年の端に触れない）を、最大 6 年 */
-function rangeOf(providers: readonly ProviderName[]): [string, string] {
-  let from = 2021;
-  let to = 2026;
-  for (const p of providers) {
-    from = Math.max(from, YEARS[p][0] + 1);
-    to = Math.min(to, YEARS[p][1] - 1);
-  }
-  return [iso(from, 1, 1), iso(to, 12, 31)];
-}
-
-/** 規則の並び（目録から作る。test/support/catalog.ts。規則の形を足したら目録に足せば、ここでも試す） */
-function rules(g: Gen, newShapes: boolean, withHolidays: boolean, max: number): Obj[] {
-  return randomRules(
-    picker(g.next),
-    { holidays: withHolidays, kinds: KINDS, keys: KEYS, year: 2024, newShapes },
-    max,
-  );
-}
-
-function providersOf(g: Gen): ProviderName[] {
-  const n = g.pick([0, 1, 1, 2, 2]);
-  return n === 0 ? [] : g.some(PROVIDERS, n);
-}
-
-function sourceOptions(g: Gen, providers: readonly ProviderName[]): Obj {
-  const o: Obj = {};
-  if (providers.length > 0) {
-    o["holidayProvider"] = providers.length === 1 && g.chance(0.5) ? providers[0] : [...providers];
-    o["timeZone"] = TIME_ZONES[providers[0]!];
-  }
-  return o;
-}
-
-function calendarCase(g: Gen, id: string, newShapes: boolean): Case {
-  const providers = providersOf(g);
-  const options = sourceOptions(g, providers);
-  const withHolidays = providers.length > 0;
-  options["holidayPolicy"] = g.pick(["closed", "open", "ignore"]);
-  if (g.chance(0.6)) options["closedWeekdays"] = g.some([0, 6, 3], 2);
-  if (g.chance(0.8)) options["closedRecurringRules"] = rules(g, newShapes, withHolidays, 4);
-  if (g.chance(0.3)) options["openRecurringRules"] = rules(g, newShapes, withHolidays, 2);
-  if (g.chance(0.25))
-    options["closedAnnualDates"] = [
-      g.pick(["12-31", "01-02", "08-13", { from: "12-29", to: "01-03" }]),
-    ];
-  if (g.chance(0.2)) options["closedDates"] = [iso(g.int(2021, 2026), g.int(1, 12), g.int(1, 28))];
-  if (g.chance(0.2)) options["openDates"] = [iso(g.int(2021, 2026), g.int(1, 12), g.int(1, 28))];
-  const [from, to] = rangeOf(providers);
-  return { id, kind: "calendar", providers, options, from, to };
-}
-
-function scheduleCase(g: Gen, id: string, newShapes: boolean): Case {
-  const providers = providersOf(g);
-  const options = sourceOptions(g, providers);
-  const values = ["A", "B", "C", "closed"];
-  options["weekdayValues"] = Array.from({ length: 7 }, (_, i) =>
-    i === 0 || i === 6 ? "closed" : g.pick(values),
-  );
-  options["holidayPolicy"] = g.pick<unknown>(["ignore", { sameAs: 0 }, { value: "H" }]);
-  if (g.chance(0.85))
-    options["recurringRules"] = rules(g, newShapes, providers.length > 0, 4).map((r) => ({
-      ...r,
-      value: g.pick(values),
-    }));
-  if (g.chance(0.25)) options["annualDates"] = [{ date: "12-31", value: "closed" }];
-  if (g.chance(0.2))
-    options["dates"] = [{ date: iso(g.int(2021, 2026), g.int(1, 12), g.int(1, 28)), value: "X" }];
-  const [from, to] = rangeOf(providers);
-  return { id, kind: "schedule", providers, options, from, to };
-}
-
-/**
- * 過去の退行を書き留めた固定の設定（乱数では当たりにくい形）。新しい退行を見つけたら、その最小の設定を足す
- * （直した版を出した後も残す。同じ退行が戻ったら止めるため）
- */
-function fixedCases(): Case[] {
-  const holiday = (kinds: string[]): Obj => ({ holiday: true, kinds });
-  const cal = (id: string, providers: ProviderName[], options: Obj): Case => {
-    const [from, to] = rangeOf(providers);
-    return {
-      id,
-      kind: "calendar",
-      providers,
-      options: { holidayProvider: providers, timeZone: TIME_ZONES[providers[0]!], ...options },
-      from,
-      to,
-    };
-  };
-  /** 提供元のないカレンダー */
-  const cal0 = (id: string, options: Obj): Case => ({
-    id,
-    kind: "calendar",
-    providers: [],
-    options,
-    from: "2021-01-01",
-    to: "2026-12-31",
-  });
-  return [
-    // 和集合の旧名 "national" は、日本の提供元の毎年の祝日だけに当たる（ほかの提供元の "regular" には当たらない）
-    cal("fixed-union-national", ["jp", "england"], {
-      holidayPolicy: "open",
-      closedRecurringRules: [holiday(["national"])],
-    }),
-    // 日本を含む和集合の "regular" は、日本の国民の祝日にも当たる（改名で意味が広がった。etc/result-changes.json で許す）
-    cal("fixed-union-regular", ["jp", "england"], {
-      holidayPolicy: "open",
-      closedRecurringRules: [holiday(["regular"])],
-    }),
-    // 日本の提供元だけの設定の "regular" と旧名の "national" の同じ規則は、後の規則が shadowed になる
-    cal("fixed-jp-regular-national", ["jp"], {
-      closedRecurringRules: [holiday(["regular"]), holiday(["national"])],
-    }),
-    cal("fixed-jp-national-regular", ["jp"], {
-      closedRecurringRules: [holiday(["national"]), holiday(["regular"])],
-    }),
-    // 第 n 営業日を数える規則があると、数え方を変える個別の日付・毎年の月日は redundant にならない
-    cal0("fixed-counting-date", {
-      closedDates: ["2026-05-01"],
-      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
-    }),
-    cal0("fixed-counting-annual", {
-      closedAnnualDates: ["05-01"],
-      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
-    }),
-    {
-      ...cal0("fixed-counting-week", {
-        closedDates: ["2026-05-04"],
-        closedRecurringRules: [{ weekday: 1 }, { businessDayOfWeek: 1, weekStart: 1 }],
-      }),
-      minBase: "0.30.0",
-    },
-  ];
 }
 
 // ------------------------------------------------------------
@@ -557,11 +343,58 @@ function diagnosticKeys(list: unknown): Set<string> | string {
   );
 }
 
+/**
+ * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（CALENDAR_REF）を、その版で作った同じ提供元の
+ * 土日休みのカレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）
+ */
+function withCalendars(lib: Lib, c: Case, naming: "new" | "old", options: Obj): Obj {
+  const key = naming === "old" ? "recurring" : "recurringRules";
+  const list = options[key];
+  if (!Array.isArray(list) || !list.some((r) => (r as Obj)["calendar"] === CALENDAR_REF))
+    return options;
+  const providers = c.providers.map((p) => lib.providers.get(p));
+  const source: Obj =
+    providers.length === 0
+      ? {}
+      : {
+          [naming === "old" ? "holidays" : "holidayProvider"]: providers,
+          timeZone: TIME_ZONES[c.providers[0]!],
+        };
+  const calendar = lib.createCalendar(source);
+  return {
+    ...options,
+    [key]: (list as Obj[]).map((r) => (r["calendar"] === CALENDAR_REF ? { ...r, calendar } : r)),
+  };
+}
+
+/** 意図した入力の誤り（生成器が印を付けた規則。test/support/catalog.ts の isIntendedInvalid）を含む設定か */
+const intendedInvalid = (c: Case): boolean =>
+  ["closedRecurringRules", "openRecurringRules", "recurringRules"].some(
+    (k) => Array.isArray(c.options[k]) && (c.options[k] as unknown[]).some(isIntendedInvalid),
+  );
+
+/** 作成の結果の集計（今回の版で、意図した入力の誤りの設定・意図せず作成に失敗した設定） */
+const creation = { intended: 0, unintended: [] as string[] };
+
+/** 今回の版の作成の結果を数える（名前の書き方のうち最初の 1 つだけ。同じ設定を 2 回数えないため） */
+function tally(c: Case, h: Built, naming: "new" | "old"): void {
+  if (naming !== namings[0]) return;
+  if (intendedInvalid(c)) {
+    if (h.ok) creation.unintended.push(`${c.id}: 意図した入力の誤りなのに作成できた`);
+    else creation.intended++;
+  } else if (!h.ok) creation.unintended.push(`${c.id}: ${h.error}`);
+}
+
 function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boolean): Diff[] {
   const diffs: Diff[] = [];
   const written = naming === "old" ? toOld(c) : c.options;
   const opts = (lib: Lib): Obj =>
-    naming === "old" ? withProvidersOld(lib, written) : withProviders(lib, written);
+    withCalendars(
+      lib,
+      c,
+      naming,
+      naming === "old" ? withProvidersOld(lib, written) : withProviders(lib, written),
+    );
   const meta = (target: string): Omit<Diff, "detail"> => ({
     id: c.id,
     naming,
@@ -571,6 +404,19 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
   if (c.kind === "calendar") {
     const b = build(() => base.createCalendar(opts(base)));
     const h = build(() => head.createCalendar(opts(head)));
+    tally(c, h, naming);
+    if (c.partner)
+      tally(
+        c.partner,
+        build(() =>
+          head.createCalendar(
+            naming === "old"
+              ? withProvidersOld(head, toOld(c.partner!))
+              : withProviders(head, c.partner!.options),
+          ),
+        ),
+        naming,
+      );
     compareDays(diffs, days(b, c.from, c.to), days(h, c.from, c.to), meta("calendar"), c.from);
     if (c.partner && b.ok && h.ok) {
       const partner = (lib: Lib): Obj =>
@@ -596,6 +442,7 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
   } else {
     const b = build(() => base.createSchedule(opts(base)));
     const h = build(() => head.createSchedule(opts(head)));
+    tally(c, h, naming);
     compareDays(diffs, days(b, c.from, c.to), days(h, c.from, c.to), meta("schedule"), c.from);
     if (b.ok && h.ok) {
       const isOpen = (v: unknown): boolean => v !== "closed";
@@ -695,23 +542,11 @@ try {
   process.exit(2);
 }
 
-const g = new Gen(seed);
 const newShapes = !baseIsBeforeRename;
-const counts = { calendars: Math.round(240 * scale), schedules: Math.round(100 * scale) };
-const cases: Case[] = fixedCases().filter(
-  (c) => c.minBase === undefined || cmp(baseVersion, c.minBase) >= 0,
-);
-for (let i = 0; i < counts.calendars; i++) {
-  const c = calendarCase(g, `calendar-${i}`, newShapes);
-  if (g.chance(0.25)) {
-    cases.push({
-      ...c,
-      partner: calendarCase(g, `calendar-${i}-partner`, newShapes),
-      combine: g.pick(["all", "any"]),
-    });
-  } else cases.push(c);
-}
-for (let i = 0; i < counts.schedules; i++) cases.push(scheduleCase(g, `schedule-${i}`, newShapes));
+const cases: Case[] = [
+  ...fixedCases().filter((c) => c.minBase === undefined || cmp(baseVersion, c.minBase) >= 0),
+  ...generateCases(seed, scale, newShapes),
+];
 /** 診断は時間がかかるので、固定の設定と、設定 4 件に 1 件だけ */
 const diagnosed = (c: Case, i: number): boolean => c.id.startsWith("fixed-") || i % 4 === 0;
 
@@ -725,6 +560,9 @@ cases.forEach((c, i) => {
 });
 
 const unexpected = diffs.filter((d) => allowedBy(known, d) === undefined);
+// 生成器は誤りを混ぜる文脈で作るので、入力の誤りの設定が 0 件なら、エラーコードの比較を黙って見なくなっている
+const noInvalid = creation.intended === 0;
+const failed = unexpected.length > 0 || creation.unintended.length > 0 || noInvalid;
 const allowed = diffs.filter((d) => allowedBy(known, d) !== undefined);
 
 const out: string[] = [];
@@ -734,6 +572,19 @@ out.push(
     `診断 ${diagnosedCount} 件）、名前: ${namings.join("・")}、種 ${seed}`,
   "",
 );
+out.push(
+  `入力の誤りの設定: ${creation.intended} 件（エラーコードを比較）。意図せず作成に失敗した設定: ${creation.unintended.length} 件`,
+  "",
+);
+if (creation.unintended.length > 0)
+  out.push(
+    "意図せず作成に失敗した設定（生成器が誤った設定を作っている。結果を比べられていない）:",
+    "",
+    "```text",
+    ...creation.unintended.slice(0, 100),
+    "```",
+    "",
+  );
 const describe = (d: Diff): string =>
   `${d.id} [${d.naming}] ${d.target}: ${d.detail}${d.traits.length > 0 ? `（${d.traits.join(", ")}）` : ""}`;
 const LIMIT = 100;
@@ -758,8 +609,12 @@ if (unexpected.length > 0) {
     "",
     "**失敗**（意図した変更なら、etc/result-changes.json に特徴・版・出典を書く）",
   );
+} else if (creation.unintended.length > 0) {
+  out.push("**失敗**（意図せず作成に失敗した設定がある）");
+} else if (noInvalid) {
+  out.push("**失敗**（入力の誤りの設定が 0 件。エラーコードの比較が空振りしている）");
 } else {
   out.push(allowed.length > 0 ? "**合格**（差分は意図した変更だけ）" : "**合格**（差分なし）");
 }
 console.log(out.join("\n"));
-process.exit(unexpected.length > 0 ? 1 : 0);
+process.exit(failed ? 1 : 0);
