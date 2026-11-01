@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { gzipSync } from "node:zlib";
+import { skipWhen } from "../test/support/skip.ts";
 
 interface Pkg {
   version: string;
@@ -106,7 +107,8 @@ function checkLimitChanges(): { ok: boolean; changed: boolean } {
       );
       return { ok: false, changed: false };
     }
-    console.log("SKIP limit changes: no release tag readable with git (run git fetch --tags)");
+    // 意図した飛ばし（test/support/skip.ts の no-release-tag。CI では上で失敗にする）
+    console.log(`SKIP limit changes: ${skipWhen("no-release-tag", true)}`);
     return { ok: true, changed: false };
   }
   const noted = searched.some((name) => sections.get(name)?.includes("サイズの上限"));

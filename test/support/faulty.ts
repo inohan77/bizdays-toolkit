@@ -51,6 +51,30 @@ export function unconfirmedInYear(year: number): Provider {
   );
 }
 
+/**
+ * 年ごとに、calls 回目の呼び出しまでは正しいデータを返し、その後は例外を投げる（year を渡せばその年だけ。code を渡せば
+ * 例外に code を付ける）。提供元の約束（同じ年に同じ結果を返す）の外の提供元で、診断の最初の検査（対応年のすべての年を
+ * 1 回ずつ引く）は通り、規則どうしの診断の途中で投げる。診断の catch 節に届くことを確かめるテスト（test/catch-paths.test.ts）で使う
+ */
+export function throwingAfter(
+  calls: number,
+  options: { year?: number; code?: string } = {},
+): Provider {
+  const count = new Map<number, number>();
+  return wrap(`LATE-${calls}-${options.year ?? "all"}`, (y) => {
+    const n = (count.get(y) ?? 0) + 1;
+    count.set(y, n);
+    if (n > calls && (options.year === undefined || y === options.year)) {
+      const error = new RangeError(`injected late failure for ${y}`) as RangeError & {
+        code?: string;
+      };
+      if (options.code !== undefined) error.code = options.code;
+      throw error;
+    }
+    return base.holidaysInYear(y);
+  });
+}
+
 /** 注入した年（2026 年）の日・祝日・前後の年の日 */
 export const INJECTED_YEAR = 2026;
 export const DAY_IN_INJECTED_YEAR = "2026-03-03";

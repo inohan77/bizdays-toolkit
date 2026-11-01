@@ -18,6 +18,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join, normalize, resolve } from "node:path";
+import { skipWhen } from "../test/support/skip.ts";
 
 const [browser, driver] = process.argv.slice(2);
 const capabilities: Record<string, Record<string, unknown>> = {
@@ -191,7 +192,7 @@ try {
     console.log(`${r.ok ? "OK  " : "FAIL"} ${r.name}${r.error ? `: ${r.error}` : ""}`);
   }
   console.log(
-    `Temporal: ${outcome.temporal === "native" ? "checked with the native Temporal" : "skipped (no Temporal in this browser)"}`,
+    `Temporal: ${outcome.temporal === "native" ? "checked with the native Temporal" : `skipped (${skipWhen("temporal-unavailable-browser", true)})`}`,
   );
   code = outcome.results.length > 0 && outcome.results.every((r) => r.ok) ? 0 : 1;
 } finally {

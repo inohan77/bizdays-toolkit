@@ -12,6 +12,7 @@ import "./strict-warnings.ts";
 import { spawn } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { skipWhen } from "../test/support/skip.ts";
 
 const workerd = process.argv[2];
 if (!workerd) throw new Error("usage: node scripts/test-workerd.ts <path to workerd>");
@@ -79,7 +80,7 @@ try {
   for (const r of results)
     console.log(`${r.ok ? "OK  " : "FAIL"} ${r.name}${r.error ? `: ${r.error}` : ""}`);
   console.log(
-    `Temporal: ${temporal === "native" ? "checked with the native Temporal" : "skipped (no Temporal in this runtime)"}`,
+    `Temporal: ${temporal === "native" ? "checked with the native Temporal" : `skipped (${skipWhen("temporal-unavailable-runtime", true)})`}`,
   );
   code = results.every((r) => r.ok) && results.length > 0 ? 0 : 1;
 } finally {

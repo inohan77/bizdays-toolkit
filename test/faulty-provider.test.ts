@@ -1,6 +1,6 @@
 // 失敗を注入した祝日の提供元で、判定・診断・合成の結果が文書（docs/guide.ja.md の「対応年の外」「未確定の祝日」「エラー」
 // 「設定の診断」、docs/providers.ja.md の「提供元の約束と誤りの扱い」）のとおりになることを確かめる（テスト拡充案の T3）。
-// 途中から例外を投げる提供元（同じ年に同じ結果を返す約束の外）は、ここでは確かめない（診断の catch 節の到達の検査で足す）。
+// 途中から例外を投げる提供元（同じ年に同じ結果を返す約束の外）は、ここでは確かめない（診断の catch 節に届くことは test/catch-paths.test.ts が確かめる）。
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -27,6 +27,7 @@ import { random } from "./support/catalog.ts";
 import { SHORT_PROVIDER } from "./support/provider.ts";
 import { diagnoseOptions } from "./support/sites.ts";
 import { flagEnv } from "./support/env.ts";
+import { skipWhen, todoFor } from "./support/skip.ts";
 
 /** f が code の例外を投げる */
 const throwsCode = (f: () => unknown, code: string, context: string): void => {
@@ -202,6 +203,9 @@ test('注入（途中の年を未確定）× 判定（スケジュールから�
     holidayProvider: unconfirmedInYear(INJECTED_YEAR),
     weekdayValues: ["closed", "open", "open", "open", "open", "open", "closed"],
     holidayPolicy: "ignore",
+    // スケジュールの第 n 営業日の規則は、数える基準のカレンダー（calendar）が必須（スケジュールの値は営業日・休業日では
+    // ないので、既定の基準を作れない。calendar がなければ invalid-option）。既定の基準（createBasis）を通るのはカレンダーの
+    // 規則だけで、それは "ignore" のカレンダーのテスト（第 n 営業日の規則を含む）が確かめる
     recurringRules: [{ businessDayOfMonth: 1, value: "closed", calendar: plainCalendar() }],
     unconfirmedHolidayPolicy: "throw",
   });
@@ -212,6 +216,11 @@ test('注入（途中の年を未確定）× 判定（スケジュールから�
     () => calendar.dayInfoOn(HOLIDAY_IN_INJECTED_YEAR),
     "unconfirmed-holiday",
     "fromSchedule dayInfoOn",
+  );
+  throwsCode(
+    () => calendar.daysBetween("2026-05-01", "2026-05-31"),
+    "unconfirmed-holiday",
+    "fromSchedule daysBetween",
   );
   // "ignore" でない設定は、営業日の判定でも投げる
   const strict = createCalendarFromSchedule(
@@ -270,7 +279,7 @@ test("注入（途中の年を未確定）× 合成: 投げるカレンダーが
 // 既知の不具合（0.31.0 で直す。docs/guide.ja.md の「未確定の祝日」）: 先のカレンダーで結果が決まると、後のカレンダーを判定しない
 test(
   '注入（途中の年を未確定）× 合成: "all" で先のカレンダーが休業日でも、後のカレンダーが投げるなら投げる',
-  { todo: "既知の不具合（0.31.0 で直す）: 先のカレンダーが休業日なら後のカレンダーを判定しない" },
+  { todo: todoFor("known-bug-combine-short-circuit") },
   () => {
     const combined = combineCalendars([plainCalendar(), strictCalendar()], { open: "all" });
     throwsCode(
@@ -282,7 +291,7 @@ test(
 );
 test(
   '注入（途中の年を未確定）× 合成: "any" で先のカレンダーが営業日でも、後のカレンダーが投げるなら投げる',
-  { todo: "既知の不具合（0.31.0 で直す）: 先のカレンダーが営業日なら後のカレンダーを判定しない" },
+  { todo: todoFor("known-bug-combine-short-circuit") },
   () => {
     const combined = combineCalendars([plainCalendar("open"), strictCalendar()], { open: "any" });
     throwsCode(
@@ -374,12 +383,12 @@ test("注入（特定の年で例外を投げる）× 診断: どの設定でも
   assert.equal(checked, 120);
 });
 
-/** 診断と判定の一致のテストの設定の数（診断が時間を食うので pnpm check では少なくする） */
-const CONSISTENCY_RUNS = 12;
+/** 診断と判定の一致のテストの設定の数（診断が時間を食うので pnpm check では 12 件。全件の 150 件は CONSISTENCY_FULL=1 で、CI の diagnose-consistency ジョブ） */
+const CONSISTENCY_RUNS = flagEnv("CONSISTENCY_FULL") ? 150 : 12;
 
 test(
   '診断と判定の一致（オラクル）: 診断が unconfirmedHolidayPolicy を redundant と出した設定は、"throw" を "accept" に変えても全日の判定（例外の有無を含む）が変わらない',
-  { skip: flagEnv("BIZDAYS_TZ_RUN") && "暦日だけで決まるので、TZ を変えた実行では飛ばす" },
+  { skip: skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN")) },
   () => {
     // 目録の設定（祝日に従属する形のない文脈）を、祝日の扱い "ignore" と未確定の年を含む提供元で作る。"over-holiday"・
     // "after-holiday" の規則の有無で、redundant と出る設定と出ない設定の両方ができる

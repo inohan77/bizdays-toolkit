@@ -26,10 +26,11 @@ import {
   fullRangeSourceOf,
   withCountingRule,
 } from "./support/sites.ts";
+import { skipWhen } from "./support/skip.ts";
 
 const SEED = intEnv("PROPERTY_SEED", DIAGNOSE_PROPERTY.seed);
 /** 日本の全範囲の走査は暦日だけで決まり時間もかかるので、タイムゾーンを変えた実行（scripts/test-tz.ts）では飛ばす */
-const SKIP_TZ = flagEnv("BIZDAYS_TZ_RUN") && "暦日だけで決まるので、TZ を変えた実行では飛ばす";
+const SKIP_TZ = skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN"));
 
 /** 提供元の名前（"jp"）を本物にする */
 const real = (options: Obj): Obj =>

@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import { COMMON_RULE_KEYS, SHAPES, random, shapeOf, type Obj } from "./support/catalog.ts";
 import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 import { flagEnv } from "./support/env.ts";
+import { skipWhen } from "./support/skip.ts";
 
 type Fn = (...args: unknown[]) => unknown;
 const target = process.env["ORACLE_TARGET"];
@@ -56,7 +57,7 @@ const SHARD = ((): { k: number; n: number } | undefined => {
     );
   return { k, n };
 })();
-const SKIP = flagEnv("BIZDAYS_TZ_RUN") && "タイムゾーンに依存しないので、TZ を変えた実行では飛ばす";
+const SKIP = skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN"));
 const AS_OF = "2026-07-01";
 
 // ------------------------------------------------------------
@@ -475,7 +476,7 @@ test(
 test(
   "オラクル: 出た項目をまとめて取り除いても、全日の結果が変わらない",
   {
-    skip: SKIP || (!flagEnv("ORACLE_JOINT") && "0.31.0（P1）で有効にする。ORACLE_JOINT=1 で試せる"),
+    skip: SKIP || skipWhen("oracle-joint", !flagEnv("ORACLE_JOINT")),
   },
   () => {
     const report = run((list, policy, d, r, weekdays) => {
