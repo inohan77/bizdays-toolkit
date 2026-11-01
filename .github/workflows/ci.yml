@@ -286,10 +286,15 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
 
   oracle:
-    # 診断の総当たりのオラクル（test/diagnose-oracle.test.ts）を、すべての組み合わせで動かす（約 2.5 分）。
-    # pnpm check は決まった抜き出しだけを試す。完全性の報告（取り除けるのに何も出ない項目）を Job Summary に残す
+    # 診断の総当たりのオラクル（test/diagnose-oracle.test.ts）を、すべての組み合わせで動かす。1 ジョブの時間を
+    # RELEASING.md の決まり（10 分以内）に収めるため、ORACLE_SHARD で行列に分ける。pnpm check は決まった抜き出しだけを試す。
+    # 完全性の報告（取り除けるのに何も出ない項目）と、設定の内訳を Job Summary に残す
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["0/3", "1/3", "2/3"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -300,6 +305,7 @@ jobs:
       - run: pnpm test:oracle
         env:
           ORACLE_FULL: "1"
+          ORACLE_SHARD: ${{ matrix.shard }}
 
   generator-features:
     # 実際の呼び出し側（乱数のテストと result-compare）を動かし、作った設定の特徴が生成範囲の記録

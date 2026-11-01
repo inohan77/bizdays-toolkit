@@ -1,5 +1,5 @@
 {
-  "note": "診断のオラクルの項目（test/diagnose-oracle.test.ts）。0.30.4 で目録の乱数（種 20261101）から選んだ項目を写して固定したもの。目録の値の候補を変えても、この一覧は意図して変えない限り変わらない",
+  "note": "診断のオラクルの項目（test/diagnose-oracle.test.ts）。0.30.4 で目録の乱数（種 20261101）から選んだ 59 項目を写して固定し、0.30.5 で目録の形とキーの不足（曜日の規則の nth・months・skipWeekdays、週の第 n 営業日の months、祝日の months、祝前日の weekdays、有効期間の始まり・名前）を埋める 6 つの規則を、閉じる・開く規則の両方として足した。目録の値の候補を変えても、この一覧は意図して変えない限り変わらない",
   "items": [
     [
       "closedRecurringRules",
@@ -363,6 +363,98 @@
         "dayBeforeHoliday": true,
         "kinds": ["regular"],
         "skipWeekdays": [6]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "weekday": 3,
+        "nth": [2, 4],
+        "months": [1, 4, 7, 10]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "weekday": 3,
+        "nth": [2, 4],
+        "months": [1, 4, 7, 10]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "weekday": 1,
+        "holidayOverlapPolicy": "after-holiday",
+        "skipWeekdays": [0, 6]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "weekday": 1,
+        "holidayOverlapPolicy": "after-holiday",
+        "skipWeekdays": [0, 6]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "businessDayOfWeek": 1,
+        "weekStart": 1,
+        "months": [2, 3]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "businessDayOfWeek": 1,
+        "weekStart": 1,
+        "months": [2, 3]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "holiday": true,
+        "months": [5]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "holiday": true,
+        "months": [5]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayBeforeHoliday": true,
+        "weekdays": [1, 2, 3, 4, 5]
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayBeforeHoliday": true,
+        "weekdays": [1, 2, 3, 4, 5]
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "dayOfMonth": 15,
+        "effectiveFrom": "2026-04-01",
+        "name": "r1"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "dayOfMonth": 15,
+        "effectiveFrom": "2026-04-01",
+        "name": "r1"
       }
     ],
     [

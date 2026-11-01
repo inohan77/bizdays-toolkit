@@ -4,6 +4,10 @@
 // 呼び出し側の設定は test/support/sites.ts の関数で、呼び出し側と同じ種と試行の数で作る。diagnose-properties と
 // result-compare は乱数の並びまで呼び出し側と同じだが、properties は近似（性質の中で日付なども同じ乱数から引くので、
 // 並びが呼び出し側とずれる）。実際の呼び出し側の包含は、CI の generator-features ジョブ（スクリプトの --check）で確かめる。
+// 拾える特徴の数は、スクリプトのほうが多い。result-compare（テスト 487 件・スクリプト 563 件、0.30.5 で調べた差 76 件）は、
+// 差がすべて問い合わせた日付の特徴（scan[…]）で、スクリプトだけが、スケジュールの第 n 営業日の規則の基準のカレンダー
+// （result-compare が作る提供元だけのカレンダー）にライブラリが問い合わせた日付（提供元の対応年に広がる）を拾うため。
+// 設定だけを作るこのテストには、その問い合わせが出ない。設定の特徴（scan 以外）は両方で同じ。
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { jp } from "../src/jp/index.ts";

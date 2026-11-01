@@ -26,6 +26,8 @@ import "./strict-warnings.ts";
  * （RELEASING.md の「品質の確認」）。
  * --update は --ref v0.30.3 でだけ動く（今の版から作ると、包含の検査が自分自身との比較になるため）。
  * 呼び出し側は strict-warnings を読み込んで動かし、Node.js の警告が出たら失敗にする（フックの警告を見落とさないため）。
+ * --update では呼び出し側の終了コード 0 を必須にする（途中で止まった呼び出し側の特徴で基準が小さくなるのを防ぐ）。
+ * --check では終了コードを見ない（途中で止まれば、拾えない特徴が落ちた特徴として出て、比べた結果が失敗になる）。
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
@@ -233,6 +235,15 @@ registerHooks({
         maxBuffer: 1 << 28,
       },
     );
+    // 記録を作るときは、呼び出し側が最後まで動いたこと（終了コード 0）を必須にする（途中で止まった呼び出し側の特徴で、
+    // 基準が黙って小さくなるのを防ぐ）。比べるとき（--check）は終了コードを見ない（今の呼び出し側のテストの合否は
+    // pnpm check が見る。途中で止まれば拾えない特徴が落ちた特徴として出るので、比べた結果も失敗になる）
+    if (update && r.status !== 0) {
+      console.error(r.stdout.slice(-2000), r.stderr.slice(-2000));
+      throw new Error(
+        `${site}: the caller exited with ${r.status} (--update needs every caller to finish)`,
+      );
+    }
     const warned = r.stderr
       .split("\n")
       .filter((l) => l.includes("Node.js warning treated as an error"));

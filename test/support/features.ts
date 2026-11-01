@@ -139,7 +139,12 @@ export function diagnoseRangeOf(options: Obj): { from: string; to: string } | un
   let from = ignore ? Math.min(...years.map((y) => y[0])) : Math.max(...years.map((y) => y[0]));
   let to = ignore ? Math.max(...years.map((y) => y[1])) : Math.min(...years.map((y) => y[1]));
   if (from > to) return undefined;
-  if (to - from + 1 > 200) [from, to] = [Math.max(from, 1900), Math.min(to, 2099)];
+  // 200 年を超える範囲は 1900〜2099 年に絞り、重ならなければ先頭の 200 年にする（src/core/diagnose.ts の clipYears）
+  if (to - from + 1 > 200) {
+    const a = Math.max(from, 1900);
+    const b = Math.min(to, 2099);
+    [from, to] = a <= b ? [a, b] : [from, from + 199];
+  }
   return { from: `${from}-01-01`, to: `${to}-12-31` };
 }
 

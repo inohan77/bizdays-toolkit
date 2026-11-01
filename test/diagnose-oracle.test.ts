@@ -5,7 +5,8 @@
  * その 2 つまでの組み合わせを総当たりする（乱数の種による当たり外れがなく、目録を変えても項目は変わらない）。
  *
  * - 判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。docs/decisions.md の 31 番）
- * - pnpm check では決まった抜き出しだけを試す。すべての組み合わせ（約 2.5 分）は ORACLE_FULL=1 で（CI の test:oracle ジョブ）
+ * - pnpm check では決まった抜き出しだけを試す。すべての組み合わせは ORACLE_FULL=1 で（CI の oracle ジョブ。時間の決まりと
+ *   行列の分け方は RELEASING.md の「品質の確認」）
  * - 判定は暦日でタイムゾーンに依存しないので、タイムゾーンを変えた実行（scripts/test-tz.ts）では飛ばす
  * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別の版（公開済みの版など）を試せる。ORACLE_SHARD=k/n で、
  *   試す組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。書式の誤りと k >= n は例外）
@@ -16,7 +17,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { COMMON_RULE_KEYS, SHAPES, shapeOf, type Obj } from "./support/catalog.ts";
+import { COMMON_RULE_KEYS, SHAPES, random, shapeOf, type Obj } from "./support/catalog.ts";
 import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 import { flagEnv } from "./support/env.ts";
 
@@ -66,23 +67,17 @@ const items: readonly Item[] = (
  * 項目の一覧がまだ持っていない形のキーと、その理由。test/catalog.test.ts の到達性と同じ形で、一覧が目録のすべての形と
  * キーを含むかを確かめ、ここに載っていない不足は失敗にする（載っているのに不足していない項目も、古い記載として失敗）
  */
-const ITEM_GAPS: Readonly<Record<string, string>> = {
-  "WeekdayPattern.nth":
-    "項目を足すと組み合わせが約 1.4 倍になり、全件の実行が CI の時間（10 分）を超えるため、全件の実行を行列に分けてから足す",
-  "WeekdayPattern.months": "同上",
-  "WeekdayPattern.skipWeekdays": "同上",
-  "BusinessDayOfWeekPattern.months": "同上",
-  "HolidayPattern.months": "同上",
-  "DayBeforeHolidayPattern.weekdays": "同上",
-  "*.effectiveFrom": "同上",
-  "*.name": "同上",
-};
+const ITEM_GAPS: Readonly<Record<string, string>> = {};
 
-const build = (list: readonly Item[], holidayPolicy: string): Obj => {
+const build = (
+  list: readonly Item[],
+  holidayPolicy: string,
+  closedWeekdays: readonly number[] = [0, 6],
+): Obj => {
   const o: Obj = {
     holidayProvider: SHORT_PROVIDER,
     timeZone: "UTC",
-    closedWeekdays: [0, 6],
+    closedWeekdays: [...closedWeekdays],
     holidayPolicy,
     outOfRangePolicy: "ignore",
   };
@@ -110,18 +105,59 @@ const pathsOf = (list: readonly Item[]): string[] => {
   return list.map(([k]) => `${k}[${(count[k] = (count[k] ?? -1) + 1)}]`);
 };
 
-/** 試す設定（すべての組み合わせ、または決まった抜き出し） */
-function* configs(): Generator<{ list: Item[]; policy: string }> {
-  let n = 0;
-  for (let i = 0; i < items.length; i++)
-    for (let j = i; j < items.length; j++)
-      for (const policy of i === j ? ["closed"] : ["closed", "open"]) {
-        n++;
-        if (!FULL && n % 37 !== 0) continue;
-        if (SHARD && n % SHARD.n !== SHARD.k) continue;
-        yield { list: i === j ? [items[i]!] : [items[i]!, items[j]!], policy };
-      }
+/** 休業日の扱いの方針と定休日（項目 1 つの設定は 3 × 3 通りすべて、項目 2 つの設定は方針 3 通り × 土日） */
+const POLICIES = ["closed", "open", "ignore"] as const;
+const WEEKDAY_SETS: readonly (readonly number[])[] = [[0, 6], [0], []];
+/** 項目 2 つの設定で、定休日 [0]・[] と組み合わせるものは、種で決まる抜き出し（この割合） */
+const OTHER_WEEKDAYS_RATE = 1 / 8;
+/** pnpm check（ORACLE_FULL なし）は、全件の設定から、この間隔の決まった抜き出しだけを試す */
+const SAMPLE_EVERY = 111;
+
+interface Config {
+  readonly list: readonly Item[];
+  readonly policy: string;
+  readonly weekdays: readonly number[];
 }
+
+/** 全件の設定（決まった順。定休日 [0]・[] との 2 つの組み合わせは、種で決まる抜き出し）と、その内訳 */
+const plan = (() => {
+  const all: Config[] = [];
+  const pick = random(20261102);
+  let other = 0;
+  for (let i = 0; i < items.length; i++)
+    for (let j = i; j < items.length; j++) {
+      const list = i === j ? [items[i]!] : [items[i]!, items[j]!];
+      for (const policy of POLICIES)
+        for (const weekdays of WEEKDAY_SETS) {
+          if (i !== j && weekdays.length !== 2) {
+            other++;
+            if (pick() >= OTHER_WEEKDAYS_RATE) continue;
+          }
+          all.push({ list, policy, weekdays });
+        }
+    }
+  const chosen = all.filter(
+    (_, n) => (FULL || n % SAMPLE_EVERY === 0) && (!SHARD || n % SHARD.n === SHARD.k),
+  );
+  const count = (f: (c: Config) => string) => {
+    const out: Record<string, number> = {};
+    for (const c of chosen) out[f(c)] = (out[f(c)] ?? 0) + 1;
+    return out;
+  };
+  const sampledOther = all.filter((c) => c.list.length === 2 && c.weekdays.length !== 2).length;
+  return {
+    chosen,
+    lines: [
+      `項目 ${items.length} 件、全件の設定 ${all.length} 件（${FULL ? "全件" : `${SAMPLE_EVERY} 件に 1 件の抜き出し`}${SHARD ? `、${SHARD.n} 個に分けた ${SHARD.k} 番目` : ""}）。試す設定 ${chosen.length} 件`,
+      `方針ごと: ${JSON.stringify(count((c) => c.policy))}`,
+      `定休日ごと: ${JSON.stringify(count((c) => JSON.stringify(c.weekdays)))}`,
+      `項目 2 つと定休日 [0]・[] の組み合わせの抜き出し: ${sampledOther} / ${other} 件（割合 ${OTHER_WEEKDAYS_RATE}）`,
+    ],
+  };
+})();
+
+/** 試す設定 */
+const configs = (): readonly Config[] => plan.chosen;
 
 interface Report {
   configs: number;
@@ -130,16 +166,25 @@ interface Report {
   codes: Record<string, number>;
 }
 
-function run(check: (list: Item[], policy: string, d: Obj[], report: Report) => void): Report {
+function run(
+  check: (
+    list: readonly Item[],
+    policy: string,
+    d: Obj[],
+    report: Report,
+    weekdays: readonly number[],
+  ) => void,
+  list: readonly Config[] = configs(),
+): Report {
   const report: Report = { configs: 0, unsound: [], incomplete: new Map(), codes: {} };
-  for (const { list, policy } of configs()) {
-    const o = build(list, policy);
+  for (const { list: items, policy, weekdays } of list) {
+    const o = build(items, policy, weekdays);
     const d = diag["diagnoseCalendar"]!(o) as Obj[];
     if (d.some((x) => x["severity"] === "error")) continue;
     report.configs++;
     for (const x of d)
       report.codes[x["code"] as string] = (report.codes[x["code"] as string] ?? 0) + 1;
-    check(list, policy, d, report);
+    check(items, policy, d, report, weekdays);
   }
   return report;
 }
@@ -149,10 +194,12 @@ const summarize = (name: string, report: Report): void => {
   const lines = [
     `### ${name}`,
     "",
-    `設定 ${report.configs} 件、誤り ${report.unsound.length} 件、診断のコード: ${JSON.stringify(report.codes)}`,
+    ...plan.lines,
+    "",
+    `設定 ${report.configs} 件（作成の誤りの設定を除く）、誤り ${report.unsound.length} 件、診断のコード: ${JSON.stringify(report.codes)}`,
     "",
     "取り除いても変わらないのに何も出ない項目（完全性の報告。失敗にはしない）:",
-    ...top.map(([k, v]) => `- ${v} 件 ${k}`),
+    ...(top.length > 0 ? top.map(([k, v]) => `- ${v} 件 ${k}`) : ["- なし"]),
     "",
   ];
   console.log(lines.join("\n"));
@@ -184,37 +231,78 @@ test("オラクル: 項目の一覧は目録のすべての形とキーを含む
 // 健全性: 出た項目を取り除いても、結果が変わらない
 // ------------------------------------------------------------
 
+/** 設定の項目を 1 つずつ取り除き、健全性（出た項目は取り除いても変わらない）と完全性（変わらないのに何も出ない項目）を数える */
+function checkRemovals(
+  list: readonly Item[],
+  policy: string,
+  d: Obj[],
+  r: Report,
+  weekdays: readonly number[],
+): void {
+  const paths = pathsOf(list);
+  const baseOpen = snapshot(build(list, policy, weekdays), false);
+  const baseFull = snapshot(build(list, policy, weekdays), true);
+  paths.forEach((path, p) => {
+    const codes = d.filter((x) => x["path"] === path).map((x) => x["code"] as string);
+    const rest = build(
+      list.filter((_, q) => q !== p),
+      policy,
+      weekdays,
+    );
+    const restOpen = snapshot(rest, false);
+    const where = `${policy} ${JSON.stringify(weekdays)} ${JSON.stringify(list)}`;
+    if (
+      (codes.includes("shadowed") || codes.includes("never-matches")) &&
+      !same(snapshot(rest, true), baseFull)
+    )
+      r.unsound.push(`${codes.join(",")} ${path} ${where}`);
+    if (codes.includes("redundant") && !same(restOpen, baseOpen))
+      r.unsound.push(`redundant ${path} ${where}`);
+    if (
+      same(restOpen, baseOpen) &&
+      !codes.some((c) => ["redundant", "shadowed", "never-matches", "expired"].includes(c))
+    ) {
+      const key = `${list[p]![0]} ${JSON.stringify(list[p]![1])}`;
+      r.incomplete.set(key, (r.incomplete.get(key) ?? 0) + 1);
+    }
+  });
+}
+
+/**
+ * 完全性の報告に必ず出る設定（カナリア）。開く規則「5・7 月の月曜」は、定休日が土日なので月曜を開く意味がなく、
+ * 閉じる規則「2026 年からの毎月 1 日」と重なる日（5・7 月の 1 日が月曜）も、対応年（2025〜2027 年）にない。
+ * そのため取り除いても全日の結果は変わらないが、診断は redundant と言わない。redundant は、祝日・暦の並びの
+ * 偶然で取り除ける項目まで見つけることを約束していないため（docs/decisions.md の 31 番）。報告の仕組みが壊れて
+ * 何も数えなくなれば、ここで止まる
+ */
+const CANARY: Config = {
+  list: [
+    ["openRecurringRules", { weekday: 1, months: [5, 7] }],
+    ["closedRecurringRules", { dayOfMonth: 1, effectiveFrom: "2026-01-01" }],
+  ],
+  policy: "closed",
+  weekdays: [0, 6],
+};
+const CANARY_KEY = `openRecurringRules ${JSON.stringify({ weekday: 1, months: [5, 7] })}`;
+
+test("オラクル: 完全性の報告は、取り除けるのに何も出ない既知の設定（カナリア）を数える", () => {
+  const report = run(checkRemovals, [CANARY]);
+  assert.equal(report.configs, 1, "カナリアの設定が作成できない");
+  assert.deepEqual(report.unsound, []);
+  assert.equal(
+    report.incomplete.get(CANARY_KEY),
+    1,
+    `完全性の報告がカナリアを数えない: ${JSON.stringify([...report.incomplete])}`,
+  );
+});
+
+// ------------------------------------------------------------
+
 test(
   "オラクル: shadowed・never-matches・redundant と出た項目は、取り除いても全日の結果が変わらない",
   { skip: SKIP },
   () => {
-    const report = run((list, policy, d, r) => {
-      const paths = pathsOf(list);
-      const baseOpen = snapshot(build(list, policy), false);
-      const baseFull = snapshot(build(list, policy), true);
-      paths.forEach((path, p) => {
-        const codes = d.filter((x) => x["path"] === path).map((x) => x["code"] as string);
-        const rest = build(
-          list.filter((_, q) => q !== p),
-          policy,
-        );
-        const restOpen = snapshot(rest, false);
-        if (
-          (codes.includes("shadowed") || codes.includes("never-matches")) &&
-          !same(snapshot(rest, true), baseFull)
-        )
-          r.unsound.push(`${codes.join(",")} ${path} ${policy} ${JSON.stringify(list)}`);
-        if (codes.includes("redundant") && !same(restOpen, baseOpen))
-          r.unsound.push(`redundant ${path} ${policy} ${JSON.stringify(list)}`);
-        if (
-          same(restOpen, baseOpen) &&
-          !codes.some((c) => ["redundant", "shadowed", "never-matches", "expired"].includes(c))
-        ) {
-          const key = `${list[p]![0]} ${JSON.stringify(list[p]![1])}`;
-          r.incomplete.set(key, (r.incomplete.get(key) ?? 0) + 1);
-        }
-      });
-    });
+    const report = run(checkRemovals);
     summarize("健全性と完全性", report);
     assert.deepEqual(
       report.unsound,
@@ -225,6 +313,13 @@ test(
       report.configs > 0 && (report.codes["redundant"] ?? 0) > 0,
       "オラクルが空振りしている",
     );
+    // 全件では、取り除ける項目の 3 つのコードがどれも出ている（expired は次のテストが確かめる）
+    if (FULL)
+      for (const code of ["shadowed", "never-matches", "redundant"])
+        assert.ok(
+          (report.codes[code] ?? 0) > 0,
+          `${code} が 1 件も出ていない（オラクルが空振りしている）`,
+        );
   },
 );
 
@@ -238,10 +333,10 @@ test(
   () => {
     const fromIndex = SHORT_DAYS.indexOf(AS_OF);
     let checked = 0;
-    run((list, policy, _d, r) => {
-      const d = diag["diagnoseCalendar"]!(build(list, policy), { asOf: AS_OF }) as Obj[];
+    run((list, policy, _d, r, weekdays) => {
+      const d = diag["diagnoseCalendar"]!(build(list, policy, weekdays), { asOf: AS_OF }) as Obj[];
       const paths = pathsOf(list);
-      const base = snapshot(build(list, policy), false);
+      const base = snapshot(build(list, policy, weekdays), false);
       paths.forEach((path, p) => {
         if (!d.some((x) => x["path"] === path && x["code"] === "expired")) return;
         checked++;
@@ -256,6 +351,7 @@ test(
               build(
                 list.filter((_, q) => q !== p),
                 policy,
+                weekdays,
               ),
               false,
             ),
@@ -275,10 +371,10 @@ test(
   "オラクル: no-business-day は営業日が本当にない設定だけ、counting-basis は数え方の限界がある設定だけに出る",
   { skip: SKIP },
   () => {
-    run((list, policy, d, r) => {
+    run((list, policy, d, r, weekdays) => {
       if (
         d.some((x) => x["code"] === "no-business-day") &&
-        snapshot(build(list, policy), false).includes("true")
+        snapshot(build(list, policy, weekdays), false).includes("true")
       )
         r.unsound.push(`no-business-day なのに営業日がある ${JSON.stringify(list)}`);
       if (d.some((x) => x["code"] === "counting-basis")) {
@@ -307,7 +403,7 @@ test(
     skip: SKIP || (!flagEnv("ORACLE_JOINT") && "0.31.0（P1）で有効にする。ORACLE_JOINT=1 で試せる"),
   },
   () => {
-    const report = run((list, policy, d, r) => {
+    const report = run((list, policy, d, r, weekdays) => {
       const paths = pathsOf(list);
       const removable = new Set(
         d
@@ -318,8 +414,9 @@ test(
       const rest = build(
         list.filter((_, p) => !removable.has(paths[p])),
         policy,
+        weekdays,
       );
-      if (!same(snapshot(rest, false), snapshot(build(list, policy), false)))
+      if (!same(snapshot(rest, false), snapshot(build(list, policy, weekdays), false)))
         r.unsound.push(`${[...removable].join(",")} ${policy} ${JSON.stringify(list)}`);
     });
     assert.deepEqual(report.unsound, []);
