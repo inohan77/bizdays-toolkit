@@ -473,7 +473,101 @@ function checkProviderData(c: IssueCollector, source: HolidaySource<string>): bo
   return ok;
 }
 
+/** 基準のカレンダーが投げて判定できない月として扱う例外の code（対応年の外・未確定の祝日） */
+const UNJUDGEABLE = new Set(["out-of-range", "unconfirmed-holiday"]);
+
+/**
+ * スケジュールの第 n 営業日の規則の基準のカレンダーを、投げた月を「判定できない月」として記録しながら評価する（その月は
+ * 営業日がないとみなす）。診断の走査の範囲（提供元のないスケジュールの 2001 年からの周期・形を調べる代表の 28 年間）で
+ * 基準のカレンダーが対応年の外・未確定の祝日で投げても、診断が例外にならず、誤った error を出さないため。範囲は前もって
+ * 計算しない（合成したカレンダーなど、提供元の対応年と outOfRangePolicy の組み合わせから正しく求められないため）
+ */
+function guardBases<Value, Kind extends string>(
+  compiled: CompiledSchedule<Value, Kind>,
+  unknownMonths: Set<number>,
+): CompiledSchedule<Value, Kind> {
+  if (!compiled.recurring.some((r) => r.basis !== null && r.calendar !== null)) return compiled;
+  return {
+    ...compiled,
+    recurring: compiled.recurring.map((r) => {
+      const basis = r.basis;
+      if (basis === null || r.calendar === null) return r;
+      return {
+        ...r,
+        basis: (year: number, month: number) => {
+          try {
+            return basis(year, month);
+          } catch (error) {
+            if (!UNJUDGEABLE.has(String((error as { code?: unknown }).code))) throw error;
+            unknownMonths.add(year * 12 + month - 1);
+            return [];
+          }
+        },
+      };
+    }),
+  };
+}
+
+/**
+ * 判定できない月があるときに出さない診断（分からないことは言わない）。shadowed は規則の形（集合の包含・同じ基準のカレンダーか）
+ * だけで決まり、基準のカレンダーを評価しないので、いつも出す
+ */
+const UNSURE_CODES = new Set(["never-matches", "redundant"]);
+
+/**
+ * 判定できない月がある設定で、never-matches・redundant のうち、その項目の有効期間（個別の日付はその期間。期間を持たない
+ * 項目は全期間）に判定できない月があるものを取り除く。項目の有効期間の日がすべて判定できるなら、その日の比較は確かなので出す
+ */
+function dropUnsure<Value, Kind extends string>(
+  c: IssueCollector,
+  from: number,
+  compiled: CompiledSchedule<Value, Kind>,
+  unknownMonths: ReadonlySet<number>,
+): void {
+  const monthOf = (day: number): number => {
+    const { year, month } = parseDate(fromDayNumber(day));
+    return year * 12 + month - 1;
+  };
+  const overlaps = (start: number | null, end: number | null): boolean => {
+    const a = start === null ? -Infinity : monthOf(start);
+    const b = end === null ? Infinity : monthOf(end);
+    for (const m of unknownMonths) if (m >= a && m <= b) return true;
+    return false;
+  };
+  const indexed = (path: string, name: string): number | undefined => {
+    const m = new RegExp(`^${name}\\[(\\d+)\\]$`).exec(path);
+    return m ? Number(m[1]) : undefined;
+  };
+  const unsure = (path: string): boolean => {
+    const r = indexed(path, "recurringRules");
+    const rule = r === undefined ? undefined : compiled.recurring[r];
+    if (rule !== undefined) return overlaps(rule.effectiveFrom, rule.effectiveTo);
+    const a = indexed(path, "annualDates");
+    const annual = a === undefined ? undefined : compiled.annual[a];
+    if (annual !== undefined) return overlaps(annual.effectiveFrom, annual.effectiveTo);
+    const d = indexed(path, "dates");
+    const date = d === undefined ? undefined : compiled.dates[d];
+    if (date !== undefined) return overlaps(date.from, date.to);
+    return true;
+  };
+  const kept = c.issues.slice(from).filter((d) => !(UNSURE_CODES.has(d.code) && unsure(d.path)));
+  c.issues.length = from;
+  c.issues.push(...kept);
+}
+
 function analyze<Value, Kind extends string>(
+  c: IssueCollector,
+  original: CompiledSchedule<Value, Kind>,
+  isCalendar: boolean,
+): void {
+  const unknownMonths = new Set<number>();
+  const compiled = guardBases(original, unknownMonths);
+  const from = c.issues.length;
+  analyzeRules(c, compiled, isCalendar);
+  if (unknownMonths.size > 0) dropUnsure(c, from, compiled, unknownMonths);
+}
+
+function analyzeRules<Value, Kind extends string>(
   c: IssueCollector,
   compiled: CompiledSchedule<Value, Kind>,
   isCalendar: boolean,

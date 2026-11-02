@@ -27,7 +27,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CALENDAR_REF, isIntendedInvalid } from "../test/support/catalog.ts";
-import { TIME_ZONES, fixedCases, generateCases, type Case } from "../test/support/result-cases.ts";
+import {
+  TIME_ZONES,
+  YEARS,
+  fixedCases,
+  generateCases,
+  type Case,
+} from "../test/support/result-cases.ts";
 
 type Obj = Record<string, unknown>;
 type Fn = (...args: unknown[]) => unknown;
@@ -267,6 +273,15 @@ function traitsOfOne(one: Case): string[] {
     )
   )
     traits.add("counting-rules-with-dates");
+  // スケジュールの第 n 営業日の規則の基準のカレンダー（同じ提供元）の対応年が、診断の規則の形を調べる代表の 28 年間
+  // （2001〜2028 年）を覆わない（0.30.6 で直した、診断の誤った out-of-range）
+  if (
+    one.kind === "schedule" &&
+    Array.isArray(one.options["recurringRules"]) &&
+    (one.options["recurringRules"] as Obj[]).some((r) => r["calendar"] === CALENDAR_REF) &&
+    one.providers.some((p) => YEARS[p][0] > 2001 || YEARS[p][1] < 2028)
+  )
+    traits.add("schedule-counting-basis-narrower-than-scan");
   for (const key of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {
     const list = one.options[key];
     if (!Array.isArray(list)) continue;

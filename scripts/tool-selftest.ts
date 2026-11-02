@@ -168,7 +168,22 @@ const CASES: readonly Case[] = [
     tool: "check-size",
     name: "上限を上げたのに「サイズの上限」の記載がない",
     args: TOOLS["check-size"]!,
-    inject: () => edit("size-limits.json", replaceOnce(/("\.\/uk"\s*:\s*)(\d+)/, "$19999")),
+    // この版の CHANGELOG に「サイズの上限」の記載がすでにある（上限を正しく上げた版）ときも誤りになるよう、その記載も消す
+    inject: () => {
+      edit("size-limits.json", replaceOnce(/("\.\/uk"\s*:\s*)(\d+)/, "$19999"));
+      // この版の節（[Unreleased] の次の、最初の版の見出しから次の見出しの前まで）
+      const changelog = readFileSync(join(copy, "CHANGELOG.md"), "utf8");
+      const start = changelog.indexOf("\n## [", changelog.indexOf("\n## [") + 1);
+      const end = changelog.indexOf("\n## [", start + 1);
+      if (changelog.slice(start, end).includes("サイズの上限"))
+        edit(
+          "CHANGELOG.md",
+          (t) =>
+            t.slice(0, start) +
+            t.slice(start, end).replaceAll("サイズの上限", "サイズ") +
+            t.slice(end),
+        );
+    },
     expect: 'has no entry mentioning "サイズの上限"',
   },
   {

@@ -31,6 +31,14 @@
       "introducedIn": "0.30.2",
       "source": "CHANGELOG.md",
       "summary": "日本の提供元だけの設定で、\"regular\" と旧名の \"national\" の同じ規則を shadowed で見つける（0.30.1 で失われた結果を戻す）"
+    },
+    {
+      "trait": "schedule-counting-basis-narrower-than-scan",
+      "targets": ["diagnose"],
+      "removedCodes": ["out-of-range"],
+      "introducedIn": "0.30.6",
+      "source": "CHANGELOG.md",
+      "summary": "スケジュールの第 n 営業日の規則の基準のカレンダーの対応年が診断の走査の範囲を覆わないとき、作成も判定も投げないのに error の out-of-range を出していた誤りを直す"
     }
   ]
 }

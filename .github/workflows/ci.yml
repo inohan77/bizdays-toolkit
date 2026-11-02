@@ -344,7 +344,7 @@ jobs:
 
   diagnose-consistency:
     # 診断が unconfirmedHolidayPolicy を redundant と出した設定で、"throw" を "accept" に変えても全日の判定が変わらないことを、
-    # 目録の設定の全件（150 件）で確かめる（pnpm check は 12 件）
+    # 目録の設定の全件（150 件）で確かめる（pnpm check は 12 件）。API どうしの整合（test/consistency.test.ts）の全件も、ここで動かす
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -357,6 +357,9 @@ jobs:
       - run: node --import ./scripts/strict-warnings.ts --test --test-name-pattern="診断と判定の一致" test/faulty-provider.test.ts
         env:
           CONSISTENCY_FULL: "1"
+      - run: node --import ./scripts/strict-warnings.ts --test test/consistency.test.ts
+        env:
+          CONSISTENCY_API_FULL: "1"
 
   generator-features:
     # 実際の呼び出し側（乱数のテストと result-compare）を動かし、作った設定の特徴が生成範囲の記録
