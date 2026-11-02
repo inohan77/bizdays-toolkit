@@ -32,6 +32,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { cell, copyEach, errorText } from "./tool-selftest-parts.ts";
 
 const repo = resolve(".");
 const parent = process.env["TOOL_SELFTEST_DIR"] || tmpdir();
@@ -250,8 +251,10 @@ const git = (args: readonly string[], cwd = repo): string =>
   execFileSync("git", args, { cwd, encoding: "utf8" });
 let failed = false;
 const rows: string[] = [];
-/** 表の前に出す覚え書き（写した取り込み中の変更） */
-const notes: string[] = [];
+/** 写した取り込み中の変更（写すたびに足す。途中で例外が出ても、そこまでに写したものを表の後に出す） */
+const copied: string[] = [];
+/** 写しを始めたか（始めていなければ、写した変更の行を出さない） */
+let copyStarted = false;
 /** 後始末の問題（リンクを外せない・作業ツリーを外せない・リポジトリの node_modules が消えた） */
 const cleanupProblems: string[] = [];
 /** 作ったもの（後始末で外すもの） */
@@ -262,22 +265,23 @@ try {
   git(["worktree", "add", "--detach", "--quiet", copy, "HEAD"]);
   worktreeAdded = true;
   // -z で読む（日本語やスペースを含むパスが引用符付き・エスケープ付きで出ず、そのまま読める。項目は NUL で区切られる）
-  const copied: string[] = [];
-  for (const entry of git(["status", "--porcelain=v1", "-z", "-uall", "--no-renames"])
+  const changed = git(["status", "--porcelain=v1", "-z", "-uall", "--no-renames"])
     .split("\0")
-    .filter(Boolean)) {
-    const file = entry.slice(3);
-    if (file.startsWith("node_modules/") || file.startsWith("dist/")) continue;
-    const from = join(repo, file);
-    const to = join(copy, file);
-    if (existsSync(from)) {
-      mkdirSync(dirname(to), { recursive: true });
-      cpSync(from, to);
-    } else rmSync(to, { force: true });
-    copied.push(file);
-  }
-  notes.push(
-    `写した取り込み中の変更: ${copied.length} 件${copied.length > 0 ? `（${copied.join("、")}）` : ""}`,
+    .filter(Boolean)
+    .map((entry) => entry.slice(3))
+    .filter((file) => !file.startsWith("node_modules/") && !file.startsWith("dist/"));
+  copyStarted = true;
+  copyEach(
+    changed,
+    (file) => {
+      const from = join(repo, file);
+      const to = join(copy, file);
+      if (existsSync(from)) {
+        mkdirSync(dirname(to), { recursive: true });
+        cpSync(from, to);
+      } else rmSync(to, { force: true });
+    },
+    copied,
   );
   symlinkSync(join(repo, "node_modules"), join(copy, "node_modules"), "junction");
   linked = true;
@@ -297,7 +301,8 @@ try {
   for (const [tool, args] of Object.entries(TOOLS)) {
     const started = Date.now();
     const r = node(args);
-    // 対照は、どの検査も飛ばさずに合格することを確かめる（SKIP の行が出れば失敗）
+    // 対照は、どの検査も飛ばさずに合格することを確かめる（SKIP の行が出れば失敗）。2 つ目の形（skipped に括弧が続く行）は、
+    // 今の 8 つの検査は出さないが、将来、対照にブラウザー・workerd の検査（飛ばした検査をこの形で出す）を加えたときのために見る
     const skipped = r.output.split("\n").filter((l) => /\bSKIP\b|skipped \(/.test(l));
     const ok = r.status === 0 && skipped.length === 0;
     if (!ok) failed = true;
@@ -306,7 +311,7 @@ try {
         ? r.output.trim().split("\n").slice(-3).join(" / ").slice(0, 200)
         : `対照で飛ばした: ${skipped.join(" / ").slice(0, 200)}`;
     rows.push(
-      `| ${tool} | （対照: 誤りなし） | ${r.status} | ${ok ? "合格" : `**失敗**: ${why}`} | ${Math.round((Date.now() - started) / 1000)}s |`,
+      `| ${cell(tool)} | （対照: 誤りなし） | ${r.status} | ${ok ? "合格" : `**失敗**: ${cell(why)}`} | ${Math.round((Date.now() - started) / 1000)}s |`,
     );
   }
 
@@ -323,21 +328,21 @@ try {
         ? `終了コード ${r.status}、「${c.expect}」を出した`
         : `**期待と違う**（終了コード ${r.status}、「${c.expect}」${r.output.includes(c.expect) ? "あり" : "なし"}）: ${r.output.trim().split("\n").slice(-3).join(" / ").slice(0, 200)}`;
     } catch (error) {
-      note = `**注入できない**: ${(error as Error).message}`;
+      note = `**注入できない**: ${errorText(error)}`;
     } finally {
       restore();
       benchControl();
     }
     if (!ok) failed = true;
     rows.push(
-      `| ${c.tool} | ${c.name} | ${ok ? "≠ 0" : "—"} | ${note} | ${Math.round((Date.now() - started) / 1000)}s |`,
+      `| ${cell(c.tool)} | ${cell(c.name)} | ${ok ? "≠ 0" : "—"} | ${cell(note)} | ${Math.round((Date.now() - started) / 1000)}s |`,
     );
   }
 } catch (error) {
   // 写し・ビルドなどの途中の例外でも、そこまでの表と後始末の問題を出してから失敗で終わる
   failed = true;
   rows.push(
-    `| （途中の例外） | — | — | **失敗**: ${(error as Error).message.split("\n").slice(0, 3).join(" / ").slice(0, 300)} | — |`,
+    `| （途中の例外） | — | — | **失敗**: ${cell(errorText(error).split("\n").slice(0, 3).join(" / ").slice(0, 300))} | — |`,
   );
 } finally {
   // リンクを先に外す（ジャンクションの先の node_modules を消さないため）。外せなかったら（まだ作っていない ENOENT のほかは）、
@@ -348,7 +353,7 @@ try {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         cleanupProblems.push(
-          `node_modules のリンクを外せない（作業ツリーと一時ディレクトリは消さずに残した。リンクを外してから手で消す）: ${join(copy, "node_modules")}: ${(error as Error).message}`,
+          `node_modules のリンクを外せない（作業ツリーと一時ディレクトリは消さずに残した。リンクを外してから手で消す）: ${join(copy, "node_modules")}: ${errorText(error)}`,
         );
     }
   }
@@ -357,7 +362,7 @@ try {
       try {
         git(["worktree", "remove", "--force", copy]);
       } catch (error) {
-        cleanupProblems.push(`作業ツリーを外せない: ${copy}: ${(error as Error).message}`);
+        cleanupProblems.push(`作業ツリーを外せない: ${copy}: ${errorText(error)}`);
       }
     }
     if (cleanupProblems.length === 0) {
@@ -375,7 +380,10 @@ try {
 console.log("## 検査のスクリプトの検査\n");
 console.log("| 検査 | 入れた誤り | 終了コード | 結果 | 時間 |\n| --- | --- | --- | --- | --- |");
 console.log(rows.join("\n"));
-if (notes.length > 0) console.log(`\n${notes.join("\n")}`);
+if (copyStarted)
+  console.log(
+    `\n写した取り込み中の変更: ${copied.length} 件${copied.length > 0 ? `（${copied.join("、")}）` : ""}`,
+  );
 console.log(`\n一時ディレクトリ: ${existsSync(work) ? `**残っている**: ${work}` : "消えた"}`);
 if (existsSync(work)) failed = true;
 if (cleanupProblems.length > 0) {

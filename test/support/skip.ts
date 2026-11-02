@@ -34,40 +34,35 @@ export const INTENDED_SKIPS: Readonly<Record<string, IntendedSkip>> = {
 
 const inCI = (): boolean => (process.env["CI"] ?? "") !== "" && process.env["CI"] !== "false";
 
-function entryOf(id: string, todo: boolean): IntendedSkip | undefined {
-  const entry = INTENDED_SKIPS[id];
-  const problem =
-    entry === undefined
-      ? `意図した飛ばしの一覧（test/support/skip.ts）にない理由: ${id}`
-      : (entry.todo ?? false) !== todo
-        ? `${id} は${todo ? "既知の不具合（todo）" : "飛ばし（skip）"}の理由ではない`
-        : inCI() && !entry.ci
-          ? `CI では飛ばさない理由: ${id}（${entry.reason}）`
-          : undefined;
-  if (problem !== undefined) {
-    if (inCI() || entry !== undefined) throw new Error(problem);
-    return undefined;
-  }
-  return entry;
-}
-
-/**
- * active なら飛ばす理由（node:test の skip に渡す）、そうでなければ false。理由（id）が一覧にあるかは、active にかかわらず
- * いつも確かめる（打ち間違いを、飛ばす条件がそろう前に見つけるため。一覧にない理由は CI でなくても失敗）
- */
-export function skipWhen(id: string, active: boolean): string | false {
+/** 理由（id）が一覧にあり、飛ばし（skip）と既知の不具合（todo）を取り違えていないことを、CI かどうかにかかわらず確かめる */
+function entryOf(id: string, todo: boolean): IntendedSkip {
   const entry = INTENDED_SKIPS[id];
   if (entry === undefined)
     throw new Error(`意図した飛ばしの一覧（test/support/skip.ts）にない理由: ${id}`);
-  // skip と todo の取り違えも、飛ばす条件にかかわらずいつも確かめる
-  if (entry.todo ?? false) throw new Error(`${id} は飛ばし（skip）の理由ではない`);
+  if ((entry.todo ?? false) !== todo)
+    throw new Error(`${id} は${todo ? "既知の不具合（todo）" : "飛ばし（skip）"}の理由ではない`);
+  return entry;
+}
+
+/** CI では飛ばさない理由（ci: false）なら、CI で失敗にする */
+function checkCI(id: string, entry: IntendedSkip): void {
+  if (inCI() && !entry.ci) throw new Error(`CI では飛ばさない理由: ${id}（${entry.reason}）`);
+}
+
+/**
+ * active なら飛ばす理由（node:test の skip に渡す）、そうでなければ false。理由（id）が一覧にあるかと、skip と todo の
+ * 取り違えは、active にかかわらずいつも確かめる（打ち間違いを、飛ばす条件がそろう前に見つけるため。CI でなくても失敗）
+ */
+export function skipWhen(id: string, active: boolean): string | false {
+  const entry = entryOf(id, false);
   if (!active) return false;
-  return entryOf(id, false)?.reason ?? entry.reason;
+  checkCI(id, entry);
+  return entry.reason;
 }
 
 /** 既知の不具合のテストの理由（node:test の todo に渡す）。一覧にない理由は、CI でなくても投げる（skipWhen と同じ） */
 export function todoFor(id: string): string {
-  if (INTENDED_SKIPS[id] === undefined)
-    throw new Error(`意図した飛ばしの一覧（test/support/skip.ts）にない理由: ${id}`);
-  return entryOf(id, true)?.reason ?? `意図した飛ばしの一覧にない理由: ${id}`;
+  const entry = entryOf(id, true);
+  checkCI(id, entry);
+  return entry.reason;
 }

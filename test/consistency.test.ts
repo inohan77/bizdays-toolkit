@@ -24,6 +24,7 @@ import { RENAMED_KEYS } from "../src/core/renamed.ts";
 import {
   CALENDAR_REF,
   CONTEXTS,
+  isIntendedInvalid,
   picker,
   random,
   randomCalendarOptions,
@@ -109,11 +110,12 @@ function scheduleOptions(rand: () => number, run: number, ctx?: Context): Obj {
   return o;
 }
 
-/** 作成（失敗したら undefined） */
+/** 作成（設定の誤りで作成できなければ undefined。bizdays のエラーコードを持たない例外は投げ直す） */
 function tryCreate<T>(make: () => T): T | undefined {
   try {
     return make();
-  } catch {
+  } catch (e) {
+    if (!isBizdaysError(e)) throw e;
     return undefined;
   }
 }
@@ -126,11 +128,12 @@ const tried: Record<string, number> = {};
 const count = (relation: string): void => {
   tried[relation] = (tried[relation] ?? 0) + 1;
 };
-const report = (relation: string): void => {
+/** 件数の行を出し、0 件なら失敗にする（unit は数えたもの） */
+const report = (relation: string, unit = "設定"): void => {
   console.log(
-    `# ${relation}: 試した設定 ${tried[relation] ?? 0} 件（${FULL ? "全件" : "抜き出し"}）`,
+    `# ${relation}: 試した${unit} ${tried[relation] ?? 0} 件（${FULL ? "全件" : "抜き出し"}）`,
   );
-  assert.ok((tried[relation] ?? 0) > 0, `${relation}: 試した設定が 0 件（空振り）`);
+  assert.ok((tried[relation] ?? 0) > 0, `${relation}: 試した${unit}が 0 件（空振り）`);
 };
 
 test(
@@ -241,11 +244,21 @@ test(
   { skip: SKIP },
   () => {
     const rand = random(20261108);
+    const trials: { run: number; base: Obj; n: number }[] = [];
     for (let run = 0; run < RUNS.counting; run++) {
       const base = calendarOptions(rand, run);
       delete base["closedRecurringRules"];
       delete base["openRecurringRules"];
-      const n = [1, 2, 3, -1, -2][Math.floor(rand() * 5)]!;
+      trials.push({ run, base, n: [1, 2, 3, -1, -2][Math.floor(rand() * 5)]! });
+    }
+    // 営業日が n 日に満たない月がある設定（2025 年 2 月は営業日がない。目録の設定では起きないので固定で試す）
+    const sparse: Obj = {
+      closedWeekdays: [0, 1, 2, 3, 4, 5],
+      closedDates: [{ from: "2025-02-01", to: "2025-02-28" }],
+    };
+    for (const n of [1, -1]) trials.push({ run: -1, base: sparse, n });
+    let missing = 0;
+    for (const { run, base, n } of trials) {
       // 祝日の上でも当てはめる（"over-holiday"）ので、規則が決めた日は第 n 営業日そのもの
       const rule = { businessDayOfMonth: n, name: "counted", holidayOverlapPolicy: "over-holiday" };
       const calendar = tryCreate(() =>
@@ -261,7 +274,8 @@ test(
           expected = basis.nthBusinessDayOfMonth(month as `${number}-${number}`, n);
         } catch (e) {
           // その月に n 番目の営業日がない（営業日が少ない設定）
-          if (!isBizdaysError(e)) throw e;
+          if (!isBizdaysError(e) || e.code !== "no-business-day") throw e;
+          missing++;
         }
         const marked: string[] = DAYS.filter(
           (d) => d.startsWith(month) && calendar.dayInfoOn(d).name === "counted",
@@ -279,6 +293,7 @@ test(
       }
     }
     report("整合 4");
+    assert.ok(missing > 0, "整合 4: n 番目の営業日がない月を 1 度も試していない");
   },
 );
 
@@ -296,32 +311,76 @@ test(
   "整合 5: 診断に error がないことと作成が成功することは同じで、作成のエラーコードは診断の error のコードにある",
   { skip: SKIP },
   () => {
-    const rand = random(20261109);
     // 入力の誤り（曜日に合わない起点・自分の曜日を含む飛ばす曜日・基準のカレンダーのない第 n 営業日の規則）を混ぜる文脈
     const invalid: Context = { ...SHORT_CTX, invalid: true };
+    /** 診断の error と作成の結果を比べ、作成のエラーコードを返す */
+    const check = (
+      kind: "calendar" | "schedule",
+      options: Obj,
+      label: string,
+    ): string | undefined => {
+      const issues = kind === "calendar" ? diagnoseCalendar(options) : diagnoseSchedule(options);
+      const errors = issues.filter((d) => d.severity === "error").map((d) => d.code);
+      const code = creationError(() =>
+        kind === "calendar"
+          ? createCalendar(options as CalendarOptions)
+          : createSchedule(options as unknown as ScheduleOptions<unknown>),
+      );
+      const context = `${label} ${kind} 診断の error: ${JSON.stringify(errors)} 作成: ${code ?? "成功"}`;
+      assert.equal(errors.length === 0, code === undefined, context);
+      if (code !== undefined) assert.ok(errors.includes(code), context);
+      return code;
+    };
+
+    // 目録の設定（試行の半分は入力の誤りを混ぜる文脈で作る）
+    const rand = random(20261109);
     for (let run = 0; run < RUNS.diagnose; run++) {
       for (const kind of ["calendar", "schedule"] as const) {
+        const ctx = run % 2 === 0 ? invalid : undefined;
         const options =
-          kind === "calendar"
-            ? calendarOptions(rand, run, run % 2 === 0 ? invalid : undefined)
-            : scheduleOptions(rand, run, run % 2 === 0 ? invalid : undefined);
-        const issues = kind === "calendar" ? diagnoseCalendar(options) : diagnoseSchedule(options);
-        const errors = issues.filter((d) => d.severity === "error").map((d) => d.code);
-        const code = creationError(() =>
-          kind === "calendar"
-            ? createCalendar(options as CalendarOptions)
-            : createSchedule(options as unknown as ScheduleOptions<unknown>),
-        );
+          kind === "calendar" ? calendarOptions(rand, run, ctx) : scheduleOptions(rand, run, ctx);
+        const code = check(kind, options, `run=${run}`);
         count(`整合 5（${code === undefined ? "作成できた" : "作成できない"}）`);
-        const context = `run=${run} ${kind} 診断の error: ${JSON.stringify(errors)} 作成: ${code ?? "成功"}`;
-        assert.equal(errors.length === 0, code === undefined, context);
-        if (code !== undefined) assert.ok(errors.includes(code), context);
+      }
+    }
+
+    // 目録が意図して入力の誤りにした規則を含む設定（上の試行とは別の種で作る。作成できない側を確かに試すため）。
+    // 誤りの規則を含むまで作り直す（カレンダーの設定に誤りが入るのは 3% ほどなので、上限は 400 回）
+    const randInvalid = random(20261114);
+    let missed = 0;
+    for (let run = 0; run < RUNS.diagnose; run++) {
+      for (const kind of ["calendar", "schedule"] as const) {
+        const make = (): Obj =>
+          kind === "calendar"
+            ? calendarOptions(randInvalid, run, invalid)
+            : scheduleOptions(randInvalid, run, invalid);
+        let options = make();
+        for (let i = 0; i < 400 && !hasIntendedInvalid(options); i++) options = make();
+        if (!hasIntendedInvalid(options)) {
+          missed++;
+          continue;
+        }
+        const code = check(kind, options, `intended run=${run}`);
+        count("整合 5（意図した入力の誤り）");
+        assert.notEqual(
+          code,
+          undefined,
+          `intended run=${run} ${kind}: 意図した入力の誤りなのに作成できた`,
+        );
       }
     }
     report("整合 5（作成できた）");
     report("整合 5（作成できない）");
+    report("整合 5（意図した入力の誤り）");
+    assert.equal(missed, 0, "意図した入力の誤りの規則を含む設定を作れなかった試行がある");
   },
 );
+
+/** 目録が意図して入力の誤りにした規則（test/support/catalog.ts の印）を含む設定か */
+const hasIntendedInvalid = (options: Obj): boolean =>
+  ["closedRecurringRules", "openRecurringRules", "recurringRules"].some(
+    (k) => Array.isArray(options[k]) && (options[k] as unknown[]).some(isIntendedInvalid),
+  );
 
 /** 新しい名前の設定を、0.30.0 の改名の前の名前で書く（キーの改名と、スケジュールの holidayPolicy の値 "ignore" → "weekday"） */
 function toOld(options: Obj, kind: "calendar" | "schedule"): Obj {
@@ -399,7 +458,7 @@ test(
 );
 
 test(
-  "整合 5: スケジュールの第 n 営業日の規則の基準のカレンダーの対応年が、診断の走査の範囲より狭くても、診断は誤った error を出さない（0.30.6 で直した）",
+  "整合 5: スケジュールの第 n 営業日の規則の基準のカレンダーの対応年が、診断の走査の範囲より狭くても、診断は誤った error を出さない",
   { skip: SKIP },
   () => {
     const weekdayValues = ["closed", "open", "open", "open", "open", "open", "closed"];
@@ -621,8 +680,8 @@ test(
       }
     }
     report("整合 5（基準のカレンダーを持つスケジュールの作成と診断）");
-    report("整合 5（never-matches と判定できる日）");
-    report("整合 5（redundant と判定できる日）");
+    report("整合 5（never-matches と判定できる日）", "診断の項目");
+    report("整合 5（redundant と判定できる日）", "診断の項目");
   },
 );
 

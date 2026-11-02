@@ -29,9 +29,10 @@ import { pathToFileURL } from "node:url";
 import { CALENDAR_REF, isIntendedInvalid } from "../test/support/catalog.ts";
 import {
   TIME_ZONES,
-  YEARS,
+  basisOutOfRangePolicy,
   fixedCases,
   generateCases,
+  traitsOfCase,
   type Case,
 } from "../test/support/result-cases.ts";
 
@@ -242,79 +243,14 @@ interface Diff {
   readonly removedCodes?: readonly string[];
 }
 
-/** 祝日に従属する規則の形（同じ形の規則どうしを比べるため） */
-const holidayShape = (r: Obj): string | undefined =>
-  r["holiday"] === true
-    ? "holiday"
-    : r["dayAfterHoliday"] === true
-      ? "dayAfterHoliday"
-      : r["dayBeforeHoliday"] === true
-        ? "dayBeforeHoliday"
-        : undefined;
-
-/** 1 つの設定の特徴 */
-function traitsOfOne(one: Case): string[] {
-  const traits = new Set<string>();
-  const hasJp = one.providers.includes("jp");
-  const jpOnly = hasJp && one.providers.every((p) => p === "jp");
-  // 自分の設定を基準に第 n 営業日を数える規則と、数え方を変える個別の日付・毎年の月日を持つカレンダー
-  const counts = ["closedRecurringRules", "openRecurringRules"].some(
-    (key) =>
-      Array.isArray(one.options[key]) &&
-      (one.options[key] as Obj[]).some(
-        (r) => "businessDayOfMonth" in r || "businessDayOfWeek" in r,
-      ),
-  );
-  if (
-    one.kind === "calendar" &&
-    counts &&
-    ["closedDates", "openDates", "closedAnnualDates"].some(
-      (k) => Array.isArray(one.options[k]) && (one.options[k] as unknown[]).length > 0,
-    )
-  )
-    traits.add("counting-rules-with-dates");
-  // スケジュールの第 n 営業日の規則の基準のカレンダー（同じ提供元）の対応年が、診断の規則の形を調べる代表の 28 年間
-  // （2001〜2028 年）を覆わない（0.30.6 で直した、診断の誤った out-of-range）
-  if (
-    one.kind === "schedule" &&
-    Array.isArray(one.options["recurringRules"]) &&
-    (one.options["recurringRules"] as Obj[]).some((r) => r["calendar"] === CALENDAR_REF) &&
-    one.providers.some((p) => YEARS[p][0] > 2001 || YEARS[p][1] < 2028)
-  )
-    traits.add("schedule-counting-basis-narrower-than-scan");
-  for (const key of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {
-    const list = one.options[key];
-    if (!Array.isArray(list)) continue;
-    const kindsOf = (r: Obj): string[] =>
-      Array.isArray(r["kinds"]) ? (r["kinds"] as string[]) : [];
-    for (const r of list as Obj[]) {
-      if (hasJp && kindsOf(r).includes("regular")) traits.add("kinds-regular-with-jp");
-      if (hasJp && !jpOnly && kindsOf(r).includes("national"))
-        traits.add("kinds-national-in-union-with-jp");
-      // 同じ配列に、同じ形で "regular" を含む規則もあるときだけ（覆う関係を比べる組）
-      const shape = holidayShape(r);
-      if (
-        jpOnly &&
-        shape !== undefined &&
-        kindsOf(r).includes("national") &&
-        (list as Obj[]).some(
-          (x) => x !== r && holidayShape(x) === shape && kindsOf(x).includes("regular"),
-        )
-      )
-        traits.add("kinds-national-and-regular-with-jp-only");
-    }
-  }
-  return [...traits];
-}
-
 /**
  * 比べた対象の特徴（意図した差分を許す単位）。合成は組のカレンダーの両方の設定、ほかはその設定だけから付ける
  * （相手のカレンダーの特徴で、単独の結果の差分を許さないため）
  */
 function traitsOf(c: Case, target: string): string[] {
-  const own = traitsOfOne(c);
+  const own = traitsOfCase(c);
   if (target !== "combine" || c.partner === undefined) return own;
-  return [...new Set([...own, ...traitsOfOne(c.partner)])];
+  return [...new Set([...own, ...traitsOfCase(c.partner)])];
 }
 
 function compareDays(
@@ -360,7 +296,8 @@ function diagnosticKeys(list: unknown): Set<string> | string {
 
 /**
  * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（CALENDAR_REF）を、その版で作った同じ提供元の
- * 土日休みのカレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）
+ * 土日休みのカレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）。基準のカレンダーの
+ * outOfRangePolicy は、スケジュールの設定のものを受け継ぐ（basisOutOfRangePolicy。特徴の付け方と同じ関数）
  */
 function withCalendars(lib: Lib, c: Case, naming: "new" | "old", options: Obj): Obj {
   const key = naming === "old" ? "recurring" : "recurringRules";
@@ -375,6 +312,8 @@ function withCalendars(lib: Lib, c: Case, naming: "new" | "old", options: Obj): 
           [naming === "old" ? "holidays" : "holidayProvider"]: providers,
           timeZone: TIME_ZONES[c.providers[0]!],
         };
+  const policy = basisOutOfRangePolicy(c);
+  if (policy !== undefined) source[naming === "old" ? "outOfRange" : "outOfRangePolicy"] = policy;
   const calendar = lib.createCalendar(source);
   return {
     ...options,

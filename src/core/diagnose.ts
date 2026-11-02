@@ -50,6 +50,7 @@ import {
   type AnnualRule,
   type CompiledPeriod,
   type CompiledSchedule,
+  type DateRule,
   type DecidingRule,
   type HolidaySource,
   type RecurringRuleCompiled,
@@ -480,7 +481,9 @@ const UNJUDGEABLE = new Set(["out-of-range", "unconfirmed-holiday"]);
  * スケジュールの第 n 営業日の規則の基準のカレンダーを、投げた月を「判定できない月」として記録しながら評価する（その月は
  * 営業日がないとみなす）。診断の走査の範囲（提供元のないスケジュールの 2001 年からの周期・形を調べる代表の 28 年間）で
  * 基準のカレンダーが対応年の外・未確定の祝日で投げても、診断が例外にならず、誤った error を出さないため。範囲は前もって
- * 計算しない（合成したカレンダーなど、提供元の対応年と outOfRangePolicy の組み合わせから正しく求められないため）
+ * 計算しない（合成したカレンダーなど、提供元の対応年と outOfRangePolicy の組み合わせから正しく求められないため）。
+ * 週の第 n 営業日の規則は、月をまたぐ週で隣の月の基準も見るので、投げた月の前の月と次の月も判定できない月にする
+ * （月の第 n 営業日の規則は、その月の基準だけで決まるので記録しない）
  */
 function guardBases<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
@@ -499,7 +502,12 @@ function guardBases<Value, Kind extends string>(
             return basis(year, month);
           } catch (error) {
             if (!UNJUDGEABLE.has(String((error as { code?: unknown }).code))) throw error;
-            unknownMonths.add(year * 12 + month - 1);
+            const thrown = year * 12 + month - 1;
+            unknownMonths.add(thrown);
+            if (r.weekStart !== null) {
+              unknownMonths.add(thrown - 1);
+              unknownMonths.add(thrown + 1);
+            }
             return [];
           }
         },
@@ -515,10 +523,17 @@ function guardBases<Value, Kind extends string>(
 const UNSURE_CODES = new Set(["never-matches", "redundant"]);
 
 /**
- * 判定できない月がある設定で、never-matches・redundant のうち、その項目の有効期間（個別の日付はその期間。期間を持たない
- * 項目は全期間）に判定できない月があるものを取り除く。項目の有効期間の日がすべて判定できるなら、その日の比較は確かなので出す
+ * @internal 判定できない月がある設定で、never-matches・redundant のうち、判定できない月の影響を受けうるものを取り除く。
+ * 診断の項目は、path の先頭が規則の位置（規則の path）と一致するもので引く（規則の中のオプションの位置も同じ規則に当たる）。
+ *
+ * - 基準のカレンダーを持たない繰り返しの規則の never-matches と、その規則の中のオプションの診断は、規則の形と設定だけで
+ *   決まり、基準のカレンダーを評価しないので残す
+ * - それ以外は、その項目の有効期間（個別の日付はその期間。期間を持たない項目は全期間）に判定できない月があれば取り除く。
+ *   redundant は、取り除いた設定と元の設定の結果を比べるので、ほかの規則の基準のカレンダーの評価にも依存する。
+ *   項目の有効期間の日がすべて判定できるなら、その日の比較は確かなので出す
+ * - 規則に当たらない path の診断は取り除く
  */
-function dropUnsure<Value, Kind extends string>(
+export function dropUnsure<Value, Kind extends string>(
   c: IssueCollector,
   from: number,
   compiled: CompiledSchedule<Value, Kind>,
@@ -534,23 +549,30 @@ function dropUnsure<Value, Kind extends string>(
     for (const m of unknownMonths) if (m >= a && m <= b) return true;
     return false;
   };
-  const indexed = (path: string, name: string): number | undefined => {
-    const m = new RegExp(`^${name}\\[(\\d+)\\]$`).exec(path);
-    return m ? Number(m[1]) : undefined;
+  const items: readonly DecidingRule<Value>[] = [
+    ...compiled.dates,
+    ...compiled.annual,
+    ...compiled.recurring,
+  ];
+  const isRecurring = (r: DecidingRule<Value>): r is RecurringRuleCompiled<Value> =>
+    (compiled.recurring as readonly DecidingRule<Value>[]).includes(r);
+  const isDate = (r: DecidingRule<Value>): r is DateRule<Value> =>
+    (compiled.dates as readonly DecidingRule<Value>[]).includes(r);
+  const unsure = (code: string, path: string): boolean => {
+    const item = items.find((r) => path === r.path || path.startsWith(`${r.path}.`));
+    if (item === undefined) return true;
+    if (
+      isRecurring(item) &&
+      item.calendar === null &&
+      (code === "never-matches" || path !== item.path)
+    )
+      return false;
+    if (isDate(item)) return overlaps(item.from, item.to);
+    return overlaps(item.effectiveFrom, item.effectiveTo);
   };
-  const unsure = (path: string): boolean => {
-    const r = indexed(path, "recurringRules");
-    const rule = r === undefined ? undefined : compiled.recurring[r];
-    if (rule !== undefined) return overlaps(rule.effectiveFrom, rule.effectiveTo);
-    const a = indexed(path, "annualDates");
-    const annual = a === undefined ? undefined : compiled.annual[a];
-    if (annual !== undefined) return overlaps(annual.effectiveFrom, annual.effectiveTo);
-    const d = indexed(path, "dates");
-    const date = d === undefined ? undefined : compiled.dates[d];
-    if (date !== undefined) return overlaps(date.from, date.to);
-    return true;
-  };
-  const kept = c.issues.slice(from).filter((d) => !(UNSURE_CODES.has(d.code) && unsure(d.path)));
+  const kept = c.issues
+    .slice(from)
+    .filter((d) => !(UNSURE_CODES.has(d.code) && unsure(d.code, d.path)));
   c.issues.length = from;
   c.issues.push(...kept);
 }

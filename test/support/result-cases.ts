@@ -3,6 +3,7 @@
 // 提供元は名前のまま持ち、比べるときに読み込んだ版の提供元に置き換える。
 
 import {
+  CALENDAR_REF,
   CONTEXTS,
   beforeRename,
   picker,
@@ -211,4 +212,80 @@ export function fixedCases(): Case[] {
       minBase: "0.30.0",
     },
   ];
+}
+
+/** 祝日に従属する規則の形（同じ形の規則どうしを比べるため） */
+const holidayShape = (r: Obj): string | undefined =>
+  r["holiday"] === true
+    ? "holiday"
+    : r["dayAfterHoliday"] === true
+      ? "dayAfterHoliday"
+      : r["dayBeforeHoliday"] === true
+        ? "dayBeforeHoliday"
+        : undefined;
+
+/**
+ * スケジュールの第 n 営業日の規則が数える基準のカレンダー（CALENDAR_REF を置き換えたもの）の outOfRangePolicy。
+ * スケジュールの設定のものを受け継ぐ（省略なら既定の "throw"）。result-compare の基準のカレンダーの作り方と、特徴の付け方が使う
+ */
+export const basisOutOfRangePolicy = (c: Case): unknown => c.options["outOfRangePolicy"];
+
+/**
+ * 1 つの設定の特徴（意図した差分を許す単位。etc/result-changes.json の trait）。合成の組の特徴は、呼び出し側が
+ * 両方の設定の特徴を合わせる
+ */
+export function traitsOfCase(one: Case): string[] {
+  const traits = new Set<string>();
+  const hasJp = one.providers.includes("jp");
+  const jpOnly = hasJp && one.providers.every((p) => p === "jp");
+  // 自分の設定を基準に第 n 営業日を数える規則と、数え方を変える個別の日付・毎年の月日を持つカレンダー
+  const counts = ["closedRecurringRules", "openRecurringRules"].some(
+    (key) =>
+      Array.isArray(one.options[key]) &&
+      (one.options[key] as Obj[]).some(
+        (r) => "businessDayOfMonth" in r || "businessDayOfWeek" in r,
+      ),
+  );
+  if (
+    one.kind === "calendar" &&
+    counts &&
+    ["closedDates", "openDates", "closedAnnualDates"].some(
+      (k) => Array.isArray(one.options[k]) && (one.options[k] as unknown[]).length > 0,
+    )
+  )
+    traits.add("counting-rules-with-dates");
+  // スケジュールの第 n 営業日の規則の基準のカレンダー（同じ提供元）の対応年が、診断の規則の形を調べる代表の 28 年間
+  // （2001〜2028 年）を覆わず、基準のカレンダーが対応年の外で投げる（outOfRangePolicy が "ignore" でない）。
+  // 診断が基準のカレンダーの投げた月を判定できない月として扱い、error の out-of-range を出さなくなった差分を許す
+  if (
+    one.kind === "schedule" &&
+    basisOutOfRangePolicy(one) !== "ignore" &&
+    Array.isArray(one.options["recurringRules"]) &&
+    (one.options["recurringRules"] as Obj[]).some((r) => r["calendar"] === CALENDAR_REF) &&
+    one.providers.some((p) => YEARS[p][0] > 2001 || YEARS[p][1] < 2028)
+  )
+    traits.add("schedule-counting-basis-narrower-than-scan");
+  for (const key of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {
+    const list = one.options[key];
+    if (!Array.isArray(list)) continue;
+    const kindsOf = (r: Obj): string[] =>
+      Array.isArray(r["kinds"]) ? (r["kinds"] as string[]) : [];
+    for (const r of list as Obj[]) {
+      if (hasJp && kindsOf(r).includes("regular")) traits.add("kinds-regular-with-jp");
+      if (hasJp && !jpOnly && kindsOf(r).includes("national"))
+        traits.add("kinds-national-in-union-with-jp");
+      // 同じ配列に、同じ形で "regular" を含む規則もあるときだけ（覆う関係を比べる組）
+      const shape = holidayShape(r);
+      if (
+        jpOnly &&
+        shape !== undefined &&
+        kindsOf(r).includes("national") &&
+        (list as Obj[]).some(
+          (x) => x !== r && holidayShape(x) === shape && kindsOf(x).includes("regular"),
+        )
+      )
+        traits.add("kinds-national-and-regular-with-jp-only");
+    }
+  }
+  return [...traits];
 }

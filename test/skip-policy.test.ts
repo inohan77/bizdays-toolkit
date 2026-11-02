@@ -90,6 +90,17 @@ test("飛ばしの決まり: CI では、一覧にない理由と CI では飛�
       /飛ばし（skip）の理由ではない/,
     );
     assert.throws(() => todoFor("no-such-reason"), /にない理由: no-such-reason/);
+    // 環境変数 CI が "false" と空文字列のときは CI とみなさない（CI では飛ばさない理由も飛ばせる）
+    for (const value of ["false", ""]) {
+      process.env["CI"] = value;
+      assert.equal(
+        skipWhen("no-release-tag", true),
+        INTENDED_SKIPS["no-release-tag"]!.reason,
+        `CI=${JSON.stringify(value)}`,
+      );
+    }
+    process.env["CI"] = "1";
+    assert.throws(() => skipWhen("no-release-tag", true), /CI では飛ばさない理由/);
   } finally {
     if (saved === undefined) delete process.env["CI"];
     else process.env["CI"] = saved;
