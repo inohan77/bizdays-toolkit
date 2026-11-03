@@ -9,6 +9,12 @@ import "./strict-warnings.ts";
  * - ブロックが import していない公開の名前（createCalendar など）は、各サブパスから補って import する。
  *   ほかのブロックで定義した値を使う断片のために、FIXTURES の定義を補う
  * - 相対パスの import（利用者のプロジェクトのファイル）を含むブロックは、実行できないので飛ばす
+ * - 例で createCalendar・createSchedule に渡した設定は、自動で診断（diagnoseCalendar・diagnoseSchedule）にもかける。
+ *   error か warning があれば失敗にする。誤りを見せる例は、コードブロックの直前の空でない行の注記
+ *   `<!-- example: allow-diagnostics <code>,<code> -->` で許すコードを明示する
+ * - 診断の結果を filter・find で絞った例は失敗にする（絞ると、例の設定の誤りが隠れる）。絞る理由のある例は、直前の空でない行の注記
+ *   `<!-- example: allow-filtered-diagnostics -->` で明示する
+ * - 移行ガイド（docs/migration.md）は、最新の版の節までを実行する（それより前の節は旧名で書かれていて、1.0.0 で動かなくなる）
  */
 
 import { spawnSync } from "node:child_process";
@@ -215,6 +221,64 @@ function prepare(block: string): { source: string; checks: Check[] } | undefined
   };
 }
 
+/** 診断の結果を filter・find で絞っているか（呼び出しに続けて絞る形と、結果を入れた変数を絞る形） */
+function filtersDiagnostics(block: string): boolean {
+  const narrow = String.raw`\s*\.\s*(?:filter|find|findLast)\s*\(`;
+  if (new RegExp(String.raw`diagnose(?:Calendar|Schedule)\s*\([^;]*?\)` + narrow).test(block))
+    return true;
+  for (const m of block.matchAll(
+    /\b(?:const|let)\s+(\w+)\s*=\s*diagnose(?:Calendar|Schedule)\s*\(/g,
+  )) {
+    if (new RegExp(String.raw`\b${m[1]}` + narrow).test(block)) return true;
+  }
+  return false;
+}
+
+/**
+ * 例の createCalendar・createSchedule を包むモジュール。設定を診断にかけ、許していない error・warning を 1 行ずつ出す
+ * （例の import を、パッケージのルートからこのモジュールに付け替える）
+ */
+const WRAPPER = `
+import * as lib from "bizdays-toolkit";
+import { diagnoseCalendar, diagnoseSchedule } from "bizdays-toolkit/diagnose";
+export * from "bizdays-toolkit";
+const allowed: string[] = JSON.parse(process.env.README_ALLOWED_DIAGNOSTICS ?? "[]");
+function audit(name: string, issues: readonly { severity: string; code: string; path: string; message: string }[]): void {
+  for (const d of issues) {
+    if ((d.severity === "error" || d.severity === "warning") && !allowed.includes(d.code)) {
+      console.log(JSON.stringify({ diagnostic: name + ": " + d.severity + " " + d.code + " at " + JSON.stringify(d.path) + ": " + d.message }));
+      process.exitCode = 1;
+    }
+  }
+}
+export function createCalendar(...args: unknown[]): unknown {
+  console.log(JSON.stringify({ audited: "createCalendar" }));
+  audit("createCalendar", diagnoseCalendar((args[0] ?? {}) as never));
+  return (lib.createCalendar as (...a: unknown[]) => unknown)(...args);
+}
+export function createSchedule(...args: unknown[]): unknown {
+  console.log(JSON.stringify({ audited: "createSchedule" }));
+  audit("createSchedule", diagnoseSchedule(args[0] as never));
+  return (lib.createSchedule as (...a: unknown[]) => unknown)(...args);
+}
+`;
+
+/**
+ * パッケージのルートからの読み込み（`from "bizdays-toolkit"`・`from 'bizdays-toolkit'`・`import "bizdays-toolkit"`・
+ * 動的な `import("bizdays-toolkit")`・`require("bizdays-toolkit")`（引用符とテンプレートリテラル）。サブパスは含まない）
+ */
+const ROOT_IMPORT =
+  /\b(?:from|import)\s*["']bizdays-toolkit["']|\b(?:import|require)\s*\(\s*["'`]bizdays-toolkit["'`]\s*\)/;
+
+/** コードブロックの直前の空でない行の注記（`<!-- example: <name> <args> -->`） */
+function noteOf(text: string, index: number): Map<string, string> {
+  const before = text.slice(0, index).trimEnd().split("\n").at(-1) ?? "";
+  const notes = new Map<string, string>();
+  for (const m of before.matchAll(/<!--\s*example:\s*([\w-]+)\s*([^>]*?)\s*-->/g))
+    notes.set(m[1]!, m[2]!);
+  return notes;
+}
+
 const CHECKER = `
 const ANY = Symbol("any");
 function parse(text: string): unknown {
@@ -256,7 +320,7 @@ export function __check(index: number, actual: unknown): void {
 }
 `;
 
-/** コード例を実行するファイル（README と docs のガイド。英語・日本語） */
+/** コード例を実行するファイル（README と docs のガイド。英語・日本語。移行ガイドは最新の版の節まで） */
 const DOC_FILES = [
   "README.md",
   "docs/README.ja.md",
@@ -264,7 +328,15 @@ const DOC_FILES = [
   "docs/guide.ja.md",
   "docs/providers.md",
   "docs/providers.ja.md",
+  "docs/migration.md",
 ];
+
+/** 実行する範囲の文章（移行ガイドは、2 つ目の版の見出し「## 0.x.y」より前まで） */
+function runnablePart(file: string, text: string): string {
+  if (file !== "docs/migration.md") return text;
+  const versions = [...text.matchAll(/^## \d+\.\d+\.\d+\s*$/gm)];
+  return versions.length < 2 ? text : text.slice(0, versions[1]!.index);
+}
 
 // 削除予定の表（docs/migration.md）の、結果の型の項目の名前（例: `DayInfo.businessDay` の businessDay）
 const RESULT_TYPES = ["DayInfo", "ScheduleDayInfo", "HolidayLookup", "Calendar", "Schedule"];
@@ -278,18 +350,40 @@ const dir = mkdtempSync(join(ROOT, ".readme-examples-"));
 const failures: string[] = [];
 let blocks = 0;
 let compared = 0;
+/** 包むモジュールが診断にかけた設定の数（関数ごと）。付け替えが外れると 0 件になるので、0 件なら失敗にする */
+const audited: Record<string, number> = { createCalendar: 0, createSchedule: 0 };
 try {
   writeFileSync(join(dir, "__check.ts"), CHECKER);
+  writeFileSync(join(dir, "__wrap.ts"), WRAPPER);
   for (const file of DOC_FILES) {
-    const text = readFileSync(file, "utf8");
+    const text = runnablePart(file, readFileSync(file, "utf8"));
     for (const m of text.matchAll(/^```ts\n([\s\S]*?)^```/gm)) {
       const startLine = text.slice(0, m.index).split("\n").length + 1;
+      const notes = noteOf(text, m.index);
+      if (filtersDiagnostics(m[1]!) && !notes.has("allow-filtered-diagnostics")) {
+        failures.push(
+          `${file}:${startLine}: the example narrows the diagnostics with filter/find (show them all, or add <!-- example: allow-filtered-diagnostics -->)`,
+        );
+      }
       const prepared = prepare(m[1]!);
       if (!prepared) continue;
       blocks++;
       compared += prepared.checks.length;
       const path = join(dir, `example-${blocks}.ts`);
-      writeFileSync(path, prepared.source);
+      // パッケージのルートの import を、作成した設定を診断にかけるモジュールに付け替える。付け替えは
+      // `from "bizdays-toolkit";` の完全一致なので、ほかの書き方（単引用符・セミコロンなし・import 文だけ・動的な import・
+      // require）が残れば、診断にかけずに通ってしまう。残っていたらその例を失敗にする
+      const redirected = prepared.source.replaceAll(
+        'from "bizdays-toolkit";',
+        'from "./__wrap.ts";',
+      );
+      if (ROOT_IMPORT.test(redirected)) {
+        failures.push(
+          `${file}:${startLine}: the example imports "bizdays-toolkit" in a form the checker does not redirect (write it as \`from "bizdays-toolkit";\`)`,
+        );
+        continue;
+      }
+      writeFileSync(path, redirected);
       const result = spawnSync(
         process.execPath,
         ["--import", "./scripts/strict-warnings.ts", path],
@@ -299,12 +393,30 @@ try {
             ...process.env,
             README_EXPECTED: JSON.stringify(prepared.checks.map((c) => c.expected)),
             README_DEPRECATED_KEYS: JSON.stringify(deprecatedResultKeys),
+            README_ALLOWED_DIAGNOSTICS: JSON.stringify(
+              (notes.get("allow-diagnostics") ?? "").split(",").filter(Boolean),
+            ),
           },
         },
       );
+      const before = failures.length;
       for (const line of (result.stdout ?? "").split("\n").filter(Boolean)) {
         try {
-          const { index, actual } = JSON.parse(line) as { index: number; actual: unknown };
+          const parsed = JSON.parse(line) as {
+            index: number;
+            actual: unknown;
+            diagnostic?: string;
+            audited?: string;
+          };
+          if (typeof parsed.audited === "string") {
+            audited[parsed.audited] = (audited[parsed.audited] ?? 0) + 1;
+            continue;
+          }
+          if (typeof parsed.diagnostic === "string") {
+            failures.push(`${file}:${startLine}: ${parsed.diagnostic}`);
+            continue;
+          }
+          const { index, actual } = parsed;
           const c = prepared.checks[index]!;
           failures.push(
             `${file}:${startLine + c.line - 1}: ${c.code}\n  expected ${c.expected}\n  actual   ${JSON.stringify(actual)}`,
@@ -313,7 +425,7 @@ try {
           // 例の出力（console.log など）は無視する
         }
       }
-      if (result.status !== 0 && failures.length === 0) {
+      if (result.status !== 0 && failures.length === before) {
         failures.push(`${file}:${startLine}: the example failed to run\n${result.stderr}`);
       } else if (result.status !== 0 && !result.stdout) {
         failures.push(`${file}:${startLine}: the example failed to run\n${result.stderr}`);
@@ -324,8 +436,17 @@ try {
   rmSync(dir, { recursive: true, force: true });
 }
 
+const diagnosedTotal = audited["createCalendar"]! + audited["createSchedule"]!;
+if (diagnosedTotal === 0) {
+  failures.push(
+    'no options were diagnosed (the imports of "bizdays-toolkit" in the examples were not redirected to the wrapper)',
+  );
+}
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exit(1);
 }
 console.log(`OK   README examples: ${blocks} blocks run, ${compared} results compared`);
+console.log(
+  `OK   README options diagnosed: ${diagnosedTotal} (createCalendar ${audited["createCalendar"]}, createSchedule ${audited["createSchedule"]})`,
+);

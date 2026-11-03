@@ -398,7 +398,7 @@ hours.dayInfoOn("2026-05-04").reason; // "weekday" (a holiday in the run is not 
 
 ## Combining calendars
 
-`combineCalendars` makes one calendar out of several: the days on which **all** of them are open (`open: "all"`), or on which **any** of them is open (`"any"`). The result is an ordinary calendar, so business-day arithmetic, `adjust`, `dueDate` and the rest work on the combination.
+`combineCalendars` makes one calendar out of several: the days on which **all** of them are open (`open: "all"`), or on which **any** of them is open (`"any"`). The result is an ordinary calendar, so business-day arithmetic, `adjust`, `dueDate` and the rest work on the combination. Pass two or more distinct calendars: a single calendar, or the same calendar twice, is an `invalid-argument` (when you build the array, handle the case of one element separately).
 
 ```ts
 import { combineCalendars, createCalendar } from "bizdays-toolkit";
@@ -749,6 +749,8 @@ try {
 ## Errors
 
 Invalid options and inputs throw ordinary exceptions such as `RangeError` and `TypeError`, with a `code`. Messages may change, so branch on `code`.
+
+<!-- example: allow-diagnostics invalid-date -->
 
 ```ts
 import { createCalendar, isBizdaysError } from "bizdays-toolkit";

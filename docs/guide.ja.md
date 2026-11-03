@@ -389,7 +389,7 @@ hours.dayInfoOn("2026-05-04").reason; // "weekday"（連休の中の祝日は祝
 
 ## カレンダーの合成
 
-`combineCalendars` は、複数のカレンダーから 1 つのカレンダーを作ります。**すべて**が営業している日（`open: "all"`）か、**いずれか**が営業している日（`"any"`）を営業日にします。結果は通常のカレンダーなので、営業日の加減算・`adjust`・`dueDate` などが合成結果で動きます。
+`combineCalendars` は、複数のカレンダーから 1 つのカレンダーを作ります。**すべて**が営業している日（`open: "all"`）か、**いずれか**が営業している日（`"any"`）を営業日にします。結果は通常のカレンダーなので、営業日の加減算・`adjust`・`dueDate` などが合成結果で動きます。2 つ以上の別々のカレンダーを渡します。1 つだけ、または同じカレンダーを 2 度渡すと `invalid-argument` になります（配列を組み立てて渡すときは、要素が 1 つの場合を分けてください）。
 
 ```ts
 import { combineCalendars, createCalendar } from "bizdays-toolkit";
@@ -740,6 +740,8 @@ try {
 ## エラー
 
 設定や入力の誤りは、従来どおり `RangeError`・`TypeError` などの例外になり、`code` を持ちます。メッセージの文言は変わることがあるので、判定には `code` を使ってください。
+
+<!-- example: allow-diagnostics invalid-date -->
 
 ```ts
 import { createCalendar, isBizdaysError } from "bizdays-toolkit";
