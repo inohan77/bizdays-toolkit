@@ -1,0 +1,105 @@
+name: Wide result comparison
+
+# 設定の結果の差分（scripts/result-compare.ts。decisions.md の 37 番）を、種と倍率を指定して広く動かす、手動の実行だけの道具。
+# CI の result-compare ジョブ（決まった種・倍率 1）では当たらない設定を、GitHub の上の CI と同じ環境で調べるために使う。
+# - いつ使うか: 退行が疑われるとき（特定の形の設定を、種を変えて多く試したい）、結果の判定に関わる変更の多い版を公開する
+#   前など。リリースの必須の手順ではない。手元でも `node scripts/result-compare.ts --seed … --scale …` で同じことができる
+# - 定期実行にはしない（週 1 回などの頻度で乱数の見本を増やしても、前の版から変わったコードを通る設定が増えるとは限らず、
+#   決まった種では当たらない退行を見つける目的に効かないため。decisions.md の 37 番）
+# - result-compare の終了コード: 0 = 合格、1 = 許していない差分・意図せず作成に失敗した設定、
+#   2 = 引数・読み込みの誤り・予期しない例外（比較が終わっていない）。2 つの比較をどちらも動かして Job Summary に出し、
+#   どちらかが 0 でなければ最後のステップで失敗にする（2 なら、結果は差分ではなく比較が終わらなかったこと）
+# - 入力がなければ、種は ISO 週（UTC。例: 202645）、倍率は 10
+
+run-name: Wide result comparison (seed ${{ inputs.seed || 'ISO week' }}, scale ${{ inputs.scale || '10' }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Seed (an integer; empty uses the ISO week, e.g. 202645)"
+        type: string
+        default: ""
+      scale:
+        description: "Scale of the generated cases (the CI job uses 1)"
+        type: string
+        default: "10"
+
+permissions: {}
+
+concurrency:
+  group: result-compare-wide
+  cancel-in-progress: false
+
+jobs:
+  result-compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read # リポジトリの取得だけ（npm の公開済みの版の取得に権限は要らない）
+    env:
+      LEGACY_BASE_VERSION: "0.22.2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "26.13.0"
+      - run: pnpm build
+      - name: Choose the seed and the scale
+        env:
+          SEED_INPUT: ${{ inputs.seed }}
+          SCALE_INPUT: ${{ inputs.scale }}
+        # 入力は GITHUB_ENV に書く前に整数であることを確かめる（改行を含む入力で、後のステップに環境変数を足せないように。
+        # 起動できるのは書き込みの権限を持つ人と cron-job.org のトークン）
+        run: |
+          seed="${SEED_INPUT:-$(date -u +%G%V)}"
+          scale="${SCALE_INPUT:-10}"
+          if ! [[ "${seed}" =~ ^[0-9]+$ ]] || ! [[ "${scale}" =~ ^[0-9]+$ ]]; then
+            # 入力の値は出さない（改行を含む値で、ワークフローのコマンドの行を足せないように）
+            echo "::error::seed and scale must be non-negative integers" >&2
+            exit 1
+          fi
+          echo "SEED=${seed}" >> "${GITHUB_ENV}"
+          echo "SCALE=${scale}" >> "${GITHUB_ENV}"
+          echo "seed ${seed}, scale ${scale}" | tee -a "${GITHUB_STEP_SUMMARY}"
+      - name: Fetch the published versions for comparison
+        run: |
+          base="$(npm view bizdays-toolkit version)"
+          echo "BASE_VERSION=${base}" >> "${GITHUB_ENV}"
+          for version in "${base}" "${LEGACY_BASE_VERSION}"; do
+            mkdir -p "${RUNNER_TEMP}/${version}"
+            (cd "${RUNNER_TEMP}/${version}" && npm pack "bizdays-toolkit@${version}" --ignore-scripts --silent \
+              && tar -xzf "bizdays-toolkit-${version}.tgz")
+          done
+      # 2 つの比較をどちらも動かしてから、最後のステップで失敗にする（片方の差分で、もう片方の結果が消えないように）
+      - name: Compare the results with the latest version
+        id: latest
+        run: |
+          set +e
+          node scripts/result-compare.ts --base "${RUNNER_TEMP}/${BASE_VERSION}/package" --head . \
+            --base-label "${BASE_VERSION}" --seed "${SEED}" --scale "${SCALE}" | tee -a "${GITHUB_STEP_SUMMARY}"
+          echo "code=${PIPESTATUS[0]}" >> "${GITHUB_OUTPUT}"
+      - name: Compare the results with the version before the renaming
+        id: legacy
+        run: |
+          set +e
+          node scripts/result-compare.ts --base "${RUNNER_TEMP}/${LEGACY_BASE_VERSION}/package" --head . \
+            --base-label "${LEGACY_BASE_VERSION}" --seed "${SEED}" --scale "${SCALE}" | tee -a "${GITHUB_STEP_SUMMARY}"
+          echo "code=${PIPESTATUS[0]}" >> "${GITHUB_OUTPUT}"
+      - name: Fail when a comparison found a difference or did not finish
+        env:
+          LATEST_CODE: ${{ steps.latest.outputs.code }}
+          LEGACY_CODE: ${{ steps.legacy.outputs.code }}
+        run: |
+          failed=0
+          if [ "${LATEST_CODE}" != "0" ]; then
+            echo "::error::result-compare with ${BASE_VERSION} exited with ${LATEST_CODE:-no code} (seed ${SEED}, scale ${SCALE})" >&2
+            failed=1
+          fi
+          if [ "${LEGACY_CODE}" != "0" ]; then
+            echo "::error::result-compare with ${LEGACY_BASE_VERSION} exited with ${LEGACY_CODE:-no code} (seed ${SEED}, scale ${SCALE})" >&2
+            failed=1
+          fi
+          exit "${failed}"

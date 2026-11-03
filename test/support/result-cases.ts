@@ -168,6 +168,17 @@ export function fixedCases(): Case[] {
       to,
     };
   };
+  const sch = (id: string, providers: ProviderName[], options: Obj): Case => {
+    const [from, to] = rangeOf(providers);
+    return {
+      id,
+      kind: "schedule",
+      providers,
+      options: { holidayProvider: providers, timeZone: TIME_ZONES[providers[0]!], ...options },
+      from,
+      to,
+    };
+  };
   /** 提供元のないカレンダー */
   const cal0 = (id: string, options: Obj): Case => ({
     id,
@@ -204,6 +215,21 @@ export function fixedCases(): Case[] {
       closedAnnualDates: ["05-01"],
       closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
     }),
+    // スケジュールの第 n 営業日の規則の基準のカレンダーは、スケジュールの outOfRangePolicy を受け継ぐ（basisOutOfRangePolicy）。
+    // "ignore" の基準は対応年の外で投げないので、診断は判定できない月を作らない。旧名の比較では outOfRange として渡る。
+    // 比べる期間はシンガポールの対応年（2020〜2027 年）の外まで広げる（対応年の内側では "ignore" と "throw" の結果が同じため）
+    {
+      ...sch("fixed-schedule-basis-ignore", ["sg"], {
+        outOfRangePolicy: "ignore",
+        weekdayValues: ["closed", "A", "A", "A", "A", "A", "closed"],
+        recurringRules: [
+          { businessDayOfMonth: 1, calendar: CALENDAR_REF, value: "B" },
+          { businessDayOfMonth: -1, months: [12], calendar: CALENDAR_REF, value: "C" },
+        ],
+      }),
+      from: "2018-01-01",
+      to: "2029-12-31",
+    },
     {
       ...cal0("fixed-counting-week", {
         closedDates: ["2026-05-04"],
@@ -288,4 +314,39 @@ export function traitsOfCase(one: Case): string[] {
     }
   }
   return [...traits];
+}
+
+/** 基準のカレンダーを作るのに要る、版の部品（作る関数と、提供元の名前 → 提供元） */
+export interface BasisLib {
+  readonly createCalendar: (options: Obj) => unknown;
+  readonly providers: ReadonlyMap<string, unknown>;
+}
+
+/**
+ * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（CALENDAR_REF）を、その版で作った同じ提供元の
+ * 土日休みのカレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）。基準のカレンダーの
+ * outOfRangePolicy は、スケジュールの設定のものを受け継ぐ（basisOutOfRangePolicy。特徴の付け方と同じ関数）。
+ * result-compare（scripts/result-compare.ts）が前の版と今回の版の両方に使う。両方を同じ作り方で比べるので、この処理が壊れても
+ * 差分にならない。そのため、ここに置いて test/result-traits.test.ts で直接確かめる
+ */
+export function withCalendars(lib: BasisLib, c: Case, naming: "new" | "old", options: Obj): Obj {
+  const key = naming === "old" ? "recurring" : "recurringRules";
+  const list = options[key];
+  if (!Array.isArray(list) || !list.some((r) => (r as Obj)["calendar"] === CALENDAR_REF))
+    return options;
+  const providers = c.providers.map((p) => lib.providers.get(p));
+  const source: Obj =
+    providers.length === 0
+      ? {}
+      : {
+          [naming === "old" ? "holidays" : "holidayProvider"]: providers,
+          timeZone: TIME_ZONES[c.providers[0]!],
+        };
+  const policy = basisOutOfRangePolicy(c);
+  if (policy !== undefined) source[naming === "old" ? "outOfRange" : "outOfRangePolicy"] = policy;
+  const calendar = lib.createCalendar(source);
+  return {
+    ...options,
+    [key]: (list as Obj[]).map((r) => (r["calendar"] === CALENDAR_REF ? { ...r, calendar } : r)),
+  };
 }

@@ -17,6 +17,7 @@ const ci = read(".github/workflows/ci.yml");
 const others: [string, string][] = [
   [".github/workflows/release.yml", read(".github/workflows/release.yml")],
   [".github/workflows/data-watch.yml", read(".github/workflows/data-watch.yml")],
+  [".github/workflows/result-compare-wide.yml", read(".github/workflows/result-compare-wide.yml")],
 ];
 const action = read(".github/actions/setup-toolchain/action.yml");
 const pkg = JSON.parse(read("package.json")) as { engines: { node: string } };

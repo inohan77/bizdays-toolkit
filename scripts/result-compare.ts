@@ -19,20 +19,22 @@
  *   --base は前の版を展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回のリポジトリ（pnpm build 済み）。
  *   --scale は設定の数の倍率（既定 1）。--changes は意図した差分の一覧（既定は --head の etc/result-changes.json。
  *   公開済みの版どうしを比べて検査が働くかを確かめるときに、このリポジトリの一覧を渡す）
- * 終了コード: 0 合格、1 失敗、2 使い方・読み込みの誤り。結果は Markdown で標準出力に書く。
+ * 終了コード: 0 = 合格、1 = 許していない差分・意図せず作成に失敗した設定、2 = 引数・読み込みの誤り・予期しない例外
+ * （設定ごとの比較の外で投げたもの。比較が終わっていないので、差分の有無は分からない）。結果は Markdown で標準出力に書く。
  */
 
+// 最初の import: 予期しない例外を終了コード 2 にする（ほかの import の評価の途中で投げた例外も受けるため、ほかより先に読み込む）
+import "./exit-on-unexpected.ts";
 import "./strict-warnings.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { CALENDAR_REF, isIntendedInvalid } from "../test/support/catalog.ts";
+import { isIntendedInvalid } from "../test/support/catalog.ts";
 import {
-  TIME_ZONES,
-  basisOutOfRangePolicy,
   fixedCases,
   generateCases,
   traitsOfCase,
+  withCalendars,
   type Case,
 } from "../test/support/result-cases.ts";
 
@@ -294,33 +296,6 @@ function diagnosticKeys(list: unknown): Set<string> | string {
   );
 }
 
-/**
- * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（CALENDAR_REF）を、その版で作った同じ提供元の
- * 土日休みのカレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）。基準のカレンダーの
- * outOfRangePolicy は、スケジュールの設定のものを受け継ぐ（basisOutOfRangePolicy。特徴の付け方と同じ関数）
- */
-function withCalendars(lib: Lib, c: Case, naming: "new" | "old", options: Obj): Obj {
-  const key = naming === "old" ? "recurring" : "recurringRules";
-  const list = options[key];
-  if (!Array.isArray(list) || !list.some((r) => (r as Obj)["calendar"] === CALENDAR_REF))
-    return options;
-  const providers = c.providers.map((p) => lib.providers.get(p));
-  const source: Obj =
-    providers.length === 0
-      ? {}
-      : {
-          [naming === "old" ? "holidays" : "holidayProvider"]: providers,
-          timeZone: TIME_ZONES[c.providers[0]!],
-        };
-  const policy = basisOutOfRangePolicy(c);
-  if (policy !== undefined) source[naming === "old" ? "outOfRange" : "outOfRangePolicy"] = policy;
-  const calendar = lib.createCalendar(source);
-  return {
-    ...options,
-    [key]: (list as Obj[]).map((r) => (r["calendar"] === CALENDAR_REF ? { ...r, calendar } : r)),
-  };
-}
-
 /** 意図した入力の誤り（生成器が印を付けた規則。test/support/catalog.ts の isIntendedInvalid）を含む設定か */
 const intendedInvalid = (c: Case): boolean =>
   ["closedRecurringRules", "openRecurringRules", "recurringRules"].some(
@@ -421,6 +396,15 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
       if (bk !== hk) diffs.push({ ...meta("diagnose"), detail: `${String(bk)} → ${String(hk)}` });
     } else {
       const missing = [...bk].filter((k) => !hk.has(k));
+      // 増えた結果は約束の範囲内（失敗にしない）。CHANGELOG に書くべき変化に気付くため、一覧に出す。旧名の設定の比較では、
+      // deprecated-option は旧名で書いたことを知らせるだけ（改名の前の版にはない）なので数えない。新しい名前の設定で
+      // deprecated-option が増えたら、利用者に見える変化なので数える
+      const added = [...hk].filter(
+        (k) =>
+          !bk.has(k) &&
+          !(naming === "old" && (JSON.parse(k) as unknown[])[1] === "deprecated-option"),
+      );
+      if (added.length > 0) increases.push(`${c.id} [${naming}]: ${added.join(" ")}`);
       if (missing.length > 0) {
         diffs.push({
           ...meta("diagnose"),
@@ -432,6 +416,9 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
   }
   return diffs;
 }
+
+/** 診断の結果が増えた設定（前の版になかった結果。約束の範囲内なので失敗にしない） */
+const increases: string[] = [];
 
 // ------------------------------------------------------------
 // 意図した差分
@@ -497,12 +484,18 @@ try {
 }
 
 const newShapes = !baseIsBeforeRename;
-const cases: Case[] = [
-  ...fixedCases().filter((c) => c.minBase === undefined || cmp(baseVersion, c.minBase) >= 0),
-  ...generateCases(seed, scale, newShapes),
-];
-/** 診断は時間がかかるので、固定の設定と、設定 4 件に 1 件だけ */
-const diagnosed = (c: Case, i: number): boolean => c.id.startsWith("fixed-") || i % 4 === 0;
+const fixed = fixedCases().filter(
+  (c) => c.minBase === undefined || cmp(baseVersion, c.minBase) >= 0,
+);
+const cases: Case[] = [...fixed, ...generateCases(seed, scale, newShapes)];
+/**
+ * 診断は時間がかかるので、固定の設定と、種で作った設定の 4 件に 1 件だけ。種で作った設定は、その中の番号を 4 で割った余り
+ * （DIAGNOSED_REMAINDER）で選ぶ。固定の設定を足しても、診断する種で作った設定が変わらないようにするため。余りは、固定の設定の
+ * 数で選んでいた 0.30.6 までと同じ設定になるように、改名の前の版との比較とそれ以外で分ける（生成範囲の記録を保つため）
+ */
+const DIAGNOSED_REMAINDER = newShapes ? 1 : 2;
+const diagnosed = (c: Case, i: number): boolean =>
+  c.id.startsWith("fixed-") || (i - fixed.length) % 4 === DIAGNOSED_REMAINDER;
 
 const namings: ("new" | "old")[] = baseIsBeforeRename ? ["old"] : ["new", "old"];
 const diffs: Diff[] = [];
@@ -553,6 +546,18 @@ if (allowed.length > 0) {
     out.push(`- ${k.trait}（${k.introducedIn}）: ${n} 件 — ${k.summary}（${k.source}）`);
   out.push("");
 }
+out.push(
+  `診断の結果が増えた設定（約束の範囲内。CHANGELOG に書くべき変化かを確かめる）: ${increases.length} 件`,
+  "",
+);
+if (increases.length > 0)
+  out.push(
+    "```text",
+    ...increases.slice(0, LIMIT),
+    ...(increases.length > LIMIT ? [`…（ほか ${increases.length - LIMIT} 件）`] : []),
+    "```",
+    "",
+  );
 if (unexpected.length > 0) {
   out.push(
     `許していない差分（${unexpected.length} 件${unexpected.length > LIMIT ? `。先頭の ${LIMIT} 件` : ""}）:`,

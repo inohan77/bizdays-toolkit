@@ -416,6 +416,13 @@ jobs:
           node scripts/result-compare.ts --base "${RUNNER_TEMP}/${LEGACY_BASE_VERSION}/package" --head . \
             --base-label "${LEGACY_BASE_VERSION}" | tee -a "${GITHUB_STEP_SUMMARY}"
           test "${PIPESTATUS[0]}" -eq 0
+      # 文章の主張の検査（scripts/check-claims.ts）の、前の版が要る部分（d）: 変わった dist の .js・.d.ts の一覧と CHANGELOG の
+      # 区分。.js・.d.ts が変わったのに利用者向けの区分がなければ失敗する（決定の番号の参照の表 c は、リリースの前に手元で読む）
+      - name: List the published changes
+        run: |
+          node scripts/check-claims.ts --base "${RUNNER_TEMP}/${BASE_VERSION}/package" \
+            | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${PIPESTATUS[0]}" -eq 0
 
   workflows:
     # ワークフローの構文・式・シェルスクリプトの誤りを actionlint で検出する（pnpm check はワークフローを検査しない）。

@@ -1,9 +1,10 @@
-// 飛ばしの決まり（test/support/skip.ts）。テストの skip・todo とスクリプトの SKIP の行が補助の関数を通っていること（grep）と、
+// 飛ばしの決まり（test/support/skip.ts）。テストの skip・todo とスクリプトの SKIP の行が補助の関数を通っていること（grep。省略記法・分割代入・import は TypeScript のコンパイラーの API）と、
 // 補助の関数が CI で一覧にない理由・CI では飛ばさない理由を失敗にすることを確かめる（テスト拡充案の T3）。
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import ts from "typescript";
 import { INTENDED_SKIPS, skipWhen, todoFor } from "./support/skip.ts";
 
 /**
@@ -36,14 +37,57 @@ test("飛ばしの決まり: テストの skip・todo とスクリプトの SKIP
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
         if (/\b(test|t|it|describe)\.(skip|todo)\(/.test(line))
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
-        // 省略記法（{ skip }・{ todo }）は、何を入れたかが行から読めないので使わない。この grep は 1 行の中の省略記法だけを拾い、
-        // 複数行に分けたオブジェクトの「skip,」だけの行は拾わない（拾うには TypeScript のコンパイラーの API で読む必要がある。0.30.7 で検討）
-        if (!/^\s*(\/\/|\*)/.test(line) && /[{,]\s*(skip|todo)\s*[,}]/.test(line))
-          problems.push(`${file}:${i + 1}: ${line.trim()}`);
         // 飛ばしの理由を入れる定数（SKIP・SKIP_TZ）は、補助の関数の結果だけを入れる
         if (/\bconst SKIP(_TZ)?\s*=/.test(line) && !/skipWhen\(/.test(line))
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
       });
+  }
+  // 省略記法と、skip・todo という名前の値を持ち込む書き方は使わない（何を入れたかが行から読めず、補助の関数を通らない値を
+  // 飛ばしに渡せるため）。行に分けて書いても拾うよう、TypeScript のコンパイラーの API で読む（コメント・文字列の中は拾わない）。
+  // 拾う形: オブジェクトの省略記法（{ skip }）、分割代入（const { skip } = …・({ todo }) => …）、import・export
+  // （import { skip } from "node:test"。別名の import { skip as s } も）、その名前の変数・引数の宣言（const skip = …・
+  // (todo) => …。値を f(a, skip, b) のように渡す書き方は、その宣言で拾う）
+  const named = (n: ts.Node | undefined): string | undefined =>
+    n !== undefined &&
+    (ts.isIdentifier(n) || ts.isStringLiteral(n)) &&
+    (n.text === "skip" || n.text === "todo")
+      ? n.text
+      : undefined;
+  for (const file of testFiles) {
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const found = (node: ts.Node, kind: string, name: string): void => {
+      const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+      problems.push(`${file}:${line + 1}: ${kind} "${name}"`);
+    };
+    const visit = (node: ts.Node): void => {
+      let name: string | undefined;
+      if (ts.isShorthandPropertyAssignment(node) && (name = named(node.name)))
+        found(node, "shorthand", name);
+      else if (
+        ts.isBindingElement(node) &&
+        ts.isObjectBindingPattern(node.parent) &&
+        node.propertyName === undefined &&
+        (name = named(node.name))
+      )
+        found(node, "destructuring", name);
+      else if (
+        (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) &&
+        (name = named(node.propertyName ?? node.name))
+      )
+        found(node, ts.isImportSpecifier(node) ? "import" : "export", name);
+      else if (
+        (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+        (name = named(node.name))
+      )
+        found(node, ts.isParameter(node) ? "parameter" : "declaration", name);
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
   }
   for (const file of [...filesIn("scripts", /\.ts$/), ...filesIn("test/compat", /\.(mjs|cjs)$/)]) {
     readFileSync(file, "utf8")

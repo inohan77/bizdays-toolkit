@@ -241,24 +241,24 @@ jobs:
           curl -fsS -m 10 --retry 3 -o /dev/null "${url}" \
             || echo "::warning::could not send the heartbeat (healthchecks.io will alert if pings stop)"
 
-      - name: Fail when GOV.UK, data.gov.sg, the Cabinet Office CSV or data.gouv.fr differs
+      # 照合ごとの終了コードで、差分（1）と、照合そのものの失敗（2 = 取得・解析の失敗）を書き分ける
+      - name: Fail when GOV.UK, data.gov.sg, the Cabinet Office CSV or data.gouv.fr differs or could not be checked
         if: steps.verify.outcome == 'failure' || steps.verify_sg.outcome == 'failure' || steps.verify_jp.outcome == 'failure' || steps.verify_fr.outcome == 'failure'
         run: |
-          if [ "${GOVUK_FAILED}" = "true" ]; then
-            echo "::error::GOV.UK bank holidays differ from the bundled data (see the ${LABEL} issue)" >&2
-          fi
-          if [ "${SG_FAILED}" = "true" ]; then
-            echo "::error::data.gov.sg public holidays differ from the bundled data (see the ${SG_LABEL} issue)" >&2
-          fi
-          if [ "${JP_FAILED}" = "true" ]; then
-            echo "::error::Cabinet Office holidays (Japan) differ from the bundled data (see the ${JP_LABEL} issue)" >&2
-          fi
-          if [ "${FR_FAILED}" = "true" ]; then
-            echo "::error::data.gouv.fr public holidays (France) differ from the bundled data (see the ${FR_LABEL} issue)" >&2
-          fi
+          report() { # 1: 終了コード 2: データの名前 3: issue のラベル
+            case "${1}" in
+              0) ;;
+              1) echo "::error::${2} differ from the bundled data (see the ${3} issue)" >&2 ;;
+              *) echo "::error::${2} could not be checked (see the ${3} issue)" >&2 ;;
+            esac
+          }
+          report "${CODE:-2}" "GOV.UK bank holidays" "${LABEL}"
+          report "${SG_CODE:-2}" "data.gov.sg public holidays" "${SG_LABEL}"
+          report "${JP_CODE:-2}" "Cabinet Office holidays (Japan)" "${JP_LABEL}"
+          report "${FR_CODE:-2}" "data.gouv.fr public holidays (France)" "${FR_LABEL}"
           exit 1
         env:
-          GOVUK_FAILED: ${{ steps.verify.outcome == 'failure' }}
-          SG_FAILED: ${{ steps.verify_sg.outcome == 'failure' }}
-          JP_FAILED: ${{ steps.verify_jp.outcome == 'failure' }}
-          FR_FAILED: ${{ steps.verify_fr.outcome == 'failure' }}
+          CODE: ${{ steps.verify.outputs.code }}
+          SG_CODE: ${{ steps.verify_sg.outputs.code }}
+          JP_CODE: ${{ steps.verify_jp.outputs.code }}
+          FR_CODE: ${{ steps.verify_fr.outputs.code }}

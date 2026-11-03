@@ -77,7 +77,7 @@
     "bench": "node scripts/bench.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "node scripts/check-toolchain.ts && pnpm typecheck && pnpm lint && pnpm test && pnpm test:tz && pnpm build && pnpm test:compat && node scripts/check-readme-examples.ts && node scripts/check-consumer-types.ts && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/check-names.ts && node scripts/api-report.ts",
+    "check": "node scripts/check-toolchain.ts && pnpm typecheck && pnpm lint && pnpm test && pnpm test:tz && pnpm build && pnpm test:compat && node scripts/check-readme-examples.ts && node scripts/check-consumer-types.ts && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/check-names.ts && node scripts/check-claims.ts && node scripts/api-report.ts",
     "verify:cao": "node scripts/verify-cao.ts",
     "verify:govuk": "node scripts/verify-govuk.ts",
     "verify:datagovsg": "node scripts/verify-datagovsg.ts",

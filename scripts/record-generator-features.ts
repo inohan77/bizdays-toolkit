@@ -33,6 +33,7 @@ import "./strict-warnings.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -129,7 +130,13 @@ try {
   const support = worktree
     ? ["test/support"]
     : git("ls-tree", "-r", "--name-only", ref, "test/support").split("\n").filter(Boolean);
-  for (const file of [...files, ...support]) {
+  // 呼び出し側が読み込む、版によってはないファイル（result-compare の予期しない例外の登録は 0.30.7 から）
+  const optional = ["scripts/exit-on-unexpected.ts"].filter((file) =>
+    worktree
+      ? existsSync(join(repo, file))
+      : git("ls-tree", "--name-only", ref, file).trim() !== "",
+  );
+  for (const file of [...files, ...optional, ...support]) {
     const dest = join(work, file);
     mkdirSync(dirname(dest), { recursive: true });
     if (worktree) cpSync(join(repo, file), dest, { recursive: true });

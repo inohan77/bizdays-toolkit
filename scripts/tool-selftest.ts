@@ -73,6 +73,18 @@ function restore(): void {
 }
 /** 最初の一致だけを置き換える（一致しなければ edit が失敗にする） */
 const replaceOnce = (from: string | RegExp, to: string) => (text: string) => text.replace(from, to);
+/** CHANGELOG の [Unreleased] と今の版（その次の節）の利用者向けの区分の見出しを、区分でない見出しに変える */
+const withoutUserFacingSections = (text: string): string => {
+  const start = text.indexOf("## [Unreleased]");
+  const end = text.indexOf("\n## [", text.indexOf("\n## [", start + 1) + 1);
+  return (
+    text.slice(0, start) +
+    text
+      .slice(start, end)
+      .replace(/^### (Added|Changed|Fixed|Deprecated|Removed|Data)$/gm, "### Notes") +
+    text.slice(end)
+  );
+};
 
 interface Case {
   /** 検査のスクリプト */
@@ -92,6 +104,11 @@ interface Case {
 const DECISIONS = ["decisions", "md"].join(".");
 const MISSING_PATH = ["scripts", "no-such-file.ts"].join("/");
 const OLD_KEY = ["closed", "Annual"].join("");
+const OLD_SERIES = ["0", "29", "x"].join(".");
+const OLD_SERIES_V = ["v0", "29", "X"].join(".");
+const OLD_SERIES_MAJOR = ["1", "2", "x"].join(".");
+/** 移行ガイドの検索の案内にある、振替の旧名の項目（旧名をそのまま書くと check-names が旧名の残りとして止める） */
+const SEARCH_ORIGINAL = ["・`origin", "al:`"].join("");
 
 const benchControl = () => {
   writeFileSync(join(work, "bench-base.json"), JSON.stringify({ isBusinessDay: 100 }));
@@ -113,6 +130,7 @@ const TOOLS: Readonly<Record<string, readonly string[]>> = {
   "check-size": ["scripts/check-size.ts"],
   "check-readme-examples": ["scripts/check-readme-examples.ts"],
   "check-names": ["scripts/check-names.ts"],
+  "check-claims": ["scripts/check-claims.ts", "--base", base],
   "api-report": ["scripts/api-report.ts"],
   "bench-compare": [
     "scripts/bench-compare.ts",
@@ -210,6 +228,60 @@ const CASES: readonly Case[] = [
     expect: `旧名 ${OLD_KEY}: が残っている`,
   },
   {
+    tool: "check-claims",
+    name: "今の版より前のマイナー系列を指す語",
+    args: TOOLS["check-claims"]!,
+    inject: () => edit("SECURITY.md", (t) => `${t}\nSupported since ${OLD_SERIES}.\n`),
+    expect: "refers to a minor series before",
+  },
+  {
+    tool: "check-claims",
+    name: "診断の対象外の旧名が移行ガイドの検索の案内にない",
+    args: TOOLS["check-claims"]!,
+    inject: () => edit("docs/migration.md", replaceOnce(SEARCH_ORIGINAL, "")),
+    expect: 'the renamed key "original" is not diagnosed',
+  },
+  {
+    tool: "check-claims",
+    name: "前に v が付き、大文字の X で書いた前のマイナー系列",
+    args: TOOLS["check-claims"]!,
+    inject: () => edit("SECURITY.md", (t) => `${t}\nSupported since ${OLD_SERIES_V}.\n`),
+    expect: `"${OLD_SERIES_V}" refers to a minor series before`,
+  },
+  {
+    tool: "check-claims",
+    name: "メジャーの違う前の系列（今の版を 1.3.0 にして 1.2.x を書く）",
+    args: TOOLS["check-claims"]!,
+    inject: () => {
+      edit("package.json", replaceOnce(/"version": "[^"]+"/, '"version": "1.3.0"'));
+      edit("SECURITY.md", (t) => `${t}\nSupported since ${OLD_SERIES_MAJOR}.\n`);
+    },
+    expect: `"${OLD_SERIES_MAJOR}" refers to a minor series before 1.3.0`,
+  },
+  {
+    tool: "check-claims",
+    name: "dist の .js が変わったのに CHANGELOG の今の版と [Unreleased] に利用者向けの区分がない",
+    args: TOOLS["check-claims"]!,
+    inject: () => {
+      edit("dist/core/month.js", (t) => `${t}\n// injected\n`);
+      edit("CHANGELOG.md", withoutUserFacingSections);
+    },
+    expect: "has a user-facing section",
+  },
+  {
+    tool: "check-claims",
+    name: "dist の .d.ts の型だけが変わったのに CHANGELOG の今の版と [Unreleased] に利用者向けの区分がない",
+    args: TOOLS["check-claims"]!,
+    inject: () => {
+      edit(
+        "dist/core/month.d.ts",
+        replaceOnce("export type MonthString = string;", "export type MonthString = number;"),
+      );
+      edit("CHANGELOG.md", withoutUserFacingSections);
+    },
+    expect: "has a user-facing section",
+  },
+  {
     tool: "api-report",
     name: "公開 API と etc/api.md の不一致",
     args: TOOLS["api-report"]!,
@@ -302,7 +374,7 @@ try {
     const started = Date.now();
     const r = node(args);
     // 対照は、どの検査も飛ばさずに合格することを確かめる（SKIP の行が出れば失敗）。2 つ目の形（skipped に括弧が続く行）は、
-    // 今の 8 つの検査は出さないが、将来、対照にブラウザー・workerd の検査（飛ばした検査をこの形で出す）を加えたときのために見る
+    // 今の 9 つの検査は出さないが、将来、対照にブラウザー・workerd の検査（飛ばした検査をこの形で出す）を加えたときのために見る
     const skipped = r.output.split("\n").filter((l) => /\bSKIP\b|skipped \(/.test(l));
     const ok = r.status === 0 && skipped.length === 0;
     if (!ok) failed = true;

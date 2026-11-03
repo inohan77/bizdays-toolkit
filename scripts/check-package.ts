@@ -18,6 +18,13 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type BundledEntry, loadBundledProviders } from "./bundled-providers.ts";
+import {
+  DECISION_REFERENCE,
+  changelogSections,
+  currentFiles,
+  decisionNumbers,
+  decisionReferenceFiles,
+} from "./decision-references.ts";
 
 interface Pkg {
   name: string;
@@ -649,24 +656,7 @@ function checkPairNumbers(enPath: string, jaPath: string): string[] {
  */
 function checkReferences(): string[] {
   const problems: string[] = [];
-  const walk = (dir: string): string[] =>
-    readdirSync(dir).flatMap((name) => {
-      const path = `${dir}/${name}`;
-      if (name === "node_modules" || name === "dist") return [];
-      return statSync(path).isDirectory() ? walk(path) : [path];
-    });
-  const current = [
-    ...["scripts", "src", "test", ".github"]
-      .flatMap(walk)
-      .filter((f) => /\.(ts|mts|mjs|cjs|yml)$/.test(f)),
-    "README.md",
-    "RELEASING.md",
-    "SECURITY.md",
-    ...readdirSync("docs")
-      .filter((f) => f.endsWith(".md") && f !== "decisions.md" && f !== "migration.md")
-      .map((f) => `docs/${f}`),
-    ...readdirSync("docs/sources").map((f) => `docs/sources/${f}`),
-  ];
+  const current = currentFiles();
   const pathPattern =
     /(?<![\w/.@-])((?:scripts|src|test|docs|etc|\.github)\/[\w./-]+\.(?:ts|mts|mjs|cjs|md|json|yml|txt|svg|png))/g;
   for (const file of current) {
@@ -696,32 +686,21 @@ function checkReferences(): string[] {
   if (oldNumbers.size === 0)
     problems.push("docs/decisions.md: the table of old decision numbers was not found");
   const checkNumbers = (file: string, list: string, known: ReadonlySet<number>): void => {
-    for (const n of list.split(/[・、,]/).map((x) => Number(x.trim()))) {
+    for (const n of decisionNumbers(list)) {
       if (!known.has(n))
         problems.push(`${file}: refers to decision ${n}, which docs/decisions.md does not have`);
     }
   };
-  const referencePattern = /decisions\.md`? の ([\d・、, ]+?) ?番(?!目)/g;
-  for (const file of [...current, "docs/migration.md"]) {
+  for (const file of decisionReferenceFiles()) {
     const text = readFileSync(file, "utf8");
-    for (const m of text.matchAll(referencePattern)) checkNumbers(file, m[1]!, numbers);
+    for (const m of text.matchAll(DECISION_REFERENCE)) checkNumbers(file, m[1]!, numbers);
     // 「番」を書き忘れた参照は上の検査にかからないので、形の誤りとして止める
     for (const m of text.matchAll(/decisions\.md`? の ([\d・、, ]*\d)(?![\d・、, ]*番)/g))
       problems.push(`${file}: write the decision reference as "decisions.md の ${m[1]} 番"`);
   }
-  const renumberedAfter = [0, 30, 2];
-  const isOld = (version: string): boolean => {
-    const v = version.split(".").map(Number);
-    for (let i = 0; i < 3; i++) if (v[i] !== renumberedAfter[i]) return v[i]! < renumberedAfter[i]!;
-    return true;
-  };
-  for (const section of readFileSync("CHANGELOG.md", "utf8")
-    .split(/^## \[/m)
-    .slice(1)) {
-    const version = section.slice(0, section.indexOf("]"));
-    const known = /^\d+\.\d+\.\d+$/.test(version) && isOld(version) ? oldNumbers : numbers;
-    for (const m of section.matchAll(referencePattern))
-      checkNumbers(`CHANGELOG.md [${version}]`, m[1]!, known);
+  for (const { version, text, oldNumbering } of changelogSections()) {
+    for (const m of text.matchAll(DECISION_REFERENCE))
+      checkNumbers(`CHANGELOG.md [${version}]`, m[1]!, oldNumbering ? oldNumbers : numbers);
   }
   for (const m of decisions.matchAll(/(?<![\d.])(\d+(?:[・、]\d+)*) ?番(?!目)/g))
     checkNumbers("docs/decisions.md", m[1]!, numbers);
