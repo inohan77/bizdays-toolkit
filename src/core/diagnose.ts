@@ -278,6 +278,22 @@ function scanWindow(
   return { ranges: merged, label };
 }
 
+/**
+ * 規則どうしの診断（redundant など）が調べる期間。analyzeRules が使う。テストのオラクル（test/diagnose-oracle.test.ts）も、
+ * 診断と同じ期間で「取り除いても結果が変わらない」かを確かめるために、同じ関数を使う
+ * @internal
+ */
+export function rulesScanWindow(
+  compiled: Pick<CompiledSchedule<unknown, string>, "source" | "annual" | "recurring">,
+  cycle: number = patternCycle(compiled.recurring),
+): Window | undefined {
+  return scanWindow(
+    compiled.source as HolidaySource<string>,
+    [...compiled.annual, ...compiled.recurring],
+    cycle,
+  );
+}
+
 /** 期間の日ごとに fn を呼ぶ（true を返したら止める） */
 function eachDay(window: Window, fn: (dayNumber: number) => boolean | void): void {
   for (const { from, to } of window.ranges) {
@@ -604,7 +620,7 @@ function analyzeRules<Value, Kind extends string>(
   });
   const basis = createBasis(compiled, lookup);
   const cycle = patternCycle(recurring);
-  const window = scanWindow(source as HolidaySource<string>, [...annual, ...recurring], cycle);
+  const window = rulesScanWindow(compiled, cycle);
   /** 使われないことが分かった規則（redundant を重ねて出さない） */
   const unused = new Set<DecidingRule<Value>>();
 

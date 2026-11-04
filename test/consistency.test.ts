@@ -72,6 +72,7 @@ const withPolicy = (options: Obj, policy: string | undefined): Obj => {
   if (Array.isArray(out["recurringRules"])) {
     const basis = createCalendar({
       ...(options["holidayProvider"] === undefined ? {} : source(true)),
+      closedWeekdays: [0, 6],
       outOfRangePolicy: policy,
     } as CalendarOptions);
     out["recurringRules"] = (out["recurringRules"] as Obj[]).map((r) =>
@@ -105,7 +106,9 @@ function scheduleOptions(rand: () => number, run: number, ctx?: Context): Obj {
   };
   if (Array.isArray(o["recurringRules"]))
     o["recurringRules"] = (o["recurringRules"] as Obj[]).map((r) =>
-      r["calendar"] === CALENDAR_REF ? { ...r, calendar: createCalendar(source(withHolidays)) } : r,
+      r["calendar"] === CALENDAR_REF
+        ? { ...r, calendar: createCalendar({ ...source(withHolidays), closedWeekdays: [0, 6] }) }
+        : r,
     );
   return o;
 }

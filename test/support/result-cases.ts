@@ -291,6 +291,16 @@ export function traitsOfCase(one: Case): string[] {
     one.providers.some((p) => YEARS[p][0] > 2001 || YEARS[p][1] < 2028)
   )
     traits.add("schedule-counting-basis-narrower-than-scan");
+  // 上の設定のうち、基準のカレンダーで週の第 n 営業日を数える規則があるもの。診断は、基準のカレンダーが投げた月の前後の月も
+  // 判定できない月にする（月をまたぐ週は隣の月の基準で決まるため。0.30.7）。0.30.6 が出していた誤った never-matches・
+  // redundant を出さなくなった差分を許す
+  if (
+    traits.has("schedule-counting-basis-narrower-than-scan") &&
+    (one.options["recurringRules"] as Obj[]).some(
+      (r) => r["calendar"] === CALENDAR_REF && "businessDayOfWeek" in r,
+    )
+  )
+    traits.add("schedule-week-counting-basis-narrower-than-scan");
   for (const key of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {
     const list = one.options[key];
     if (!Array.isArray(list)) continue;
@@ -323,8 +333,27 @@ export interface BasisLib {
 }
 
 /**
+ * 基準のカレンダーの定休日（closedWeekdays。undefined は書かない）。設定の id から決める別の乱数で選ぶ（生成器の乱数の流れを
+ * 変えないため）。目録の生成器が作る形（書かない・曜日の部分集合）にそろえ、実際の利用で多い土日休みを多めにする:
+ * 書かない 3 割、土日 4 割、曜日ごとに 4 分の 1 で選んだ部分集合 3 割（0.30.7 までは、いつも書かなかった）
+ */
+export function basisClosedWeekdays(c: Case): number[] | undefined {
+  let seed = 0;
+  for (const ch of c.id) seed = (Math.imul(seed, 31) + ch.charCodeAt(0)) >>> 0;
+  const r = random(seed ^ 0x2c1b3c6d);
+  const pick = r();
+  if (pick < 0.3) return undefined;
+  if (pick < 0.7) return [0, 6];
+  const days = [0, 1, 2, 3, 4, 5, 6].filter(() => r() < 0.25);
+  return days.length === 7 ? [0, 6] : days; // 全曜日の定休日のカレンダーは作れないので、土日にする
+}
+
+/** 基準のカレンダーの設定に付ける印（生成範囲の検査が、基準のカレンダーの特徴を分けて数えるため。ライブラリは無視する） */
+export const BASIS_MARK = Symbol.for("bizdays-toolkit.result-compare.basis");
+
+/**
  * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（CALENDAR_REF）を、その版で作った同じ提供元の
- * 土日休みのカレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）。基準のカレンダーの
+ * カレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）。定休日は basisClosedWeekdays。基準のカレンダーの
  * outOfRangePolicy は、スケジュールの設定のものを受け継ぐ（basisOutOfRangePolicy。特徴の付け方と同じ関数）。
  * result-compare（scripts/result-compare.ts）が前の版と今回の版の両方に使う。両方を同じ作り方で比べるので、この処理が壊れても
  * 差分にならない。そのため、ここに置いて test/result-traits.test.ts で直接確かめる
@@ -344,6 +373,9 @@ export function withCalendars(lib: BasisLib, c: Case, naming: "new" | "old", opt
         };
   const policy = basisOutOfRangePolicy(c);
   if (policy !== undefined) source[naming === "old" ? "outOfRange" : "outOfRangePolicy"] = policy;
+  const closed = basisClosedWeekdays(c);
+  if (closed !== undefined) source["closedWeekdays"] = closed;
+  (source as Record<symbol, unknown>)[BASIS_MARK] = true;
   const calendar = lib.createCalendar(source);
   return {
     ...options,

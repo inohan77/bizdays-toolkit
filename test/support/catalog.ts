@@ -486,11 +486,30 @@ export function randomScheduleOptions(p: Picker, ctx: Context): Obj {
       return rule;
     });
   if (p.chance(0.3)) o["annualDates"] = [{ date: "12-31", value: "closed" }];
-  if (p.chance(0.25)) o["dates"] = [{ date: date(p, ctx.years), value: "X" }];
+  if (p.chance(0.25)) {
+    const d = date(p, ctx.years);
+    o["dates"] = [ctx.newShapes ? scheduleDate(d) : { date: d, value: "X" }];
+  }
   return o;
 }
 
-/** スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（呼び出し側が、同じ提供元の土日休みのカレンダーに置き換える） */
+/**
+ * スケジュールの個別の日付。半分ほどを期間（{ from, to }。同じ年の中の 2〜7 日）にする。期間にするかと長さは、日付から
+ * 決める別の乱数で選ぶ（呼び出し側の乱数の流れを変えないため。変えると、ほかのテストが試す設定がすべて変わる）
+ */
+function scheduleDate(d: string): Obj {
+  let seed = 0;
+  for (const ch of d) seed = (Math.imul(seed, 31) + ch.charCodeAt(0)) >>> 0;
+  const side = random(seed ^ 0x5bd1e995);
+  if (side() < 0.5) return { date: d, value: "X" };
+  const to = addDays(d, 1 + Math.floor(side() * 6));
+  return to.slice(0, 4) === d.slice(0, 4) ? { from: d, to, value: "X" } : { date: d, value: "X" };
+}
+
+/**
+ * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印。呼び出し側が、同じ提供元のカレンダーに置き換える（整合の検査と
+ * 変形のテストは土日休み、result-compare は設定ごとに basisClosedWeekdays で選んだ定休日）
+ */
 export const CALENDAR_REF: Readonly<Obj> = Object.freeze({ calendarRef: "weekends-and-holidays" });
 
 /** "YYYY-MM-DD" に日数を足す */

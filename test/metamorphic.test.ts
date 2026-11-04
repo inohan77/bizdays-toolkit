@@ -95,7 +95,10 @@ function optionsOf(
     ...(kind === "calendar" ? randomCalendarOptions(p, ctx) : randomScheduleOptions(p, ctx)),
   };
   if (Array.isArray(o["recurringRules"])) {
-    const basis = createCalendar(sourceOf(providers) as CalendarOptions);
+    const basis = createCalendar({
+      ...sourceOf(providers),
+      closedWeekdays: [0, 6],
+    } as CalendarOptions);
     o["recurringRules"] = (o["recurringRules"] as Obj[]).map((r) =>
       r["calendar"] === CALENDAR_REF ? { ...r, calendar: basis } : r,
     );
@@ -431,7 +434,11 @@ function rewrap(options: Obj, kindOf?: (k: string) => string): Obj {
     ? providers.map((p: HolidayProvider<string>) => wrapProvider(p, kindOf))
     : wrapProvider(providers as HolidayProvider<string>, kindOf);
   const out: Obj = { ...options, holidayProvider: wrapped };
-  const basis = createCalendar({ holidayProvider: wrapped, timeZone: "UTC" } as CalendarOptions);
+  const basis = createCalendar({
+    holidayProvider: wrapped,
+    timeZone: "UTC",
+    closedWeekdays: [0, 6],
+  } as CalendarOptions);
   for (const list of RULE_LISTS) {
     if (!Array.isArray(out[list])) continue;
     out[list] = (out[list] as Obj[]).map((r) => {

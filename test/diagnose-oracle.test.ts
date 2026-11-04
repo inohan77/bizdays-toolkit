@@ -8,7 +8,9 @@
  * - pnpm check では決まった抜き出しだけを試す。すべての組み合わせは ORACLE_FULL=1 で（CI の oracle ジョブ。時間の決まりと
  *   行列の分け方は RELEASING.md の「品質の確認」）
  * - 判定は暦日でタイムゾーンに依存しないので、タイムゾーンを変えた実行（scripts/test-tz.ts）では総当たりを飛ばす
- *   （カナリアの 2 件は 1 つの設定だけで費用が小さいので、そこでも動かす）
+ *   （完全性の数え方の見張りは 1 つの設定だけで費用が小さいので、そこでも動かす）
+ * - 完全性（取り除いても変わらないのに何も出ない項目）は、対応年で取り除けた項目を、診断が規則どうしを調べる期間
+ *   （診断と同じ関数 rulesScanWindow で求める）でも確かめ直してから数え、既知の項目の一覧（KNOWN_INCOMPLETE）と合わなければ失敗にする
  * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別の版（公開済みの版など）を試せる。ORACLE_SHARD=k/n で、
  *   全件の組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。ORACLE_FULL=1 と組み合わせたときだけ。
  *   書式の誤り・k >= n・ORACLE_FULL なしは例外）
@@ -34,6 +36,43 @@ const diag = (await import(
     ? pathToFileURL(resolve(target, "dist/diagnose/index.js")).href
     : "../src/diagnose/index.ts"
 )) as Record<string, Fn>;
+/**
+ * 診断が規則どうしを調べる期間（日付の範囲の並び。設定の作成に失敗するときと、期間が求まらないときは undefined）。診断と
+ * 同じ関数で求める: 設定の組み立ては診断と同じ compileCalendarOptions、期間は analyzeRules が使う rulesScanWindow。
+ * ORACLE_TARGET の版に rulesScanWindow がない（0.30.6 まで）なら、今のソースの関数を使う（期間の決め方は 0.30.x の間、
+ * 変えていない）
+ */
+type Core = Record<string, Fn>;
+const coreOf = async (dir: string | undefined, name: string): Promise<Core> =>
+  (await import(
+    dir ? pathToFileURL(resolve(dir, `dist/core/${name}.js`)).href : `../src/core/${name}.ts`
+  )) as Core;
+const scanCore = await (async () => {
+  const fromTarget = target ? await coreOf(target, "diagnose") : undefined;
+  const dir = fromTarget?.["rulesScanWindow"] ? target : undefined;
+  return {
+    compile: (await coreOf(dir, "calendar"))["compileCalendarOptions"]!,
+    collector: (await coreOf(dir, "errors"))["IssueCollector"] as unknown as new () => unknown,
+    window: (fromTarget?.["rulesScanWindow"] ??
+      (await coreOf(undefined, "diagnose"))["rulesScanWindow"])!,
+    fromDay: (await coreOf(dir, "date"))["fromDayNumber"]!,
+  };
+})();
+const calendarScanWindow = (
+  options: object,
+): readonly { from: string; to: string }[] | undefined => {
+  const compiled = (
+    scanCore.compile(new scanCore.collector(), options) as { schedule?: unknown } | undefined
+  )?.schedule;
+  if (compiled === undefined) return undefined;
+  const window = scanCore.window(compiled) as
+    | { ranges: { from: number; to: number }[] }
+    | undefined;
+  return window?.ranges.map((r) => ({
+    from: scanCore.fromDay(r.from) as string,
+    to: scanCore.fromDay(r.to) as string,
+  }));
+};
 
 const FULL = flagEnv("ORACLE_FULL");
 /**
@@ -92,6 +131,31 @@ const build = (
   for (const [k, v] of list) ((o[k] ??= []) as unknown[]).push(v);
   return o;
 };
+/** 期間（日付の範囲の並び）の全日の営業日かどうか（投げた日はエラーコード） */
+const openOver = (o: Obj, ranges: readonly { from: string; to: string }[]): string => {
+  const calendar = lib["createCalendar"]!(o) as { dayInfoOn: (d: string) => Obj };
+  const out: string[] = [];
+  for (const { from, to } of ranges)
+    for (let t = Date.parse(from); t <= Date.parse(to); t += 86_400_000) {
+      const d = new Date(t).toISOString().slice(0, 10);
+      try {
+        out.push(String(calendar.dayInfoOn(d)["open"]));
+      } catch (error) {
+        out.push(`E:${String((error as { code?: unknown }).code)}`);
+      }
+    }
+  return out.join(",");
+};
+/**
+ * 対応年で取り除けた項目を、診断が規則どうしを調べる期間（calendarScanWindow）でも取り除けるか確かめ直す。診断は有効期間が
+ * 対応年の外に続く規則を、その外まで調べるので、対応年だけで比べると、取り除けない項目を「何も出ない」と数えてしまう
+ */
+function removableInScanWindow(full: Obj, rest: Obj): boolean {
+  const ranges = calendarScanWindow(full);
+  if (ranges === undefined) return true;
+  return openOver(rest, ranges) === openOver(full, ranges);
+}
+
 /** 全日の結果（full なら理由・名前・振替元まで） */
 const snapshot = (o: Obj, full: boolean): string[] => {
   const calendar = lib["createCalendar"]!(o) as { dayInfoOn: (d: string) => Obj };
@@ -190,6 +254,9 @@ interface Report {
   unsound: string[];
   incomplete: Map<string, number>;
   codes: Record<string, number>;
+  /** 対応年では取り除けたが、診断の期間で確かめ直して取り除けなかった項目の数と、確かめ直しの時間（ミリ秒） */
+  rechecked: number;
+  recheckMs: number;
 }
 
 function run(
@@ -202,7 +269,14 @@ function run(
   ) => void,
   list: readonly Config[] = configs(),
 ): Report {
-  const report: Report = { configs: 0, unsound: [], incomplete: new Map(), codes: {} };
+  const report: Report = {
+    configs: 0,
+    unsound: [],
+    incomplete: new Map(),
+    codes: {},
+    rechecked: 0,
+    recheckMs: 0,
+  };
   for (const { list: items, policy, weekdays } of list) {
     const o = build(items, policy, weekdays);
     const d = diag["diagnoseCalendar"]!(o) as Obj[];
@@ -224,7 +298,9 @@ const summarize = (name: string, report: Report): void => {
     "",
     `設定 ${report.configs} 件（作成の誤りの設定を除く）、誤り ${report.unsound.length} 件、診断のコード: ${JSON.stringify(report.codes)}`,
     "",
-    "取り除いても変わらないのに何も出ない項目（完全性の報告。失敗にはしない）:",
+    `対応年では取り除けたが、診断の期間で確かめ直して取り除けなかった項目: ${report.rechecked} 件（確かめ直し ${Math.round(report.recheckMs)} ms）`,
+    "",
+    "取り除いても変わらないのに何も出ない項目（完全性。既知の項目の一覧 KNOWN_INCOMPLETE と合わなければ失敗）:",
     ...(top.length > 0 ? top.map(([k, v]) => `- ${v} 件 ${k}`) : ["- なし"]),
     "",
   ];
@@ -287,6 +363,13 @@ function checkRemovals(
       same(restOpen, baseOpen) &&
       !codes.some((c) => ["redundant", "shadowed", "never-matches", "expired"].includes(c))
     ) {
+      const started = performance.now();
+      const removable = removableInScanWindow(build(list, policy, weekdays), rest);
+      r.recheckMs += performance.now() - started;
+      if (!removable) {
+        r.rechecked++;
+        return;
+      }
       const key = `${list[p]![0]} ${JSON.stringify(list[p]![1])}`;
       r.incomplete.set(key, (r.incomplete.get(key) ?? 0) + 1);
     }
@@ -294,39 +377,49 @@ function checkRemovals(
 }
 
 /**
- * 完全性の報告に必ず出る設定（カナリア）。開く規則「5・7 月の月曜」が開きうる日は、もともと営業日の月曜（定休日は土日）と、
- * 5・7 月の月曜の祝日（自作の提供元では 2025-05-05・2026-05-04 や 7 月の第 3 月曜など）だけ。祝日のほうは、
- * holidayOverlapPolicy の既定（"under-holiday"。祝日が優先）なので開かない（次のテストが、"over-holiday" にすると
- * 取り除けなくなることで確かめる）。閉じる規則「2026 年からの毎月 1 日」と重なる日（5・7 月の 1 日が月曜）も、
- * 対応年（2025〜2027 年）にない。そのため取り除いても全日の結果は変わらないが、診断は redundant と言わない。redundant は、祝日・暦の並びの
- * 偶然で取り除ける項目まで見つけることを約束していないため（docs/decisions.md の 31 番）。報告の仕組みが壊れて
- * 何も数えなくなれば、ここで止まる
+ * 取り除いても変わらないのに診断が何も言わない項目（完全性の報告に出る項目）のうち、理由が分かっていて受け入れるもの
+ * （項目 → 理由）。ここにない項目が出たら失敗、ここにある項目が出なくなっても失敗（一覧が古くなるのを防ぐ）。
+ * 0.30.7 で、対応年だけで比べていたために出ていた 2 件（どちらも診断の期間では取り除けない）を確かめ直しで外したので、空
  */
-const CANARY: Config = {
-  list: [
-    ["openRecurringRules", { weekday: 1, months: [5, 7] }],
-    ["closedRecurringRules", { dayOfMonth: 1, effectiveFrom: "2026-01-01" }],
-  ],
-  policy: "closed",
-  weekdays: [0, 6],
-};
-const CANARY_KEY = `openRecurringRules ${JSON.stringify({ weekday: 1, months: [5, 7] })}`;
+const KNOWN_INCOMPLETE: Readonly<Record<string, string>> = {};
 
-test("オラクル: 完全性の報告は、取り除けるのに何も出ない既知の設定（カナリア）を数える", () => {
-  const report = run(checkRemovals, [CANARY]);
-  assert.equal(report.configs, 1, "カナリアの設定が作成できない");
-  assert.deepEqual(report.unsound, []);
+/**
+ * 完全性の数え方の見張り。診断の結果を空にして渡し、(1) 本当に取り除ける項目（定休日の土曜の個別の日付）を数えること、
+ * (2) 対応年では取り除けるが診断の期間では取り除けない項目（2026 年からの毎月 1 日を閉じる規則と、5・7 月の月曜を開く規則。
+ * 2028-05-01 などで結果が変わる）は確かめ直しで数えないこと、を確かめる。報告の仕組みが壊れて何も数えなくなっても、
+ * 確かめ直しがいつも「取り除けない」と答えて取りこぼしを隠すように壊れても、ここで止まる
+ */
+test("オラクル: 完全性の数え方は、診断が何も言わない取り除ける項目を数え、診断の期間で取り除けない項目は数えない", () => {
+  const report: Report = {
+    configs: 1,
+    unsound: [],
+    incomplete: new Map(),
+    codes: {},
+    rechecked: 0,
+    recheckMs: 0,
+  };
+  const saturday: Item = ["closedDates", "2025-03-01"];
+  checkRemovals([saturday], "closed", [], report, [0, 6]);
   assert.equal(
-    report.incomplete.get(CANARY_KEY),
+    report.incomplete.get(`closedDates ${JSON.stringify("2025-03-01")}`),
     1,
-    `完全性の報告がカナリアを数えない: ${JSON.stringify([...report.incomplete])}`,
+    `取り除ける項目を数えない: ${JSON.stringify([...report.incomplete])}`,
   );
+  const openMondays: Item = ["openRecurringRules", { weekday: 1, months: [5, 7] }];
+  const firstDays: Item = ["closedRecurringRules", { dayOfMonth: 1, effectiveFrom: "2026-01-01" }];
+  checkRemovals([openMondays, firstDays], "closed", [], report, [0, 6]);
+  assert.equal(
+    report.incomplete.get(`openRecurringRules ${JSON.stringify({ weekday: 1, months: [5, 7] })}`),
+    undefined,
+    "診断の期間では取り除けない項目を数えた",
+  );
+  assert.ok(report.rechecked >= 1, "確かめ直しが働いていない");
 });
 
 // ------------------------------------------------------------
 
 test(
-  "オラクル: shadowed・never-matches・redundant と出た項目は、取り除いても全日の結果が変わらない",
+  "オラクル: shadowed・never-matches・redundant と出た項目は、取り除いても全日の結果が変わらず、取り除ける項目には何かが出る（既知の項目を除く）",
   { skip: SKIP },
   () => {
     const report = run(checkRemovals);
@@ -336,6 +429,19 @@ test(
       [],
       "診断が取り除いても変わらないと言った項目で、結果が変わった",
     );
+    // 完全性: 一覧にない「取り除けるのに何も出ない」項目は失敗。一覧の項目が出なくなったら失敗（全件を 1 回で試すときだけ。
+    // 分けた実行では、一覧の項目がほかの分にある）
+    assert.deepEqual(
+      [...report.incomplete.keys()].filter((k) => !(k in KNOWN_INCOMPLETE)),
+      [],
+      "取り除いても結果が変わらないのに、診断が何も言わない項目がある（診断の取りこぼし。理由が分かって受け入れるなら KNOWN_INCOMPLETE に載せる）",
+    );
+    if (FULL && SHARD === undefined)
+      assert.deepEqual(
+        Object.keys(KNOWN_INCOMPLETE).filter((k) => !report.incomplete.has(k)),
+        [],
+        "KNOWN_INCOMPLETE の項目が出なくなった（直ったか、網から外れた。一覧から外す）",
+      );
     assert.ok(
       report.configs > 0 && (report.codes["redundant"] ?? 0) > 0,
       "オラクルが空振りしている",
@@ -353,47 +459,6 @@ test(
 // ------------------------------------------------------------
 // 診断のコードごとの約束
 // ------------------------------------------------------------
-
-test("オラクル: カナリアが取り除けるのは、開く規則が祝日を開かない（holidayOverlapPolicy の既定）ため", () => {
-  // 前提: 自作の提供元に、5・7 月の月曜の祝日がある
-  const calendar = lib["createCalendar"]!({
-    holidayProvider: SHORT_PROVIDER,
-    timeZone: "UTC",
-  }) as Record<string, (d: string) => unknown>;
-  const mondayHolidays = SHORT_DAYS.filter(
-    (d) =>
-      ["05", "07"].includes(d.slice(5, 7)) &&
-      new Date(`${d}T00:00:00Z`).getUTCDay() === 1 &&
-      calendar["isHoliday"]!(d) === true,
-  );
-  assert.ok(
-    mondayHolidays.length > 0,
-    "自作の提供元に 5・7 月の月曜の祝日がない（カナリアの理由の前提が変わった）",
-  );
-  // 祝日より開く規則を優先（"over-holiday"）にすると、その祝日を開くので、取り除くと結果が変わる（報告に出ない）
-  const overHoliday: Config = {
-    ...CANARY,
-    list: [
-      ["openRecurringRules", { weekday: 1, months: [5, 7], holidayOverlapPolicy: "over-holiday" }],
-      CANARY.list[1]!,
-    ],
-  };
-  // 開く規則を実際に取り除くと、全日の結果が元の設定と変わる（その祝日が閉じに戻る）
-  const removed = [overHoliday.list[1]!];
-  const before = snapshot(build(overHoliday.list, overHoliday.policy, overHoliday.weekdays), false);
-  const after = snapshot(build(removed, overHoliday.policy, overHoliday.weekdays), false);
-  assert.ok(
-    !same(after, before),
-    `"over-holiday" の開く規則を取り除いても結果が変わらない（カナリアの理由が違う）: ${describeConfig(overHoliday.list, overHoliday.policy, overHoliday.weekdays, "openRecurringRules[0]")}`,
-  );
-  const report = run(checkRemovals, [overHoliday]);
-  assert.equal(report.configs, 1);
-  assert.deepEqual(
-    [...report.incomplete],
-    [],
-    `"over-holiday" でも取り除けると報告された（カナリアの理由が違う）: ${mondayHolidays.join(",")}`,
-  );
-});
 
 test(
   "オラクル: expired は、終わりが基準日より前で、基準日以降の結果に影響しない",

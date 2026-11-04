@@ -13,7 +13,9 @@
  * （removedCodes）でも絞れる。
  * 許すのは、前の版がその変更より前（affectedSince 以上・introducedIn 未満）で、今回の版がその変更を含むときだけ。
  * 失敗にする条件: 許していない差分がある。今回の版で、意図せず作成に失敗した設定がある（生成器が意図して混ぜた入力の誤り
- * （test/support/catalog.ts の印を付けた規則を含む設定）は数えて Job Summary に出し（0 件なら空振りとして失敗）、それ以外の作成の失敗は、結果を比べられていないので失敗にする）。
+ * （test/support/catalog.ts の印を付けた規則を含む設定）は数えて Job Summary に出し（0 件なら空振りとして失敗）、それ以外の作成の失敗は、結果を比べられていないので失敗にする。
+ * 名前の書き方（新しい名前・旧名）ごとに数え、前の版でも失敗した設定の数も出す。前の版と誤りが同じなら差分にならないので、
+ * 数えなければ黙って空振りになるため）。旧名の回で、新しい名前で書ける項目があるのに旧名に書き換わらなかった設定がある。
  *
  * 使い方: node scripts/result-compare.ts --base <dir> [--head .] [--base-label <label>] [--seed <n>] [--scale <n>] [--changes <file>]
  *   --base は前の版を展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回のリポジトリ（pnpm build 済み）。
@@ -302,21 +304,54 @@ const intendedInvalid = (c: Case): boolean =>
     (k) => Array.isArray(c.options[k]) && (c.options[k] as unknown[]).some(isIntendedInvalid),
   );
 
-/** 作成の結果の集計（今回の版で、意図した入力の誤りの設定・意図せず作成に失敗した設定） */
-const creation = { intended: 0, unintended: [] as string[] };
+/**
+ * 作成の結果の集計（今回の版で、意図した入力の誤りの設定・意図せず作成に失敗した設定）。bothFailed は、意図せず作成に失敗した
+ * 設定のうち、前の版でも作成に失敗したもの（誤りが同じなら差分にならず、結果を何も比べていない空振り）。notRenamed は、旧名の回で
+ * 旧名に書き換わらなかった設定（新しい名前で書ける項目があるのに、書き換えた設定が新しい名前の設定と同じ）
+ */
+const creation = {
+  intended: 0,
+  unintended: [] as string[],
+  bothFailed: 0,
+  notRenamed: [] as string[],
+};
 
-/** 今回の版の作成の結果を数える（名前の書き方のうち最初の 1 つだけ。同じ設定を 2 回数えないため） */
-function tally(c: Case, h: Built, naming: "new" | "old"): void {
-  if (naming !== namings[0]) return;
+/**
+ * 作成の結果を数える。意図した入力の誤りは、名前の書き方のうち最初の 1 つだけで数える（同じ設定を 2 回数えないため）。
+ * 意図せず作成に失敗した設定は、名前の書き方ごとに数える（旧名の回だけで失敗する設定も見つけるため）
+ */
+function tally(c: Case, h: Built, naming: "new" | "old", b?: Built): void {
   if (intendedInvalid(c)) {
-    if (h.ok) creation.unintended.push(`${c.id}: 意図した入力の誤りなのに作成できた`);
+    if (naming !== namings[0]) return;
+    if (h.ok) creation.unintended.push(`${c.id} [${naming}]: 意図した入力の誤りなのに作成できた`);
     else creation.intended++;
-  } else if (!h.ok) creation.unintended.push(`${c.id}: ${h.error}`);
+  } else if (!h.ok) {
+    creation.unintended.push(`${c.id} [${naming}]: ${h.error}`);
+    if (b !== undefined && !b.ok) creation.bothFailed++;
+  }
+}
+
+/** 新しい名前で書ける項目（旧名の表にある名前）を持つ設定か（旧名の回で、書き換わったことを確かめる対象） */
+function hasRenamable(c: Case): boolean {
+  const places = c.kind === "calendar" ? ["source", "calendar"] : ["source", "schedule"];
+  const top = Object.keys(c.options).some((k) =>
+    renamedKeys.some((r) => places.includes(r.place) && r.to === k),
+  );
+  const rules = ["closedRecurringRules", "openRecurringRules", "recurringRules"].some(
+    (k) =>
+      Array.isArray(c.options[k]) &&
+      (c.options[k] as Obj[]).some((r) =>
+        Object.keys(r).some((rk) => renamedKeys.some((x) => x.place === "rule" && x.to === rk)),
+      ),
+  );
+  return top || rules;
 }
 
 function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boolean): Diff[] {
   const diffs: Diff[] = [];
   const written = naming === "old" ? toOld(c) : c.options;
+  if (naming === "old" && hasRenamable(c) && JSON.stringify(written) === JSON.stringify(c.options))
+    creation.notRenamed.push(c.id);
   const opts = (lib: Lib): Obj =>
     withCalendars(
       lib,
@@ -333,19 +368,27 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
   if (c.kind === "calendar") {
     const b = build(() => base.createCalendar(opts(base)));
     const h = build(() => head.createCalendar(opts(head)));
-    tally(c, h, naming);
-    if (c.partner)
+    tally(c, h, naming, b);
+    if (c.partner) {
+      // 合成の相手も、本体の設定と同じに数える（前の版の結果を渡し、旧名の回で旧名に書き換わったかも確かめる）
+      const partner = c.partner;
+      const partnerOpts = (lib: Lib): Obj =>
+        naming === "old"
+          ? withProvidersOld(lib, toOld(partner))
+          : withProviders(lib, partner.options);
+      if (
+        naming === "old" &&
+        hasRenamable(partner) &&
+        JSON.stringify(toOld(partner)) === JSON.stringify(partner.options)
+      )
+        creation.notRenamed.push(`${c.id} (partner)`);
       tally(
-        c.partner,
-        build(() =>
-          head.createCalendar(
-            naming === "old"
-              ? withProvidersOld(head, toOld(c.partner!))
-              : withProviders(head, c.partner!.options),
-          ),
-        ),
+        partner,
+        build(() => head.createCalendar(partnerOpts(head))),
         naming,
+        build(() => base.createCalendar(partnerOpts(base))),
       );
+    }
     compareDays(diffs, days(b, c.from, c.to), days(h, c.from, c.to), meta("calendar"), c.from);
     if (c.partner && b.ok && h.ok) {
       const partner = (lib: Lib): Obj =>
@@ -371,7 +414,7 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
   } else {
     const b = build(() => base.createSchedule(opts(base)));
     const h = build(() => head.createSchedule(opts(head)));
-    tally(c, h, naming);
+    tally(c, h, naming, b);
     compareDays(diffs, days(b, c.from, c.to), days(h, c.from, c.to), meta("schedule"), c.from);
     if (b.ok && h.ok) {
       const isOpen = (v: unknown): boolean => v !== "closed";
@@ -471,13 +514,16 @@ try {
   base = await load(baseDir);
   head = await load(headDir);
   known = knownChanges();
-  if (baseIsBeforeRename) {
-    const table = (await import(pathToFileURL(resolve(headDir, "dist/core/renamed.js")).href)) as {
-      RENAMED_KEYS?: readonly Renamed[];
-    };
-    if (!table.RENAMED_KEYS) throw new Error("dist/core/renamed.js has no RENAMED_KEYS");
-    renamedKeys = table.RENAMED_KEYS;
-  }
+  // 旧名の回（どの比較にもある）で設定を旧名に書き換えるので、旧名の表はいつも読み込む（0.30.7 までは、改名の前の版との
+  // 比較でだけ読み込んでいたので、latest との比較の旧名の回は旧名に書き換わっていなかった）
+  const table = (await import(pathToFileURL(resolve(headDir, "dist/core/renamed.js")).href)) as {
+    RENAMED_KEYS?: readonly Renamed[];
+  };
+  // 空の表は読み込みの誤りとする（空だと旧名の回が旧名に書き換わらず、「旧名に書き換わらなかった設定」の検査も表を使うので
+  // 何も見つけない。0.30.7 で直した穴そのものを、この検査が止められるように）
+  if (!table.RENAMED_KEYS || table.RENAMED_KEYS.length === 0)
+    throw new Error("dist/core/renamed.js has no RENAMED_KEYS (or it is empty)");
+  renamedKeys = table.RENAMED_KEYS;
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(2);
@@ -509,7 +555,11 @@ cases.forEach((c, i) => {
 const unexpected = diffs.filter((d) => allowedBy(known, d) === undefined);
 // 生成器は誤りを混ぜる文脈で作るので、入力の誤りの設定が 0 件なら、エラーコードの比較を黙って見なくなっている
 const noInvalid = creation.intended === 0;
-const failed = unexpected.length > 0 || creation.unintended.length > 0 || noInvalid;
+const failed =
+  unexpected.length > 0 ||
+  creation.unintended.length > 0 ||
+  creation.notRenamed.length > 0 ||
+  noInvalid;
 const allowed = diffs.filter((d) => allowedBy(known, d) !== undefined);
 
 const out: string[] = [];
@@ -520,7 +570,7 @@ out.push(
   "",
 );
 out.push(
-  `入力の誤りの設定: ${creation.intended} 件（エラーコードを比較）。意図せず作成に失敗した設定: ${creation.unintended.length} 件`,
+  `入力の誤りの設定: ${creation.intended} 件（エラーコードを比較）。意図せず作成に失敗した設定: ${creation.unintended.length} 件（名前の書き方ごと。うち前の版でも失敗した設定 ${creation.bothFailed} 件）。旧名に書き換わらなかった設定: ${creation.notRenamed.length} 件`,
   "",
 );
 if (creation.unintended.length > 0)
@@ -570,6 +620,10 @@ if (unexpected.length > 0) {
   );
 } else if (creation.unintended.length > 0) {
   out.push("**失敗**（意図せず作成に失敗した設定がある）");
+} else if (creation.notRenamed.length > 0) {
+  out.push(
+    `**失敗**（旧名の回で旧名に書き換わらなかった設定がある: ${creation.notRenamed.slice(0, 20).join("、")}）`,
+  );
 } else if (noInvalid) {
   out.push("**失敗**（入力の誤りの設定が 0 件。エラーコードの比較が空振りしている）");
 } else {

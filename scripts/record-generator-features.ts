@@ -172,7 +172,9 @@ try {
       `    appendFileSync(process.env.FEATURES_FILE, JSON.stringify([...g.__features]) + "\\n");`,
       `  });`,
       `}`,
-      `const record = (o, kind) => { try { for (const f of featuresOf(o, kind)) g.__features.add(f); } catch (e) { g.__features.add("record-error=" + e.message); } };`,
+      // 基準のカレンダー（test/support/result-cases.ts の BASIS_MARK の印）は、定休日の特徴を「basis.」を付けて別にも数える
+      `const BASIS = Symbol.for("bizdays-toolkit.result-compare.basis");`,
+      `const record = (o, kind) => { try { const fs = featuresOf(o, kind); for (const f of fs) g.__features.add(f); if (o && o[BASIS]) for (const f of fs) if (f.startsWith("closedWeekdays")) g.__features.add("basis." + f); } catch (e) { g.__features.add("record-error=" + e.message); } };`,
       `const DATE = /^\\d{4}-\\d{2}-\\d{2}/;`,
       `const watch = (made, o) => {`,
       `  if (typeof made !== "object" || made === null) return made;`,
