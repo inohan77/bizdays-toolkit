@@ -194,3 +194,21 @@ test("期間の指定が逆なら RangeError", () => {
     RangeError,
   );
 });
+
+test("no-business-day: 探索・第 n 営業日・締め期間のどの経路でも RangeError（同じ code は同じクラス。3 番）", () => {
+  const never = createCalendar({ closedWeekdays: [0, 1, 2, 3, 4, 5, 6] });
+  const closure = createCalendar({ closedDates: [{ from: "2026-05-01", to: "2026-06-25" }] });
+  const paths: [string, () => unknown][] = [
+    ["addBusinessDays", () => never.addBusinessDays("2026-05-01", 1)],
+    ["nthBusinessDayOfMonth", () => never.nthBusinessDayOfMonth("2026-05", 1)],
+    ["closingPeriod", () => closure.closingPeriod("2026-06", 20, { convention: "preceding" })],
+  ];
+  for (const [name, call] of paths) {
+    assert.throws(
+      call,
+      (e: unknown) =>
+        e instanceof RangeError && (e as { code?: unknown }).code === "no-business-day",
+      name,
+    );
+  }
+});

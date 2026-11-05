@@ -517,17 +517,37 @@ test(
         r.unsound.push(
           `no-business-day なのに営業日がある ${describeConfig(list, policy, weekdays)}`,
         );
-      if (d.some((x) => x["code"] === "counting-basis")) {
-        // 数え方の限界: 第 n 営業日の規則があり、毎週の曜日（第 n 曜日・隔週・月の絞り込みのない曜日の規則）を
-        // 繰り返しの規則で閉じている・開いている（数える基準は繰り返しの規則を除くので、その曜日は数え方に入らない。16 番）
-        const rules = list.filter(([k]) => k.endsWith("RecurringRules")).map(([, v]) => v as Obj);
-        const counts = rules.some((v) => "businessDayOfMonth" in v || "businessDayOfWeek" in v);
-        const weekly = rules.some(
-          (v) => "weekday" in v && !("nth" in v) && !("interval" in v) && !("months" in v),
+      // 数え方の限界: 第 n 営業日の規則と、毎週の曜日（第 n 曜日・隔週・月の絞り込みのない曜日の規則）を閉じる・開く
+      // 繰り返しの規則があり、その 2 つの有効期間が重なる（数える基準は繰り返しの規則を除くので、その曜日は数え方に入らない。
+      // 16 番）。前提を満たす組（第 n 営業日の規則ごとに、重なる曜日の規則の数を足したもの）だけ counting-basis が出る。
+      // オラクルは outOfRangePolicy: "ignore" なので、対応年の外で使われない曜日の規則はない
+      const rules = list.filter(([k]) => k.endsWith("RecurringRules")).map(([, v]) => v as Obj);
+      const from = (v: Obj): string => (v["effectiveFrom"] as string | undefined) ?? "0000-01-01";
+      const to = (v: Obj): string => (v["effectiveTo"] as string | undefined) ?? "9999-12-31";
+      const pairs = rules
+        .filter((v) => "businessDayOfMonth" in v || "businessDayOfWeek" in v)
+        .flatMap((n) =>
+          rules.filter(
+            (v) =>
+              "weekday" in v &&
+              !("nth" in v) &&
+              !("interval" in v) &&
+              !("months" in v) &&
+              from(n) <= to(v) &&
+              from(v) <= to(n),
+          ),
+        ).length;
+      const found = d.filter((x) => x["code"] === "counting-basis").length;
+      if (found > 0 && pairs === 0)
+        r.unsound.push(`counting-basis の前提がない ${describeConfig(list, policy, weekdays)}`);
+      else if (found === 0 && pairs > 0)
+        r.unsound.push(
+          `counting-basis の前提があるのに出ない ${describeConfig(list, policy, weekdays)}`,
         );
-        if (!counts || !weekly)
-          r.unsound.push(`counting-basis の前提がない ${describeConfig(list, policy, weekdays)}`);
-      }
+      else if (found !== pairs)
+        r.unsound.push(
+          `counting-basis が ${found} 件で、前提を満たす組の数 ${pairs} と違う ${describeConfig(list, policy, weekdays)}`,
+        );
       assert.deepEqual(r.unsound, []);
     });
     assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");

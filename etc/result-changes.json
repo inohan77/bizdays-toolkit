@@ -47,6 +47,14 @@
       "introducedIn": "0.30.7",
       "source": "CHANGELOG.md",
       "summary": "週の第 n 営業日の規則で、基準のカレンダーが投げた月の前後の月も判定できない月にし、月をまたぐ週の隣の月が判定できないときに出していた誤った never-matches・redundant を出さなくする"
+    },
+    {
+      "trait": "counting-rule-with-period-weekly-rule",
+      "targets": ["diagnose"],
+      "removedCodes": ["counting-basis"],
+      "introducedIn": "0.30.8",
+      "source": "CHANGELOG.md",
+      "summary": "第 n 営業日の規則と有効期間が重ならない、または使われない毎週の曜日の規則を理由に counting-basis を出していた誤りを直す"
     }
   ]
 }

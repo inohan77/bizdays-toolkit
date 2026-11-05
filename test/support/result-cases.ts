@@ -237,6 +237,28 @@ export function fixedCases(): Case[] {
       }),
       minBase: "0.30.0",
     },
+    // 第 n 営業日の規則と有効期間が重ならない曜日の規則には counting-basis を出さない（0.30.7 までは出していた）
+    cal("fixed-counting-basis-no-overlap", ["jp"], {
+      closedWeekdays: [0, 6],
+      closedRecurringRules: [
+        { weekday: 3, effectiveTo: "2026-12-31" },
+        { businessDayOfMonth: 1, effectiveFrom: "2027-01-01" },
+      ],
+    }),
+    // 曜日の規則が 2 つなら counting-basis を 2 件出す（0.30.7 までは最初の 1 つだけ）
+    cal("fixed-counting-basis-two-weekly", ["jp"], {
+      closedWeekdays: [0],
+      closedRecurringRules: [{ weekday: 3 }, { weekday: 6 }, { businessDayOfMonth: 1 }],
+    }),
+    // 第 n 営業日の規則より後ろの曜日の規則が shadowed なら、使われている規則だけを数える（unused が確定する前に判定すると、使われない規則の分も数えて 2 件になる）
+    cal("fixed-counting-basis-shadowed-weekly", ["jp"], {
+      closedWeekdays: [0, 6],
+      closedRecurringRules: [{ businessDayOfMonth: 1 }, { weekday: 3 }, { weekday: 3 }],
+    }),
+    // カレンダーの個別の日付に書いた value は unknown-option（0.30.7 までは黙って通っていた）
+    cal("fixed-calendar-date-with-value", ["jp"], {
+      closedDates: [{ date: "2026-12-01", value: true }],
+    }),
   ];
 }
 
@@ -301,6 +323,33 @@ export function traitsOfCase(one: Case): string[] {
     )
   )
     traits.add("schedule-week-counting-basis-narrower-than-scan");
+  // 基準のカレンダーを持たない第 n 営業日の規則があり、有効期間を持つ毎週の曜日の規則か、毎週の曜日の規則が 2 つ以上ある。
+  // counting-basis を、有効期間が重なり使われている曜日の規則ごとに出すようにした差分を許す（0.30.8）
+  const ownRules = ["closedRecurringRules", "openRecurringRules"].flatMap((key) =>
+    Array.isArray(one.options[key]) ? (one.options[key] as Obj[]) : [],
+  );
+  const weeklyRules = ownRules.filter(
+    (r) => "weekday" in r && !("nth" in r) && !("interval" in r) && !("months" in r),
+  );
+  if (
+    ownRules.some(
+      (r) => ("businessDayOfMonth" in r || "businessDayOfWeek" in r) && !("calendar" in r),
+    ) &&
+    (weeklyRules.some((r) => "effectiveFrom" in r || "effectiveTo" in r) || weeklyRules.length >= 2)
+  )
+    traits.add("counting-rule-with-period-weekly-rule");
+  // カレンダーの個別の日付・毎年の月日の要素に value（スケジュールの書き方）がある。診断の unknown-option が増える（0.30.8）
+  if (
+    one.kind === "calendar" &&
+    ["closedDates", "openDates", "closedAnnualDates"].some(
+      (k) =>
+        Array.isArray(one.options[k]) &&
+        (one.options[k] as unknown[]).some(
+          (e) => typeof e === "object" && e !== null && "value" in e,
+        ),
+    )
+  )
+    traits.add("calendar-date-with-value");
   for (const key of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {
     const list = one.options[key];
     if (!Array.isArray(list)) continue;

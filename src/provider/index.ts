@@ -262,6 +262,7 @@ function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kin
  * 振替日は年をまたぐことがある（12 月 31 日が祝日の国で日曜日なら翌年の 1 月 1 日）。提供元の holidaysInYear は
  * その年の日付だけを返す契約なので、そうなる国では翌年の分として扱うこと。
  * 国民の休日（2 つの祝日に挟まれた日）のような国に固有の規則は含まない。
+ * 返す祝日はどれも凍結している（入力のまま返す祝日も、契約の項目だけを持つ複製）。
  *
  * @example 米国の連邦祝日（土曜日は前の金曜日、日曜日は次の月曜日）
  * withSubstituteDays(federal, { directions: { 6: "previous", 0: "next" }, kind: "observed",
@@ -284,9 +285,20 @@ export function withSubstituteDays<Kind extends string>(
   } = checkOptions<Kind>(options);
   const sorted = [...input].sort((a, b) => (a.date < b.date ? -1 : 1));
   const taken = new Set<DateString>(sorted.map((h) => h.date));
-  const result: Holiday<Kind>[] = sorted.filter(
-    (h) => original !== "drop" || rules[weekdayOf(h.date)] === undefined,
-  );
+  // 入力のまま返す祝日も、振替日と同じ項目だけを持つ凍結した複製にする（返すものはすべて凍結。4 番）
+  const result: Holiday<Kind>[] = sorted
+    .filter((h) => original !== "drop" || rules[weekdayOf(h.date)] === undefined)
+    .map((h) =>
+      Object.freeze({
+        date: h.date,
+        name: h.name,
+        nameEn: h.nameEn,
+        ...(h.names === undefined ? {} : { names: h.names }),
+        kind: h.kind,
+        confirmed: h.confirmed,
+        ...(h.key === undefined ? {} : { key: h.key }),
+      }),
+    );
   for (const h of sorted) {
     const direction = rules[weekdayOf(h.date)];
     if (direction === undefined) continue;

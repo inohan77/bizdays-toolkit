@@ -45,3 +45,92 @@ test("counting-basis: 週の第 n 営業日の規則（businessDayOfWeek）で�
   assert.equal(list[0]!.path, "closedRecurringRules[0]");
   assert.equal(list[0]!.relatedPath, "closedRecurringRules[1]");
 });
+
+// 0.30.8: 有効期間が重なり、使われている曜日の規則ごとに 1 件（それ以外の曜日の規則は数え方に影響しない）
+const relatedOf = (options: Parameters<typeof diagnoseCalendar>[0]) =>
+  countingBasis(options).map((d) => [d.path, d.relatedPath]);
+
+test("counting-basis: 有効期間が重ならない曜日の規則では出さない", () => {
+  assert.deepEqual(
+    relatedOf({
+      holidayProvider: jp,
+      closedWeekdays: [0, 6],
+      closedRecurringRules: [
+        { weekday: 3, effectiveTo: "2026-12-31" },
+        { businessDayOfMonth: 1, effectiveFrom: "2027-01-01" },
+      ],
+    }),
+    [],
+  );
+});
+
+test('counting-basis: 対応年の外で使われない曜日の規則では出さない（"ignore" では使われるので出す）', () => {
+  const options = {
+    holidayProvider: jp,
+    closedWeekdays: [0, 6],
+    closedRecurringRules: [{ weekday: 3, effectiveTo: "1950-12-31" }, { businessDayOfMonth: 1 }],
+  } as const;
+  assert.deepEqual(relatedOf(options), []);
+  assert.deepEqual(
+    diagnoseCalendar(options).map((d) => [d.code, d.path]),
+    [["out-of-range", "closedRecurringRules[0]"]],
+  );
+  assert.deepEqual(relatedOf({ ...options, outOfRangePolicy: "ignore" }), [
+    ["closedRecurringRules[1]", "closedRecurringRules[0]"],
+  ]);
+});
+
+test("counting-basis: 曜日の規則が 2 つなら 2 件出す", () => {
+  assert.deepEqual(
+    relatedOf({
+      holidayProvider: jp,
+      closedWeekdays: [0],
+      closedRecurringRules: [{ weekday: 3 }, { weekday: 6 }, { businessDayOfMonth: 1 }],
+    }),
+    [
+      ["closedRecurringRules[2]", "closedRecurringRules[0]"],
+      ["closedRecurringRules[2]", "closedRecurringRules[1]"],
+    ],
+  );
+});
+
+test("counting-basis: 開く規則と閉じる規則に 1 つずつなら 2 件出す", () => {
+  assert.deepEqual(
+    relatedOf({
+      holidayProvider: jp,
+      closedWeekdays: [0, 6],
+      openRecurringRules: [{ weekday: 6 }],
+      closedRecurringRules: [{ weekday: 3 }, { businessDayOfMonth: 1 }],
+    }),
+    [
+      ["closedRecurringRules[1]", "openRecurringRules[0]"],
+      ["closedRecurringRules[1]", "closedRecurringRules[0]"],
+    ],
+  );
+});
+
+test("counting-basis: 第 n 営業日の規則より後ろの曜日の規則が shadowed でも、使われている規則だけを数える（並び順で変わらない）", () => {
+  const options = {
+    holidayProvider: jp,
+    closedWeekdays: [0, 6],
+    closedRecurringRules: [{ businessDayOfMonth: 1 }, { weekday: 3 }, { weekday: 3 }],
+  } as const;
+  assert.deepEqual(relatedOf(options), [["closedRecurringRules[0]", "closedRecurringRules[1]"]]);
+  const all = diagnoseCalendar(options);
+  assert.ok(
+    all.some(
+      (d) =>
+        d.code === "shadowed" &&
+        d.path === "closedRecurringRules[2]" &&
+        d.relatedPath === "closedRecurringRules[1]",
+    ),
+  );
+  assert.ok(all.some((d) => d.code === "redundant" && d.path === "closedRecurringRules[1]"));
+  assert.deepEqual(
+    relatedOf({
+      ...options,
+      closedRecurringRules: [{ weekday: 3 }, { weekday: 3 }, { businessDayOfMonth: 1 }],
+    }),
+    [["closedRecurringRules[2]", "closedRecurringRules[0]"]],
+  );
+});

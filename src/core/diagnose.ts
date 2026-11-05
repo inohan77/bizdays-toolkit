@@ -14,7 +14,8 @@
  * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidayPolicy: "throw" を含む）
  *             expired: 第 2 引数の asOf より前に終わった規則・日付（asOf を渡したときだけ）
  *             counting-basis: 第 n 営業日の規則（businessDayOfMonth・businessDayOfWeek）の数える基準は繰り返しの規則を除くので、
- *                             同じ設定の毎週の曜日の規則（{ weekday }）の曜日は営業日として数えられる（relatedPath にその規則）
+ *                             同じ設定の毎週の曜日の規則（{ weekday }）の曜日は営業日として数えられる（relatedPath にその規則）。
+ *                             有効期間が重なり、使われている曜日の規則ごとに 1 件
  *
  * 未確定の祝日の扱い（unconfirmedHolidayPolicy）は診断では常に "accept" で評価する。診断は設定の形を調べるもので、
  * 祝日が確定しているかどうかは関係がなく、"throw" のまま評価すると例外を握りつぶして「当てはまらない」と誤判定するため
@@ -346,6 +347,11 @@ function annualBits(rule: AnnualRule<unknown>): Uint8Array {
 /** a が当てはまる日に、b もすべて当てはまるか（a ⊆ b） */
 const isSubset = (a: Uint8Array, b: Uint8Array): boolean =>
   a.every((v, i) => v === 0 || b[i] === 1);
+
+/** 有効期間が 1 日でも重なる（どちらかが無期限なら重なる） */
+const periodsOverlap = (a: CompiledPeriod, b: CompiledPeriod): boolean =>
+  (a.effectiveFrom ?? -Infinity) <= (b.effectiveTo ?? Infinity) &&
+  (b.effectiveFrom ?? -Infinity) <= (a.effectiveTo ?? Infinity);
 
 /** 先の規則の有効期間が、後の規則の有効期間を含むか */
 const periodCovers = (earlier: CompiledPeriod, later: CompiledPeriod): boolean =>
@@ -819,23 +825,6 @@ function analyzeRules<Value, Kind extends string>(
         'This option does not change the result: holidays are closed (holidayPolicy: "closed"), so an nth business day is never a holiday',
       );
     }
-    // 第 n 営業日の規則の数える基準は繰り返しの規則を除くので、同じ設定の毎週の曜日の規則があれば知らせる（定休日を曜日の規則で書いた設定）
-    if (businessDayBased && rule.basis === null) {
-      const weekly = recurring.find(
-        (r) => r.weekday !== null && r.nth === null && r.interval === null && r.months === null,
-      );
-      if (weekly) {
-        c.info(
-          "counting-basis",
-          rule.path,
-          weekly.value === true
-            ? `The business days are counted without recurring rules, so the days opened by the weekday rule ${weekly.path} are not counted`
-            : `The business days are counted without recurring rules, so the weekday rule ${weekly.path} does not reduce the count; ` +
-                "write regular closed weekdays as closedWeekdays if they should not be counted",
-          weekly.path,
-        );
-      }
-    }
     // 祝日・祝日の翌日・祝前日の規則は祝日次第で年ごとに変わるので、形の包含は同じ形の規則どうし（種別・識別子・曜日・月の絞り込み）だけで調べる。
     // 日単位の周期の規則は、周期の規則どうしだけで調べる（曜日・日の規則とは周期がそろわない）
     const k = recurring.findIndex(
@@ -882,6 +871,34 @@ function analyzeRules<Value, Kind extends string>(
       recurring[k]!.path,
     );
   });
+
+  // --- 第 n 営業日の規則の数え方の限界（counting-basis） ---
+  // 数える基準は繰り返しの規則を除くので、同じ設定の毎週の曜日の規則があれば知らせる（定休日を曜日の規則で書いた設定）。
+  // 有効期間が重なり、使われている曜日の規則ごとに 1 件。使われない規則（対応年の外・never-matches・shadowed）は
+  // 上の走査で unused に入り終えているので、ここで判定する（規則の並び順で結果が変わらないように）
+  for (const rule of recurring) {
+    if (rule.businessDays === null || rule.basis !== null) continue;
+    const weeklies = recurring.filter(
+      (r) =>
+        r.weekday !== null &&
+        r.nth === null &&
+        r.interval === null &&
+        r.months === null &&
+        !unused.has(r) &&
+        periodsOverlap(rule, r),
+    );
+    for (const weekly of weeklies) {
+      c.info(
+        "counting-basis",
+        rule.path,
+        weekly.value === true
+          ? `The business days are counted without recurring rules, so the days opened by the weekday rule ${weekly.path} are not counted`
+          : `The business days are counted without recurring rules, so the weekday rule ${weekly.path} does not reduce the count; ` +
+              "write regular closed weekdays as closedWeekdays if they should not be counted",
+        weekly.path,
+      );
+    }
+  }
 
   // --- 営業日が 1 日もない（営業日カレンダー） ---
   // 個別の日付は有限なので、臨時営業日（値が true）がなければ、個別の日付を除いて調べる

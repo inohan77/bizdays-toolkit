@@ -818,6 +818,8 @@ export function compileDateRules<Value>(
   entries: unknown,
   valueOf: (entry: Record<string, unknown>, path: string) => Value | undefined,
   allowString: boolean,
+  /** 要素の value を既知のキーにするか（スケジュールは true。カレンダーは false で、書くと診断の unknown-option） */
+  valueKey: boolean,
 ): DateRule<Value>[] {
   if (entries === undefined) return [];
   if (!Array.isArray(entries)) {
@@ -839,7 +841,7 @@ export function compileDateRules<Value>(
     const value = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
     if ("date" in entry) {
-      checkUnknownKeys(c, p, entry, ["date", "name", "value"]);
+      checkUnknownKeys(c, p, entry, ["date", "name", ...(valueKey ? ["value"] : [])]);
       const n = checkDate(c, `${p}.date`, entry["date"]);
       if (n !== undefined && value !== undefined)
         rules.push({ path: p, from: n, to: n, value, name });
@@ -849,7 +851,7 @@ export function compileDateRules<Value>(
       c.error("invalid-option", p, 'must have "date" or both "from" and "to"');
       return;
     }
-    checkUnknownKeys(c, p, entry, ["from", "to", "name", "value"]);
+    checkUnknownKeys(c, p, entry, ["from", "to", "name", ...(valueKey ? ["value"] : [])]);
     const from = checkDate(c, `${p}.from`, entry["from"]);
     const to = checkDate(c, `${p}.to`, entry["to"]);
     if (from === undefined || to === undefined) return;
@@ -873,6 +875,8 @@ export function compileAnnualRules<Value>(
   entries: unknown,
   valueOf: (entry: Record<string, unknown>, path: string) => Value | undefined,
   allowString: boolean,
+  /** 要素の value を既知のキーにするか（スケジュールは true。カレンダーは false で、書くと診断の unknown-option） */
+  valueKey: boolean,
 ): AnnualRule<Value>[] {
   if (entries === undefined) return [];
   if (!Array.isArray(entries)) {
@@ -895,7 +899,12 @@ export function compileAnnualRules<Value>(
     const name = checkName(c, p, entry["name"]);
     const period = checkPeriod(c, p, entry);
     if ("date" in entry) {
-      checkUnknownKeys(c, p, entry, ["date", "name", "value", ...PERIOD_KEYS]);
+      checkUnknownKeys(c, p, entry, [
+        "date",
+        "name",
+        ...(valueKey ? ["value"] : []),
+        ...PERIOD_KEYS,
+      ]);
       const md = checkMonthDay(c, `${p}.date`, entry["date"]);
       if (md !== undefined && value !== undefined && period) {
         rules.push({ path: p, from: md, to: md, value, name, ...period });
@@ -906,7 +915,13 @@ export function compileAnnualRules<Value>(
       c.error("invalid-option", p, 'must have "date" or both "from" and "to"');
       return;
     }
-    checkUnknownKeys(c, p, entry, ["from", "to", "name", "value", ...PERIOD_KEYS]);
+    checkUnknownKeys(c, p, entry, [
+      "from",
+      "to",
+      "name",
+      ...(valueKey ? ["value"] : []),
+      ...PERIOD_KEYS,
+    ]);
     const from = checkMonthDay(c, `${p}.from`, entry["from"]);
     const to = checkMonthDay(c, `${p}.to`, entry["to"]);
     if (from !== undefined && to !== undefined && value !== undefined && period) {
@@ -2073,8 +2088,16 @@ export function compileScheduleOptions<Value, Kind extends string>(
     o["annualDates"],
     requiredValue<Value>(c),
     false,
+    true,
   );
-  const dates = compileDateRules<Value>(c, "dates", o["dates"], requiredValue<Value>(c), false);
+  const dates = compileDateRules<Value>(
+    c,
+    "dates",
+    o["dates"],
+    requiredValue<Value>(c),
+    false,
+    true,
+  );
   const recurring = compileRecurringRules<Value>(
     c,
     "recurringRules",

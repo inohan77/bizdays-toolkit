@@ -6,19 +6,28 @@
 
 ## [0.30.8] - 2026-11-05
 
-品質改善提案（10 通目）の分です。文書・決定の文書・コメントが実装と食い違っていた箇所を直しました。カレンダー・スケジュールの判定の結果と診断の結果は変わりません（公開物の `.js` は `core/input.js` の到達しない 1 行を消しただけで、挙動は同じです）。
+品質改善提案（10 通目）の分です。文書・決定の文書・コメントが実装と食い違っていた箇所を直し、不具合を 4 件直しました。カレンダー・スケジュールの判定の結果は変わりません。変わるのは、診断の結果（カレンダーの個別の日付・毎年の月日の `value` に `unknown-option` が増える。誤った `counting-basis` が消え、曜日の規則ごとに出る）、`no-business-day` の例外のクラス（`Error` → `RangeError`。広がる向き）、`withSubstituteDays` が返す祝日の凍結です。
 
 ### Fixed
 
+- 診断: 第 n 営業日の規則（`businessDayOfMonth`・`businessDayOfWeek`）の `counting-basis` を、同じ設定の最初の毎週の曜日の規則だけを見て出していた。有効期間が重ならない曜日の規則（例: `{ weekday: 3, effectiveTo: "2026-12-31" }` と `{ businessDayOfMonth: 1, effectiveFrom: "2027-01-01" }`）や、対応年の外で決して使われない曜日の規則（例: 既定の `outOfRangePolicy: "throw"` で `{ weekday: 3, effectiveTo: "1950-12-31" }`。`out-of-range` だけが出る）を理由にも出し、曜日の規則が 2 つ以上あっても最初の 1 つしか `relatedPath` に出さなかった。有効期間が重なり、使われている曜日の規則ごとに 1 件出すようにした。減る形: 上の 2 つの例（どちらも `counting-basis` が出なくなる。`outOfRangePolicy: "ignore"` では 1950 年の数え方に影響するので、2 つ目の例でも出す）と、第 n 営業日の規則より後ろにある曜日の規則が `shadowed`・`never-matches` のとき（判定の順番で、使われないと分かる前に見ていた。例: `[{ businessDayOfMonth: 1 }, { weekday: 3 }, { weekday: 3 }]` は 2 件ではなく 1 件）。増える形: `{ weekday: 3 }`・`{ weekday: 6 }`・`{ businessDayOfMonth: 1 }` のように曜日の規則が 2 つ（2 件）、開く規則 `{ weekday: 6 }` と閉じる規則 `{ weekday: 3 }` に 1 つずつ（2 件。0.30.7 までは開く規則の 1 件だけ）。誤った診断を直す修正で、判定の結果は変わらない（オラクルは `counting-basis` を「出たら前提があるか」の一方向だけで、有効期間を見ずに確かめていたので見つけなかった。逆向きと件数も確かめるようにした。種類は正解と突き合わせる仕組みの不足）
+- 診断: カレンダーの個別の日付・毎年の月日（`closedDates`・`openDates`・`closedAnnualDates`）の要素に書いた `value`（スケジュールの書き方の流用）を、黙って通していた。作成時は今までどおり無視し、診断で `unknown-option`（`path` は `closedDates[0].value` の形）を出す（打ち間違いは診断で見つかるという 8 番の約束のとおりにする。スケジュールの `dates`・`annualDates` の `value` は今までどおり既知のキー）
+- `bizdays-toolkit/provider` の `withSubstituteDays`: 入力のまま返す祝日を凍結していなかった（振替日だけ凍結していた。4 番の「返すものはすべて凍結」から外れていた）。契約の項目だけを持つ凍結した複製にした。返す配列の凍結と戻り値の型の `readonly` は、`push` していたコードや可変の配列の型に代入しているコードが通らなくなるので、パッチではなく 0.31.0 で行う（RELEASING.md の区分）
+- `no-business-day` の例外のクラスが経路で違っていた（探索と第 n 営業日は `Error`、`closingPeriod` は `RangeError`）。どれも `RangeError` にした。`RangeError` は `Error` でもあるので、`instanceof Error` で受けていたコードはそのまま通り、`instanceof RangeError` で受けていたコードは新たに捕まる（広がる向き）
 - 文書を直した（コードの挙動は変わらない）:
-  - ガイド（英日）の「設定の診断」の `redundant` の説明: 「毎年の月日と繰り返しの規則は個別の日付を除いた設定で調べる」と無条件に書いていた。0.30.3 から、自分の設定を基準に第 n 営業日を数える規則があれば、個別の日付は数え方を変えるので残し、取り除いて変わりうる月・週の日をすべて調べる（0.30.3 の Fixed のとおり。例は `test/diagnose.test.ts` の「第 n 営業日の規則があると、数え方を変える個別の日付・毎年の月日は redundant にしない」）
+  - ガイド（英日）の「設定の診断」の `redundant` の説明: 「毎年の月日と繰り返しの規則は個別の日付を除いた設定で調べる」と無条件に書いていた。0.30.3 から、自分の設定を基準に第 n 営業日を数える規則があれば、個別の日付は数え方を変えるので残し、毎年の月日は取り除いて変わりうる月・週の日をすべて調べる（0.30.3 の Fixed のとおり。例は `test/diagnose.test.ts` の「第 n 営業日の規則があると、数え方を変える個別の日付・毎年の月日は redundant にしない」）
   - ガイド（英日）の診断の表の `counting-basis` の行と `src/core/diagnose.ts` の冒頭のコメント: `businessDayOfMonth` の規則だけを書いていたが、週の第 n 営業日の規則（`businessDayOfWeek`）でも出る。`{ businessDayOfWeek: -1, weekStart: 1 }` と `{ weekday: 0 }` の設定の単体テストを `test/counting-basis.test.ts` に足した
   - ガイド（英日）の「未確定の祝日」: 「`holidaysInYear`・`holidaysBetween` は投げない」を、未確定の祝日では投げない、に限った（対応年の外の `out-of-range` と、提供元のデータの誤りの `invalid-provider-data` は投げる）
   - ガイド（英日）と `BusinessDayOnOrAfterOptions.cutoff` の TSDoc: `cutoff` が `"HH:mm"` だけを受け付ける理由（入力の時刻は分の精度で比べるので、秒を持つ締め時刻は入力の秒と比べられない）を書いた。秒の受け付けは 0.31.0 で扱う
 
 ### 開発
 
-- 決定の文書: 「版と互換性」の章の見出しの直後にあった番号のない箇条 2 つ（オラクルの完全性を判定する期間、週の第 n 営業日の規則の判定できない月の限界）を 31 番に移した。`KNOWN_INCOMPLETE` に載せるときの手順は RELEASING.md の「診断のオラクル」の行と重なっていたので決定の文書からは消し、37 番に手順の場所だけを書いた。章の見出しと最初の決定の見出しの間に本文があれば失敗にする検査を `scripts/check-package.ts` に足し、`scripts/tool-selftest.ts` にその誤りを足した（目次の検査は見出しだけを見るので、見出しのない本文を見つけられなかった）
+- 診断のオラクル: `counting-basis` の確かめを、第 n 営業日の規則と毎週の曜日の規則の有効期間が重なる組を前提にし、前提があるのに出ないとき・出た件数が組の数と違うときも失敗にした。項目の一覧（`test/fixtures/oracle-items.json`）に、有効期間が重ならない組を作る 4 項目（閉じる・開く規則の両方の `{ weekday: 2, effectiveTo: "2025-06-30" }` と `{ businessDayOfMonth: 2, effectiveFrom: "2025-07-01" }`）を足した（71 → 75 項目）
+- 前の版との比較: 特徴 `counting-rule-with-period-weekly-rule`（`etc/result-changes.json` で `counting-basis` が消える差分を許す）と `calendar-date-with-value`（増える向きなので許可は足さない）を足し、固定の設定 4 つ（`fixed-counting-basis-no-overlap`・`fixed-counting-basis-two-weekly`・`fixed-counting-basis-shadowed-weekly`・`fixed-calendar-date-with-value`）を足した
+- 決定の文書: 3 番に「同じ `code` は同じクラスで投げる」を足した
+- `counting-basis` の判定を、規則どうしの走査の後の第 2 の走査にした（規則の並び順で結果が変わらないように）
+- `./diagnose` の gzip のサイズ（測定 26,322。上限 26,500）。`counting-basis` の判定の直しで増えた
+- 決定の文書: 「版と互換性」の章の見出しの直後にあった番号のない箇条 2 つ（オラクルの完全性を判定する期間、週の第 n 営業日の規則の判定できない月の限界）を 31 番に移した。`KNOWN_INCOMPLETE` に載せるときの手順は RELEASING.md の「診断のオラクル」の行と重なっていたので決定の文書からは消し、31 番（オラクルの完全性の箇条の直後）に手順の場所だけを書いた。章の見出しと最初の決定の見出しの間に本文があれば失敗にする検査を `scripts/check-package.ts` に足し、`scripts/tool-selftest.ts` にその誤りを足した（目次の検査は見出しだけを見るので、見出しのない本文を見つけられなかった）
 - 「0.31.0 の P1」を「診断の判定の作り直し（0.31.0）」と言葉で書いた（決定の文書・RELEASING.md・この CHANGELOG の 0.30.4 と 0.30.6 の節・飛ばしの理由。P1 はどの文書にも定義のない名前だったため）
 - API どうしの整合のテスト（`test/consistency.test.ts`）の名前の番号を整合 1〜11 に振り直した（「整合 5」が 6 件あり、失敗の報告から文書の行を引けなかった）。RELEASING.md の「API どうしの整合」の行は、関係の数を書かずに、関係とテストの番号を並べた
 - `bizdays-toolkit/jp` の `jp` の TSDoc に 0.30.0 の旧名 `holidays` が残っていたのを `holidayProvider` に直した。`scripts/check-names.ts` の旧名の残りの検査（C14）は `holidays` をキーの形でしか探していなかったので、日本語の TSDoc で引数名として書く形（「の holidays に」）を足した

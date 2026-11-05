@@ -301,7 +301,7 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
   adjust(input: DateInput, options: AdjustOptions): DateString;
   /**
    * 月 "YYYY-MM" の第 n 営業日。n が負なら月末から数える（-1 は最終営業日）。
-   * その月の営業日が足りなければ code: "no-business-day" の Error
+   * その月の営業日が足りなければ code: "no-business-day" の RangeError
    */
   nthBusinessDayOfMonth(month: MonthString, n: number): DateString;
   /** 月 "YYYY-MM" の最初の営業日（nthBusinessDayOfMonth(month, 1)） */
@@ -324,7 +324,7 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
    * 営業日を考慮した締め日で区切ったときの、その月分の期間（両端を含む暦日。前月の調整後の締め日の翌日から
    * 当月の調整後の締め日まで）。暦日を渡すと、その日が属する期間（closingMonth で求めた月の期間）。
    * 月を渡して、その月に固有の期間がない（前月の締め日から当月の締め日までに営業日がない）ときは
-   * code: "no-business-day" の Error。返す値は変更できず、name は付かない
+   * code: "no-business-day" の RangeError。返す値は変更できず、name は付かない
    */
   closingPeriod(
     input: DateInput | MonthString,
@@ -401,9 +401,17 @@ export function compileCalendarOptions<Kind extends string>(
     o["closedAnnualDates"],
     () => false,
     true,
+    false,
   );
-  const open = compileDateRules<boolean>(c, "openDates", o["openDates"], () => true, true);
-  const closed = compileDateRules<boolean>(c, "closedDates", o["closedDates"], () => false, true);
+  const open = compileDateRules<boolean>(c, "openDates", o["openDates"], () => true, true, false);
+  const closed = compileDateRules<boolean>(
+    c,
+    "closedDates",
+    o["closedDates"],
+    () => false,
+    true,
+    false,
+  );
   const openRecurringRules = compileRecurringRules<boolean>(
     c,
     "openRecurringRules",
@@ -531,7 +539,7 @@ function buildCalendar<Kind extends string>(
       const date = fromDayNumber(n);
       if (isOpen(date)) return date;
     }
-    throw plainError(
+    throw rangeError(
       "no-business-day",
       `No business day found within ${searchDayLimit} days from ${start}`,
     );
@@ -632,7 +640,7 @@ function buildCalendar<Kind extends string>(
     const days = businessDaysOfMonth(month);
     const found = n > 0 ? days[n - 1] : days[days.length + n];
     if (found === undefined) {
-      throw plainError(
+      throw rangeError(
         "no-business-day",
         `${month} has ${days.length} business day(s); requested ${n > 0 ? "" : "last "}#${Math.abs(n)}`,
       );

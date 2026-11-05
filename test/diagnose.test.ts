@@ -675,3 +675,20 @@ test("スケジュールの第 n 営業日の規則は別のカレンダーで�
     [["redundant", "dates[0]"]],
   );
 });
+
+test("unknown-option: カレンダーの個別の日付・毎年の月日に書いた value（スケジュールの書き方の流用）", () => {
+  for (const [key, entry] of [
+    ["closedDates", { date: "2026-12-01", value: true }],
+    ["openDates", { date: "2026-12-01", value: true }],
+    ["closedAnnualDates", { date: "12-01", value: true }],
+  ] as const) {
+    const list = diagnoseCalendar({ [key]: [entry] } as never).filter(
+      (d) => d.code === "unknown-option",
+    );
+    assert.deepEqual(
+      list.map((d) => [d.path, d.severity]),
+      [[`${key}[0].value`, "warning"]],
+      key,
+    );
+  }
+});
