@@ -203,7 +203,7 @@ function namingSourceOf(node: ts.Node): string | undefined {
 
 const violations: string[] = [];
 const report = (rule: string, where: string, reason: string): void => {
-  violations.push(`${rule.padEnd(7)} ${where}  ${reason}`);
+  violations.push(`${rule.padEnd(7)} ${where.replaceAll("\\", "/")}  ${reason}`);
 };
 
 /** 型の宣言の名前。外部の名前の型（@namingSource）は項目と値を見ない（C9） */
@@ -972,6 +972,11 @@ const oldParams = tableUnder(migration, "引数の名前").flatMap((r) => {
   return old ? fns.map((fn) => ({ fn, old })) : [];
 });
 const escape = (t: string): string => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+if (!oldKeys.includes("holidays")) {
+  throw new Error(
+    "旧名の表に holidays がない: 日本語の TSDoc の引数名の形（patterns の holidays の項目）も一緒に消すこと",
+  );
+}
 const patterns: { name: string; re: RegExp; codeOnly?: RegExp }[] = [
   ...oldKeys.map((k) => ({
     name: `${k}:`,
@@ -979,10 +984,9 @@ const patterns: { name: string; re: RegExp; codeOnly?: RegExp }[] = [
     codeOnly: new RegExp(`^\\s*(?:\\*\\s*)?${escape(k)}\\s*:`),
   })),
   // holidays は普通の語（holidaysInYear など）としても現れるので、キーの形のほかに、日本語の TSDoc で引数名として書く形
-  // （「の」「に」で挟む形）だけを足す。このファイルも検査の対象なので、その形をここに直接書かない
-  ...(oldKeys.includes("holidays")
-    ? [{ name: "holidays（日本語の TSDoc の引数名）", re: new RegExp(`の ${"holidays"} に`) }]
-    : []),
+  // （「の」「に」で挟む形）だけを足す。このファイルも検査の対象なので、その形をここに直接書かない。
+  // 旧名の表から holidays が外れたら（1.0.0）、この形も一緒に消す（下の確かめで止まる）
+  { name: "holidays（日本語の TSDoc の引数名）", re: new RegExp(`の ${"holidays"} に`) },
   ...oldWords.map((w) => ({ name: w, re: new RegExp(`\\b${escape(w)}\\b`) })),
   ...oldParams.map((p) => ({
     name: `${p.fn}(… ${p.old}`,

@@ -250,6 +250,12 @@ export function fixedCases(): Case[] {
       closedWeekdays: [0],
       closedRecurringRules: [{ weekday: 3 }, { weekday: 6 }, { businessDayOfMonth: 1 }],
     }),
+    // 開く規則と閉じる規則に曜日の規則が 1 つずつなら counting-basis を 2 件出す（0.30.7 までは開く規則の 1 件だけ）
+    cal("fixed-counting-basis-open-closed-weekly", ["jp"], {
+      closedWeekdays: [0, 6],
+      openRecurringRules: [{ weekday: 6 }],
+      closedRecurringRules: [{ weekday: 3 }, { businessDayOfMonth: 1 }],
+    }),
     // 第 n 営業日の規則より後ろの曜日の規則が shadowed なら、使われている規則だけを数える（unused が確定する前に判定すると、使われない規則の分も数えて 2 件になる）
     cal("fixed-counting-basis-shadowed-weekly", ["jp"], {
       closedWeekdays: [0, 6],

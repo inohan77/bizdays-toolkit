@@ -6,7 +6,7 @@
  * - ランタイムの依存（dependencies）がないこと
  * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
  * - 英語と日本語のドキュメントの対（README・guide・providers）の構成がそろい、見出しへのリンクが実在すること（checkDocPair・checkDocAnchors）
- * - ライブラリのソース（src）が Node.js 固有の機能を使っていないこと（checkPortableSource。decisions.md の 35 番）
+ * - ライブラリのソース（src）が Node.js 固有の機能と、実行環境のタイムゾーンに依存する API を使っていないこと（checkPortableSource。decisions.md の 35 番）
  * - ドキュメントの数値・一覧（対応年・タイムゾーン・confirmedThrough・key の表・コードの一覧・サイズを測った版）が
  *   dist とソースの型に一致し、英日の対で節ごとの数値がそろうこと（checkDocFacts・checkPairNumbers。decisions.md の 39 番）
  * - コメントと文書のファイルのパス・決定の番号の参照が実在すること（checkReferences。decisions.md の 36 番）
@@ -253,6 +253,14 @@ function checkPortableSource(dir: string): string[] {
     [/\bBuffer\b/, "Buffer"],
     [/\b__(dirname|filename)\b/, "__dirname / __filename"],
     [/\bglobal\s*\./, "global (use globalThis)"],
+    // 実行環境のタイムゾーンに依存する API（どのタイムゾーンでも結果が同じ、という約束を静的に守る。decisions.md の 35 番）
+    [
+      /\.(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)\s*\(/,
+      "a local-time Date method (use getUTC…/setUTC…/Date.UTC)",
+    ],
+    [/\.getTimezoneOffset\s*\(/, "getTimezoneOffset"],
+    [/\.toLocale(Date|Time)?String\s*\(/, "toLocale…String (local time and locale)"],
+    [/\bnew Date\s*\([^)]*,/, "new Date(year, month, …) (local time; use Date.UTC)"],
   ];
   for (const file of walk(dir).filter((f) => f.endsWith(".ts"))) {
     // コメントの中の言及は数えない
@@ -261,6 +269,11 @@ function checkPortableSource(dir: string): string[] {
       .replace(/^\s*\/\/.*$/gm, "");
     for (const [pattern, label] of forbidden) {
       if (pattern.test(code)) problems.push(`${file.replaceAll("\\", "/")}: uses ${label}`);
+    }
+    // Intl.DateTimeFormat は timeZone を渡さないと実行環境のタイムゾーンになる（引数の括弧の中に timeZone があること）
+    for (const m of code.matchAll(/\bnew Intl\.DateTimeFormat\s*\(([^)]*)\)/g)) {
+      if (!/\btimeZone\b/.test(m[1]!))
+        problems.push(`${file.replaceAll("\\", "/")}: uses Intl.DateTimeFormat without timeZone`);
     }
   }
   return problems;

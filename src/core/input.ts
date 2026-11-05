@@ -164,7 +164,7 @@ function parseString(value: string, timeZone: string): CivilDateTime {
   }
   const offset = m[5];
   if (offset === undefined) return { date, minutes };
-  // オフセット付きは瞬間として扱う
+  // オフセット付きは瞬間として扱う（Date.parse はオフセットのない文字列を実行環境のタイムゾーンで読むので、正規表現でオフセット付きに限ったものだけを渡す）
   const normalized = value.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
   const ms = Date.parse(normalized);
   if (Number.isNaN(ms)) {

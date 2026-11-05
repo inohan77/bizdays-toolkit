@@ -592,8 +592,14 @@ if (allowed.length > 0) {
     byChange.set(k, (byChange.get(k) ?? 0) + 1);
   }
   out.push("意図した差分（etc/result-changes.json）:", "");
-  for (const [k, n] of byChange)
+  for (const [k, n] of byChange) {
     out.push(`- ${k.trait}（${k.introducedIn}）: ${n} 件 — ${k.summary}（${k.source}）`);
+    // 許した差分の設定（意図しない差分が出たときに、許した側と見比べるため）
+    const ids = allowed
+      .filter((d) => allowedBy(known, d) === k)
+      .map((d) => `${d.id} [${d.target}]`);
+    out.push(...[...new Set(ids)].slice(0, LIMIT).map((id) => `  - ${id}`));
+  }
   out.push("");
 }
 out.push(

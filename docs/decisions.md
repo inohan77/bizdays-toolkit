@@ -442,6 +442,7 @@
 - 開発用のツールの版の違いは、CI ではエラー、手元では注意だけにします。熟成ゲートの都合で手元を先に変えることがあるためです
 - スクリプトからレジストリに接続する npm の操作をさせないのは、スクリプトから起動する npm が、PowerShell の関数として定義された Safe Chain を通らないためです
 - Windows の CI は置きません。`dist` はどの OS でも同じに動き、開発用のスクリプトの問題は手元（Windows）の `pnpm check` で止まるためです
+- タイムゾーンを変えたテストを 4 ゾーンから 2 ゾーン（UTC より遅い America/Los_Angeles と進んだ Pacific/Chatham）にしたのは、依存の経路が静的に名指しできるためです。`src` はローカル時刻の `Date` の API・`getTimezoneOffset`・`toLocale…String`・`new Date(年, 月, …)`・`timeZone` を渡さない `Intl.DateTimeFormat` を使わず、`check-package` がこれを禁止します。残る動的な確認は、漏れた依存が日付のずれとして現れる向きが UTC との差の向きで変わるので、両側 1 つずつで足ります（UTC は既定の実行と同じで、Asia/Tokyo は Chatham と同じ側）。実測では `pnpm check` のテストの時間の半分以上がこの再実行でした（測定値は 0.30.8 の CHANGELOG）
 
 ### 36. 規則を 1 か所に書くことと、納品の検査・人の確認の理由
 

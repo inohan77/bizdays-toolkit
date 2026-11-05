@@ -161,6 +161,22 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-package",
+    name: "src のローカル時刻の Date の API",
+    args: TOOLS["check-package"]!,
+    inject: () =>
+      edit("src/core/date.ts", (t) => `${t}\nexport const tzLeak = new Date().getHours();\n`),
+    expect: "src/core/date.ts: uses a local-time Date method",
+  },
+  {
+    tool: "check-package",
+    name: "src の timeZone を渡さない Intl.DateTimeFormat",
+    args: TOOLS["check-package"]!,
+    inject: () =>
+      edit("src/core/input.ts", replaceOnce("      timeZone,\n", "      hour12: false,\n")),
+    expect: "src/core/input.ts: uses Intl.DateTimeFormat without timeZone",
+  },
+  {
+    tool: "check-package",
     name: "存在しない決定の番号",
     args: TOOLS["check-package"]!,
     inject: () => edit("RELEASING.md", (t) => `${t}\n（${DECISIONS} の 999 番）\n`),

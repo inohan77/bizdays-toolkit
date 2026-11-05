@@ -32,6 +32,11 @@
 - API どうしの整合のテスト（`test/consistency.test.ts`）の名前の番号を整合 1〜11 に振り直した（「整合 5」が 6 件あり、失敗の報告から文書の行を引けなかった）。RELEASING.md の「API どうしの整合」の行は、関係の数を書かずに、関係とテストの番号を並べた
 - `bizdays-toolkit/jp` の `jp` の TSDoc に 0.30.0 の旧名 `holidays` が残っていたのを `holidayProvider` に直した。`scripts/check-names.ts` の旧名の残りの検査（C14）は `holidays` をキーの形でしか探していなかったので、日本語の TSDoc で引数名として書く形（「の holidays に」）を足した
 - `src/core/input.ts` の到達しない `replace(" ", "T")` を消した（直前の正規表現が区切りを `T` に限るので、空白を含む値はこの行に届かない。`core/input.js` の 1 行が変わるが、挙動は同じ）
+- `check-package`: `src` が実行環境のタイムゾーンに依存する API（ローカル時刻の `Date` の API・`getTimezoneOffset`・`toLocale…String`・`new Date(年, 月, …)`・`timeZone` を渡さない `Intl.DateTimeFormat`）を使っていないことを確かめるようにし、`tool-selftest` にその誤りを 2 件足した
+- タイムゾーンを変えたテスト（`scripts/test-tz.ts`）を UTC・Asia/Tokyo・America/Los_Angeles・Pacific/Chatham の 4 ゾーンから America/Los_Angeles・Pacific/Chatham の 2 ゾーンにした（理由は decisions.md の 35 番。1 コアの手元で 209 秒 → 104 秒）
+- `check-names`: 報告のパスの区切りを `/` にそろえた（Windows では `\` で出ていて、期待と突き合わせにくかった）。旧名の表に `holidays` がないときは、日本語の TSDoc の引数名の形の検査（0.30.8 の ZIP-A で足した）を黙って外さず、一緒に消すよう失敗にする
+- 前の版との比較（`scripts/result-compare.ts`）: 意図した差分として許した設定の `id` と対象を一覧に出すようにした（意図しない差分が出たときに、許した側と見比べるため）。固定の設定 `fixed-counting-basis-open-closed-weekly`（開く規則と閉じる規則に曜日の規則が 1 つずつ。`counting-basis` が 2 件に増える形）を足した
+- `src/core/input.ts`: `Date.parse` にオフセット付きの文字列だけを渡している理由をコメントに書いた
 
 ## [0.30.7] - 2026-11-05
 
