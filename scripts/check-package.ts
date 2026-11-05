@@ -743,6 +743,22 @@ function checkDecisionsToc(decisions: string): string[] {
       break;
     }
   }
+  // 章の見出しと最初の決定の見出しの間に本文を置かない（番号のない本文は、目次にも番号の参照にも出ず、読まれない）
+  const lines = decisions.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const chapter = /^## (.+)$/.exec(lines[i]!)?.[1];
+    if (chapter === undefined || chapter === "目次" || chapter.startsWith("旧番号との対応"))
+      continue;
+    for (let j = i + 1; j < lines.length && !lines[j]!.startsWith("### "); j++) {
+      if (lines[j]!.startsWith("## ")) break;
+      if (lines[j]!.trim() !== "") {
+        problems.push(
+          `docs/decisions.md: 章「${chapter}」の見出しの直後に番号のない本文がある（決定は ### N. の見出しの下に置く）`,
+        );
+        break;
+      }
+    }
+  }
   const seen = new Set<string>();
   for (const line of body) {
     const n = /^### (\d+)\. /.exec(line)?.[1];

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { diagnoseCalendar } from "../src/diagnose/index.ts";
+import { jp } from "../src/jp/index.ts";
 
 const countingBasis = (options: Parameters<typeof diagnoseCalendar>[0]) =>
   diagnoseCalendar(options).filter((d) => d.code === "counting-basis");
@@ -33,4 +34,14 @@ test("counting-basis: 毎週の曜日を閉じる規則なら、数を減らさ�
     "The business days are counted without recurring rules, so the weekday rule closedRecurringRules[0] does not reduce the count; " +
       "write regular closed weekdays as closedWeekdays if they should not be counted",
   );
+});
+
+test("counting-basis: 週の第 n 営業日の規則（businessDayOfWeek）でも、毎週の曜日の規則があれば知らせる", () => {
+  const list = countingBasis({
+    holidayProvider: jp,
+    closedRecurringRules: [{ businessDayOfWeek: -1, weekStart: 1 }, { weekday: 0 }],
+  });
+  assert.equal(list.length, 1);
+  assert.equal(list[0]!.path, "closedRecurringRules[0]");
+  assert.equal(list[0]!.relatedPath, "closedRecurringRules[1]");
 });

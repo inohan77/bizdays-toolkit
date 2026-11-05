@@ -978,6 +978,11 @@ const patterns: { name: string; re: RegExp; codeOnly?: RegExp }[] = [
     re: new RegExp(`(?:[{,]\\s*|\`)${escape(k)}\\s*:`),
     codeOnly: new RegExp(`^\\s*(?:\\*\\s*)?${escape(k)}\\s*:`),
   })),
+  // holidays は普通の語（holidaysInYear など）としても現れるので、キーの形のほかに、日本語の TSDoc で引数名として書く形
+  // （「の」「に」で挟む形）だけを足す。このファイルも検査の対象なので、その形をここに直接書かない
+  ...(oldKeys.includes("holidays")
+    ? [{ name: "holidays（日本語の TSDoc の引数名）", re: new RegExp(`の ${"holidays"} に`) }]
+    : []),
   ...oldWords.map((w) => ({ name: w, re: new RegExp(`\\b${escape(w)}\\b`) })),
   ...oldParams.map((p) => ({
     name: `${p.fn}(… ${p.old}`,

@@ -165,7 +165,7 @@ function parseString(value: string, timeZone: string): CivilDateTime {
   const offset = m[5];
   if (offset === undefined) return { date, minutes };
   // オフセット付きは瞬間として扱う
-  const normalized = value.replace(" ", "T").replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+  const normalized = value.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
   const ms = Date.parse(normalized);
   if (Number.isNaN(ms)) {
     throw rangeError("invalid-time", `Invalid date/time string: ${JSON.stringify(value)}`);

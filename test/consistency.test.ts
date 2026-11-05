@@ -461,7 +461,7 @@ test(
 );
 
 test(
-  "整合 5: スケジュールの第 n 営業日の規則の基準のカレンダーの対応年が、診断の走査の範囲より狭くても、診断は誤った error を出さない",
+  "整合 7: スケジュールの第 n 営業日の規則の基準のカレンダーの対応年が、診断の走査の範囲より狭くても、診断は誤った error を出さない",
   { skip: SKIP },
   () => {
     const weekdayValues = ["closed", "open", "open", "open", "open", "open", "closed"];
@@ -559,7 +559,7 @@ function specialBases(): readonly [string, Calendar][] {
 const WEEKDAY_VALUES = ["closed", "open", "open", "open", "open", "open", "closed"];
 
 test(
-  "整合 5: 基準のカレンダーが投げる月がある設定（合成した基準・未確定の祝日で投げる基準・スケジュールから作った基準）でも、診断は誤った error を出さない",
+  "整合 8: 基準のカレンダーが投げる月がある設定（合成した基準・未確定の祝日で投げる基準・スケジュールから作った基準）でも、診断は誤った error を出さない",
   { skip: SKIP },
   () => {
     for (const [name, calendar] of specialBases()) {
@@ -569,7 +569,7 @@ test(
         weekdayValues: WEEKDAY_VALUES,
         recurringRules: [{ businessDayOfMonth: 1, value: "x", calendar }],
       };
-      count("整合 5（基準のカレンダーが投げる月がある設定）");
+      count("整合 8（基準のカレンダーが投げる月がある設定）");
       assert.deepEqual(
         diagnoseSchedule(options).filter((d) => d.severity === "error"),
         [],
@@ -578,12 +578,12 @@ test(
       const schedule = createSchedule(options as unknown as ScheduleOptions<unknown>);
       assert.equal(schedule.daysBetween("2025-01-01", "2025-12-31").length, 365, name);
     }
-    report("整合 5（基準のカレンダーが投げる月がある設定）");
+    report("整合 8（基準のカレンダーが投げる月がある設定）");
   },
 );
 
 test(
-  '整合 5（再現）: 日本 "throw" とシンガポール "ignore" を合成した基準で 2030 年から当てはまる規則に、never-matches を出さない',
+  '整合 9（再現）: 日本 "throw" とシンガポール "ignore" を合成した基準で 2030 年から当てはまる規則に、never-matches を出さない',
   { skip: SKIP },
   () => {
     const tz = { timeZone: "Asia/Tokyo" };
@@ -610,7 +610,7 @@ test(
 );
 
 test(
-  "整合 5: 基準のカレンダーを持つスケジュールで、診断が never-matches・redundant と出した規則は、取り除いても判定できる日の結果が変わらない",
+  "整合 10: 基準のカレンダーを持つスケジュールで、診断が never-matches・redundant と出した規則は、取り除いても判定できる日の結果が変わらない",
   { skip: SKIP },
   () => {
     const rand = random(20261111);
@@ -656,7 +656,7 @@ test(
       const code = creationError(() =>
         createSchedule(options as unknown as ScheduleOptions<unknown>),
       );
-      count("整合 5（基準のカレンダーを持つスケジュールの作成と診断）");
+      count("整合 10（基準のカレンダーを持つスケジュールの作成と診断）");
       assert.equal(
         errors.length === 0,
         code === undefined,
@@ -670,7 +670,7 @@ test(
             ? /^recurringRules\[(\d+)\]$/.exec(d.path)
             : null;
         if (!m) continue;
-        count(`整合 5（${d.code} と判定できる日）`);
+        count(`整合 10（${d.code} と判定できる日）`);
         const reduced = createSchedule({
           ...options,
           recurringRules: rules.filter((_, i) => i !== Number(m[1])),
@@ -682,14 +682,14 @@ test(
         }
       }
     }
-    report("整合 5（基準のカレンダーを持つスケジュールの作成と診断）");
-    report("整合 5（never-matches と判定できる日）", "診断の項目");
-    report("整合 5（redundant と判定できる日）", "診断の項目");
+    report("整合 10（基準のカレンダーを持つスケジュールの作成と診断）");
+    report("整合 10（never-matches と判定できる日）", "診断の項目");
+    report("整合 10（redundant と判定できる日）", "診断の項目");
   },
 );
 
 test(
-  "整合 5: 日本の提供元のスケジュールで、週の第 n 営業日の規則とその写しには shadowed が出る（範囲の端の判定できない月があっても、規則の形で決まる shadowed は出す）",
+  "整合 11: 日本の提供元のスケジュールで、週の第 n 営業日の規則とその写しには shadowed が出る（範囲の端の判定できない月があっても、規則の形で決まる shadowed は出す）",
   { skip: SKIP },
   () => {
     const tz = { timeZone: "Asia/Tokyo" };

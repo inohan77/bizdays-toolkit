@@ -13,7 +13,7 @@
  *     no-business-day … 営業日が 1 日もない設定（営業日カレンダーのみ）
  * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidayPolicy: "throw" を含む）
  *             expired: 第 2 引数の asOf より前に終わった規則・日付（asOf を渡したときだけ）
- *             counting-basis: 第 n 営業日の規則（businessDayOfMonth）の数える基準は繰り返しの規則を除くので、
+ *             counting-basis: 第 n 営業日の規則（businessDayOfMonth・businessDayOfWeek）の数える基準は繰り返しの規則を除くので、
  *                             同じ設定の毎週の曜日の規則（{ weekday }）の曜日は営業日として数えられる（relatedPath にその規則）
  *
  * 未確定の祝日の扱い（unconfirmedHolidayPolicy）は診断では常に "accept" で評価する。診断は設定の形を調べるもので、

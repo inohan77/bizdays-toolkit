@@ -17,7 +17,10 @@ export const INTENDED_SKIPS: Readonly<Record<string, IntendedSkip>> = {
     reason: "暦日だけで決まるので、タイムゾーンを変えた実行（scripts/test-tz.ts）では飛ばす",
     ci: true,
   },
-  "oracle-joint": { reason: "0.31.0（P1）で有効にする。ORACLE_JOINT=1 で試せる", ci: true },
+  "oracle-joint": {
+    reason: "診断の判定の作り直し（0.31.0）で有効にする。ORACLE_JOINT=1 で試せる",
+    ci: true,
+  },
   "temporal-unavailable-runtime": { reason: "no Temporal in this runtime", ci: true },
   "temporal-unavailable-browser": { reason: "no Temporal in this browser", ci: true },
   "no-release-tag": {

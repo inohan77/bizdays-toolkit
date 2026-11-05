@@ -153,6 +153,14 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-package",
+    name: "決定の文書の章の見出しの直後の、番号のない本文",
+    args: TOOLS["check-package"]!,
+    inject: () =>
+      edit("docs/decisions.md", replaceOnce("\n## 診断\n\n", "\n## 診断\n\n- 番号のない箇条\n\n")),
+    expect: "章「診断」の見出しの直後に番号のない本文がある",
+  },
+  {
+    tool: "check-package",
     name: "存在しない決定の番号",
     args: TOOLS["check-package"]!,
     inject: () => edit("RELEASING.md", (t) => `${t}\n（${DECISIONS} の 999 番）\n`),

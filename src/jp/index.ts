@@ -36,7 +36,7 @@ export type JpHoliday = Holiday<JpHolidayKind>;
 const cache = new Map<number, readonly JpHoliday[]>();
 
 /**
- * 日本の祝日の提供元（createCalendar・createSchedule の holidays に渡す）。
+ * 日本の祝日の提供元（createCalendar・createSchedule の holidayProvider に渡す）。
  * @public
  */
 export const jp: HolidayProvider<JpHolidayKind> = Object.freeze({

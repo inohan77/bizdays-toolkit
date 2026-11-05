@@ -191,6 +191,8 @@ shipping.dayInfoOn("2027-01-01");
 shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.open); // [true, false, false, false, false, true]
 ```
 
+`cutoff` は `"HH:mm"` だけを受け付けます（`"14:30:00"` は `invalid-time`）。入力の時刻は分の精度で比べるため、秒を持つ締め時刻は、入力の秒と比べられないからです。
+
 `daysBetween(from, to)` は、期間のすべての日の `dayInfoOn` を返します（両端を含む）。 `businessDatesBetween`・`holidaysBetween` も両端を含みます。`diffBusinessDays(from, to)` だけは `from` 以上 `to` 未満の営業日の数で、`diffBusinessDays(a, b) + diffBusinessDays(b, c)` が `diffBusinessDays(a, c)` と等しくなり、`a` が営業日なら `diffBusinessDays(a, addBusinessDays(a, n))` が `n` になります（`addBusinessDays` の逆算）。起点が休業日のときは、`addBusinessDays` は翌営業日を 1 と数える（`n = 0` は `businessDayOnOrAfter` と同じなので `+0` と `+1` が同じ日）一方、`diffBusinessDays` は休業日の起点を数えないので、1 だけずれます。
 
 `createCalendar`・`createSchedule` は作る時点で設定を検証するので、作ったものを使い回すのが基本です。作成も軽く（日本の祝日を使う営業日カレンダー・スケジュールとも 1 ミリ秒を大きく下回る）、呼び出しのたびに作っても実用上の問題はありません。
@@ -709,7 +711,7 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## 未確定の祝日
 
-提供元の `confirmedThrough` より後の年には、予測の祝日（`confirmed: false`）が含まれることがあります。日本の春分の日・秋分の日（翌年分が毎年 2 月の官報で公表される）と、GOV.UK が公表している最後の年より後の英国の bank holidays です。既定では予測をそのまま使います。`unconfirmedHolidayPolicy: "throw"`（`outOfRangePolicy` と同じ場所。カレンダー・スケジュール共通）にすると、未確定の祝日を引いた判定は `code: "unconfirmed-holiday"` の `RangeError` になり、5 年の返済予定の期日や契約書に書く日付のように、予測に依存した結果が黙って出ることがなくなります。「引いた判定」には、求めた日だけでなく、探索が途中で通る日（`addBusinessDays`・`adjust`・`dueDate`・`closingMonth` など）や、`dayAfterHoliday`・`dayBeforeHoliday` の規則が見る日（隣の日。`skipWeekdays` があれば、そこから飛ばす曜日を越えて最も近い祝日まで）も含みます。`holidaysInYear`・`holidaysBetween` は投げないので、例外を受けたあとに影響する日を列挙する逃げ道になります。
+提供元の `confirmedThrough` より後の年には、予測の祝日（`confirmed: false`）が含まれることがあります。日本の春分の日・秋分の日（翌年分が毎年 2 月の官報で公表される）と、GOV.UK が公表している最後の年より後の英国の bank holidays です。既定では予測をそのまま使います。`unconfirmedHolidayPolicy: "throw"`（`outOfRangePolicy` と同じ場所。カレンダー・スケジュール共通）にすると、未確定の祝日を引いた判定は `code: "unconfirmed-holiday"` の `RangeError` になり、5 年の返済予定の期日や契約書に書く日付のように、予測に依存した結果が黙って出ることがなくなります。「引いた判定」には、求めた日だけでなく、探索が途中で通る日（`addBusinessDays`・`adjust`・`dueDate`・`closingMonth` など）や、`dayAfterHoliday`・`dayBeforeHoliday` の規則が見る日（隣の日。`skipWeekdays` があれば、そこから飛ばす曜日を越えて最も近い祝日まで）も含みます。`holidaysInYear`・`holidaysBetween` は未確定の祝日では投げない（対応年の外の `out-of-range` と提供元のデータの誤りの `invalid-provider-data` は投げる）ので、例外を受けたあとに影響する日を列挙する逃げ道になります。
 
 ```ts
 import { createCalendar, isBizdaysError } from "bizdays-toolkit";
@@ -795,7 +797,7 @@ diagnoseCalendar({
 | `warning`          | `out-of-range`          | 個別の日付、または規則の有効期間が、祝日の提供元（`relatedPath`）の対応年の外                                                                                                                                                  |
 | `warning`          | `no-business-day`       | 営業日が 1 日もない設定（営業日カレンダーのみ。営業日を探すと例外になります）                                                                                                                                                  |
 | `info`             | `redundant`             | 取り除いても結果が変わらない規則（先の規則の組み合わせに覆われる、定休日の曜日と同じ、スケジュールで曜日の値と同じ値など）、または判定に祝日を使わない設定の `unconfirmedHolidayPolicy: "throw"`                               |
-| `info`             | `counting-basis`        | `businessDayOfMonth` の規則と、同じ設定の毎週の曜日の規則が同居している。その曜日は営業日として数えられる（[繰り返しの規則](#繰り返しの規則)）                                                                                 |
+| `info`             | `counting-basis`        | 第 n 営業日の規則（`businessDayOfMonth`・`businessDayOfWeek`）と、同じ設定の毎週の曜日の規則が同居している。その曜日は営業日として数えられる（[繰り返しの規則](#繰り返しの規則)）                                              |
 | `info`             | `expired`               | `asOf`（下記）を渡したときだけ。基準日より前に終わった規則・日付                                                                                                                                                               |
 
 - 判定には `code` を使ってください。`message` は英語で、文言は変わることがあります。`code` は将来の版で増えることがあります
@@ -804,7 +806,7 @@ diagnoseCalendar({
 - 繰り返しの規則の `shadowed` は、祝日に当たったときの扱い（`holidayOverlapPolicy`）も見ます。たとえば `"under-holiday"` の規則は、同じ日に当たる `"over-holiday"` の規則を覆いません（祝日には後の規則が当たるため）
 - `dayAfterHoliday`・`dayBeforeHoliday` の規則の `shadowed` は、同じ種類の規則どうし（`kinds`・`keys`・`weekdays`・`months`・期間と、同じ `skipWeekdays`）でだけ調べます。当てはまる日が年ごとの祝日で変わるためで、曜日の規則との重なりは `redundant` で見つかります。`cycle` の規則の `shadowed` は `cycle` の規則どうしでだけ調べ、後の規則の周期が先の規則の周期の倍数で、後の規則のどの日も先の規則の日に当たるときに覆うとみなします
 - 有効期間のある規則の `shadowed` は、先の規則の期間が後の規則の期間を含むことも条件です。周期（`interval`）のある規則は、先の規則の周期が後の規則を含むことも条件です（毎週は隔週を覆う。位相の違う隔週どうしは互いを覆わない）
-- `redundant` は、規則を取り除いた結果と 1 日ずつ比べます。個別の日付はその期間を、毎年の月日と繰り返しの規則は個別の日付を除いた設定で、祝日の提供元の対応年（日本は 1955〜2099 年）を、提供元がなければ 2001〜2028 年（曜日と月日の組み合わせが一巡する 28 年。周期（`interval`・`cycle`）のある規則があれば、その周期がそろう長さ。隔週なら 56 年、最長 200 年）を調べます。その範囲の外にある有効期間も調べます（`outOfRangePolicy: "throw"` では対応年の中だけ）。調べた年は `message` に書かれます。スケジュールの値は、配列と普通のオブジェクトなら中身で、それ以外（`Date` など）は同じものかで比べます
+- `redundant` は、規則を取り除いた結果と 1 日ずつ比べます。個別の日付はその期間を、毎年の月日と繰り返しの規則は個別の日付を除いた設定で（自分の設定を基準に第 n 営業日を数える規則があれば、個別の日付は数え方を変えるので残し、取り除いて変わりうる月・週の日をすべて調べます）、祝日の提供元の対応年（日本は 1955〜2099 年）を、提供元がなければ 2001〜2028 年（曜日と月日の組み合わせが一巡する 28 年。周期（`interval`・`cycle`）のある規則があれば、その周期がそろう長さ。隔週なら 56 年、最長 200 年）を調べます。その範囲の外にある有効期間も調べます（`outOfRangePolicy: "throw"` では対応年の中だけ）。調べた年は `message` に書かれます。スケジュールの値は、配列と普通のオブジェクトなら中身で、それ以外（`Date` など）は同じものかで比べます
 - `shadowed` と `redundant` は、規則を 1 つずつ外したときの判定です。同じ規則を 2 つ書くと、後の規則が `shadowed`、前の規則が `redundant` と出ますが、両方を外すと結果が変わります。複数の規則が出たときは、1 つ外すたびに診断をやり直してください
 - 日本の祝日を使う設定では、全日を調べるため数百ミリ秒かかります。リクエストごとではなく、テストや起動時の確認で使ってください。開発・テスト用の道具なので、アプリの本体のバンドルに入らないようサブパスに分けています
 
