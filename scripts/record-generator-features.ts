@@ -253,8 +253,13 @@ registerHooks({
     const file = join(work, `${site}.jsonl`);
     writeFileSync(file, "");
     const started = Date.now();
-    // 種と試行の数はその版の既定のまま（種を変える PROPERTY_SEED と、TZ を変えた実行の印は渡さない）
-    const env: NodeJS.ProcessEnv = { ...process.env, FEATURES_FILE: file };
+    // 種と試行の数はその版の既定のまま（種を変える PROPERTY_SEED と、TZ を変えた実行の印は渡さない）。
+    // 特徴はカレンダーを作るときに集めるので、抜き出し（pnpm check）ではなく全件を動かす（DIAGNOSE_PROPERTY_FULL）
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      FEATURES_FILE: file,
+      DIAGNOSE_PROPERTY_FULL: "1",
+    };
     delete env["PROPERTY_SEED"];
     delete env["BIZDAYS_TZ_RUN"];
     const r = spawnSync(
