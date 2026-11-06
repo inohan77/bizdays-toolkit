@@ -276,8 +276,13 @@ function checkPortableSource(dir: string): string[] {
   const DATE_PARSE_ALLOWED: ReadonlyMap<string, number> = new Map([["src/core/input.ts", 1]]);
   for (const file of walk(dir).filter((f) => f.endsWith(".ts"))) {
     const shown = file.replaceAll("\\", "/");
-    // コメントの中の言及は数えない（行末の // も除く。文字列の中の :// は空白が前にないので残る）
+    // コメントと文字列の中の言及は数えない。先に文字列の中身を空にしてから（" //" を含む文字列で行末のコメントと
+    // 誤認して、その行の残りが検査から外れないように）、/* */ と行末の // を除く。正規表現のリテラルは残す
     const code = readFileSync(file, "utf8")
+      .replace(
+        /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g,
+        (m) => `${m[0]}${m[0]}`,
+      )
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|\s)\/\/.*$/gm, "$1");
     for (const [pattern, label] of forbidden) {

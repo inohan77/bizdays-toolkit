@@ -1,6 +1,7 @@
 // 対応年の短い自作の提供元（テスト拡充案の T1・T2）。全日を比べるテストを速く回すため、対応年を 2025〜2027 年に絞る。
 // 元日・5 月の連休（日曜日に当たれば 5 月 6 日が振替）・7 月の第 3 月曜日・12 月 25 日を祝日にする。
 import type { Holiday, HolidayProvider } from "../../src/index.ts";
+import { daysOf } from "./compare.ts";
 
 const holidaysIn = (year: number): Holiday[] => {
   const list: [string, string, string][] = [
@@ -35,9 +36,4 @@ export const SHORT_KINDS = ["regular", "substitute"] as const;
 export const SHORT_KEYS = ["new-year", "b", "mon", "xmas"] as const;
 
 /** 対応年のすべての日 */
-export const SHORT_DAYS: readonly string[] = (() => {
-  const out: string[] = [];
-  for (let t = Date.UTC(2025, 0, 1); t <= Date.UTC(2027, 11, 31); t += 86_400_000)
-    out.push(new Date(t).toISOString().slice(0, 10));
-  return out;
-})();
+export const SHORT_DAYS: readonly string[] = daysOf("2025-01-01", "2027-12-31");

@@ -16,6 +16,7 @@ import { createCalendar, type CalendarOptions } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 import { diagnoseCalendar } from "../src/diagnose/index.ts";
 import { random, type Obj } from "./support/catalog.ts";
+import { daysOf, linesOf, removeItem } from "./support/compare.ts";
 import { flagEnv, intEnv } from "./support/env.ts";
 import {
   DIAGNOSE_PROPERTY,
@@ -41,24 +42,20 @@ const real = (options: Obj): Obj =>
 const describeOf = (seed: number, run: number, options: Obj): string =>
   `seed=${seed} run=${run} ${JSON.stringify({ ...options, holidayProvider: options["holidayProvider"] === undefined ? undefined : String((options["holidayProvider"] as { id?: string }).id ?? options["holidayProvider"]) })}`;
 
-/** "closedRecurringRules[2]" の規則を取り除いた設定 */
-function remove(options: Obj, path: string): Obj {
-  const m = /^(\w+)\[(\d+)\]$/.exec(path);
-  assert.ok(m, `unexpected path ${path}`);
-  const key = m[1]!;
-  const index = Number(m[2]);
-  return { ...options, [key]: (options[key] as unknown[]).filter((_, i) => i !== index) };
-}
-
-/** 期間の全日の結果（full なら理由・名前・振替元まで。位置は取り除くとずれるので含めない） */
-function snapshot(options: Obj, range: { from: string; to: string }, full: boolean): string[] {
-  const calendar = createCalendar(options as CalendarOptions);
-  return calendar
-    .daysBetween(range.from, range.to)
-    .map((d) =>
-      full ? `${d.open}|${d.reason}|${d.name ?? ""}|${d.shiftedFrom ?? ""}` : String(d.open),
-    );
-}
+/** 期間の全日の結果（test/support/compare.ts の linesOf。full なら理由・名前・振替元まで） */
+const snapshot = (options: Obj, range: { from: string; to: string }, full: boolean): string[] => {
+  const lines = linesOf(
+    createCalendar(options as CalendarOptions),
+    daysOf(range.from, range.to),
+    full,
+  );
+  // この範囲では投げない設定だけを試す。投げた日は "E:<code>" になり、取り除く前後で一致してしまうので、ここで失敗にする
+  assert.ok(
+    !lines.some((l) => l.startsWith("E:")),
+    `投げた日がある: ${lines.find((l) => l.startsWith("E:"))}`,
+  );
+  return lines;
+};
 
 /** 設定の項目（配列の要素）に出た shadowed・never-matches・redundant を取り除き、期間の全日で結果を比べる */
 function checkRemovals(
@@ -84,7 +81,7 @@ function checkRemovals(
       (options[d.path.replace(/\[\d+\]$/, "")] as unknown[])[Number(/\[(\d+)\]/.exec(d.path)![1])],
     );
     if (target.includes("effective")) found["withPeriod"] = (found["withPeriod"] ?? 0) + 1;
-    const reduced = remove(options, d.path);
+    const reduced = removeItem(options, d.path);
     if (d.code === "redundant") {
       open ??= snapshot(options, range, false);
       assert.deepEqual(snapshot(reduced, range, false), open, `${d.code} ${d.path}: ${describe()}`);

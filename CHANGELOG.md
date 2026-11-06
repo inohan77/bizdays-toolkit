@@ -4,9 +4,9 @@
 
 ## [Unreleased]
 
-## [0.30.8] - 2026-11-05
+## [0.30.8] - 2026-11-06
 
-品質改善提案（10 通目）の分です。文書・決定の文書・コメントが実装と食い違っていた箇所を直し、不具合を 4 件直しました。カレンダー・スケジュールの判定の結果は変わりません。変わるのは、診断の結果（カレンダーの個別の日付・毎年の月日の `value` に `unknown-option` が増える。誤った `counting-basis` が消え、曜日の規則ごとに出る）、`no-business-day` の例外のクラス（`Error` → `RangeError`。広がる向き）、`withSubstituteDays` が返す祝日の凍結です。
+品質改善提案（10 通目）の分です。文書・決定の文書・コメントが実装と食い違っていた箇所を直し、不具合を 4 件直しました。カレンダー・スケジュールの判定の結果は変わりません。変わるのは、診断の結果（カレンダーの個別の日付・毎年の月日の `value` に `unknown-option` が増える。誤った `counting-basis` が消え、曜日の規則ごとに出る）、`no-business-day` の例外のクラス（`Error` → `RangeError`。広がる向き）、`withSubstituteDays` が返す祝日の凍結です。あわせて、品質の仕組みを軽くしました（タイムゾーンを変えたテストを 4 ゾーンから 2 ゾーンに、診断の性質のテストを抜き出しに、全日の結果を比べる補助を 1 つに、同じ恒等式を確かめるテストを 1 か所に。詳しくは「開発」）。公開物の `.js` が変わるのは Fixed の 4 件の分だけで、カレンダー・スケジュール・提供元の判定の結果は変わらないので、利用者の作業は要りません。
 
 ### Fixed
 
@@ -41,6 +41,9 @@
 - `check-package` の実行環境のタイムゾーンに依存する API の検査を直した: 引数の中の括弧を 1 段まで読む（`new Date(Number(y), m)` を見逃していた）、`new` を付けない `Intl.DateTimeFormat(…)` と `timeZone: undefined` も不可にした、文字列を渡す `new Date("…")` を不可にし、`Date.parse` は `src/core/input.ts` の 1 か所（オフセット付きに限った文字列）だけを許して回数が変わったら失敗にした、行末の `//` コメントも検査の前に除くようにした（コメントに書いた形で誤って失敗していた）。`tool-selftest` に文字列を渡す `new Date` の誤りを足した
 - 診断の性質のテスト（`test/diagnose-properties.test.ts`）を、ほかの全件のテストと同じ「`pnpm check` は抜き出し、全件は CI」の形にした: 設定は毎回作り（乱数の列は変わらない。生成範囲の記録はカレンダーを作る時点で特徴を集めるので、記録の仕組み `scripts/record-generator-features.ts` は全件を動かす）、`pnpm check` では 3 件に 1 件の決まった抜き出しだけを確かめ、全件は `DIAGNOSE_PROPERTY_FULL=1` で CI の `diagnose-consistency` ジョブ。タイムゾーンを変えた実行では 3 つとも飛ばす（暦日だけで決まる。試行を減らして動かしていた `tzRuns`・`tzCountingRuns` は消した）。1 コアの手元で `pnpm test` のこのファイルの分が約 45 秒 → 12 秒
 - 変形しても結果が同じ（`test/metamorphic.test.ts`）の全件（`METAMORPHIC_FULL=1`、関係ごとに 40 件）を CI の `diagnose-consistency` ジョブで動かすようにした（RELEASING.md に全件の環境変数だけがあり、動かす場所がなかった。36 番の「黙って外れる確認を作らない」）
+- 全日の結果を比べる補助を `test/support/compare.ts` に 1 つにした（`daysOf`・`dayLine`・`linesOf`・`removeItem`）。診断の性質・診断のオラクル・整合・和集合・失敗の注入のテストと `test/support/provider.ts` が別々に持っていた、期間の全日の列・1 日の結果の文字列・項目の取り除きを置き換えた（約束は変えない。変形のテストの全項目の比較、整合のテストの `valueOn` の比較、失敗の注入のテストの `isBusinessDay` と例外の有無の比較は、比べる約束が違うので残した）
+- 同じ恒等式を 3 か所で確かめていたのを 1 か所にした: `diff(a, add(a, n)) = n`・`add(end, −n) = start`・加算の結果は営業日・逆向きの差は −n、次の営業日は翌日からの営業日の一覧の最初・前の営業日は前日以前の営業日、を `test/consistency.test.ts` の整合 2・3（目録の設定）で確かめる。`test/properties.test.ts` の性質「addBusinessDays の結果は営業日で、n 進めて −n 戻ると元の営業日に戻る」「nextBusinessDay との間に営業日はなく、previousBusinessDay で戻る」と、`test/naming.test.ts` の T3 のカレンダーの対を消した（T3 は日付の `diffDays`・`addDays` の対だけ残す）。生成範囲の記録は変わらない（残る性質が同じ設定の作り方を使う。`record-generator-features.ts --check` で確かめた）
+- `check-package` の実行環境のタイムゾーンに依存する API の検査: 文字列の中身を先に空にしてから `//` のコメントを除くようにした（`" //"` を含む文字列を行末のコメントと誤認して、その行の残りが黙って検査から外れていた）
 
 ## [0.30.7] - 2026-11-05
 

@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  addDays,
   combineCalendars,
   createCalendar,
   createCalendarFromSchedule,
@@ -36,6 +37,7 @@ import {
 import { flagEnv } from "./support/env.ts";
 import { jp } from "../src/jp/index.ts";
 import { sg } from "../src/sg/index.ts";
+import { daysOf } from "./support/compare.ts";
 import { SHORT_PROVIDER } from "./support/provider.ts";
 import { SHORT_RANGE } from "./support/sites.ts";
 import { skipWhen } from "./support/skip.ts";
@@ -47,12 +49,6 @@ const RUNS = FULL
   ? { days: 120, search: 120, counting: 120, diagnose: 150, migrate: 80, basis: 40 }
   : { days: 12, search: 12, counting: 12, diagnose: 12, migrate: 6, basis: 5 };
 
-const daysOf = (from: string, to: string): string[] => {
-  const out: string[] = [];
-  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000)
-    out.push(new Date(t).toISOString().slice(0, 10));
-  return out;
-};
 /** 自作の提供元の対応年の全日（outOfRangePolicy: "ignore" で試す） */
 const DAYS = daysOf(SHORT_RANGE.from, SHORT_RANGE.to);
 /** 隣の年を引かない内側の範囲（既定の "throw" で試す。祝日の翌日・前日の規則が隣の年を見ない） */
@@ -213,6 +209,18 @@ test(
         for (const d of calendar.daysBetween(previous, day).slice(1, -1))
           assert.equal(d.open, false, `run=${run} ${previous} → ${day}: ${d.date}`);
         assert.ok(next > day && previous < day, `run=${run} ${day}: ${previous} ${next}`);
+        // 次の営業日は、翌日からの営業日の一覧の最初の 1 つ。前の営業日は、前日以前の営業日（0.30.8 までは
+        // test/properties.test.ts の性質「nextBusinessDay との間に営業日はなく…」が同じ恒等式を確かめていた）
+        assert.deepEqual(
+          calendar.businessDatesBetween(addDays(day, 1), next),
+          [next],
+          `run=${run} ${day} → ${next}`,
+        );
+        assert.equal(
+          calendar.previousBusinessDay(next),
+          calendar.businessDayOnOrBefore(addDays(next, -1)),
+          `run=${run} ${next}`,
+        );
       } catch (e) {
         if (!noBusinessDay(e)) throw e;
       }
@@ -235,6 +243,12 @@ test("整合 3: 起点が営業日なら、営業日の加算と差は互いに�
       count("整合 3");
       assert.equal(calendar.diffBusinessDays(start, end), n, `run=${run} ${start} +${n} = ${end}`);
       assert.equal(calendar.addBusinessDays(end, -n), start, `run=${run} ${end} -${n}`);
+      // 加算の結果は営業日で、逆向きの差は −n（0.30.8 までは test/properties.test.ts の性質「addBusinessDays の結果は
+      // 営業日で、n 進めて −n 戻ると…」と test/naming.test.ts の T3 が同じ恒等式を確かめていた）
+      assert.ok(calendar.isBusinessDay(end), `run=${run} ${end}`);
+      assert.equal(calendar.diffBusinessDays(end, start), -n, `run=${run} ${end} -> ${start}`);
+      // 営業日を起点にした 0 日の加算はその日（0.30.8 までは test/naming.test.ts の T3 が n = 0 を含めて確かめていた）
+      assert.equal(calendar.addBusinessDays(start, 0), start, `run=${run} ${start} +0`);
     } catch (e) {
       if (!noBusinessDay(e)) throw e;
     }

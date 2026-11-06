@@ -3,6 +3,7 @@
 // 錨は公開済みの 0.22.2 で作ったフィクスチャ（0.22.x の意味を正とする。確定した年だけ）。データのパッチ版が錨の範囲の
 // 過去の祝日を変えたとき（法改正・臨時の祝日）は、0.22.2 では作り直せないので、影響する日付を錨から外し、CHANGELOG の「開発」に記録する
 import assert from "node:assert/strict";
+import { daysOf } from "./support/compare.ts";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
@@ -46,13 +47,6 @@ const jpOnly: HolidayProvider<string> = {
 };
 const providers: Record<string, HolidayProvider> = { jp, england, other };
 
-const daysOf = (from: string, to: string): string[] => {
-  const days: string[] = [];
-  for (let t = Date.parse(from); t <= Date.parse(to); t += 86_400_000) {
-    days.push(new Date(t).toISOString().slice(0, 10));
-  }
-  return days;
-};
 const closedDays = (options: object, days: readonly string[]): string[] => {
   const calendar = createCalendar({ timeZone: "Asia/Tokyo", ...options } as CalendarOptions);
   return days.filter((d) => !calendar.isBusinessDay(d));

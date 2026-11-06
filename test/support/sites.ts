@@ -160,10 +160,8 @@ export type PropertyConfigKind = "calendar" | "weekly" | "shift" | "move" | "pai
  * 性質が実際に使った作り方がこの一覧と同じかを確かめる（一覧にない性質が設定を作ると失敗する）
  */
 export const PROPERTY_CONFIGS: Readonly<Record<string, PropertyConfigKind>> = {
-  "addBusinessDays の結果は営業日で、n 進めて −n 戻ると元の営業日に戻る": "calendar",
   "休業日を起点にした addBusinessDays は、翌営業日を 1 と数える（diffBusinessDays は起点が営業日のときだけ逆算になる）":
     "calendar",
-  "nextBusinessDay との間に営業日はなく、previousBusinessDay で戻る": "calendar",
   "businessDatesBetween の件数は diffBusinessDays と一致する": "calendar",
   "営業日カレンダーと、同じ規則の真偽値のスケジュールは一致する": "weekly",
   "振替先は振替元より後の祝日でない日で、その間はすべて祝日": "shift",

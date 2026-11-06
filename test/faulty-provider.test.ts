@@ -24,7 +24,7 @@ import {
   type InvalidData,
 } from "./support/faulty.ts";
 import { random } from "./support/catalog.ts";
-import { SHORT_PROVIDER } from "./support/provider.ts";
+import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 import { diagnoseOptions } from "./support/sites.ts";
 import { flagEnv } from "./support/env.ts";
 import { skipWhen, todoFor } from "./support/skip.ts";
@@ -393,9 +393,7 @@ test(
     // 目録の設定（祝日に従属する形のない文脈）を、祝日の扱い "ignore" と未確定の年を含む提供元で作る。"over-holiday"・
     // "after-holiday" の規則の有無で、redundant と出る設定と出ない設定の両方ができる
     const rand = random(20261104);
-    const days: string[] = [];
-    for (let t = Date.UTC(2025, 0, 1); t <= Date.UTC(2027, 11, 31); t += 86_400_000)
-      days.push(new Date(t).toISOString().slice(0, 10));
+    const days = SHORT_DAYS;
     const outcome = (calendar: ReturnType<typeof createCalendar>, day: string): string => {
       try {
         return String(calendar.isBusinessDay(day));

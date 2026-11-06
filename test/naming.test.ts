@@ -88,11 +88,9 @@ test("T2 diff…(from, to): f(a, a) = 0、f(a, b) = −f(b, a)、f(a, b) + f(b, 
   }
 });
 
-test("T3 add… と diff… の対: diff(a, add(a, n)) = n", () => {
+test("T3 add… と diff… の対: diff(a, add(a, n)) = n（カレンダーの対は test/consistency.test.ts の整合 3）", () => {
   for (let run = 0; run < RUNS; run++) {
     const n = int(-30, 30);
-    const a = calendar.businessDayOnOrAfter(date());
-    assert.equal(calendar.diffBusinessDays(a, calendar.addBusinessDays(a, n)), n, `${a} ${n}`);
     const d = date();
     assert.equal(root.diffDays(d, root.addDays(d, n)), n, `${d} ${n}`);
   }

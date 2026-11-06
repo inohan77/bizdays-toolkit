@@ -134,19 +134,6 @@ function property(name: string, check: (g: Gen, c: Configs) => string | void): v
   });
 }
 
-property("addBusinessDays の結果は営業日で、n 進めて −n 戻ると元の営業日に戻る", (g, c) => {
-  const { calendar, describe } = c.calendar();
-  const start = calendar.businessDayOnOrAfter(g.date());
-  const n = g.int(1, 40);
-  const forward = calendar.addBusinessDays(start, n);
-  const context = `${describe} start=${start} n=${n}`;
-  assert.ok(calendar.isBusinessDay(forward), context);
-  assert.equal(calendar.addBusinessDays(forward, -n), start, context);
-  assert.equal(calendar.diffBusinessDays(start, forward), n, context);
-  assert.equal(calendar.diffBusinessDays(forward, start), -n, context);
-  return context;
-});
-
 property(
   "休業日を起点にした addBusinessDays は、翌営業日を 1 と数える（diffBusinessDays は起点が営業日のときだけ逆算になる）",
   (g, c) => {
@@ -170,22 +157,6 @@ property(
     return context;
   },
 );
-
-property("nextBusinessDay との間に営業日はなく、previousBusinessDay で戻る", (g, c) => {
-  const { calendar, describe } = c.calendar();
-  const day = g.date();
-  const next = calendar.nextBusinessDay(day);
-  const context = `${describe} day=${day} next=${next}`;
-  assert.ok(next > day, context);
-  assert.ok(calendar.isBusinessDay(next), context);
-  assert.deepEqual(calendar.businessDatesBetween(addDays(day, 1), next), [next], context);
-  assert.equal(
-    calendar.previousBusinessDay(next),
-    calendar.businessDayOnOrBefore(addDays(next, -1)),
-    context,
-  );
-  return context;
-});
 
 property("businessDatesBetween の件数は diffBusinessDays と一致する", (g, c) => {
   const { calendar, describe } = c.calendar();

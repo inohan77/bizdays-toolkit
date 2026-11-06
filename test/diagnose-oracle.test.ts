@@ -22,6 +22,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { COMMON_RULE_KEYS, SHAPES, random, shapeOf, type Obj } from "./support/catalog.ts";
+import { type DayLike, linesOf } from "./support/compare.ts";
 import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 import { flagEnv } from "./support/env.ts";
 import { skipWhen } from "./support/skip.ts";
@@ -156,20 +157,9 @@ function removableInScanWindow(full: Obj, rest: Obj): boolean {
   return openOver(rest, ranges) === openOver(full, ranges);
 }
 
-/** 全日の結果（full なら理由・名前・振替元まで） */
-const snapshot = (o: Obj, full: boolean): string[] => {
-  const calendar = lib["createCalendar"]!(o) as { dayInfoOn: (d: string) => Obj };
-  return SHORT_DAYS.map((d) => {
-    try {
-      const i = calendar.dayInfoOn(d);
-      return full
-        ? `${i["open"]}|${i["reason"]}|${i["name"] ?? ""}|${i["shiftedFrom"] ?? ""}`
-        : String(i["open"]);
-    } catch (error) {
-      return `E:${String((error as { code?: unknown }).code)}`;
-    }
-  });
-};
+/** 対応年の全日の結果（test/support/compare.ts の linesOf。full なら理由・名前・振替元まで） */
+const snapshot = (o: Obj, full: boolean): string[] =>
+  linesOf(lib["createCalendar"]!(o) as { dayInfoOn: (d: string) => DayLike }, SHORT_DAYS, full);
 const same = (a: readonly string[], b: readonly string[], from = 0) =>
   a.every((x, i) => i < from || x === b[i]);
 const pathsOf = (list: readonly Item[]): string[] => {
