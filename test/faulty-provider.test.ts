@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  addDays,
   combineCalendars,
   createCalendar,
   createCalendarFromSchedule,
@@ -27,7 +28,6 @@ import { random } from "./support/catalog.ts";
 import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 import { diagnoseOptions } from "./support/sites.ts";
 import { flagEnv } from "./support/env.ts";
-import { skipWhen, todoFor } from "./support/skip.ts";
 
 /** f が code の例外を投げる */
 const throwsCode = (f: () => unknown, code: string, context: string): void => {
@@ -259,48 +259,37 @@ const strictCalendar = () =>
 const plainCalendar = (holidayPolicy: "closed" | "open" = "closed") =>
   createCalendar({ holidayProvider: SHORT_PROVIDER, closedWeekdays: [0, 6], holidayPolicy });
 
-test("注入（途中の年を未確定）× 合成: 投げるカレンダーが先なら、合成したカレンダーも投げる", () => {
-  for (const open of ["all", "any"] as const) {
-    const combined = combineCalendars([strictCalendar(), plainCalendar()], { open });
-    throwsCode(
-      () => combined.isBusinessDay(HOLIDAY_IN_INJECTED_YEAR),
-      "unconfirmed-holiday",
-      `合成（${open}）`,
-    );
-    throwsCode(
-      () => combined.dayInfoOn(HOLIDAY_IN_INJECTED_YEAR),
-      "unconfirmed-holiday",
-      `合成（${open}）dayInfoOn`,
-    );
-    assert.equal(combined.isBusinessDay(DAY_BEFORE), true);
+test("注入（途中の年を未確定）× 合成: 投げるカレンダーが先でも後でも、合成したカレンダーも投げる", () => {
+  // 後に置いた場合は、先のカレンダーで結果が決まる日（"all" で休業・"any" で営業）を選ぶ。0.30.8 までは後のカレンダーを判定しなかった
+  for (const [open, other] of [
+    ["all", () => plainCalendar("closed")],
+    ["any", () => plainCalendar("open")],
+  ] as const) {
+    for (const order of ["strict-first", "strict-last"] as const) {
+      const calendars =
+        order === "strict-first" ? [strictCalendar(), other()] : [other(), strictCalendar()];
+      const combined = combineCalendars(calendars, { open });
+      const label = `合成（${open}・${order}）`;
+      throwsCode(
+        () => combined.isBusinessDay(HOLIDAY_IN_INJECTED_YEAR),
+        "unconfirmed-holiday",
+        label,
+      );
+      throwsCode(
+        () => combined.dayInfoOn(HOLIDAY_IN_INJECTED_YEAR),
+        "unconfirmed-holiday",
+        `${label} dayInfoOn`,
+      );
+      // 探索も、途中で通る日にすべてのカレンダーを判定する（前日から戻ると最初に通るのが予測の祝日）
+      throwsCode(
+        () => combined.previousBusinessDay(addDays(HOLIDAY_IN_INJECTED_YEAR, 1)),
+        "unconfirmed-holiday",
+        `${label} previousBusinessDay`,
+      );
+      assert.equal(combined.isBusinessDay(DAY_BEFORE), true, label);
+    }
   }
 });
-
-// 既知の不具合（0.31.0 で直す。docs/guide.ja.md の「未確定の祝日」）: 先のカレンダーで結果が決まると、後のカレンダーを判定しない
-test(
-  '注入（途中の年を未確定）× 合成: "all" で先のカレンダーが休業日でも、後のカレンダーが投げるなら投げる',
-  { todo: todoFor("known-bug-combine-short-circuit") },
-  () => {
-    const combined = combineCalendars([plainCalendar(), strictCalendar()], { open: "all" });
-    throwsCode(
-      () => combined.isBusinessDay(HOLIDAY_IN_INJECTED_YEAR),
-      "unconfirmed-holiday",
-      "合成（all）",
-    );
-  },
-);
-test(
-  '注入（途中の年を未確定）× 合成: "any" で先のカレンダーが営業日でも、後のカレンダーが投げるなら投げる',
-  { todo: todoFor("known-bug-combine-short-circuit") },
-  () => {
-    const combined = combineCalendars([plainCalendar("open"), strictCalendar()], { open: "any" });
-    throwsCode(
-      () => combined.isBusinessDay(HOLIDAY_IN_INJECTED_YEAR),
-      "unconfirmed-holiday",
-      "合成（any）",
-    );
-  },
-);
 
 test('注入（途中の年を未確定）× 診断: 未確定の祝日はそのまま使って調べ、"throw" でも報告しない', () => {
   for (const list of [
@@ -386,67 +375,63 @@ test("注入（特定の年で例外を投げる）× 診断: どの設定でも
 /** 診断と判定の一致のテストの設定の数（診断が時間を食うので pnpm check では 12 件。全件の 150 件は CONSISTENCY_FULL=1 で、CI の diagnose-consistency ジョブ） */
 const CONSISTENCY_RUNS = flagEnv("CONSISTENCY_FULL") ? 150 : 12;
 
-test(
-  '診断と判定の一致（オラクル）: 診断が unconfirmedHolidayPolicy を redundant と出した設定は、"throw" を "accept" に変えても全日の判定（例外の有無を含む）が変わらない',
-  { skip: skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN")) },
-  () => {
-    // 目録の設定（祝日に従属する形のない文脈）を、祝日の扱い "ignore" と未確定の年を含む提供元で作る。"over-holiday"・
-    // "after-holiday" の規則の有無で、redundant と出る設定と出ない設定の両方ができる
-    const rand = random(20261104);
-    const days = SHORT_DAYS;
-    const outcome = (calendar: ReturnType<typeof createCalendar>, day: string): string => {
-      try {
-        return String(calendar.isBusinessDay(day));
-      } catch (e) {
-        return `throw:${isBizdaysError(e) ? e.code : String(e)}`;
-      }
-    };
-    /** 群ごとの件数: 診断の結果（redundant と出たか）・作成に失敗したか・全日を比べたか・違いのあった設定 */
-    const groups = {
-      redundant: { configs: 0, failed: 0, compared: 0, differed: 0 },
-      other: { configs: 0, failed: 0, compared: 0, differed: 0 },
-    };
-    for (let run = 0; run < CONSISTENCY_RUNS; run++) {
-      const options = {
-        ...diagnoseOptions(rand, "none"),
-        holidayProvider: unconfirmedInYear(INJECTED_YEAR),
-        holidayPolicy: "ignore",
-        unconfirmedHolidayPolicy: "throw",
-      } as CalendarOptions;
-      const flagged = diagnoseCalendar(options).some(
-        (d) => d.code === "redundant" && d.path === "unconfirmedHolidayPolicy",
-      );
-      const group = flagged ? groups.redundant : groups.other;
-      group.configs++;
-      let strict: ReturnType<typeof createCalendar>;
-      let plain: ReturnType<typeof createCalendar>;
-      try {
-        strict = createCalendar(options);
-        plain = createCalendar({
-          ...options,
-          unconfirmedHolidayPolicy: "accept",
-        } as CalendarOptions);
-      } catch {
-        group.failed++;
-        continue;
-      }
-      group.compared++;
-      const context = `run=${run} ${JSON.stringify({ ...options, holidayProvider: "UNCONFIRMED-2026" })}`;
-      if (days.some((day) => outcome(strict, day) !== outcome(plain, day))) group.differed++;
-      // redundant と出た設定は、どの日も同じ（出なかった設定は、違ってよいので数えるだけ）
-      if (flagged)
-        for (const day of days)
-          assert.equal(outcome(strict, day), outcome(plain, day), `${context} ${day}`);
+test('診断と判定の一致（オラクル）: 診断が unconfirmedHolidayPolicy を redundant と出した設定は、"throw" を "accept" に変えても全日の判定（例外の有無を含む）が変わらない', () => {
+  // 目録の設定（祝日に従属する形のない文脈）を、祝日の扱い "ignore" と未確定の年を含む提供元で作る。"over-holiday"・
+  // "after-holiday" の規則の有無で、redundant と出る設定と出ない設定の両方ができる
+  const rand = random(20261104);
+  const days = SHORT_DAYS;
+  const outcome = (calendar: ReturnType<typeof createCalendar>, day: string): string => {
+    try {
+      return String(calendar.isBusinessDay(day));
+    } catch (e) {
+      return `throw:${isBizdaysError(e) ? e.code : String(e)}`;
     }
-    const line = (g: (typeof groups)["redundant"]) =>
-      `${g.configs} 件（全日を比べた ${g.compared} 件・作成に失敗した ${g.failed} 件・違いのあった ${g.differed} 件）`;
-    console.log(
-      `# redundant と出た設定 ${line(groups.redundant)}、出なかった設定 ${line(groups.other)}`,
+  };
+  /** 群ごとの件数: 診断の結果（redundant と出たか）・作成に失敗したか・全日を比べたか・違いのあった設定 */
+  const groups = {
+    redundant: { configs: 0, failed: 0, compared: 0, differed: 0 },
+    other: { configs: 0, failed: 0, compared: 0, differed: 0 },
+  };
+  for (let run = 0; run < CONSISTENCY_RUNS; run++) {
+    const options = {
+      ...diagnoseOptions(rand, "none"),
+      holidayProvider: unconfirmedInYear(INJECTED_YEAR),
+      holidayPolicy: "ignore",
+      unconfirmedHolidayPolicy: "throw",
+    } as CalendarOptions;
+    const flagged = diagnoseCalendar(options).some(
+      (d) => d.code === "redundant" && d.path === "unconfirmedHolidayPolicy",
     );
-    // どちらの群も、全日を比べた設定が 1 件以上ある（空振りしていない）
-    assert.ok(
-      groups.redundant.compared > 0 && groups.other.compared > 0,
-      `比べた設定が足りない（空振り）: ${JSON.stringify(groups)}`,
-    );
-  },
-);
+    const group = flagged ? groups.redundant : groups.other;
+    group.configs++;
+    let strict: ReturnType<typeof createCalendar>;
+    let plain: ReturnType<typeof createCalendar>;
+    try {
+      strict = createCalendar(options);
+      plain = createCalendar({
+        ...options,
+        unconfirmedHolidayPolicy: "accept",
+      } as CalendarOptions);
+    } catch {
+      group.failed++;
+      continue;
+    }
+    group.compared++;
+    const context = `run=${run} ${JSON.stringify({ ...options, holidayProvider: "UNCONFIRMED-2026" })}`;
+    if (days.some((day) => outcome(strict, day) !== outcome(plain, day))) group.differed++;
+    // redundant と出た設定は、どの日も同じ（出なかった設定は、違ってよいので数えるだけ）
+    if (flagged)
+      for (const day of days)
+        assert.equal(outcome(strict, day), outcome(plain, day), `${context} ${day}`);
+  }
+  const line = (g: (typeof groups)["redundant"]) =>
+    `${g.configs} 件（全日を比べた ${g.compared} 件・作成に失敗した ${g.failed} 件・違いのあった ${g.differed} 件）`;
+  console.log(
+    `# redundant と出た設定 ${line(groups.redundant)}、出なかった設定 ${line(groups.other)}`,
+  );
+  // どちらの群も、全日を比べた設定が 1 件以上ある（空振りしていない）
+  assert.ok(
+    groups.redundant.compared > 0 && groups.other.compared > 0,
+    `比べた設定が足りない（空振り）: ${JSON.stringify(groups)}`,
+  );
+});

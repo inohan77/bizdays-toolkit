@@ -7,6 +7,8 @@
  *
  * 対応年の短い自作の提供元（2025〜2027 年）と提供元なしの設定はその全日を、日本の提供元と提供元なしの一部の設定は
  * 日本の提供元の対応年の全日（1955〜2099 年）を比べる。判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。31 番）。
+ * pnpm check は短い提供元・提供元なしの性質だけを抜き出しで動かし、第 n 営業日の規則のある設定と日本の全範囲は
+ * DIAGNOSE_PROPERTY_FULL=1（CI の diagnose-consistency ジョブ）で動かす。
  * 種を変えて試すには: PROPERTY_SEED=123 node --test test/diagnose-properties.test.ts
  */
 
@@ -18,6 +20,7 @@ import { diagnoseCalendar } from "../src/diagnose/index.ts";
 import { random, type Obj } from "./support/catalog.ts";
 import { daysOf, linesOf, removeItem } from "./support/compare.ts";
 import { flagEnv, intEnv } from "./support/env.ts";
+import { skipWhen } from "./support/skip.ts";
 import {
   DIAGNOSE_PROPERTY,
   JP_FULL_RANGE,
@@ -27,14 +30,13 @@ import {
   fullRangeSourceOf,
   withCountingRule,
 } from "./support/sites.ts";
-import { skipWhen } from "./support/skip.ts";
 
 const SEED = intEnv("PROPERTY_SEED", DIAGNOSE_PROPERTY.seed);
-/** 診断は暦日だけで決まるので、タイムゾーンを変えた実行（scripts/test-tz.ts）では 3 つとも飛ばす（オラクル・整合・変形と同じ） */
-const SKIP_TZ = skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN"));
 // pnpm check は抜き出し（設定は毎回作り、確かめるのは run を sampleEvery で割った余りが 0 の試行だけ）。全件は DIAGNOSE_PROPERTY_FULL=1
 const FULL = flagEnv("DIAGNOSE_PROPERTY_FULL");
 const checked = (run: number): boolean => FULL || run % DIAGNOSE_PROPERTY.sampleEvery === 0;
+/** 第 n 営業日の規則のある設定と日本の全範囲は、短い提供元の性質と同じ形で範囲・規則を変えたものなので、全件のときだけ動かす */
+const SKIP = skipWhen("ci-full-only", !FULL);
 
 /** 提供元の名前（"jp"）を本物にする */
 const real = (options: Obj): Obj =>
@@ -92,30 +94,26 @@ function checkRemovals(
   }
 }
 
-test(
-  "性質: 使われない・取り除いても変わらないと診断した規則は、取り除いても結果が変わらない（短い提供元・提供元なしの全日）",
-  { skip: SKIP_TZ },
-  () => {
-    const rand = random(SEED);
-    const found: Record<string, number> = {};
-    for (let run = 0; run < DIAGNOSE_PROPERTY.runs; run++) {
-      const options = real(diagnoseOptions(rand, diagnoseSourceOf(run)));
-      if (!checked(run)) continue;
-      checkRemovals(options, SHORT_RANGE, () => describeOf(SEED, run, options), found);
-    }
-    // 性質が空振りしていない（診断が実際に出ている）ことも確かめる（never-matches は少ないので単体テストで確かめる）
-    console.log(`# 確かめた診断: ${JSON.stringify(found)}`);
-    assert.ok((found["shadowed"] ?? 0) > 0 && (found["redundant"] ?? 0) > 0, JSON.stringify(found));
-    assert.ok(
-      (found["withPeriod"] ?? 0) > 0,
-      `有効期間のある規則にも診断が出ている: ${JSON.stringify(found)}`,
-    );
-  },
-);
+test("性質: 使われない・取り除いても変わらないと診断した規則は、取り除いても結果が変わらない（短い提供元・提供元なしの全日）", () => {
+  const rand = random(SEED);
+  const found: Record<string, number> = {};
+  for (let run = 0; run < DIAGNOSE_PROPERTY.runs; run++) {
+    const options = real(diagnoseOptions(rand, diagnoseSourceOf(run)));
+    if (!checked(run)) continue;
+    checkRemovals(options, SHORT_RANGE, () => describeOf(SEED, run, options), found);
+  }
+  // 性質が空振りしていない（診断が実際に出ている）ことも確かめる（never-matches は少ないので単体テストで確かめる）
+  console.log(`# 確かめた診断: ${JSON.stringify(found)}`);
+  assert.ok((found["shadowed"] ?? 0) > 0 && (found["redundant"] ?? 0) > 0, JSON.stringify(found));
+  assert.ok(
+    (found["withPeriod"] ?? 0) > 0,
+    `有効期間のある規則にも診断が出ている: ${JSON.stringify(found)}`,
+  );
+});
 
 test(
   "性質: 第 n 営業日の規則がある設定でも、取り除いても変わらないと診断した項目は、取り除いても結果が変わらない",
-  { skip: SKIP_TZ },
+  { skip: SKIP },
   () => {
     const seed = SEED + 2;
     const rand = random(seed);
@@ -137,7 +135,7 @@ test(
 
 test(
   "性質: 日本の提供元の全範囲（1955〜2099 年）と、同じ範囲の提供元なしの設定でも、取り除いても結果が変わらない",
-  { skip: SKIP_TZ },
+  { skip: SKIP },
   () => {
     const seed = SEED + 3;
     const rand = random(seed);

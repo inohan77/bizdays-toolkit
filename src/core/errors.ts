@@ -153,6 +153,24 @@ export class IssueCollector {
 }
 
 /**
+ * @internal 値が undefined の項目を除いた複製（なければ元のオブジェクト）。設定の明示的な undefined は省略と同じ
+ * （decisions.md の 6 番）。知らないキーの検査（checkUnknownKeys）は除く前のオブジェクトに対して行う。
+ * スケジュールの value は undefined も値として持てるので除かない
+ */
+export function withoutUndefined(
+  value: Record<string, unknown>,
+  /** 除く項目を限るとき、その項目 */
+  keys?: readonly string[],
+): Record<string, unknown> {
+  const out = { ...value };
+  for (const key of Object.keys(value)) {
+    const limited = keys !== undefined && !keys.includes(key);
+    if (value[key] === undefined && key !== "value" && !limited) delete out[key];
+  }
+  return out;
+}
+
+/**
  * @internal 設定のオブジェクトに、知らないキーがあれば警告として記録する。
  * 近い既知のキーを候補に挙げるのは規則の診断で行う（作成時は警告を使わないので、ここでは既知のキーを渡すだけ）
  */

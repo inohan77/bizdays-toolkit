@@ -46,23 +46,11 @@ test("counting-basis: 週の第 n 営業日の規則（businessDayOfWeek）で�
   assert.equal(list[0]!.relatedPath, "closedRecurringRules[1]");
 });
 
-// 0.30.8: 有効期間が重なり、使われている曜日の規則ごとに 1 件（それ以外の曜日の規則は数え方に影響しない）
+// 0.30.8: 有効期間が重なり、使われている曜日の規則ごとに 1 件（それ以外の曜日の規則は数え方に影響しない）。
+// 有効期間が重ならない 2 項目の組と件数はオラクル（test/diagnose-oracle.test.ts）が全件で確かめる。ここに残すのは、
+// オラクルが試さない形（outOfRangePolicy: "throw"、3 項目以上の並び）だけ
 const relatedOf = (options: Parameters<typeof diagnoseCalendar>[0]) =>
   countingBasis(options).map((d) => [d.path, d.relatedPath]);
-
-test("counting-basis: 有効期間が重ならない曜日の規則では出さない", () => {
-  assert.deepEqual(
-    relatedOf({
-      holidayProvider: jp,
-      closedWeekdays: [0, 6],
-      closedRecurringRules: [
-        { weekday: 3, effectiveTo: "2026-12-31" },
-        { businessDayOfMonth: 1, effectiveFrom: "2027-01-01" },
-      ],
-    }),
-    [],
-  );
-});
 
 test('counting-basis: 対応年の外で使われない曜日の規則では出さない（"ignore" では使われるので出す）', () => {
   const options = {

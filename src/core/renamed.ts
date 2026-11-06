@@ -92,12 +92,14 @@ export function renameKeys(
   for (const r of RENAMED_KEYS) {
     if (!places.includes(r.place) || !Object.hasOwn(value, r.from)) continue;
     const at = join(writtenPath, r.from);
-    if (Object.hasOwn(value, r.to)) {
+    // 明示的な undefined は省略と同じ（decisions.md の 6 番）。どちらかが undefined なら衝突にしない
+    const old = value[r.from];
+    if (old !== undefined && value[r.to] !== undefined) {
       conflict(report, at, r.from, r.to);
       delete out[r.from];
       continue;
     }
-    out[r.to] = value[r.from];
+    if (old !== undefined) out[r.to] = old;
     delete out[r.from];
     if (report !== "throw")
       report.warning(
@@ -116,7 +118,7 @@ export function writtenKey(
   key: string,
 ): string {
   const r = RENAMED_KEYS.find(
-    (x) => places.includes(x.place) && x.to === key && Object.hasOwn(value, x.from),
+    (x) => places.includes(x.place) && x.to === key && value[x.from] !== undefined,
   );
   return r ? r.from : key;
 }

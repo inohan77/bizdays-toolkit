@@ -7,8 +7,6 @@
  * - 判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。docs/decisions.md の 31 番）
  * - pnpm check では決まった抜き出しだけを試す。すべての組み合わせは ORACLE_FULL=1 で（CI の oracle ジョブ。時間の決まりと
  *   行列の分け方は RELEASING.md の「品質の確認」）
- * - 判定は暦日でタイムゾーンに依存しないので、タイムゾーンを変えた実行（scripts/test-tz.ts）では総当たりを飛ばす
- *   （完全性の数え方の見張りは 1 つの設定だけで費用が小さいので、そこでも動かす）
  * - 完全性（取り除いても変わらないのに何も出ない項目）は、対応年で取り除けた項目を、診断が規則どうしを調べる期間
  *   （診断と同じ関数 rulesScanWindow で求める）でも確かめ直してから数え、既知の項目の一覧（KNOWN_INCOMPLETE）と合わなければ失敗にする
  * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別の版（公開済みの版など）を試せる。ORACLE_SHARD=k/n で、
@@ -97,7 +95,6 @@ const SHARD = ((): { k: number; n: number } | undefined => {
     );
   return { k, n };
 })();
-const SKIP = skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN"));
 const AS_OF = "2026-07-01";
 
 // ------------------------------------------------------------
@@ -105,11 +102,13 @@ const AS_OF = "2026-07-01";
 // ------------------------------------------------------------
 
 type Item = readonly [key: string, value: unknown];
-const items: readonly Item[] = (
-  JSON.parse(readFileSync(new URL("./fixtures/oracle-items.json", import.meta.url), "utf8")) as {
-    items: Item[];
-  }
-).items;
+const fixture = JSON.parse(
+  readFileSync(new URL("./fixtures/oracle-items.json", import.meta.url), "utf8"),
+) as {
+  items: Item[];
+  jointFixed: { items: Item[]; policy: string; weekdays: number[] }[];
+};
+const items: readonly Item[] = fixture.items;
 
 /**
  * 項目の一覧がまだ持っていない形のキーと、その理由。test/catalog.test.ts の到達性と同じ形で、一覧が目録のすべての形と
@@ -408,141 +407,125 @@ test("オラクル: 完全性の数え方は、診断が何も言わない取り
 
 // ------------------------------------------------------------
 
-test(
-  "オラクル: shadowed・never-matches・redundant と出た項目は、取り除いても全日の結果が変わらず、取り除ける項目には何かが出る（既知の項目を除く）",
-  { skip: SKIP },
-  () => {
-    const report = run(checkRemovals);
-    summarize("健全性と完全性", report);
+test("オラクル: shadowed・never-matches・redundant と出た項目は、取り除いても全日の結果が変わらず、取り除ける項目には何かが出る（既知の項目を除く）", () => {
+  const report = run(checkRemovals);
+  summarize("健全性と完全性", report);
+  assert.deepEqual(
+    report.unsound,
+    [],
+    "診断が取り除いても変わらないと言った項目で、結果が変わった",
+  );
+  // 完全性: 一覧にない「取り除けるのに何も出ない」項目は失敗。一覧の項目が出なくなったら失敗（全件を 1 回で試すときだけ。
+  // 分けた実行では、一覧の項目がほかの分にある）
+  assert.deepEqual(
+    [...report.incomplete.keys()].filter((k) => !(k in KNOWN_INCOMPLETE)),
+    [],
+    "取り除いても結果が変わらないのに、診断が何も言わない項目がある（診断の取りこぼし。理由が分かって受け入れるなら KNOWN_INCOMPLETE に載せる）",
+  );
+  if (FULL && SHARD === undefined)
     assert.deepEqual(
-      report.unsound,
+      Object.keys(KNOWN_INCOMPLETE).filter((k) => !report.incomplete.has(k)),
       [],
-      "診断が取り除いても変わらないと言った項目で、結果が変わった",
+      "KNOWN_INCOMPLETE の項目が出なくなった（直ったか、網から外れた。一覧から外す）",
     );
-    // 完全性: 一覧にない「取り除けるのに何も出ない」項目は失敗。一覧の項目が出なくなったら失敗（全件を 1 回で試すときだけ。
-    // 分けた実行では、一覧の項目がほかの分にある）
-    assert.deepEqual(
-      [...report.incomplete.keys()].filter((k) => !(k in KNOWN_INCOMPLETE)),
-      [],
-      "取り除いても結果が変わらないのに、診断が何も言わない項目がある（診断の取りこぼし。理由が分かって受け入れるなら KNOWN_INCOMPLETE に載せる）",
-    );
-    if (FULL && SHARD === undefined)
-      assert.deepEqual(
-        Object.keys(KNOWN_INCOMPLETE).filter((k) => !report.incomplete.has(k)),
-        [],
-        "KNOWN_INCOMPLETE の項目が出なくなった（直ったか、網から外れた。一覧から外す）",
+  assert.ok(report.configs > 0 && (report.codes["redundant"] ?? 0) > 0, "オラクルが空振りしている");
+  // 全件では、取り除ける項目の 3 つのコードがどれも出ている（expired は次のテストが確かめる）
+  if (FULL)
+    for (const code of ["shadowed", "never-matches", "redundant"])
+      assert.ok(
+        (report.codes[code] ?? 0) > 0,
+        `${code} が 1 件も出ていない（オラクルが空振りしている）`,
       );
-    assert.ok(
-      report.configs > 0 && (report.codes["redundant"] ?? 0) > 0,
-      "オラクルが空振りしている",
-    );
-    // 全件では、取り除ける項目の 3 つのコードがどれも出ている（expired は次のテストが確かめる）
-    if (FULL)
-      for (const code of ["shadowed", "never-matches", "redundant"])
-        assert.ok(
-          (report.codes[code] ?? 0) > 0,
-          `${code} が 1 件も出ていない（オラクルが空振りしている）`,
-        );
-  },
-);
+});
 
 // ------------------------------------------------------------
 // 診断のコードごとの約束
 // ------------------------------------------------------------
 
-test(
-  "オラクル: expired は、終わりが基準日より前で、基準日以降の結果に影響しない",
-  { skip: SKIP },
-  () => {
-    const fromIndex = SHORT_DAYS.indexOf(AS_OF);
-    let checked = 0;
-    const report = run((list, policy, _d, r, weekdays) => {
-      const d = diag["diagnoseCalendar"]!(build(list, policy, weekdays), { asOf: AS_OF }) as Obj[];
-      const paths = pathsOf(list);
-      const base = snapshot(build(list, policy, weekdays), false);
-      paths.forEach((path, p) => {
-        if (!d.some((x) => x["path"] === path && x["code"] === "expired")) return;
-        checked++;
-        const v = list[p]![1] as Obj | string;
-        const end =
-          typeof v === "string" ? v : ((v["effectiveTo"] ?? v["to"]) as string | undefined);
-        if (end === undefined || end >= AS_OF)
-          r.unsound.push(
-            `expired の終わりが基準日以降 ${describeConfig(list, policy, weekdays, path)}`,
-          );
-        if (
-          !same(
-            snapshot(
-              build(
-                list.filter((_, q) => q !== p),
-                policy,
-                weekdays,
-              ),
-              false,
-            ),
-            base,
-            fromIndex,
-          )
-        )
-          r.unsound.push(
-            `expired を取り除くと基準日以降が変わる ${describeConfig(list, policy, weekdays, path)}`,
-          );
-      });
-      assert.deepEqual(r.unsound, []);
-    });
-    assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
-    assert.ok(checked > 0, "expired が 1 件も出ていない（オラクルが空振りしている）");
-  },
-);
-
-test(
-  "オラクル: no-business-day は営業日が本当にない設定だけ、counting-basis は数え方の限界がある設定だけに出る",
-  { skip: SKIP },
-  () => {
-    const report = run((list, policy, d, r, weekdays) => {
+test("オラクル: expired は、終わりが基準日より前で、基準日以降の結果に影響しない", () => {
+  const fromIndex = SHORT_DAYS.indexOf(AS_OF);
+  let checked = 0;
+  const report = run((list, policy, _d, r, weekdays) => {
+    const d = diag["diagnoseCalendar"]!(build(list, policy, weekdays), { asOf: AS_OF }) as Obj[];
+    const paths = pathsOf(list);
+    const base = snapshot(build(list, policy, weekdays), false);
+    paths.forEach((path, p) => {
+      if (!d.some((x) => x["path"] === path && x["code"] === "expired")) return;
+      checked++;
+      const v = list[p]![1] as Obj | string;
+      const end = typeof v === "string" ? v : ((v["effectiveTo"] ?? v["to"]) as string | undefined);
+      if (end === undefined || end >= AS_OF)
+        r.unsound.push(
+          `expired の終わりが基準日以降 ${describeConfig(list, policy, weekdays, path)}`,
+        );
       if (
-        d.some((x) => x["code"] === "no-business-day") &&
-        snapshot(build(list, policy, weekdays), false).includes("true")
+        !same(
+          snapshot(
+            build(
+              list.filter((_, q) => q !== p),
+              policy,
+              weekdays,
+            ),
+            false,
+          ),
+          base,
+          fromIndex,
+        )
       )
         r.unsound.push(
-          `no-business-day なのに営業日がある ${describeConfig(list, policy, weekdays)}`,
+          `expired を取り除くと基準日以降が変わる ${describeConfig(list, policy, weekdays, path)}`,
         );
-      // 数え方の限界: 第 n 営業日の規則と、毎週の曜日（第 n 曜日・隔週・月の絞り込みのない曜日の規則）を閉じる・開く
-      // 繰り返しの規則があり、その 2 つの有効期間が重なる（数える基準は繰り返しの規則を除くので、その曜日は数え方に入らない。
-      // 16 番）。前提を満たす組（第 n 営業日の規則ごとに、重なる曜日の規則の数を足したもの）だけ counting-basis が出る。
-      // オラクルは outOfRangePolicy: "ignore" なので、対応年の外で使われない曜日の規則はない
-      const rules = list.filter(([k]) => k.endsWith("RecurringRules")).map(([, v]) => v as Obj);
-      const from = (v: Obj): string => (v["effectiveFrom"] as string | undefined) ?? "0000-01-01";
-      const to = (v: Obj): string => (v["effectiveTo"] as string | undefined) ?? "9999-12-31";
-      const pairs = rules
-        .filter((v) => "businessDayOfMonth" in v || "businessDayOfWeek" in v)
-        .flatMap((n) =>
-          rules.filter(
-            (v) =>
-              "weekday" in v &&
-              !("nth" in v) &&
-              !("interval" in v) &&
-              !("months" in v) &&
-              from(n) <= to(v) &&
-              from(v) <= to(n),
-          ),
-        ).length;
-      const found = d.filter((x) => x["code"] === "counting-basis").length;
-      if (found > 0 && pairs === 0)
-        r.unsound.push(`counting-basis の前提がない ${describeConfig(list, policy, weekdays)}`);
-      else if (found === 0 && pairs > 0)
-        r.unsound.push(
-          `counting-basis の前提があるのに出ない ${describeConfig(list, policy, weekdays)}`,
-        );
-      else if (found !== pairs)
-        r.unsound.push(
-          `counting-basis が ${found} 件で、前提を満たす組の数 ${pairs} と違う ${describeConfig(list, policy, weekdays)}`,
-        );
-      assert.deepEqual(r.unsound, []);
     });
-    assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
-  },
-);
+    assert.deepEqual(r.unsound, []);
+  });
+  assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
+  assert.ok(checked > 0, "expired が 1 件も出ていない（オラクルが空振りしている）");
+});
+
+test("オラクル: no-business-day は営業日が本当にない設定だけ、counting-basis は数え方の限界がある設定だけに出る", () => {
+  const report = run((list, policy, d, r, weekdays) => {
+    if (
+      d.some((x) => x["code"] === "no-business-day") &&
+      snapshot(build(list, policy, weekdays), false).includes("true")
+    )
+      r.unsound.push(
+        `no-business-day なのに営業日がある ${describeConfig(list, policy, weekdays)}`,
+      );
+    // 数え方の限界: 第 n 営業日の規則と、毎週の曜日（第 n 曜日・隔週・月の絞り込みのない曜日の規則）を閉じる・開く
+    // 繰り返しの規則があり、その 2 つの有効期間が重なる（数える基準は繰り返しの規則を除くので、その曜日は数え方に入らない。
+    // 16 番）。前提を満たす組（第 n 営業日の規則ごとに、重なる曜日の規則の数を足したもの）だけ counting-basis が出る。
+    // オラクルは outOfRangePolicy: "ignore" なので、対応年の外で使われない曜日の規則はない
+    const rules = list.filter(([k]) => k.endsWith("RecurringRules")).map(([, v]) => v as Obj);
+    const from = (v: Obj): string => (v["effectiveFrom"] as string | undefined) ?? "0000-01-01";
+    const to = (v: Obj): string => (v["effectiveTo"] as string | undefined) ?? "9999-12-31";
+    const pairs = rules
+      .filter((v) => "businessDayOfMonth" in v || "businessDayOfWeek" in v)
+      .flatMap((n) =>
+        rules.filter(
+          (v) =>
+            "weekday" in v &&
+            !("nth" in v) &&
+            !("interval" in v) &&
+            !("months" in v) &&
+            from(n) <= to(v) &&
+            from(v) <= to(n),
+        ),
+      ).length;
+    const found = d.filter((x) => x["code"] === "counting-basis").length;
+    if (found > 0 && pairs === 0)
+      r.unsound.push(`counting-basis の前提がない ${describeConfig(list, policy, weekdays)}`);
+    else if (found === 0 && pairs > 0)
+      r.unsound.push(
+        `counting-basis の前提があるのに出ない ${describeConfig(list, policy, weekdays)}`,
+      );
+    else if (found !== pairs)
+      r.unsound.push(
+        `counting-basis が ${found} 件で、前提を満たす組の数 ${pairs} と違う ${describeConfig(list, policy, weekdays)}`,
+      );
+    assert.deepEqual(r.unsound, []);
+  });
+  assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
+});
 
 // ------------------------------------------------------------
 // 0.31.0 で有効にする: 出た項目をすべてまとめて取り除いても、結果が変わらない（診断の判定の作り直し（0.31.0）の正解の定義）
@@ -551,27 +534,38 @@ test(
 test(
   "オラクル: 出た項目をまとめて取り除いても、全日の結果が変わらない",
   {
-    skip: SKIP || skipWhen("oracle-joint", !flagEnv("ORACLE_JOINT")),
+    skip: skipWhen("oracle-joint", !flagEnv("ORACLE_JOINT")),
   },
   () => {
-    const report = run((list, policy, d, r, weekdays) => {
-      const paths = pathsOf(list);
-      const removable = new Set(
-        d
-          .filter((x) => ["shadowed", "never-matches", "redundant"].includes(x["code"] as string))
-          .map((x) => x["path"]),
-      );
-      if (removable.size < 2) return;
-      const rest = build(
-        list.filter((_, p) => !removable.has(paths[p])),
-        policy,
-        weekdays,
-      );
-      if (!same(snapshot(rest, false), snapshot(build(list, policy, weekdays), false)))
-        r.unsound.push(
-          `まとめて取り除くと変わる ${describeConfig(list, policy, weekdays, [...removable] as string[])}`,
+    const report = run(
+      (list, policy, d, r, weekdays) => {
+        const paths = pathsOf(list);
+        const removable = new Set(
+          d
+            .filter((x) => ["shadowed", "never-matches", "redundant"].includes(x["code"] as string))
+            .map((x) => x["path"]),
         );
-    });
+        if (removable.size < 2) return;
+        const rest = build(
+          list.filter((_, p) => !removable.has(paths[p])),
+          policy,
+          weekdays,
+        );
+        if (!same(snapshot(rest, false), snapshot(build(list, policy, weekdays), false)))
+          r.unsound.push(
+            `まとめて取り除くと変わる ${describeConfig(list, policy, weekdays, [...removable] as string[])}`,
+          );
+      },
+      [
+        ...configs(),
+        // 項目 3 つの固定の設定（oracle-items.json の jointFixed。組み合わせの総当たりは 2 項目までなので、ここで足す）
+        ...fixture.jointFixed.map((c) => ({
+          list: c.items,
+          policy: c.policy,
+          weekdays: c.weekdays,
+        })),
+      ],
+    );
     assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
     assert.deepEqual(report.unsound, []);
   },

@@ -197,6 +197,8 @@ shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.open); // [true, f
 
 `createCalendar` and `createSchedule` validate the options when they are created, so the usual pattern is to create them once and reuse them. Creating is also cheap (well under a millisecond for a calendar or a schedule with Japanese holidays), so creating one per request is not a problem in practice.
 
+An option written as `undefined` is the same as an option left out, at every level (the options, each rule, each specific or annual date, and the options of methods such as `dueDate` and `combineCalendars`), so options can be built with conditions such as `skipWeekdays: shop.skipsWeekend ? [0, 6] : undefined`. The one exception is `value` in a schedule: `value: undefined` is the value `undefined`. Even when the value is `undefined`, the diagnostics still report an unknown key (`unknown-option`) and an old name from before the renaming (`deprecated-option`).
+
 Each day is decided in this order of priority (top first).
 
 1. `openDates` (specific open days)
@@ -285,6 +287,7 @@ warehouse.isBusinessDay("2026-12-28"); // false (the year-end closure starts on 
 - **The last weekday before a holiday** (`skipWeekdays` on the day after or before a holiday): without it, the day before a Monday holiday is a Sunday, which is useless for most UK bank holidays and Japan's Monday holidays. With `skipWeekdays: [0, 6]`, the rule matches the day before (or after) a block of holidays and those weekdays that contains at least one holiday: the Friday before a Monday holiday, or the Tuesday after Good Friday to Easter Monday. An ordinary weekend without a holiday is not a block. `kinds` and `keys` then look at the holiday in the block closest to the day. Only the given weekdays are skipped, not the calendar's own closed days; every weekday cannot be skipped
 - **A cycle of days** (`{ cycle, anchor, positions }`) writes rules that do not follow the week or the month: shift work such as four days on and two days off, or an inspection every 10 days. `cycle` is the length in days (2 or more), `anchor` is day 1, and `positions` lists the days of the cycle the rule matches (1 to `cycle`, not all of them). Like `interval`, the rule also matches days before `anchor`; add `effectiveFrom` to start there. `holidayOverlapPolicy` is `"under-holiday"` by default or `"over-holiday"`; `"after-holiday"` is an `invalid-option`. Shift work usually runs regardless of holidays, so set `holidayPolicy: "ignore"` and `closedWeekdays: []`
 - Among recurring rules, the one written first in the array wins, and `openRecurringRules` wins over `closedRecurringRules`. The day after Labor Thanksgiving Day on a Monday (2026-11-23) is both the day the Monday rule moves to and the day after a holiday; the rule written first decides, and `dayInfoOn` shows which
+- The array order applies within a level of the priority list above: on a holiday, every `"over-holiday"` rule (level 4) comes before every `"under-holiday"` rule (level 6), even with `holidayPolicy: "ignore"`, whatever the order in the array
 
 ```ts
 // A bank branch: no appointments on the last business day of the month; a company anniversary moved past weekends
@@ -673,6 +676,7 @@ calendar.dayInfoOn("2027-01-04");
 ```
 
 - `isOpen` must be a pure function of the value: it receives only the value (not the date), and the calendar calls it repeatedly while searching for business days, so a function that looks at the date, the time or outside state would make the result change from call to call. Conditions that depend on the date belong in the schedule's rules (`dates`, `recurringRules`)
+- Only `true` makes a business day: a value that is not a boolean, such as `1` or `"open"`, makes the day closed
 - `dayInfoOn` maps the schedule's `reason` to the calendar's: `date` → `"open-date"`/`"closed-date"`, `annual` → `"open-annual"`/`"closed-annual"`, `recurring` → `"open-recurring"`/`"closed-recurring"`, `holiday` → `"holiday"` (whether or not the holiday is open, as with `holidayPolicy: "open"`), `weekday` → `"open-weekday"`/`"closed-weekday"`. `"open-annual"` exists only for calendars made this way, since `closedAnnualDates` of `createCalendar` only closes. `name`, `holiday`, `shiftedFrom` and `optionPath` are the schedule's
 - Holidays, the time zone and `outOfRangePolicy` are the schedule's. Diagnose the schedule's options with `diagnoseSchedule`; the calendar itself is not diagnosed. `searchDayLimit` (default 3660) can be given in the options
 - Use `createCalendar` when you only need open or closed; use this when you have a schedule anyway
@@ -745,7 +749,7 @@ try {
 ```
 
 - It matters only when the results depend on holidays. With `holidayPolicy: "ignore"` (in a calendar or a schedule), no holiday-based rule (`holiday`, `dayAfterHoliday`, `dayBeforeHoliday`, `"after-holiday"`) and no rule judged on top of holidays (`"over-holiday"`), the results do not depend on holidays, so business-day checks, counting the nth business day and searches (`isBusinessDay`, `valueOn`, `addBusinessDays` and so on) do not throw (up to 0.30.5 they did). `dayInfoOn` and `daysBetween` still look up the holiday they report and throw. Option diagnostics flag such options as `redundant`
-- Combined calendars throw if any of their calendars throws; a calendar made from a schedule follows the schedule. **Known bug** (to be fixed in 0.31.0): business-day checks (`isBusinessDay` and searches) stop as soon as the result is decided, at the first closed calendar with `open: "all"` or the first open one with `open: "any"`, so they may not throw on a day when a later calendar would (it depends on the order). `dayInfoOn` evaluates every calendar
+- Combined calendars throw if any of their calendars throws, whatever the order of the calendars (every calendar is checked on each day, even when an earlier one already decides the result); a calendar made from a schedule follows the schedule.
 - The option catches holidays that are predicted, not holidays that are unknown: a one-off UK bank holiday announced later is absent from the predictions, and Singapore has no predictions at all (later years are `out-of-range`)
 
 ## Errors

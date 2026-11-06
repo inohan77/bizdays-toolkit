@@ -514,5 +514,35 @@
         "effectiveFrom": "2025-07-01"
       }
     ]
+  ],
+  "jointFixed": [
+    {
+      "note": "0.30.9 で足した 3 項目の固定の設定（品質改善提案 11 通目の反例）。同じ曜日に under・over・after の 3 つの規則を並べると、[0] と [1] はそれぞれ単独では redundant だが、両方を取り除くと祝日の月曜が変わる（\"ignore\" でも祝日の日は over の規則が under の規則より先に当たるため）。出た項目をまとめて取り除けることを正解にする診断の判定の作り直し（0.31.0）の反例として、まとめて取り除くオラクル（ORACLE_JOINT=1）だけで試す",
+      "policy": "ignore",
+      "weekdays": [0, 6],
+      "items": [
+        [
+          "closedRecurringRules",
+          {
+            "weekday": 1,
+            "holidayOverlapPolicy": "under-holiday"
+          }
+        ],
+        [
+          "closedRecurringRules",
+          {
+            "weekday": 1,
+            "holidayOverlapPolicy": "over-holiday"
+          }
+        ],
+        [
+          "closedRecurringRules",
+          {
+            "weekday": 1,
+            "holidayOverlapPolicy": "after-holiday"
+          }
+        ]
+      ]
+    }
   ]
 }

@@ -5,12 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
-import { flagEnv } from "./support/env.ts";
 import { throwingAfter } from "./support/faulty.ts";
-import { skipWhen } from "./support/skip.ts";
-
-/** 暦日だけで決まるので、タイムゾーンを変えた実行では飛ばす */
-const SKIP = skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN"));
 
 /** 祝日に従属する規則・第 n 営業日の規則・振替・個別の日付・取り除いて比べる規則（redundant の候補）を含む設定 */
 const CONFIGS: readonly Record<string, unknown>[] = [
@@ -44,57 +39,49 @@ const CONFIGS: readonly Record<string, unknown>[] = [
   },
 ];
 
-test(
-  "診断の catch 節: 途中から例外を投げる提供元でも、診断は例外を投げずに一覧を返す",
-  { skip: SKIP },
-  () => {
-    let reported = 0;
-    // 届く組み合わせ（投げ始める呼び出しの回数・投げる年）。全年で投げると祝日の規則の判定・規則どうしの診断の全体の catch 節に、
-    // 2026 年だけで投げると日ごとの値を求める catch 節に届く（scripts/check-catch-coverage.ts で確かめた）
-    for (const [calls, year] of [
-      [1, undefined],
-      [2, undefined],
-      [1, 2026],
-    ] as const)
-      for (const options of CONFIGS) {
-        const provider = throwingAfter(calls, year === undefined ? {} : { year });
-        const list = diagnoseCalendar({ holidayProvider: provider, ...options });
-        assert.ok(Array.isArray(list));
-        if (list.some((d) => d.severity === "error" && d.path === "holidayProvider")) reported++;
-        const schedule = diagnoseSchedule({
-          holidayProvider: throwingAfter(calls, year === undefined ? {} : { year }),
-          weekdayValues: ["c", "o", "o", "o", "o", "o", "c"],
-          holidayPolicy: { value: "h" },
-          recurringRules: (
-            (options["closedRecurringRules"] as Record<string, unknown>[]) ?? []
-          ).map((r) => ({
+test("診断の catch 節: 途中から例外を投げる提供元でも、診断は例外を投げずに一覧を返す", () => {
+  let reported = 0;
+  // 届く組み合わせ（投げ始める呼び出しの回数・投げる年）。全年で投げると祝日の規則の判定・規則どうしの診断の全体の catch 節に、
+  // 2026 年だけで投げると日ごとの値を求める catch 節に届く（scripts/check-catch-coverage.ts で確かめた）
+  for (const [calls, year] of [
+    [1, undefined],
+    [2, undefined],
+    [1, 2026],
+  ] as const)
+    for (const options of CONFIGS) {
+      const provider = throwingAfter(calls, year === undefined ? {} : { year });
+      const list = diagnoseCalendar({ holidayProvider: provider, ...options });
+      assert.ok(Array.isArray(list));
+      if (list.some((d) => d.severity === "error" && d.path === "holidayProvider")) reported++;
+      const schedule = diagnoseSchedule({
+        holidayProvider: throwingAfter(calls, year === undefined ? {} : { year }),
+        weekdayValues: ["c", "o", "o", "o", "o", "o", "c"],
+        holidayPolicy: { value: "h" },
+        recurringRules: ((options["closedRecurringRules"] as Record<string, unknown>[]) ?? []).map(
+          (r) => ({
             ...r,
             value: "x",
-          })),
-        });
-        assert.ok(Array.isArray(schedule));
-      }
-    // 規則どうしの診断の途中で投げた例外は、途中の結果を捨てて error として報告する経路がある
-    assert.ok(
-      reported > 0,
-      "規則どうしの診断の途中の例外を error として報告した設定がない（空振り）",
-    );
-  },
-);
+          }),
+        ),
+      });
+      assert.ok(Array.isArray(schedule));
+    }
+  // 規則どうしの診断の途中で投げた例外は、途中の結果を捨てて error として報告する経路がある
+  assert.ok(
+    reported > 0,
+    "規則どうしの診断の途中の例外を error として報告した設定がない（空振り）",
+  );
+});
 
-test(
-  "診断の catch 節: 途中から投げた例外の code が out-of-range なら、out-of-range として報告する",
-  { skip: SKIP },
-  () => {
-    const list = diagnoseCalendar({
-      holidayProvider: throwingAfter(1, { code: "out-of-range" }),
-      closedRecurringRules: [{ holiday: true }],
-    });
-    assert.ok(
-      list.some(
-        (d) => d.severity === "error" && d.code === "out-of-range" && d.path === "holidayProvider",
-      ),
-      JSON.stringify(list),
-    );
-  },
-);
+test("診断の catch 節: 途中から投げた例外の code が out-of-range なら、out-of-range として報告する", () => {
+  const list = diagnoseCalendar({
+    holidayProvider: throwingAfter(1, { code: "out-of-range" }),
+    closedRecurringRules: [{ holiday: true }],
+  });
+  assert.ok(
+    list.some(
+      (d) => d.severity === "error" && d.code === "out-of-range" && d.path === "holidayProvider",
+    ),
+    JSON.stringify(list),
+  );
+});

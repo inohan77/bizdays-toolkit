@@ -16,7 +16,13 @@ import {
   type DateString,
   type Weekday,
 } from "./date.ts";
-import { checkUnknownKeys, IssueCollector, rangeError, type KnownErrorCode } from "./errors.ts";
+import {
+  checkUnknownKeys,
+  IssueCollector,
+  rangeError,
+  withoutUndefined,
+  type KnownErrorCode,
+} from "./errors.ts";
 import { RENAMED_VALUES, renameKeys, renameValue, writtenKey } from "./renamed.ts";
 import {
   instantToCivil,
@@ -840,18 +846,21 @@ export function compileDateRules<Value>(
     }
     const value = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
-    if ("date" in entry) {
-      checkUnknownKeys(c, p, entry, ["date", "name", ...(valueKey ? ["value"] : [])]);
+    // 2 つの書き方を分ける項目（date と from・to）の明示的な undefined は省略と同じ。ほかの項目の undefined は
+    // 読むときに省略と同じになり、知らないキーの検査では残す
+    const defined = withoutUndefined(entry, DATE_SHAPE_KEYS);
+    if ("date" in defined) {
+      checkUnknownKeys(c, p, defined, ["date", "name", ...(valueKey ? ["value"] : [])]);
       const n = checkDate(c, `${p}.date`, entry["date"]);
       if (n !== undefined && value !== undefined)
         rules.push({ path: p, from: n, to: n, value, name });
       return;
     }
-    if (!("from" in entry) || !("to" in entry)) {
+    if (!("from" in defined) || !("to" in defined)) {
       c.error("invalid-option", p, 'must have "date" or both "from" and "to"');
       return;
     }
-    checkUnknownKeys(c, p, entry, ["from", "to", "name", ...(valueKey ? ["value"] : [])]);
+    checkUnknownKeys(c, p, defined, ["from", "to", "name", ...(valueKey ? ["value"] : [])]);
     const from = checkDate(c, `${p}.from`, entry["from"]);
     const to = checkDate(c, `${p}.to`, entry["to"]);
     if (from === undefined || to === undefined) return;
@@ -898,8 +907,11 @@ export function compileAnnualRules<Value>(
     const value = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
     const period = checkPeriod(c, p, entry);
-    if ("date" in entry) {
-      checkUnknownKeys(c, p, entry, [
+    // 2 つの書き方を分ける項目（date と from・to）の明示的な undefined は省略と同じ。ほかの項目の undefined は
+    // 読むときに省略と同じになり、知らないキーの検査では残す
+    const defined = withoutUndefined(entry, DATE_SHAPE_KEYS);
+    if ("date" in defined) {
+      checkUnknownKeys(c, p, defined, [
         "date",
         "name",
         ...(valueKey ? ["value"] : []),
@@ -911,11 +923,11 @@ export function compileAnnualRules<Value>(
       }
       return;
     }
-    if (!("from" in entry) || !("to" in entry)) {
+    if (!("from" in defined) || !("to" in defined)) {
       c.error("invalid-option", p, 'must have "date" or both "from" and "to"');
       return;
     }
-    checkUnknownKeys(c, p, entry, [
+    checkUnknownKeys(c, p, defined, [
       "from",
       "to",
       "name",
@@ -1003,6 +1015,9 @@ export function basisFromPredicate(isOpen: (date: DateString) => boolean): Basis
       const dim = lengthOfMonth(year, month);
       for (let d = 1; d <= dim; d++) if (isOpen(formatDate(year, month, d))) list.push(d);
       days = Object.freeze(list);
+      // 持つのは 240 か月（20 年）分まで。ふつうの使い方の期間はすべて持ち、診断の長い走査（1900 年代から 2099 年まで）
+      // でも記憶を一定に抑える上限で、測って決めた値ではない。超えたら全消去する（走査は月の順に進むので、古い月を
+      // 選んで消しても再利用はほとんどない）
       if (cache.size >= 240) cache.clear();
       cache.set(key, days);
     }
@@ -1063,10 +1078,11 @@ export function compileRecurringRules<Value>(
       return;
     }
     const written = `${writtenPath}[${i}]`;
-    const entry = renameKeys(c, ["rule"], written, rawEntry);
+    const renamedEntry = renameKeys(c, ["rule"], written, rawEntry);
+    checkUnknownKeys(c, p, renamedEntry, keys);
+    const entry = withoutUndefined(renamedEntry);
     const nationalOfJp =
       jp !== "none" && reportNational(c, `${written}.kinds`, entry["kinds"], jp === "mixed");
-    checkUnknownKeys(c, p, entry, keys);
     const value = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
     const hasWeekday = "weekday" in entry;
@@ -1989,7 +2005,8 @@ export interface CompiledSchedule<Value, Kind extends string> {
   readonly recurring: readonly RecurringRuleCompiled<Value>[];
 }
 
-const SCHEDULE_OPTION_KEYS = [
+/** @internal スケジュールの設定の項目 */
+export const SCHEDULE_OPTION_KEYS = [
   "holidayProvider",
   "timeZone",
   "outOfRangePolicy",
@@ -2000,9 +2017,12 @@ const SCHEDULE_OPTION_KEYS = [
   "dates",
   "recurringRules",
 ];
-/** @internal 繰り返しの規則の項目 */
+/** 個別の日付・毎年の月日の 2 つの書き方（{ date } と { from, to }）を分ける項目 */
+const DATE_SHAPE_KEYS = ["date", "from", "to"];
+
 /** @internal 有効期間の項目 */
 export const PERIOD_KEYS = ["effectiveFrom", "effectiveTo"];
+/** @internal 繰り返しの規則の項目 */
 export const RECURRING_RULE_KEYS = [
   "weekday",
   "nth",
@@ -2038,8 +2058,9 @@ export function compileScheduleOptions<Value, Kind extends string>(
     return undefined;
   }
   const written = options;
-  const o = renameKeys(c, ["source", "schedule"], "", written);
-  checkUnknownKeys(c, "", o, SCHEDULE_OPTION_KEYS);
+  const renamed = renameKeys(c, ["source", "schedule"], "", written);
+  checkUnknownKeys(c, "", renamed, SCHEDULE_OPTION_KEYS);
+  const o = withoutUndefined(renamed);
   const source = compileHolidaySource<Kind>(c, o);
 
   const weeklyRaw = o["weekdayValues"];

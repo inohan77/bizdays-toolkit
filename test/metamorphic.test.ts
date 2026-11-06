@@ -17,6 +17,8 @@ import {
 } from "../src/index.ts";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 import { RENAMED_KEYS, RENAMED_VALUES, type RenamedPlace } from "../src/core/renamed.ts";
+import { CALENDAR_OPTION_KEYS } from "../src/core/calendar.ts";
+import { PERIOD_KEYS, RECURRING_RULE_KEYS, SCHEDULE_OPTION_KEYS } from "../src/core/schedule.ts";
 import { jp } from "../src/jp/index.ts";
 import {
   CALENDAR_REF,
@@ -32,9 +34,7 @@ import {
 } from "./support/catalog.ts";
 import { flagEnv } from "./support/env.ts";
 import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
-import { skipWhen } from "./support/skip.ts";
 
-const SKIP = skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN"));
 /** 関係ごと・種類ごとの設定の数（期間の分割と並べ替えは、当てはまる設定が少なく軽いので 4 倍） */
 const RUNS = flagEnv("METAMORPHIC_FULL") ? 40 : 5;
 const RUNS_LIGHT = RUNS * 4;
@@ -378,35 +378,31 @@ function withKind(options: Obj, kind: string): Obj {
   return out;
 }
 
-test(
-  "変形 1: 旧名・旧い値で書いた設定は、新しい名前の設定と結果・診断が同じ（和集合を含む）",
-  { skip: SKIP },
-  () => {
-    const check = (kind: Kind, o: Obj, context: string): void => {
-      const { options: old, oldValues } = toOld(o, kind);
-      // 旧名・旧い値に書き換わる項目のない設定は数えない
-      if (JSON.stringify(old) === JSON.stringify(o)) return;
-      assertSame(kind, context, o, old, { mapPath: pathToNew(kind) });
-      count("変形 1（旧名）");
-      if (oldValues > 0) count("変形 1（旧い値）");
-    };
-    JAPAN_FIXED.forEach(({ kind, options }, i) => {
-      const context = `fixed=${i} ${kind}`;
-      // "regular" を誤った値（"substitute"）に変えると結果が変わる（旧い値の戻し方の誤りを見逃さない設定であること）
-      assert.notDeepEqual(
-        resultsOf(make(kind, withKind(options, "substitute"))),
-        baselineOf(kind, options).results,
-        `${context}: "regular" を変えても結果が変わらない（旧い値を試す設定にならない）`,
-      );
-      check(kind, options, context);
-      count("変形 1（日本の提供元の決まった設定）");
-    });
-    eachOptions(20261121, ["calendar", "schedule"], check, RUNS, SOURCES_WITH_JAPAN);
-    report("変形 1（旧名）");
-    report("変形 1（旧い値）");
-    report("変形 1（日本の提供元の決まった設定）");
-  },
-);
+test("変形 1: 旧名・旧い値で書いた設定は、新しい名前の設定と結果・診断が同じ（和集合を含む）", () => {
+  const check = (kind: Kind, o: Obj, context: string): void => {
+    const { options: old, oldValues } = toOld(o, kind);
+    // 旧名・旧い値に書き換わる項目のない設定は数えない
+    if (JSON.stringify(old) === JSON.stringify(o)) return;
+    assertSame(kind, context, o, old, { mapPath: pathToNew(kind) });
+    count("変形 1（旧名）");
+    if (oldValues > 0) count("変形 1（旧い値）");
+  };
+  JAPAN_FIXED.forEach(({ kind, options }, i) => {
+    const context = `fixed=${i} ${kind}`;
+    // "regular" を誤った値（"substitute"）に変えると結果が変わる（旧い値の戻し方の誤りを見逃さない設定であること）
+    assert.notDeepEqual(
+      resultsOf(make(kind, withKind(options, "substitute"))),
+      baselineOf(kind, options).results,
+      `${context}: "regular" を変えても結果が変わらない（旧い値を試す設定にならない）`,
+    );
+    check(kind, options, context);
+    count("変形 1（日本の提供元の決まった設定）");
+  });
+  eachOptions(20261121, ["calendar", "schedule"], check, RUNS, SOURCES_WITH_JAPAN);
+  report("変形 1（旧名）");
+  report("変形 1（旧い値）");
+  report("変形 1（日本の提供元の決まった設定）");
+});
 
 // ------------------------------------------------------------
 // 2. 同じ id で包み直した提供元・種別を付け替えた提供元
@@ -452,27 +448,23 @@ function rewrap(options: Obj, kindOf?: (k: string) => string): Obj {
   return out;
 }
 
-test(
-  "変形 2: 同じ id で包み直した提供元と、種別を付け替えて kinds も直した提供元は、結果・診断が同じ",
-  { skip: SKIP },
-  () => {
-    const renamed = (k: string): string => `renamed-${k}`;
-    const back = (k: string): string => k.replace(/^renamed-/, "");
-    eachOptions(20261122, ["calendar", "schedule"], (kind, o, context, run) => {
-      if (o["holidayProvider"] === undefined) return;
-      // 1 つの設定に 2 つの変形を試すと重いので、試行ごとに交互に試す
-      if (run % 2 === 0) {
-        assertSame(kind, `${context} 包み直し`, o, rewrap(o));
-        count("変形 2（包み直し）");
-      } else {
-        assertSame(kind, `${context} 種別の付け替え`, o, rewrap(o, renamed), { fixKind: back });
-        count("変形 2（種別の付け替え）");
-      }
-    });
-    report("変形 2（包み直し）");
-    report("変形 2（種別の付け替え）");
-  },
-);
+test("変形 2: 同じ id で包み直した提供元と、種別を付け替えて kinds も直した提供元は、結果・診断が同じ", () => {
+  const renamed = (k: string): string => `renamed-${k}`;
+  const back = (k: string): string => k.replace(/^renamed-/, "");
+  eachOptions(20261122, ["calendar", "schedule"], (kind, o, context, run) => {
+    if (o["holidayProvider"] === undefined) return;
+    // 1 つの設定に 2 つの変形を試すと重いので、試行ごとに交互に試す
+    if (run % 2 === 0) {
+      assertSame(kind, `${context} 包み直し`, o, rewrap(o));
+      count("変形 2（包み直し）");
+    } else {
+      assertSame(kind, `${context} 種別の付け替え`, o, rewrap(o, renamed), { fixKind: back });
+      count("変形 2（種別の付け替え）");
+    }
+  });
+  report("変形 2（包み直し）");
+  report("変形 2（種別の付け替え）");
+});
 
 // ------------------------------------------------------------
 // 3. 期間の個別の日付と、それを分けた複数の日付
@@ -661,136 +653,128 @@ const SPLIT_FIXED: readonly { kind: Kind; options: Obj; only?: ReadonlySet<strin
   })),
 ];
 
-test(
-  "変形 3: 期間の個別の日付を分けても結果が同じで、診断は分けた期間のほかは同じ、分けた期間はコードごとの向きに従う",
-  { skip: SKIP },
-  () => {
-    const check = (kind: Kind, o: Obj, context: string, only?: ReadonlySet<string>): void => {
-      const split = splitPeriods(o, only);
-      if (split === undefined) return;
-      const mapPath = (path: string): string =>
-        path.replace(
-          /^(closedDates|openDates|dates)\[(\d+)\]/,
-          (_, list: string, i: string) => `${list}[${split.origin[list]![Number(i)]}]`,
-        );
-      assert.deepEqual(
-        resultsOf(make(kind, split.options), { mapPath }),
-        baselineOf(kind, o).results,
-        `${context}: 結果が変わった`,
+test("変形 3: 期間の個別の日付を分けても結果が同じで、診断は分けた期間のほかは同じ、分けた期間はコードごとの向きに従う", () => {
+  const check = (kind: Kind, o: Obj, context: string, only?: ReadonlySet<string>): void => {
+    const split = splitPeriods(o, only);
+    if (split === undefined) return;
+    const mapPath = (path: string): string =>
+      path.replace(
+        /^(closedDates|openDates|dates)\[(\d+)\]/,
+        (_, list: string, i: string) => `${list}[${split.origin[list]![Number(i)]}]`,
       );
-      const before = issuesOf(kind, o);
-      const after = issuesOf(kind, split.options);
-      const pieceOf = new Map<string, string>();
-      for (const [original, [a, b]] of split.pieces) {
-        pieceOf.set(a, original);
-        pieceOf.set(b, original);
-      }
-      // 分けた期間のほかの位置の診断は、完全に同じ（全日の結果が同じなので、変わる理由がない）。ただし、分けた期間を
-      // 覆う側として指していた shadowed は、分けた後に redundant になってよい（OTHERS_MAY_CHANGE）
-      const othersBefore = before
-        .filter((d) => !split.pieces.has(headOf(d.path).head))
-        .map(line)
-        .sort();
-      // 変わってよい項目の位置と、元の診断（戻すときは元の重さを使う）
-      const mayChange = new Map(
-        before
-          .filter(
-            (d) =>
-              !split.pieces.has(headOf(d.path).head) &&
-              d.code === OTHERS_MAY_CHANGE.from &&
-              d.relatedPath !== undefined &&
-              split.pieces.has(headOf(d.relatedPath).head),
-          )
-          .map((d) => [d.path, d] as const),
-      );
-      const othersAfter = after
-        .filter((d) => !pieceOf.has(headOf(d.path).head))
-        .map((d): string => {
-          const mapped = {
-            ...d,
-            path: mapPath(d.path),
-            relatedPath: d.relatedPath === undefined ? undefined : mapPath(d.relatedPath),
-          };
-          if (mapped.code === OTHERS_MAY_CHANGE.to && mayChange.has(mapped.path)) {
-            count("変形 3（覆っていた期間が分かれて shadowed から redundant になった項目）");
-            return line(mayChange.get(mapped.path)!);
-          }
-          return line(mapped);
-        })
-        .sort();
-      assert.deepEqual(
-        othersAfter,
-        othersBefore,
-        `${context}: 分けた期間のほかの位置の診断が変わった`,
-      );
-      // 分けた期間の診断は、コードごとの向きに従う
-      for (const [original, [a, b]] of split.pieces) {
-        // 分けた期間の診断は、コードと、その項目の下の位置と、relatedPath（分けた側は読み替える）で比べる
-        // （shadowed と redundant は重さが違うので、重さは見ない）
-        type Entry = { code: string; rest: string; rel: string };
-        const at = (list: Issue[], head: string, mapped: boolean): Entry[] =>
-          list
-            .filter((d) => headOf(d.path).head === head)
-            .map((d) => ({
-              code: d.code,
-              rest: headOf(d.path).rest,
-              rel:
-                d.relatedPath === undefined ? "" : mapped ? mapPath(d.relatedPath) : d.relatedPath,
-            }));
-        const show = (e: Entry): string => `${e.code}${e.rest}${e.rel ? ` -> ${e.rel}` : ""}`;
-        const orig = at(before, original, false);
-        const first = at(after, a, true);
-        const second = at(after, b, true);
-        const accepted = new Set<Entry>();
-        for (const d of orig) {
-          const rule = ORIGINAL_SPREAD[d.code];
-          assert.ok(
-            rule !== undefined,
-            `${context}: ${original} の ${d.code} の向きを決めていない`,
-          );
-          // 同じコードなら relatedPath まで同じ。別のコードとして出た（RELATED_NOT_COMPARED）なら relatedPath は比べない
-          const matches = (e: Entry): boolean =>
-            e.rest === d.rest && (e.code === d.code ? e.rel === d.rel : rule.as.includes(e.code));
-          const inA = first.filter(matches);
-          const inB = second.filter(matches);
-          for (const e of [...inA, ...inB]) {
-            accepted.add(e);
-            if (e.code !== d.code) count(RELATED_NOT_COMPARED.label);
-          }
-          assert.ok(
-            rule.spread === "both" ? inA.length > 0 && inB.length > 0 : inA.length + inB.length > 0,
-            `${context}: ${original} の「${show(d)}」が、分けた${rule.spread === "both" ? "両方" : "どちらか"}に出ない`,
-          );
-          if (d.code === "redundant") count("変形 3（元の redundant を分けた組）");
-        }
-        for (const [piece, list, other] of [
-          [a, first, second],
-          [b, second, first],
-        ] as const) {
-          for (const e of list.filter((x) => !accepted.has(x))) {
-            assert.ok(
-              e.code in NEW_AFTER_SPLIT,
-              `${context}: 分けた ${piece} に、元の ${original} にない「${show(e)}」が出た（新しく出てよいコードではない）`,
-            );
-            if (!other.some((x) => show(x) === show(e)))
-              count("変形 3（分けた片方だけの新しい診断）");
-          }
-        }
-      }
-      count(kind === "schedule" ? "変形 3（スケジュールの期間の分割）" : "変形 3（期間の分割）");
-    };
-    SPLIT_FIXED.forEach(({ kind, options, only }, i) =>
-      check(kind, options, `fixed=${i} ${kind}`, only),
+    assert.deepEqual(
+      resultsOf(make(kind, split.options), { mapPath }),
+      baselineOf(kind, o).results,
+      `${context}: 結果が変わった`,
     );
-    eachOptions(20261123, ["calendar"], (kind, o, context) => check(kind, o, context), RUNS_LIGHT);
-    report("変形 3（期間の分割）");
-    report("変形 3（元の redundant を分けた組）", "組");
-    report("変形 3（分けた片方だけの新しい診断）", "診断の項目");
-    report("変形 3（覆っていた期間が分かれて shadowed から redundant になった項目）", "診断の項目");
-    report("変形 3（スケジュールの期間の分割）");
-    report(RELATED_NOT_COMPARED.label, "診断の項目");
-  },
-);
+    const before = issuesOf(kind, o);
+    const after = issuesOf(kind, split.options);
+    const pieceOf = new Map<string, string>();
+    for (const [original, [a, b]] of split.pieces) {
+      pieceOf.set(a, original);
+      pieceOf.set(b, original);
+    }
+    // 分けた期間のほかの位置の診断は、完全に同じ（全日の結果が同じなので、変わる理由がない）。ただし、分けた期間を
+    // 覆う側として指していた shadowed は、分けた後に redundant になってよい（OTHERS_MAY_CHANGE）
+    const othersBefore = before
+      .filter((d) => !split.pieces.has(headOf(d.path).head))
+      .map(line)
+      .sort();
+    // 変わってよい項目の位置と、元の診断（戻すときは元の重さを使う）
+    const mayChange = new Map(
+      before
+        .filter(
+          (d) =>
+            !split.pieces.has(headOf(d.path).head) &&
+            d.code === OTHERS_MAY_CHANGE.from &&
+            d.relatedPath !== undefined &&
+            split.pieces.has(headOf(d.relatedPath).head),
+        )
+        .map((d) => [d.path, d] as const),
+    );
+    const othersAfter = after
+      .filter((d) => !pieceOf.has(headOf(d.path).head))
+      .map((d): string => {
+        const mapped = {
+          ...d,
+          path: mapPath(d.path),
+          relatedPath: d.relatedPath === undefined ? undefined : mapPath(d.relatedPath),
+        };
+        if (mapped.code === OTHERS_MAY_CHANGE.to && mayChange.has(mapped.path)) {
+          count("変形 3（覆っていた期間が分かれて shadowed から redundant になった項目）");
+          return line(mayChange.get(mapped.path)!);
+        }
+        return line(mapped);
+      })
+      .sort();
+    assert.deepEqual(
+      othersAfter,
+      othersBefore,
+      `${context}: 分けた期間のほかの位置の診断が変わった`,
+    );
+    // 分けた期間の診断は、コードごとの向きに従う
+    for (const [original, [a, b]] of split.pieces) {
+      // 分けた期間の診断は、コードと、その項目の下の位置と、relatedPath（分けた側は読み替える）で比べる
+      // （shadowed と redundant は重さが違うので、重さは見ない）
+      type Entry = { code: string; rest: string; rel: string };
+      const at = (list: Issue[], head: string, mapped: boolean): Entry[] =>
+        list
+          .filter((d) => headOf(d.path).head === head)
+          .map((d) => ({
+            code: d.code,
+            rest: headOf(d.path).rest,
+            rel: d.relatedPath === undefined ? "" : mapped ? mapPath(d.relatedPath) : d.relatedPath,
+          }));
+      const show = (e: Entry): string => `${e.code}${e.rest}${e.rel ? ` -> ${e.rel}` : ""}`;
+      const orig = at(before, original, false);
+      const first = at(after, a, true);
+      const second = at(after, b, true);
+      const accepted = new Set<Entry>();
+      for (const d of orig) {
+        const rule = ORIGINAL_SPREAD[d.code];
+        assert.ok(rule !== undefined, `${context}: ${original} の ${d.code} の向きを決めていない`);
+        // 同じコードなら relatedPath まで同じ。別のコードとして出た（RELATED_NOT_COMPARED）なら relatedPath は比べない
+        const matches = (e: Entry): boolean =>
+          e.rest === d.rest && (e.code === d.code ? e.rel === d.rel : rule.as.includes(e.code));
+        const inA = first.filter(matches);
+        const inB = second.filter(matches);
+        for (const e of [...inA, ...inB]) {
+          accepted.add(e);
+          if (e.code !== d.code) count(RELATED_NOT_COMPARED.label);
+        }
+        assert.ok(
+          rule.spread === "both" ? inA.length > 0 && inB.length > 0 : inA.length + inB.length > 0,
+          `${context}: ${original} の「${show(d)}」が、分けた${rule.spread === "both" ? "両方" : "どちらか"}に出ない`,
+        );
+        if (d.code === "redundant") count("変形 3（元の redundant を分けた組）");
+      }
+      for (const [piece, list, other] of [
+        [a, first, second],
+        [b, second, first],
+      ] as const) {
+        for (const e of list.filter((x) => !accepted.has(x))) {
+          assert.ok(
+            e.code in NEW_AFTER_SPLIT,
+            `${context}: 分けた ${piece} に、元の ${original} にない「${show(e)}」が出た（新しく出てよいコードではない）`,
+          );
+          if (!other.some((x) => show(x) === show(e)))
+            count("変形 3（分けた片方だけの新しい診断）");
+        }
+      }
+    }
+    count(kind === "schedule" ? "変形 3（スケジュールの期間の分割）" : "変形 3（期間の分割）");
+  };
+  SPLIT_FIXED.forEach(({ kind, options, only }, i) =>
+    check(kind, options, `fixed=${i} ${kind}`, only),
+  );
+  eachOptions(20261123, ["calendar"], (kind, o, context) => check(kind, o, context), RUNS_LIGHT);
+  report("変形 3（期間の分割）");
+  report("変形 3（元の redundant を分けた組）", "組");
+  report("変形 3（分けた片方だけの新しい診断）", "診断の項目");
+  report("変形 3（覆っていた期間が分かれて shadowed から redundant になった項目）", "診断の項目");
+  report("変形 3（スケジュールの期間の分割）");
+  report(RELATED_NOT_COMPARED.label, "診断の項目");
+});
 
 // ------------------------------------------------------------
 // 4. 順番が意味を持たない配列の並べ替え
@@ -821,33 +805,29 @@ function reverseUnordered(options: Obj): Obj | undefined {
 const withoutInnerIndex = (path: string): string =>
   path.replace(new RegExp(`\\b(${UNORDERED.join("|")})\\[\\d+\\]`, "g"), "$1[]");
 
-test(
-  "変形 4: 順番が意味を持たない配列（closedWeekdays・kinds・keys・weekdays）を並べ替えても、結果・診断が同じ",
-  { skip: SKIP },
-  () => {
-    eachOptions(
-      20261124,
-      ["calendar", "schedule"],
-      (kind, o, context) => {
-        const reversed = reverseUnordered(o);
-        if (reversed === undefined) return;
-        assert.deepEqual(
-          resultsOf(make(kind, reversed)),
-          baselineOf(kind, o).results,
-          `${context}: 結果が変わった`,
-        );
-        assert.deepEqual(
-          diagnosticsOf(kind, reversed, withoutInnerIndex),
-          baselineOf(kind, o).diagnostics.map(withoutInnerIndex),
-          `${context}: 診断が変わった`,
-        );
-        count("変形 4（並べ替え）");
-      },
-      RUNS_LIGHT,
-    );
-    report("変形 4（並べ替え）");
-  },
-);
+test("変形 4: 順番が意味を持たない配列（closedWeekdays・kinds・keys・weekdays）を並べ替えても、結果・診断が同じ", () => {
+  eachOptions(
+    20261124,
+    ["calendar", "schedule"],
+    (kind, o, context) => {
+      const reversed = reverseUnordered(o);
+      if (reversed === undefined) return;
+      assert.deepEqual(
+        resultsOf(make(kind, reversed)),
+        baselineOf(kind, o).results,
+        `${context}: 結果が変わった`,
+      );
+      assert.deepEqual(
+        diagnosticsOf(kind, reversed, withoutInnerIndex),
+        baselineOf(kind, o).diagnostics.map(withoutInnerIndex),
+        `${context}: 診断が変わった`,
+      );
+      count("変形 4（並べ替え）");
+    },
+    RUNS_LIGHT,
+  );
+  report("変形 4（並べ替え）");
+});
 
 // ------------------------------------------------------------
 // 5. 設定の JSON での往復
@@ -872,54 +852,87 @@ function viaJson(options: Obj): Obj {
   return holidayProvider === undefined ? restored : { ...restored, holidayProvider };
 }
 
-test(
-  "変形 5: 設定を JSON で往復しても（提供元と基準のカレンダーは付け直す）、結果・診断が同じ",
-  { skip: SKIP },
-  () => {
-    eachOptions(20261125, ["calendar", "schedule"], (kind, o, context) => {
-      const back = viaJson(o);
-      assertSame(kind, context, o, back);
-      count("変形 5（JSON の往復）");
-    });
-    report("変形 5（JSON の往復）");
-  },
-);
+test("変形 5: 設定を JSON で往復しても（提供元と基準のカレンダーは付け直す）、結果・診断が同じ", () => {
+  eachOptions(20261125, ["calendar", "schedule"], (kind, o, context) => {
+    const back = viaJson(o);
+    assertSame(kind, context, o, back);
+    count("変形 5（JSON の往復）");
+  });
+  report("変形 5（JSON の往復）");
+});
+
+// ------------------------------------------------------------
+// 7. 省略と明示的な undefined
+// ------------------------------------------------------------
+
+const DATE_ENTRY_KEYS = ["date", "from", "to", "name"];
+const ANNUAL_LISTS = ["closedAnnualDates", "annualDates"];
+
+/** 書いていない既知の項目（旧名は除く）を、すべて明示的な undefined で足す（設定・規則・個別の日付・毎年の月日） */
+function withExplicitUndefined(kind: Kind, options: Obj): Obj {
+  const fill = (o: Obj, keys: readonly string[]): Obj => {
+    const out: Obj = { ...o };
+    for (const key of keys) if (!Object.hasOwn(out, key)) out[key] = undefined;
+    return out;
+  };
+  const out = fill(options, kind === "calendar" ? CALENDAR_OPTION_KEYS : SCHEDULE_OPTION_KEYS);
+  for (const list of RULE_LISTS)
+    if (Array.isArray(out[list]))
+      out[list] = (out[list] as Obj[]).map((r) => fill(r, RECURRING_RULE_KEYS));
+  for (const list of DATE_LISTS)
+    if (Array.isArray(out[list]))
+      out[list] = (out[list] as unknown[]).map((e) =>
+        typeof e === "object" && e !== null ? fill(e as Obj, DATE_ENTRY_KEYS) : e,
+      );
+  for (const list of ANNUAL_LISTS)
+    if (Array.isArray(out[list]))
+      out[list] = (out[list] as unknown[]).map((e) =>
+        typeof e === "object" && e !== null
+          ? fill(e as Obj, [...DATE_ENTRY_KEYS, ...PERIOD_KEYS])
+          : e,
+      );
+  return out;
+}
+
+test("変形 7: 書いていない項目を明示的な undefined で書いても、結果・診断が同じ（省略と同じ。decisions.md の 6 番）", () => {
+  eachOptions(20261127, ["calendar", "schedule"], (kind, o, context) => {
+    assertSame(kind, context, o, withExplicitUndefined(kind, o));
+    count("変形 7（明示的な undefined）");
+  });
+  report("変形 7（明示的な undefined）");
+});
 
 // ------------------------------------------------------------
 // 6. 同じ設定から作ったカレンダーの合成と元のカレンダー
 // ------------------------------------------------------------
 
-test(
-  "変形 6: 同じ設定から作った 2 つのカレンダーの合成は、元のカレンダーと結果が同じ（decidedBy・decidedByPath を除く）",
-  { skip: SKIP },
-  () => {
-    eachOptions(20261126, ["calendar"], (_kind, o, context) => {
-      const calendar = make("calendar", o);
-      const twin = make("calendar", o);
-      if (typeof calendar === "string" || typeof twin === "string") return;
-      for (const open of ["all", "any"] as const) {
-        // 合成は 2 つ以上の別のカレンダーを受ける（1 つだけ・同じオブジェクトの 2 つは invalid-argument）ので、
-        // 同じ設定から作った 2 つのカレンダーを合成する。比べる dayInfoOn の結果からは、合成したカレンダーにしかない
-        // decidedBy・decidedByPath だけを外す（dayOf）。holiday は、同じ提供元のオブジェクトを 1 つに数えるので同じになり、比べる
-        const combined = combineCalendars([calendar as never, twin as never], {
-          open,
-        }) as unknown as Made;
-        assert.deepEqual(
-          resultsOf(combined),
-          baselineOf("calendar", o).results,
-          `${context} open: ${open}: 結果が変わった`,
-        );
-        assert.deepEqual(
-          SHORT_DAYS.map((d): string => tryBusinessDay(combined, d)),
-          SHORT_DAYS.map((d): string => tryBusinessDay(calendar, d)),
-          `${context} open: ${open}: isBusinessDay が変わった`,
-        );
-      }
-      count("変形 6（同じ設定の合成）");
-    });
-    report("変形 6（同じ設定の合成）");
-  },
-);
+test("変形 6: 同じ設定から作った 2 つのカレンダーの合成は、元のカレンダーと結果が同じ（decidedBy・decidedByPath を除く）", () => {
+  eachOptions(20261126, ["calendar"], (_kind, o, context) => {
+    const calendar = make("calendar", o);
+    const twin = make("calendar", o);
+    if (typeof calendar === "string" || typeof twin === "string") return;
+    for (const open of ["all", "any"] as const) {
+      // 合成は 2 つ以上の別のカレンダーを受ける（1 つだけ・同じオブジェクトの 2 つは invalid-argument）ので、
+      // 同じ設定から作った 2 つのカレンダーを合成する。比べる dayInfoOn の結果からは、合成したカレンダーにしかない
+      // decidedBy・decidedByPath だけを外す（dayOf）。holiday は、同じ提供元のオブジェクトを 1 つに数えるので同じになり、比べる
+      const combined = combineCalendars([calendar as never, twin as never], {
+        open,
+      }) as unknown as Made;
+      assert.deepEqual(
+        resultsOf(combined),
+        baselineOf("calendar", o).results,
+        `${context} open: ${open}: 結果が変わった`,
+      );
+      assert.deepEqual(
+        SHORT_DAYS.map((d): string => tryBusinessDay(combined, d)),
+        SHORT_DAYS.map((d): string => tryBusinessDay(calendar, d)),
+        `${context} open: ${open}: isBusinessDay が変わった`,
+      );
+    }
+    count("変形 6（同じ設定の合成）");
+  });
+  report("変形 6（同じ設定の合成）");
+});
 
 function tryBusinessDay(made: Made, day: string): string {
   try {

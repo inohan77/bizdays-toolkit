@@ -197,6 +197,8 @@ shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.open); // [true, f
 
 `createCalendar`・`createSchedule` は作る時点で設定を検証するので、作ったものを使い回すのが基本です。作成も軽く（日本の祝日を使う営業日カレンダー・スケジュールとも 1 ミリ秒を大きく下回る）、呼び出しのたびに作っても実用上の問題はありません。
 
+値を `undefined` と書いた項目は、どの段（設定・規則・個別の日付・毎年の月日、`dueDate`・`combineCalendars` などのメソッドのオプション）でも書かなかったのと同じです。`skipWeekdays: shop.skipsWeekend ? [0, 6] : undefined` のように条件で組み立てられます。例外はスケジュールの `value` で、`value: undefined` は値 `undefined` です。値が `undefined` でも、知らないキーは `unknown-option`、改名の前の旧名は `deprecated-option` で、診断が知らせます。
+
 1 日の判定は次の優先順位で行います（上が優先）。
 
 1. `openDates`（臨時営業日）
@@ -280,6 +282,7 @@ warehouse.isBusinessDay("2026-12-28"); // false（29 日から年末年始）
 - **祝日の前の最終平日**（祝日の翌日・祝前日の `skipWeekdays`）: これがないと、月曜日の祝日の祝前日は日曜日になり、英国の bank holiday の大半や日本の月曜日の祝日では役に立ちません。`skipWeekdays: [0, 6]` を付けると、祝日とその曜日が続く塊（祝日を 1 日以上含む）の前（後）の日に当てはまります。月曜日の祝日の前の金曜日や、Good Friday から Easter Monday までが明けた火曜日です。祝日を含まない普通の週末は塊になりません。`kinds`・`keys` は、塊の中でその日に最も近い祝日に当てます。飛ばすのは書いた曜日だけで、カレンダー自身の休業日は見ません。すべての曜日は飛ばせません
 - **日単位の周期**（`{ cycle, anchor, positions }`）は、週や月にそろわない規則を書きます。4 勤 2 休のような交替制や、10 日に 1 度の点検日です。`cycle` は周期の日数（2 以上）、`anchor` は 1 日目、`positions` は当てはまる周期の中の何日目か（1〜`cycle`。すべての日は指定できない）です。`interval` と同じく `anchor` より前の日にも当てはまるので、起点から始めるには `effectiveFrom` を付けます。`holidayOverlapPolicy` は `"under-holiday"`（既定）と `"over-holiday"` で、`"after-holiday"` は `invalid-option` です。交替制はふつう祝日に関係なく回るので、`holidayPolicy: "ignore"` と `closedWeekdays: []` を指定します
 - 繰り返しの規則どうしは配列で先に書いたものが優先で、`openRecurringRules` は `closedRecurringRules` より優先です。月曜の勤労感謝の日（2026-11-23）の翌日は、月曜の規則の振替先でもあり祝日の翌日でもあります。先に書いた規則が決め、どちらが決めたかは `dayInfoOn` で分かります
+- 配列の順が効くのは、上の優先順位の同じ段階の中だけです。祝日の日は、`holidayPolicy: "ignore"` でも、`"over-holiday"` の規則（4）がすべて `"under-holiday"` の規則（6）より先に当たり、配列の順はその段階の中で効きます
 
 ```ts
 // 銀行の支店: 月末最終営業日は来店予約を止める。創立記念日は土日祝なら翌営業日
@@ -664,6 +667,7 @@ calendar.dayInfoOn("2027-01-04");
 ```
 
 - `isOpen` は値だけで決まる純粋な関数にしてください。受け取るのは値だけ（日付は渡されません）で、カレンダーは営業日を探す間に `isOpen` を繰り返し呼ぶので、日付・時刻・外部の状態を見る関数を渡すと、結果が呼ぶたびに変わってしまいます。日付で変えたい条件は、スケジュールの規則（`dates`・`recurringRules`）に書きます
+- 営業日になるのは `true` を返した日だけです。`1` や `"open"` のような boolean でない値を返した日は休業日になります
 - `dayInfoOn` の `reason` は、スケジュールの `reason` をカレンダーの `reason` に対応させたものです。`date` → `"open-date"`/`"closed-date"`、`annual` → `"open-annual"`/`"closed-annual"`、`recurring` → `"open-recurring"`/`"closed-recurring"`、`holiday` → `"holiday"`（祝日が営業でも。`holidayPolicy: "open"` と同じ）、`weekday` → `"open-weekday"`/`"closed-weekday"`。`"open-annual"` はこの作り方のカレンダーにだけ現れます（`createCalendar` の `closedAnnualDates` は休業だけのため）。`name`・`holiday`・`shiftedFrom`・`optionPath` はスケジュールの結果のままです
 - 祝日・タイムゾーン・`outOfRangePolicy` はスケジュールのものです。設定の診断は `diagnoseSchedule` でスケジュールの設定に対して行います（カレンダー自体は診断しません）。`searchDayLimit`（既定 3660）をオプションで指定できます
 - 営業・休業だけが要るなら `createCalendar`、スケジュールがどのみちあるならこちら、という使い分けです
@@ -736,7 +740,7 @@ try {
 ```
 
 - 意味があるのは、判定に祝日を使う設定だけです。`holidayPolicy: "ignore"`（カレンダーでもスケジュールでも）で、祝日に従属する規則（`holiday`・`dayAfterHoliday`・`dayBeforeHoliday`・`"after-holiday"`）も、祝日の上で先に判定する規則（`"over-holiday"`）もない設定では、結果が祝日に依存しないので、営業日の判定・第 n 営業日の数え方・探索（`isBusinessDay`・`valueOn`・`addBusinessDays` など）は投げません（0.30.5 までは投げていました）。`dayInfoOn`・`daysBetween` は `holiday` を付けるために祝日を引くので投げます。設定の診断はそのような設定を `redundant` にします
-- 合成したカレンダーは、どれかのカレンダーが投げるなら投げます。スケジュールから作ったカレンダーはスケジュールに従います。**既知の不具合**（0.31.0 で直します）: 営業日の判定（`isBusinessDay` や探索）は、`open: "all"` では先のカレンダーが休業日、`open: "any"` では先のカレンダーが営業日と決めた時点で後のカレンダーを判定しないので、後のカレンダーが投げる日でも投げないことがあります（並び順で変わります）。`dayInfoOn` はすべてのカレンダーを判定します
+- 合成したカレンダーは、どれかのカレンダーが投げるなら、並び順にかかわらず投げます（先のカレンダーで結果が決まる日も、すべてのカレンダーを判定します）。スケジュールから作ったカレンダーはスケジュールに従います
 - 捕まえるのは「予測された祝日」で、「まだ知らない祝日」ではありません。あとから発表される英国の臨時の祝日は予測に含まれず、シンガポールには予測がありません（後の年は `out-of-range`）
 
 ## エラー

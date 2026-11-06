@@ -16,7 +16,13 @@ import {
   type DateString,
   type Weekday,
 } from "./date.ts";
-import { checkUnknownKeys, IssueCollector, plainError, rangeError } from "./errors.ts";
+import {
+  checkUnknownKeys,
+  IssueCollector,
+  plainError,
+  rangeError,
+  withoutUndefined,
+} from "./errors.ts";
 import { renameKeys, writtenKey } from "./renamed.ts";
 import { parseTimeOfDay, toCivil, type DateInput } from "./input.ts";
 import {
@@ -114,7 +120,7 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
   readonly openRecurringRules?: readonly RecurringRule<Kind>[];
   /** 祝日の扱い（既定: "closed"） */
   readonly holidayPolicy?: HolidayPolicy;
-  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら Error */
+  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら code: "no-business-day" の RangeError */
   readonly searchDayLimit?: number;
   /** @deprecated 0.30.0 で closedAnnualDates に改名した。1.0.0 で削除する */
   readonly closedAnnual?: readonly (AnnualDate | AnnualRange)[];
@@ -200,7 +206,7 @@ export interface CombineCalendarsOptions {
    * "any": いずれかのカレンダーが営業日（例: 複数の店舗のどこかが開いている日）
    */
   readonly open: "all" | "any";
-  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら Error */
+  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら code: "no-business-day" の RangeError */
   readonly searchDayLimit?: number;
   /** @deprecated 0.30.0 で searchDayLimit に改名した。1.0.0 で削除する */
   readonly maxSearchDays?: number;
@@ -333,7 +339,8 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
   ): { readonly from: DateString; readonly to: DateString };
 }
 
-const CALENDAR_OPTION_KEYS = [
+/** @internal 営業日カレンダーの設定の項目 */
+export const CALENDAR_OPTION_KEYS = [
   "holidayProvider",
   "timeZone",
   "outOfRangePolicy",
@@ -364,8 +371,9 @@ export function compileCalendarOptions<Kind extends string>(
   }
   const written = options as Record<string, unknown>;
   const places = ["source", "calendar"] as const;
-  const o = renameKeys(c, places, "", written);
-  checkUnknownKeys(c, "", o, CALENDAR_OPTION_KEYS);
+  const renamed = renameKeys(c, places, "", written);
+  checkUnknownKeys(c, "", renamed, CALENDAR_OPTION_KEYS);
+  const o = withoutUndefined(renamed);
   const source = compileHolidaySource<Kind>(c, o);
 
   const closedWeekdays = new Set<number>();
@@ -737,7 +745,9 @@ function buildCalendar<Kind extends string>(
       return Object.freeze({ from, to });
     },
     dueDate(month, options) {
-      const o = isPlainObject(options) ? renameKeys("throw", ["dueDate"], "", options) : undefined;
+      const o = isPlainObject(options)
+        ? withoutUndefined(renameKeys("throw", ["dueDate"], "", options))
+        : undefined;
       const day = o?.["dayOfMonth"];
       if (!isDayOfMonthValue(day)) {
         throw rangeError(
@@ -795,7 +805,7 @@ export function combineCalendars<Kind extends string = string>(
     }
   });
   const o: Record<string, unknown> = isPlainObject(options)
-    ? renameKeys("throw", ["combine"], "", options)
+    ? withoutUndefined(renameKeys("throw", ["combine"], "", options))
     : {};
   const mode = o["open"];
   if (mode !== "all" && mode !== "any") {
@@ -825,10 +835,11 @@ export function combineCalendars<Kind extends string = string>(
       : "accept",
   });
 
-  const isOpen = (date: DateString): boolean =>
-    mode === "all"
-      ? calendars.every((c) => c.isBusinessDay(date))
-      : calendars.some((c) => c.isBusinessDay(date));
+  // すべてのカレンダーを判定する（結果が決まった時点で止めると、後のカレンダーが投げる日に投げない。17 番）
+  const isOpen = (date: DateString): boolean => {
+    const results = calendars.map((c) => c.isBusinessDay(date));
+    return mode === "all" ? results.every(Boolean) : results.some(Boolean);
+  };
 
   function info(date: DateString): DayInfo<Kind> {
     const results = calendars.map((c) => c.dayInfoOn(date));
@@ -862,14 +873,15 @@ export function combineCalendars<Kind extends string = string>(
  * @public
  */
 export interface CalendarFromScheduleOptions {
-  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら Error */
+  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら code: "no-business-day" の RangeError */
   readonly searchDayLimit?: number;
   /** @deprecated 0.30.0 で searchDayLimit に改名した。1.0.0 で削除する */
   readonly maxSearchDays?: number;
 }
 
 /**
- * スケジュール（createSchedule）から営業日カレンダーを作る。isOpen が true を返す値の日を営業日とする。
+ * スケジュール（createSchedule）から営業日カレンダーを作る。isOpen が true を返す値の日を営業日とする
+ * （true だけを営業日とし、1 や "open" のような boolean でない値を返した日は休業日になる）。
  * 営業時間表のような日ごとの値が設定の正本で、営業日の計算（加減算・調整・期日など）も同じ設定から行いたいときに使う
  * （営業日カレンダーを別に書いて同期を取る必要がなくなる）。
  *
@@ -895,7 +907,7 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
     throw rangeError("invalid-argument", "isOpen must be a function (value) => boolean");
   }
   const o: Record<string, unknown> = isPlainObject(options)
-    ? renameKeys("throw", ["fromSchedule"], "", options)
+    ? withoutUndefined(renameKeys("throw", ["fromSchedule"], "", options))
     : {};
   const searchDayLimit = (o["searchDayLimit"] ?? 3660) as number;
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {

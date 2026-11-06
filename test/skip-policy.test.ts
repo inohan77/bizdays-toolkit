@@ -5,7 +5,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import ts from "typescript";
-import { INTENDED_SKIPS, skipWhen, todoFor } from "./support/skip.ts";
+import {
+  createSkipPolicy,
+  INTENDED_SKIPS,
+  POLICY_SAMPLE,
+  skipWhen,
+  todoFor,
+} from "./support/skip.ts";
 
 /**
  * 補助の関数を通さない飛ばしと、その理由（ファイル → 理由）。test/compat は Node.js 22.12 の素の JavaScript で動き、
@@ -106,45 +112,46 @@ test("飛ばしの決まり: テストの skip・todo とスクリプトの SKIP
 test("飛ばしの決まり: CI では、一覧にない理由と CI では飛ばさない理由を失敗にし、一覧の理由は通す", () => {
   const saved = process.env["CI"];
   try {
+    const sample = createSkipPolicy(POLICY_SAMPLE);
     process.env["CI"] = "true";
     assert.throws(
-      () => skipWhen("no-such-reason", true),
+      () => sample.skipWhen("no-such-reason", true),
       /一覧（test\/support\/skip\.ts）にない理由: no-such-reason/,
     );
-    assert.throws(() => todoFor("no-such-reason"), /にない理由/);
-    assert.throws(() => skipWhen("no-release-tag", true), /CI では飛ばさない理由/);
-    assert.throws(
-      () => skipWhen("known-bug-combine-short-circuit", true),
-      /飛ばし（skip）の理由ではない/,
-    );
-    assert.equal(skipWhen("tz-run", true), INTENDED_SKIPS["tz-run"]!.reason);
-    assert.equal(
-      todoFor("known-bug-combine-short-circuit"),
-      INTENDED_SKIPS["known-bug-combine-short-circuit"]!.reason,
-    );
+    assert.throws(() => sample.todoFor("no-such-reason"), /にない理由/);
+    assert.throws(() => sample.skipWhen("sample-local-only", true), /CI では飛ばさない理由/);
+    assert.throws(() => sample.skipWhen("sample-known-bug", true), /飛ばし（skip）の理由ではない/);
+    assert.equal(sample.skipWhen("sample-skip", true), POLICY_SAMPLE["sample-skip"]!.reason);
+    assert.equal(sample.todoFor("sample-known-bug"), POLICY_SAMPLE["sample-known-bug"]!.reason);
     delete process.env["CI"];
     // 一覧にない理由は、CI でなくても、飛ばす条件がそろわなくても失敗（打ち間違いを早く見つける）
-    assert.throws(() => skipWhen("no-such-reason", false), /にない理由: no-such-reason/);
-    assert.throws(() => skipWhen("no-such-reason", true), /にない理由: no-such-reason/);
-    assert.equal(skipWhen("no-release-tag", true), INTENDED_SKIPS["no-release-tag"]!.reason);
-    assert.throws(() => todoFor("tz-run"), /既知の不具合（todo）の理由ではない/);
-    // skip と todo の取り違え・一覧にない todo の理由も、CI でなくても、飛ばす条件がそろわなくても投げる
-    assert.throws(
-      () => skipWhen("known-bug-combine-short-circuit", false),
-      /飛ばし（skip）の理由ではない/,
+    assert.throws(() => sample.skipWhen("no-such-reason", false), /にない理由: no-such-reason/);
+    assert.throws(() => sample.skipWhen("no-such-reason", true), /にない理由: no-such-reason/);
+    assert.equal(
+      sample.skipWhen("sample-local-only", true),
+      POLICY_SAMPLE["sample-local-only"]!.reason,
     );
-    assert.throws(() => todoFor("no-such-reason"), /にない理由: no-such-reason/);
+    assert.throws(() => sample.todoFor("sample-skip"), /既知の不具合（todo）の理由ではない/);
+    // skip と todo の取り違え・一覧にない todo の理由も、CI でなくても、飛ばす条件がそろわなくても投げる
+    assert.throws(() => sample.skipWhen("sample-known-bug", false), /飛ばし（skip）の理由ではない/);
+    assert.throws(() => sample.todoFor("no-such-reason"), /にない理由: no-such-reason/);
     // 環境変数 CI が "false" と空文字列のときは CI とみなさない（CI では飛ばさない理由も飛ばせる）
     for (const value of ["false", ""]) {
       process.env["CI"] = value;
       assert.equal(
-        skipWhen("no-release-tag", true),
-        INTENDED_SKIPS["no-release-tag"]!.reason,
+        sample.skipWhen("sample-local-only", true),
+        POLICY_SAMPLE["sample-local-only"]!.reason,
         `CI=${JSON.stringify(value)}`,
       );
     }
     process.env["CI"] = "1";
-    assert.throws(() => skipWhen("no-release-tag", true), /CI では飛ばさない理由/);
+    assert.throws(() => sample.skipWhen("sample-local-only", true), /CI では飛ばさない理由/);
+    // 公開している skipWhen・todoFor は、意図した飛ばしの一覧（INTENDED_SKIPS）を引く
+    delete process.env["CI"];
+    assert.equal(skipWhen("oracle-joint", true), INTENDED_SKIPS["oracle-joint"]!.reason);
+    assert.equal(skipWhen("no-release-tag", true), INTENDED_SKIPS["no-release-tag"]!.reason);
+    assert.throws(() => todoFor("oracle-joint"), /既知の不具合（todo）の理由ではない/);
+    assert.throws(() => skipWhen("sample-skip", false), /にない理由: sample-skip/);
   } finally {
     if (saved === undefined) delete process.env["CI"];
     else process.env["CI"] = saved;
