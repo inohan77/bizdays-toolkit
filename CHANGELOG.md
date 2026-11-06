@@ -37,6 +37,10 @@
 - `check-names`: 報告のパスの区切りを `/` にそろえた（Windows では `\` で出ていて、期待と突き合わせにくかった）。旧名の表に `holidays` がないときは、日本語の TSDoc の引数名の形の検査（0.30.8 の ZIP-A で足した）を黙って外さず、一緒に消すよう失敗にする
 - 前の版との比較（`scripts/result-compare.ts`）: 意図した差分として許した設定の `id` と対象を一覧に出すようにした（意図しない差分が出たときに、許した側と見比べるため）。固定の設定 `fixed-counting-basis-open-closed-weekly`（開く規則と閉じる規則に曜日の規則が 1 つずつ。`counting-basis` が 2 件に増える形）を足した
 - `src/core/input.ts`: `Date.parse` にオフセット付きの文字列だけを渡している理由をコメントに書いた
+- 開発用のツールを更新: oxlint 1.88.0 → 1.91.0、oxfmt 0.73.0 → 0.76.0、`@types/node` 24.19.2 → 26.6.6（どれも既存のファイルの整形と lint の結果は変わらない）
+- `check-package` の実行環境のタイムゾーンに依存する API の検査を直した: 引数の中の括弧を 1 段まで読む（`new Date(Number(y), m)` を見逃していた）、`new` を付けない `Intl.DateTimeFormat(…)` と `timeZone: undefined` も不可にした、文字列を渡す `new Date("…")` を不可にし、`Date.parse` は `src/core/input.ts` の 1 か所（オフセット付きに限った文字列）だけを許して回数が変わったら失敗にした、行末の `//` コメントも検査の前に除くようにした（コメントに書いた形で誤って失敗していた）。`tool-selftest` に文字列を渡す `new Date` の誤りを足した
+- 診断の性質のテスト（`test/diagnose-properties.test.ts`）を、ほかの全件のテストと同じ「`pnpm check` は抜き出し、全件は CI」の形にした: 設定は毎回作り（乱数の列と生成範囲の記録は変わらない）、`pnpm check` では 3 件に 1 件の決まった抜き出しだけを確かめ、全件は `DIAGNOSE_PROPERTY_FULL=1` で CI の `diagnose-consistency` ジョブ。タイムゾーンを変えた実行では 3 つとも飛ばす（暦日だけで決まる。試行を減らして動かしていた `tzRuns`・`tzCountingRuns` は消した）。1 コアの手元で `pnpm test` のこのファイルの分が約 45 秒 → 12 秒
+- 変形しても結果が同じ（`test/metamorphic.test.ts`）の全件（`METAMORPHIC_FULL=1`、関係ごとに 40 件）を CI の `diagnose-consistency` ジョブで動かすようにした（RELEASING.md に全件の環境変数だけがあり、動かす場所がなかった。36 番の「黙って外れる確認を作らない」）
 
 ## [0.30.7] - 2026-11-05
 

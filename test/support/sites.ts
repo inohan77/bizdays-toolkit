@@ -211,11 +211,13 @@ export function propertyConfig(
 export const DIAGNOSE_PROPERTY = {
   seed: 20261016,
   runs: 100,
-  /** タイムゾーンを変えた実行（scripts/test-tz.ts）での試行の数（判定は暦日だけで決まるので、時間を抑えるため減らす） */
-  tzRuns: 30,
   countingRuns: 30,
-  tzCountingRuns: 15,
   fullRangeRuns: 6,
+  /**
+   * pnpm check で確かめる試行の抜き出し（run をこの数で割った余りが 0 の試行だけ確かめる。設定は毎回作って乱数の列を変えない）。
+   * 全件は DIAGNOSE_PROPERTY_FULL=1（CI の diagnose-consistency ジョブ）。3 は 100・30・6 のどれでも抜き出しが 0 件にならない
+   */
+  sampleEvery: 3,
 } as const;
 /** 日本の提供元の全範囲（src/jp の対応年。test/generator-features.test.ts が対応年と一致することを確かめる） */
 export const JP_FULL_RANGE = { from: "1955-01-01", to: "2099-12-31" } as const;

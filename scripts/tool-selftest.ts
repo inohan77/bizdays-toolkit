@@ -177,6 +177,17 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-package",
+    name: "src の文字列を渡す new Date",
+    args: TOOLS["check-package"]!,
+    inject: () =>
+      edit(
+        "src/core/date.ts",
+        (t) => `${t}\nexport const tzLeak2 = new Date("2026-01-01T00:00");\n`,
+      ),
+    expect: "src/core/date.ts: uses new Date(string)",
+  },
+  {
+    tool: "check-package",
     name: "存在しない決定の番号",
     args: TOOLS["check-package"]!,
     inject: () => edit("RELEASING.md", (t) => `${t}\n（${DECISIONS} の 999 番）\n`),

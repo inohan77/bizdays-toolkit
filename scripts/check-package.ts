@@ -260,20 +260,41 @@ function checkPortableSource(dir: string): string[] {
     ],
     [/\.getTimezoneOffset\s*\(/, "getTimezoneOffset"],
     [/\.toLocale(Date|Time)?String\s*\(/, "toLocale…String (local time and locale)"],
-    [/\bnew Date\s*\([^)]*,/, "new Date(year, month, …) (local time; use Date.UTC)"],
+    // 引数の中の括弧は 1 段まで読む（new Date(Number(y), m) の形も捕まえる）
+    [
+      /\bnew Date\s*\((?:[^()]|\([^()]*\))*,/,
+      "new Date(year, month, …) (local time; use Date.UTC)",
+    ],
+    // オフセットのない文字列は実行環境のタイムゾーンで読まれる。文字列を渡す形は、正規表現でオフセット付きに限った
+    // 1 か所（下の DATE_PARSE_ALLOWED）だけを Date.parse で許し、ほかは禁止する
+    [
+      /\bnew Date\s*\(\s*["'`]/,
+      "new Date(string) (local time for strings without an offset; use Date.parse only where the string is known to carry an offset)",
+    ],
   ];
+  // Date.parse を許すファイルと、その中の回数。回数が変わったら（別のファイルに足しても、許した場所から消しても）失敗する
+  const DATE_PARSE_ALLOWED: ReadonlyMap<string, number> = new Map([["src/core/input.ts", 1]]);
   for (const file of walk(dir).filter((f) => f.endsWith(".ts"))) {
-    // コメントの中の言及は数えない
+    const shown = file.replaceAll("\\", "/");
+    // コメントの中の言及は数えない（行末の // も除く。文字列の中の :// は空白が前にないので残る）
     const code = readFileSync(file, "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+      .replace(/(^|\s)\/\/.*$/gm, "$1");
     for (const [pattern, label] of forbidden) {
-      if (pattern.test(code)) problems.push(`${file.replaceAll("\\", "/")}: uses ${label}`);
+      if (pattern.test(code)) problems.push(`${shown}: uses ${label}`);
     }
-    // Intl.DateTimeFormat は timeZone を渡さないと実行環境のタイムゾーンになる（引数の括弧の中に timeZone があること）
-    for (const m of code.matchAll(/\bnew Intl\.DateTimeFormat\s*\(([^)]*)\)/g)) {
-      if (!/\btimeZone\b/.test(m[1]!))
-        problems.push(`${file.replaceAll("\\", "/")}: uses Intl.DateTimeFormat without timeZone`);
+    const parses = (code.match(/\bDate\.parse\s*\(/g) ?? []).length;
+    const allowedParses = DATE_PARSE_ALLOWED.get(shown) ?? 0;
+    if (parses !== allowedParses) {
+      problems.push(
+        `${shown}: uses Date.parse ${parses} time(s) (allowed ${allowedParses}; strings without an offset are read in the local time zone)`,
+      );
+    }
+    // Intl.DateTimeFormat は timeZone を渡さないと実行環境のタイムゾーンになる（new の有無を問わず、引数の括弧の中に
+    // timeZone があること。timeZone: undefined は渡していないのと同じ）。引数の中の括弧は 1 段まで読む
+    for (const m of code.matchAll(/\bIntl\.DateTimeFormat\s*\(((?:[^()]|\([^()]*\))*)\)/g)) {
+      if (!/\btimeZone\b(?!\s*:\s*undefined\b)/.test(m[1]!))
+        problems.push(`${shown}: uses Intl.DateTimeFormat without timeZone`);
     }
   }
   return problems;

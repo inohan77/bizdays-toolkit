@@ -29,8 +29,11 @@ import {
 import { skipWhen } from "./support/skip.ts";
 
 const SEED = intEnv("PROPERTY_SEED", DIAGNOSE_PROPERTY.seed);
-/** 日本の全範囲の走査は暦日だけで決まり時間もかかるので、タイムゾーンを変えた実行（scripts/test-tz.ts）では飛ばす */
+/** 診断は暦日だけで決まるので、タイムゾーンを変えた実行（scripts/test-tz.ts）では 3 つとも飛ばす（オラクル・整合・変形と同じ） */
 const SKIP_TZ = skipWhen("tz-run", flagEnv("BIZDAYS_TZ_RUN"));
+// pnpm check は抜き出し（設定は毎回作り、確かめるのは run を sampleEvery で割った余りが 0 の試行だけ）。全件は DIAGNOSE_PROPERTY_FULL=1
+const FULL = flagEnv("DIAGNOSE_PROPERTY_FULL");
+const checked = (run: number): boolean => FULL || run % DIAGNOSE_PROPERTY.sampleEvery === 0;
 
 /** 提供元の名前（"jp"）を本物にする */
 const real = (options: Obj): Obj =>
@@ -92,40 +95,48 @@ function checkRemovals(
   }
 }
 
-test("性質: 使われない・取り除いても変わらないと診断した規則は、取り除いても結果が変わらない（短い提供元・提供元なしの全日）", () => {
-  const rand = random(SEED);
-  const found: Record<string, number> = {};
-  const runs = flagEnv("BIZDAYS_TZ_RUN") ? DIAGNOSE_PROPERTY.tzRuns : DIAGNOSE_PROPERTY.runs;
-  for (let run = 0; run < runs; run++) {
-    const options = real(diagnoseOptions(rand, diagnoseSourceOf(run)));
-    checkRemovals(options, SHORT_RANGE, () => describeOf(SEED, run, options), found);
-  }
-  // 性質が空振りしていない（診断が実際に出ている）ことも確かめる（never-matches は少ないので単体テストで確かめる）
-  console.log(`# 確かめた診断: ${JSON.stringify(found)}`);
-  assert.ok((found["shadowed"] ?? 0) > 0 && (found["redundant"] ?? 0) > 0, JSON.stringify(found));
-  assert.ok(
-    (found["withPeriod"] ?? 0) > 0,
-    `有効期間のある規則にも診断が出ている: ${JSON.stringify(found)}`,
-  );
-});
-
-test("性質: 第 n 営業日の規則がある設定でも、取り除いても変わらないと診断した項目は、取り除いても結果が変わらない", () => {
-  const seed = SEED + 2;
-  const rand = random(seed);
-  const found: Record<string, number> = {};
-  const runs = flagEnv("BIZDAYS_TZ_RUN")
-    ? DIAGNOSE_PROPERTY.tzCountingRuns
-    : DIAGNOSE_PROPERTY.countingRuns;
-  for (let run = 0; run < runs; run++) {
-    const options = withCountingRule(
-      rand,
-      real(diagnoseOptions(rand, run % 2 === 0 ? "short" : "none")),
+test(
+  "性質: 使われない・取り除いても変わらないと診断した規則は、取り除いても結果が変わらない（短い提供元・提供元なしの全日）",
+  { skip: SKIP_TZ },
+  () => {
+    const rand = random(SEED);
+    const found: Record<string, number> = {};
+    for (let run = 0; run < DIAGNOSE_PROPERTY.runs; run++) {
+      const options = real(diagnoseOptions(rand, diagnoseSourceOf(run)));
+      if (!checked(run)) continue;
+      checkRemovals(options, SHORT_RANGE, () => describeOf(SEED, run, options), found);
+    }
+    // 性質が空振りしていない（診断が実際に出ている）ことも確かめる（never-matches は少ないので単体テストで確かめる）
+    console.log(`# 確かめた診断: ${JSON.stringify(found)}`);
+    assert.ok((found["shadowed"] ?? 0) > 0 && (found["redundant"] ?? 0) > 0, JSON.stringify(found));
+    assert.ok(
+      (found["withPeriod"] ?? 0) > 0,
+      `有効期間のある規則にも診断が出ている: ${JSON.stringify(found)}`,
     );
-    checkRemovals(options, SHORT_RANGE, () => describeOf(seed, run, options), found, ["redundant"]);
-  }
-  console.log(`# 確かめた診断: ${JSON.stringify(found)}`);
-  assert.ok((found["redundant"] ?? 0) > 0, `checked: ${JSON.stringify(found)}`);
-});
+  },
+);
+
+test(
+  "性質: 第 n 営業日の規則がある設定でも、取り除いても変わらないと診断した項目は、取り除いても結果が変わらない",
+  { skip: SKIP_TZ },
+  () => {
+    const seed = SEED + 2;
+    const rand = random(seed);
+    const found: Record<string, number> = {};
+    for (let run = 0; run < DIAGNOSE_PROPERTY.countingRuns; run++) {
+      const options = withCountingRule(
+        rand,
+        real(diagnoseOptions(rand, run % 2 === 0 ? "short" : "none")),
+      );
+      if (!checked(run)) continue;
+      checkRemovals(options, SHORT_RANGE, () => describeOf(seed, run, options), found, [
+        "redundant",
+      ]);
+    }
+    console.log(`# 確かめた診断: ${JSON.stringify(found)}`);
+    assert.ok((found["redundant"] ?? 0) > 0, `checked: ${JSON.stringify(found)}`);
+  },
+);
 
 test(
   "性質: 日本の提供元の全範囲（1955〜2099 年）と、同じ範囲の提供元なしの設定でも、取り除いても結果が変わらない",
@@ -136,6 +147,7 @@ test(
     const found: Record<string, number> = {};
     for (let run = 0; run < DIAGNOSE_PROPERTY.fullRangeRuns; run++) {
       const options = real(diagnoseOptions(rand, fullRangeSourceOf(run)));
+      if (!checked(run)) continue;
       checkRemovals(options, JP_FULL_RANGE, () => describeOf(seed, run, options), found);
     }
     console.log(`# 確かめた診断: ${JSON.stringify(found)}`);

@@ -343,8 +343,8 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
 
   diagnose-consistency:
-    # 診断が unconfirmedHolidayPolicy を redundant と出した設定で、"throw" を "accept" に変えても全日の判定が変わらないことを、
-    # 目録の設定の全件（150 件）で確かめる（pnpm check は 12 件）。API どうしの整合（test/consistency.test.ts）の全件も、ここで動かす
+    # pnpm check では抜き出しだけを試す 4 つの全件を、ここで動かす: 診断と判定の一致（目録の設定の全件 150 件。pnpm check は 12 件）、
+    # API どうしの整合（test/consistency.test.ts）、診断の性質のテスト（test/diagnose-properties.test.ts）、変形しても結果が同じ（test/metamorphic.test.ts）
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -360,6 +360,12 @@ jobs:
       - run: node --import ./scripts/strict-warnings.ts --test test/consistency.test.ts
         env:
           CONSISTENCY_API_FULL: "1"
+      - run: node --import ./scripts/strict-warnings.ts --test test/diagnose-properties.test.ts
+        env:
+          DIAGNOSE_PROPERTY_FULL: "1"
+      - run: node --import ./scripts/strict-warnings.ts --test test/metamorphic.test.ts
+        env:
+          METAMORPHIC_FULL: "1"
 
   generator-features:
     # 実際の呼び出し側（乱数のテストと result-compare）を動かし、作った設定の特徴が生成範囲の記録

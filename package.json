@@ -87,9 +87,9 @@
     "api:update": "pnpm build && node scripts/api-report.ts --update"
   },
   "devDependencies": {
-    "@types/node": "24.19.2",
-    "oxfmt": "0.73.0",
-    "oxlint": "1.88.0",
+    "@types/node": "26.6.6",
+    "oxfmt": "0.76.0",
+    "oxlint": "1.91.0",
     "typescript": "6.0.3"
   },
   "engines": {
