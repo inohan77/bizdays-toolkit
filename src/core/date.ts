@@ -5,7 +5,7 @@
  * 変換して計算する。Date オブジェクトのローカル時刻は使わない。
  */
 
-import { rangeError } from "./errors.ts";
+import { describeValue, rangeError } from "./errors.ts";
 
 /**
  * 暦日を表す "YYYY-MM-DD" 文字列。
@@ -25,18 +25,19 @@ const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
 
 /** 年月日に分解する。形式または暦として不正なら RangeError */
 export function parseDate(value: string): { year: number; month: number; day: number } {
-  const m = DATE_RE.exec(value);
+  // 文字列でない値は正規表現に渡さない（Symbol は文字列にできず TypeError になる）
+  const m = typeof value === "string" ? DATE_RE.exec(value) : null;
   if (!m) {
     throw rangeError(
       "invalid-date",
-      `Invalid date string: ${JSON.stringify(value)} (expected YYYY-MM-DD)`,
+      `Invalid date string: ${describeValue(value)} (expected YYYY-MM-DD)`,
     );
   }
   const year = Number(m[1]);
   const month = Number(m[2]);
   const day = Number(m[3]);
   if (year < 1000 || month < 1 || month > 12 || day < 1 || day > lengthOfMonth(year, month)) {
-    throw rangeError("invalid-date", `Invalid date: ${value}`);
+    throw rangeError("invalid-date", `Invalid date: ${describeValue(value)}`);
   }
   return { year, month, day };
 }
@@ -74,7 +75,8 @@ export function isLeapYear(year: number): boolean {
 export function lengthOfMonth(year: number, month: number): number {
   if (month === 2) return isLeapYear(year) ? 29 : 28;
   const days = MONTH_DAYS[month - 1];
-  if (days === undefined) throw rangeError("invalid-date", `Invalid month: ${month}`);
+  if (days === undefined)
+    throw rangeError("invalid-date", `Invalid month: ${describeValue(month)}`);
   return days;
 }
 
@@ -96,7 +98,7 @@ export function fromDayNumber(dayNumber: number): DateString {
  */
 export function addDays(date: DateString, n: number): DateString {
   if (!Number.isInteger(n)) {
-    throw rangeError("invalid-argument", `n must be an integer: ${n}`);
+    throw rangeError("invalid-argument", `n must be an integer: ${describeValue(n)}`);
   }
   return fromDayNumber(toDayNumber(date) + n);
 }

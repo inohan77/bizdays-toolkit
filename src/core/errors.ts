@@ -35,7 +35,7 @@ export type KnownErrorCode =
   | "invalid-option"
   /** 祝日の提供元どうしのタイムゾーンが異なり、timeZone の指定が必要 */
   | "time-zone-conflict"
-  /** 対応している年の範囲の外 */
+  /** 対応している年の範囲の外（提供元の対応年、または日付として扱える 1000〜9999 年の外） */
   | "out-of-range"
   /** 判定が未確定の祝日（confirmed: false）に触れた（unconfirmedHolidayPolicy: "throw"） */
   | "unconfirmed-holiday"
@@ -91,6 +91,24 @@ export class InternalError extends Error {
 /** @internal 作りの誤りの例外を作る（到達しない箇所の例外は、すべてこの形にする） */
 export function internalError(message: string): InternalError {
   return new InternalError(`bizdays-toolkit internal error: ${message}`);
+}
+
+/**
+ * @internal 例外のメッセージに値を埋め込むときの表し方。Symbol・BigInt でもメッセージを組み立てられる（テンプレート文字列と
+ * JSON.stringify は、これらで TypeError を投げるか undefined を返す）。数は String の形（NaN・Infinity を JSON の null にしない）、
+ * 文字列は引用符付き（空文字列や空白を見分けられる）、ほかの値は JSON の形
+ */
+export function describeValue(value: unknown): string {
+  if (typeof value === "number" || typeof value === "symbol") return String(value);
+  if (typeof value === "bigint") return `${value}n`;
+  if (typeof value === "function") return "a function";
+  try {
+    // 前の版と同じ表し方（JSON の形）。undefined などの JSON にならない値は String の形
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    // JSON にできないオブジェクト（循環・BigInt を含むもの・読むと投げるもの）
+    return Object.prototype.toString.call(value);
+  }
 }
 
 /** @internal */

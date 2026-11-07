@@ -10,7 +10,7 @@
  */
 
 import { formatDate, parseDate, type DateString } from "./date.ts";
-import { rangeError, typeError } from "./errors.ts";
+import { describeValue, rangeError, typeError } from "./errors.ts";
 
 /**
  * Temporal.PlainDate / PlainDateTime として受け付ける最小限の形。
@@ -106,12 +106,12 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
 /** @internal IANA タイムゾーン名として使えるか確かめ、正規化した名前を返す（不正なら RangeError） */
 export function validateTimeZone(timeZone: string): string {
   if (typeof timeZone !== "string" || timeZone === "") {
-    throw rangeError("invalid-time-zone", `Invalid time zone: ${JSON.stringify(timeZone)}`);
+    throw rangeError("invalid-time-zone", `Invalid time zone: ${describeValue(timeZone)}`);
   }
   try {
     return formatterFor(timeZone).resolvedOptions().timeZone;
   } catch {
-    throw rangeError("invalid-time-zone", `Invalid time zone: ${JSON.stringify(timeZone)}`);
+    throw rangeError("invalid-time-zone", `Invalid time zone: ${describeValue(timeZone)}`);
   }
 }
 
@@ -139,7 +139,9 @@ function wallTime(hour: number, minute: number): number {
     minute < 0 ||
     minute > 59
   ) {
-    throw rangeError("invalid-time", `Invalid time: ${hour}:${minute}`);
+    // 入力どおり 2 桁で表す（"24:00" を "24:0" と表示しない）
+    const two = (v: number): string => String(v).padStart(2, "0");
+    throw rangeError("invalid-time", `Invalid time: ${two(hour)}:${two(minute)}`);
   }
   return hour * 60 + minute;
 }
@@ -153,7 +155,7 @@ function parseString(value: string, timeZone: string): CivilDateTime {
   if (!m) {
     throw rangeError(
       /^\d{4}-\d{2}-\d{2}[T ]/i.test(value) ? "invalid-time" : "invalid-date",
-      `Invalid date/time string: ${JSON.stringify(value)} (expected YYYY-MM-DD or ISO 8601 date-time)`,
+      `Invalid date/time string: ${describeValue(value)} (expected YYYY-MM-DD or ISO 8601 date-time)`,
     );
   }
   const date = m[1]!;
@@ -168,7 +170,7 @@ function parseString(value: string, timeZone: string): CivilDateTime {
   const normalized = value.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
   const ms = Date.parse(normalized);
   if (Number.isNaN(ms)) {
-    throw rangeError("invalid-time", `Invalid date/time string: ${JSON.stringify(value)}`);
+    throw rangeError("invalid-time", `Invalid date/time string: ${describeValue(value)}`);
   }
   return instantToCivil(ms, timeZone);
 }
@@ -186,7 +188,7 @@ function isDateLike(value: object): value is TemporalDateLike {
  * Date か（iframe や vm など、別の実行環境で作られた Date も含む）。
  * instanceof は実行環境ごとに Date が別物になるため使わない
  */
-function isDate(value: unknown): value is Date {
+export function isDate(value: unknown): value is Date {
   return Object.prototype.toString.call(value) === "[object Date]";
 }
 
@@ -275,7 +277,7 @@ export function parseTimeOfDaySeconds(value: unknown): number {
   if (!m || seconds > 59) {
     throw rangeError(
       "invalid-time",
-      `Invalid time of day: ${JSON.stringify(value)} (expected HH:mm or HH:mm:ss)`,
+      `Invalid time of day: ${describeValue(value)} (expected HH:mm or HH:mm:ss)`,
     );
   }
   return wallTime(Number(m[1]), Number(m[2])) * 60 + seconds;

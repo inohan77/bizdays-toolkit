@@ -96,7 +96,11 @@ const SHARD = ((): { k: number; n: number } | undefined => {
     );
   return { k, n };
 })();
-const AS_OF = "2026-07-01";
+/**
+ * expired を確かめる基準日。2026-07-21 は、短い提供元の 7 月の第 3 月曜日（2026-07-20。祝日）で終わる "after-holiday" の
+ * 規則の振替先（終わりの日の後の日。13 番）を試す
+ */
+const AS_OFS = ["2026-07-01", "2026-07-21"] as const;
 
 // ------------------------------------------------------------
 // 項目の一覧（test/fixtures/oracle-items.json に明示した一覧。閉じる・開く規則の両方に置く）
@@ -464,43 +468,60 @@ test("オラクル: shadowed・never-matches・redundant と出た項目は、�
 // 診断のコードごとの約束
 // ------------------------------------------------------------
 
+/** 項目の終わりの日（日付 "YYYY-MM-DD" のときだけ。毎年の月日や、終わりのない規則は undefined） */
+const endOf = (item: Item): string | undefined => {
+  const v = item[1] as Obj | string;
+  const end = typeof v === "string" ? v : ((v["effectiveTo"] ?? v["to"]) as string | undefined);
+  return end !== undefined && /^\d{4}-\d{2}-\d{2}$/.test(end) ? end : undefined;
+};
+
 test("オラクル: expired は、終わりが基準日より前で、基準日以降の結果に影響しない", () => {
-  const fromIndex = SHORT_DAYS.indexOf(AS_OF);
+  // expired は暦日の比較だけで決まるので、終わりが基準日より前の項目を含まない設定には出ない。そうした設定の診断は省く
+  // （費用を下げるための取引。省いた設定に誤った expired が出ても、ここでは捕まえない。出さないことは
+  // test/diagnose-as-of.test.ts の単体のテスト（終わりのない規則・毎年の月日を並べた設定を、いくつもの基準日で）が確かめる）
   let checked = 0;
-  const report = run((list, policy, _d, r, weekdays) => {
-    const d = diag["diagnoseCalendar"]!(build(list, policy, weekdays), { asOf: AS_OF }) as Obj[];
-    const paths = pathsOf(list);
-    const base = snapshot(build(list, policy, weekdays), false);
-    paths.forEach((path, p) => {
-      if (!d.some((x) => x["path"] === path && x["code"] === "expired")) return;
-      checked++;
-      const v = list[p]![1] as Obj | string;
-      const end = typeof v === "string" ? v : ((v["effectiveTo"] ?? v["to"]) as string | undefined);
-      if (end === undefined || end >= AS_OF)
-        r.unsound.push(
-          `expired の終わりが基準日以降 ${describeConfig(list, policy, weekdays, path)}`,
-        );
-      if (
-        !same(
-          snapshot(
-            build(
-              list.filter((_, q) => q !== p),
-              policy,
-              weekdays,
+  let diagnosed = 0;
+  for (const asOf of AS_OFS) {
+    const fromIndex = SHORT_DAYS.indexOf(asOf);
+    const report = run((list, policy, _d, r, weekdays) => {
+      if (!list.some((item) => (endOf(item) ?? asOf) < asOf)) return;
+      diagnosed++;
+      const d = diag["diagnoseCalendar"]!(build(list, policy, weekdays), { asOf }) as Obj[];
+      const paths = pathsOf(list);
+      const base = snapshot(build(list, policy, weekdays), false);
+      paths.forEach((path, p) => {
+        if (!d.some((x) => x["path"] === path && x["code"] === "expired")) return;
+        checked++;
+        const end = endOf(list[p]!);
+        if (end === undefined || end >= asOf)
+          r.unsound.push(
+            `expired の終わりが基準日以降（基準日 ${asOf}） ${describeConfig(list, policy, weekdays, path)}`,
+          );
+        if (
+          !same(
+            snapshot(
+              build(
+                list.filter((_, q) => q !== p),
+                policy,
+                weekdays,
+              ),
+              false,
             ),
-            false,
-          ),
-          base,
-          fromIndex,
+            base,
+            fromIndex,
+          )
         )
-      )
-        r.unsound.push(
-          `expired を取り除くと基準日以降が変わる ${describeConfig(list, policy, weekdays, path)}`,
-        );
+          r.unsound.push(
+            `expired を取り除くと基準日以降が変わる（基準日 ${asOf}） ${describeConfig(list, policy, weekdays, path)}`,
+          );
+      });
+      assert.deepEqual(r.unsound, []);
     });
-    assert.deepEqual(r.unsound, []);
-  });
-  assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
+    assert.ok(report.configs > 0, `試した設定が 0 件（基準日 ${asOf}。オラクルが空振りしている）`);
+  }
+  console.log(
+    `expired: 基準日 ${AS_OFS.join("・")} で診断した設定 ${diagnosed} 件、expired ${checked} 件`,
+  );
   assert.ok(checked > 0, "expired が 1 件も出ていない（オラクルが空振りしている）");
 });
 

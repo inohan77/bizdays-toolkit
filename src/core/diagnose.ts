@@ -41,6 +41,7 @@ import { compileCalendarOptions, type CalendarOptions } from "./calendar.ts";
 import {
   internalError,
   InternalError,
+  describeValue,
   IssueCollector,
   rangeError,
   type KnownErrorCode,
@@ -52,6 +53,7 @@ import {
   createHolidayLookup,
   createResolver,
   inPeriod,
+  MAX_HOLIDAY_RUN,
   jpUsage,
   matchMonthDay,
   matchPattern,
@@ -1304,7 +1306,7 @@ function compileDiagnoseOptions(options: unknown): { asOf: number | null } {
   if (!isValidDate(asOf)) {
     throw rangeError(
       "invalid-date",
-      `asOf must be a date string "YYYY-MM-DD": ${JSON.stringify(asOf)}`,
+      `asOf must be a date string "YYYY-MM-DD": ${describeValue(asOf)}`,
     );
   }
   return { asOf: toDayNumber(asOf) };
@@ -1316,19 +1318,34 @@ function checkExpired<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
   asOf: number,
 ): void {
-  const ended = (path: string, last: number, what: string): void => {
-    if (last < asOf) {
+  /** last は終わりの日、reach は結果に影響しうる最後の日（振替のない項目は last と同じ） */
+  const ended = (path: string, last: number, what: string, reach = last): void => {
+    if (reach < asOf) {
+      const moved =
+        reach > last
+          ? ` (a day moved by "after-holiday" falls at most ${reach - last} days after it)`
+          : "";
       c.info(
         "expired",
         path,
-        `This ${what} ended on ${fromDayNumber(last)}, before ${fromDayNumber(asOf)}; it no longer affects results and can be removed if the past need not be reproduced`,
+        `This ${what} ended on ${fromDayNumber(last)}${moved}, before ${fromDayNumber(asOf)}; it no longer affects results and can be removed if the past need not be reproduced`,
       );
     }
   };
   for (const r of compiled.dates) ended(r.path, r.to, "date");
   for (const r of compiled.annual) if (r.effectiveTo !== null) ended(r.path, r.effectiveTo, "rule");
+  // "after-holiday" の規則は振替元の日で有効期間を判定するので（13 番）、終わりの日の後にも振替先の日がありうる。
+  // 祝日を引かずに済むよう、振替が届きうる最も遠い日（MAX_HOLIDAY_RUN 日後）を終わりとする（安全側。30 番）
   for (const r of compiled.recurring)
-    if (r.effectiveTo !== null) ended(r.path, r.effectiveTo, "rule");
+    if (r.effectiveTo !== null)
+      ended(
+        r.path,
+        r.effectiveTo,
+        "rule",
+        r.holidayOverlapPolicy === "after-holiday"
+          ? r.effectiveTo + MAX_HOLIDAY_RUN
+          : r.effectiveTo,
+      );
 }
 
 /**

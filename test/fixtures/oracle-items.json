@@ -1,5 +1,5 @@
 {
-  "note": "診断のオラクルの項目（test/diagnose-oracle.test.ts）。0.30.4 で目録の乱数（種 20261101）から選んだ 59 項目を写して固定し、0.30.5 で目録の形とキーの不足（曜日の規則の nth・months・skipWeekdays、週の第 n 営業日の months、祝日の months、祝前日の weekdays、有効期間の始まり・名前）を埋める 6 つの規則を、閉じる・開く規則の両方として足した。目録の値の候補を変えても、この一覧は意図して変えない限り変わらない。0.30.8 で、第 n 営業日の規則と毎週の曜日の規則の有効期間が重ならない組（counting-basis を出さない形）を試すために 4 項目を足した",
+  "note": "診断のオラクルの項目（test/diagnose-oracle.test.ts）。0.30.4 で目録の乱数（種 20261101）から選んだ 59 項目を写して固定し、0.30.5 で目録の形とキーの不足（曜日の規則の nth・months・skipWeekdays、週の第 n 営業日の months、祝日の months、祝前日の weekdays、有効期間の始まり・名前）を埋める 6 つの規則を、閉じる・開く規則の両方として足した。目録の値の候補を変えても、この一覧は意図して変えない限り変わらない。0.30.8 で、第 n 営業日の規則と毎週の曜日の規則の有効期間が重ならない組（counting-basis を出さない形）を試すために 4 項目を足した。0.31.1 で、短い提供元の 7 月の第 3 月曜日（2026-07-20。祝日）で終わる \"after-holiday\" の月曜日の規則を足した（振替先の 21 日が終わりの日の後になり、基準日 2026-07-21 の expired を試すため）",
   "items": [
     [
       "closedRecurringRules",
@@ -512,6 +512,22 @@
       {
         "businessDayOfMonth": 2,
         "effectiveFrom": "2025-07-01"
+      }
+    ],
+    [
+      "closedRecurringRules",
+      {
+        "weekday": 1,
+        "holidayOverlapPolicy": "after-holiday",
+        "effectiveTo": "2026-07-20"
+      }
+    ],
+    [
+      "openRecurringRules",
+      {
+        "weekday": 1,
+        "holidayOverlapPolicy": "after-holiday",
+        "effectiveTo": "2026-07-20"
       }
     ]
   ],

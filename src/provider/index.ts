@@ -24,7 +24,7 @@ import {
   type Weekday,
 } from "../core/date.ts";
 import { renameKeys } from "../core/renamed.ts";
-import { rangeError } from "../core/errors.ts";
+import { describeValue, rangeError } from "../core/errors.ts";
 import { HOLIDAY_KEY_PATTERN, type Holiday } from "../core/types.ts";
 
 function checkYear(year: unknown): asserts year is number {
@@ -164,10 +164,7 @@ function checkHolidays<Kind extends string>(holidays: unknown): readonly Holiday
     }
     const { date, name, nameEn, kind, confirmed, key } = h as Record<string, unknown>;
     if (!isValidDate(date)) {
-      throw rangeError(
-        "invalid-date",
-        `holidays[${i}] has an invalid date ${JSON.stringify(date)}`,
-      );
+      throw rangeError("invalid-date", `holidays[${i}] has an invalid date ${describeValue(date)}`);
     }
     const y = parseDate(date).year;
     if (year === undefined) year = y;
@@ -192,7 +189,7 @@ function checkHolidays<Kind extends string>(holidays: unknown): readonly Holiday
     if (key !== undefined && (typeof key !== "string" || !HOLIDAY_KEY_PATTERN.test(key))) {
       throw rangeError(
         "invalid-argument",
-        `holidays[${i}] (${date}) key must match ${String(HOLIDAY_KEY_PATTERN)}: ${JSON.stringify(key)}`,
+        `holidays[${i}] (${date}) key must match ${String(HOLIDAY_KEY_PATTERN)}: ${describeValue(key)}`,
       );
     }
   });
@@ -225,13 +222,13 @@ function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kin
     if (!/^[0-6]$/.test(weekday)) {
       throw rangeError(
         "invalid-weekday",
-        `options.directions has a weekday that is not 0 (Sunday) to 6 (Saturday): ${JSON.stringify(weekday)}`,
+        `options.directions has a weekday that is not 0 (Sunday) to 6 (Saturday): ${describeValue(weekday)}`,
       );
     }
     if (direction !== "next" && direction !== "previous") {
       throw rangeError(
         "invalid-argument",
-        `options.directions[${weekday}] must be "next" or "previous": ${JSON.stringify(direction)}`,
+        `options.directions[${weekday}] must be "next" or "previous": ${describeValue(direction)}`,
       );
     }
   }

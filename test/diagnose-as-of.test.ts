@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isBizdaysError } from "../src/index.ts";
+import { createCalendar, isBizdaysError } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 
@@ -99,4 +99,72 @@ test("asOf: 対応年の外の基準日でも例外にならず（祝日を引�
   }
   // 設定の側の誤りは例外ではなく診断結果（扱いが分かれる）
   assert.equal(diagnoseCalendar("not an object" as never)[0]?.code, "invalid-option");
+});
+
+test('asOf: "after-holiday" の規則は、振替先が終わりの日の後に残るので、終わりから 31 日を過ぎるまで expired にしない', () => {
+  // 7 月 20 日（海の日）で終わる月曜定休は、21 日に振り替わる（有効期間は振替元の日で判定する。13 番）
+  const shifted = {
+    holidayProvider: jp,
+    closedRecurringRules: [
+      {
+        weekday: 1 as const,
+        holidayOverlapPolicy: "after-holiday" as const,
+        effectiveTo: "2026-07-20",
+        name: "Mon",
+      },
+    ],
+  };
+  const info = createCalendar(shifted).dayInfoOn("2026-07-21");
+  assert.equal(info.open, false);
+  assert.equal(info.shiftedFrom, "2026-07-20");
+  for (const asOf of ["2026-07-21", "2026-08-20"])
+    assert.deepEqual(brief(diagnoseCalendar(shifted, { asOf })), [], asOf);
+  // 31 日後（振替が届きうる最も遠い日）を過ぎれば expired。メッセージの終わりの日は effectiveTo のまま
+  const d = diagnoseCalendar(shifted, { asOf: "2026-08-21" });
+  assert.deepEqual(brief(d), [["info", "expired", "closedRecurringRules[0]"]]);
+  assert.match(d[0]!.message, /ended on 2026-07-20/);
+  // 振替のない規則は、今までどおり終わりの日の翌日から expired
+  const plain = {
+    ...shifted,
+    closedRecurringRules: [{ weekday: 1 as const, effectiveTo: "2026-07-20", name: "Mon" }],
+  };
+  assert.deepEqual(brief(diagnoseCalendar(plain, { asOf: "2026-07-21" })), [
+    ["info", "expired", "closedRecurringRules[0]"],
+  ]);
+  // スケジュールの規則も同じ
+  const schedule = {
+    holidayProvider: jp,
+    weekdayValues: [0, 1, 1, 1, 1, 1, 0],
+    recurringRules: [
+      {
+        weekday: 1 as const,
+        holidayOverlapPolicy: "after-holiday" as const,
+        effectiveTo: "2026-07-20",
+        value: 0,
+      },
+    ],
+  };
+  assert.deepEqual(brief(diagnoseSchedule(schedule, { asOf: "2026-07-21" })), []);
+  assert.deepEqual(brief(diagnoseSchedule(schedule, { asOf: "2026-08-21" })), [
+    ["info", "expired", "recurringRules[0]"],
+  ]);
+});
+
+test("asOf: 終わりのない設定には、どの基準日でも expired を出さない", () => {
+  // オラクルの expired のテストは、終わりが基準日より前の項目を含まない設定の診断を省くので、ここで確かめる
+  const endless = {
+    holidayProvider: jp,
+    closedWeekdays: [0, 6],
+    closedRecurringRules: [
+      { weekday: 1 as const, holidayOverlapPolicy: "after-holiday" as const },
+      { dayOfMonth: 15, effectiveFrom: "2026-01-01" },
+    ],
+    closedAnnualDates: ["12-31", { from: "08-13", to: "08-16" }],
+  };
+  for (const asOf of ["1955-01-01", "2026-07-21", "2099-12-31", "2200-01-01"])
+    assert.deepEqual(
+      brief(diagnoseCalendar(endless, { asOf })).filter(([, code]) => code === "expired"),
+      [],
+      asOf,
+    );
 });

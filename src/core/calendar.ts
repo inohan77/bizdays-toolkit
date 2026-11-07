@@ -20,6 +20,7 @@ import {
   checkUnknownKeys,
   internalError,
   IssueCollector,
+  describeValue,
   rangeError,
   withoutUndefined,
 } from "./errors.ts";
@@ -222,7 +223,7 @@ export interface BusinessDayOnOrAfterOptions {
    * 締め時刻 "HH:mm" または "HH:mm:ss"（カレンダーのタイムゾーン）。
    * 入力の時刻は分の精度（秒を切り捨てた分）で、その分の始まりと比べる（"14:00:30" なら 14:00 の入力は締めの前、14:01 は後）。
    * 入力の時刻がこの時刻以降なら、その日は対象にしない。時刻を持たない入力（暦日の文字列・Temporal の PlainDate など）
-   * と組み合わせると code: "invalid-argument" の Error（締め時刻が黙って無視されるのを防ぐため）
+   * と組み合わせると code: "invalid-argument" の RangeError（締め時刻が黙って無視されるのを防ぐため）
    */
   readonly cutoff?: string;
 }
@@ -657,7 +658,7 @@ function buildCalendar<Kind extends string>(
 
   function nthOfMonth(month: MonthString, n: number): DateString {
     if (!Number.isInteger(n) || n === 0) {
-      throw rangeError("invalid-argument", `n must be a non-zero integer: ${n}`);
+      throw rangeError("invalid-argument", `n must be a non-zero integer: ${describeValue(n)}`);
     }
     const days = businessDaysOfMonth(month);
     const found = n > 0 ? days[n - 1] : days[days.length + n];
@@ -695,11 +696,12 @@ function buildCalendar<Kind extends string>(
     previousBusinessDay: (input) => search(addDays(dateOf(input), -1), -1),
     nextClosedDay: (input) => search(addDays(dateOf(input), 1), 1, false),
     previousClosedDay: (input) => search(addDays(dateOf(input), -1), -1, false),
-    businessDayOnOrAfter(input, opts = {}) {
+    businessDayOnOrAfter(input, options) {
+      const opts = optionsObject(options, "businessDayOnOrAfter options");
       const civil = toCivil(input, lookup.timeZone);
       let start = civil.date;
-      if (opts.cutoff !== undefined) {
-        const cutoff = parseTimeOfDaySeconds(opts.cutoff);
+      if (opts["cutoff"] !== undefined) {
+        const cutoff = parseTimeOfDaySeconds(opts["cutoff"]);
         if (civil.minutes === null) {
           throw rangeError(
             "invalid-argument",
@@ -713,7 +715,8 @@ function buildCalendar<Kind extends string>(
     },
     businessDayOnOrBefore: (input) => search(dateOf(input), -1),
     addBusinessDays(input, n) {
-      if (!Number.isInteger(n)) throw rangeError("invalid-argument", `n must be an integer: ${n}`);
+      if (!Number.isInteger(n))
+        throw rangeError("invalid-argument", `n must be an integer: ${describeValue(n)}`);
       let date = dateOf(input);
       if (n === 0) return search(date, 1);
       const step = n > 0 ? 1 : -1;
@@ -725,7 +728,8 @@ function buildCalendar<Kind extends string>(
     diffBusinessDays(from, to) {
       const a = toDayNumber(dateOf(from));
       const b = toDayNumber(dateOf(to));
-      return a <= b ? countOpen(a, b) : -countOpen(b, a);
+      // 逆順で営業日がないときに -0 を返さない（Intl.NumberFormat などは "-0" と表示する）
+      return a <= b ? countOpen(a, b) : 0 - countOpen(b, a);
     },
     businessDatesBetween(from, to) {
       const a = dateOf(from);
@@ -762,10 +766,14 @@ function buildCalendar<Kind extends string>(
       return Object.freeze({ from, to });
     },
     dueDate(month, options) {
-      const o = isPlainObject(options)
-        ? withoutUndefined(renameKeys("throw", ["dueDate"], "", options))
-        : undefined;
-      const day = o?.["dayOfMonth"];
+      if (!isPlainObject(options)) {
+        throw rangeError(
+          "invalid-argument",
+          `dueDate options must be an object with dayOfMonth and convention: ${describeValue(options)}`,
+        );
+      }
+      const o = withoutUndefined(renameKeys("throw", ["dueDate"], "", options));
+      const day = o["dayOfMonth"];
       if (!isDayOfMonthValue(day)) {
         throw rangeError(
           "invalid-argument",
@@ -782,6 +790,23 @@ function buildCalendar<Kind extends string>(
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * メソッド・関数のオプションの引数を受ける: undefined は省略、普通のオブジェクトは明示的な undefined を除いて返す。
+ * それ以外（null・数・配列・関数など）は invalid-argument（黙ってオプションなしとして通さない。decisions.md の 6 番）
+ */
+function optionsObject(
+  options: unknown,
+  what: string,
+  rename: (v: Record<string, unknown>) => Record<string, unknown> = (v) => v,
+): Record<string, unknown> {
+  if (options === undefined) return {};
+  // Date・Map などのオブジェクトも受けない（別の実行環境のオブジェクトも受けるよう、プロトタイプではなく種類で見る）
+  if (!isPlainObject(options) || Object.prototype.toString.call(options) !== "[object Object]") {
+    throw rangeError("invalid-argument", `${what} must be an object: ${describeValue(options)}`);
+  }
+  return withoutUndefined(rename(options));
+}
 
 const isCalendarLike = (v: unknown): v is Calendar =>
   typeof v === "object" &&
@@ -821,9 +846,14 @@ export function combineCalendars<Kind extends string = string>(
       );
     }
   });
-  const o: Record<string, unknown> = isPlainObject(options)
-    ? withoutUndefined(renameKeys("throw", ["combine"], "", options))
-    : {};
+  // オブジェクトでないオプションも、今までどおり code は invalid-option（code をそろえるかは 0.32.0 で判断する）
+  if (!isPlainObject(options)) {
+    throw rangeError(
+      "invalid-option",
+      `combineCalendars options must be an object with open ("all" or "any"): ${describeValue(options)}`,
+    );
+  }
+  const o = withoutUndefined(renameKeys("throw", ["combine"], "", options));
   const mode = o["open"];
   if (mode !== "all" && mode !== "any") {
     throw rangeError("invalid-option", 'open must be "all" or "any"');
@@ -917,16 +947,19 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
   isOpen: (value: Value) => boolean,
   options?: CalendarFromScheduleOptions,
 ): Calendar<Kind> {
-  const info = infoOfSchedule(schedule);
+  // null・数などでは、内部の印を読む前に止める（読むと TypeError で落ちる）
+  const info =
+    typeof schedule === "object" && schedule !== null ? infoOfSchedule(schedule) : undefined;
   if (info === undefined) {
     throw rangeError("invalid-argument", "schedule must be a schedule created by createSchedule");
   }
   if (typeof isOpen !== "function") {
     throw rangeError("invalid-argument", "isOpen must be a function (value) => boolean");
   }
-  const o: Record<string, unknown> = isPlainObject(options)
-    ? withoutUndefined(renameKeys("throw", ["fromSchedule"], "", options))
-    : {};
+  // オプションがオブジェクトでなければ invalid-argument（黙って無視しない。dueDate・combineCalendars と同じく受け付けない）
+  const o = optionsObject(options, "createCalendarFromSchedule options", (v) =>
+    renameKeys("throw", ["fromSchedule"], "", v),
+  );
   const searchDayLimit = (o["searchDayLimit"] ?? 3660) as number;
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {
     throw rangeError("invalid-option", "searchDayLimit must be a positive integer");

@@ -17,7 +17,7 @@ import {
   weekdayOf,
   type DateString,
 } from "../core/date.ts";
-import { rangeError } from "../core/errors.ts";
+import { describeValue, rangeError } from "../core/errors.ts";
 import type { Holiday } from "../core/types.ts";
 
 /**
@@ -191,7 +191,10 @@ function baseHolidays(y: number): Entry[] {
 
 /** @internal その年の祝日・休日（日付順） */
 export function computeJapaneseHolidays(year: number): Holiday<JpHolidayKind>[] {
-  if (!Number.isInteger(year) || year < SUPPORTED_YEARS.from || year > SUPPORTED_YEARS.to) {
+  // 整数でない年（文字列の "2026" など）を範囲の外と言わない（code は out-of-range のまま。0.32.0 で見直す）
+  if (!Number.isInteger(year))
+    throw rangeError("out-of-range", `Invalid year: ${describeValue(year)} (expected an integer)`);
+  if (year < SUPPORTED_YEARS.from || year > SUPPORTED_YEARS.to) {
     throw rangeError(
       "out-of-range",
       `Japanese holidays are supported for ${SUPPORTED_YEARS.from}-${SUPPORTED_YEARS.to}; requested ${year}`,

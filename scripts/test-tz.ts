@@ -27,6 +27,7 @@ const INSTANT_PATTERN =
 
 /** 再実行するテスト。date.test.ts は印に当たらないが、すべての日数の計算が通る core/date.ts を確かめるので入れる */
 export const TZ_FILES: readonly string[] = [
+  "test/argument-errors.test.ts",
   "test/calendar-closing.test.ts",
   "test/calendar.test.ts",
   "test/date.test.ts",

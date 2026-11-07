@@ -6,7 +6,7 @@
  */
 
 import { addDays, lengthOfMonth, formatDate, parseDate, type DateString } from "./date.ts";
-import { rangeError } from "./errors.ts";
+import { describeValue, rangeError } from "./errors.ts";
 
 /**
  * 月を表す "YYYY-MM" 文字列。
@@ -28,7 +28,7 @@ export function parseMonth(value: unknown): YearMonth {
   const year = Number(m?.[1]);
   const month = Number(m?.[2]);
   if (!m || year < 1000 || month < 1 || month > 12) {
-    throw rangeError("invalid-month", `Invalid month: ${JSON.stringify(value)} (expected YYYY-MM)`);
+    throw rangeError("invalid-month", `Invalid month: ${describeValue(value)} (expected YYYY-MM)`);
   }
   return { year, month };
 }
@@ -68,7 +68,7 @@ export const isDayOfMonthValue = (v: unknown): v is number =>
  */
 export function monthOf(input: DateString | MonthString, offset = 0): MonthString {
   if (!Number.isInteger(offset)) {
-    throw rangeError("invalid-argument", `offset must be an integer: ${offset}`);
+    throw rangeError("invalid-argument", `offset must be an integer: ${describeValue(offset)}`);
   }
   const base: YearMonth =
     typeof input === "string" && input.split("-").length === 3
@@ -102,7 +102,7 @@ export function checkClosingDay(closingDayOfMonth: number): void {
   if (!isDayOfMonthValue(closingDayOfMonth)) {
     throw rangeError(
       "invalid-argument",
-      `closingDayOfMonth must be an integer from 1 to 31, or -1 (last day): ${closingDayOfMonth}`,
+      `closingDayOfMonth must be an integer from 1 to 31, or -1 (last day): ${describeValue(closingDayOfMonth)}`,
     );
   }
 }

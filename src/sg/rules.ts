@@ -13,7 +13,7 @@
  */
 
 import { addDays, formatDate, weekdayOf, type DateString } from "../core/date.ts";
-import { rangeError } from "../core/errors.ts";
+import { describeValue, rangeError } from "../core/errors.ts";
 import type { Holiday } from "../core/types.ts";
 
 /**
@@ -186,6 +186,9 @@ interface Entry {
 
 /** @internal その年の祝日（表と振替の規則から。日付順） */
 export function computeSgHolidays(year: number): Holiday<SgHolidayKind>[] {
+  // 整数でない年（文字列の "2026" など）を範囲の外と言わない（code は out-of-range のまま。0.32.0 で見直す）
+  if (!Number.isInteger(year))
+    throw rangeError("out-of-range", `Invalid year: ${describeValue(year)} (expected an integer)`);
   const movable = MOVABLE[year];
   if (movable === undefined) {
     throw rangeError(

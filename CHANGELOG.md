@@ -6,6 +6,18 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.31.1] - 2026-11-08
+
+This version fixes behaviour that did not match the documentation and corrects the documentation. The results of valid calendars and schedules do not change.
+
+### Fixed
+
+- Option diagnostics: `expired` (with `asOf`) was reported for a rule with `holidayOverlapPolicy: "after-holiday"` whose last day was moved past `effectiveTo` onto or after `asOf`, with a message saying that the rule no longer affects results (for example, a Monday rule ending on a Monday holiday still closes the Tuesday after). Such a rule is now `expired` only once more than 31 days have passed since `effectiveTo` (31 days is the furthest a day can be moved). Fewer `expired` may be reported
+- `diffBusinessDays` returned `-0` when `from` was after `to` and there was no business day between them; it now returns `0` (combined calendars and calendars made from a schedule too)
+- Wrong arguments threw a `TypeError` without `code` instead of a `RangeError` with `code: "invalid-argument"`: `today` given something other than a `Date`, `businessDayOnOrAfter` given options that are not an object, and `createCalendarFromSchedule` given a schedule that is not an object or options that are not an object (these options were silently ignored before). Error messages for a Symbol or a BigInt argument no longer fail while being built (they threw a `TypeError` without `code`)
+- Error messages: an hour of 24 is shown as written ("24:00", not "24:0"); the bundled providers' `holidaysInYear` given a year that is not an integer says so instead of reporting the year as out of range (the code is unchanged); `dueDate` and `combineCalendars` given options that are not an object say so (the codes are unchanged). Values in messages are written in one way: numbers as written (`NaN`, `Infinity`), strings in quotes, Symbols and BigInts readable
+- Documentation: the `cutoff` TSDoc named the error class as `Error` (it is a `RangeError`); the guide and `KnownErrorCode` now mention that dates are limited to the years 1000–9999 (`out-of-range` outside them, also with `outOfRangePolicy: "ignore"`)
+
 ## [0.31.0] - 2026-11-08
 
 This version rebuilds the `redundant` diagnostic so that the reported rules can be removed all together, narrows the days the diagnostics cannot judge, and brings in the changes postponed in 0.30.x that throw where nothing was thrown before or narrow a type (the return value of `isOpen`, the error classes, the frozen result of `withSubstituteDays`). It also adds the search for closed days.
@@ -842,7 +854,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.1...HEAD
+[0.31.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.0...v0.31.1
 [0.31.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.9...v0.31.0
 [0.30.9]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.8...v0.30.9
 [0.30.8]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.7...v0.30.8

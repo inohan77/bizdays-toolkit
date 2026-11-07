@@ -18,6 +18,7 @@ import {
 } from "./date.ts";
 import {
   checkUnknownKeys,
+  describeValue,
   IssueCollector,
   rangeError,
   withoutUndefined,
@@ -26,6 +27,7 @@ import {
 import { RENAMED_VALUES, renameKeys, renameValue, writtenKey } from "./renamed.ts";
 import {
   instantToCivil,
+  isDate,
   toCivil,
   toDateTimeParts,
   toInstant,
@@ -796,7 +798,7 @@ function checkName(c: IssueCollector, path: string, name: unknown): string | und
 
 function checkDate(c: IssueCollector, path: string, value: unknown): number | undefined {
   if (!isValidDate(value)) {
-    c.error("invalid-date", path, `Invalid date ${JSON.stringify(value)} (expected YYYY-MM-DD)`);
+    c.error("invalid-date", path, `Invalid date ${describeValue(value)} (expected YYYY-MM-DD)`);
     return undefined;
   }
   return toDayNumber(value);
@@ -807,7 +809,7 @@ function checkMonthDay(c: IssueCollector, path: string, value: unknown): string 
     c.error(
       "invalid-annual-date",
       path,
-      `Invalid annual date ${JSON.stringify(value)} (expected MM-DD)`,
+      `Invalid annual date ${describeValue(value)} (expected MM-DD)`,
     );
     return undefined;
   }
@@ -1668,7 +1670,7 @@ function validateProvider(c: IssueCollector, path: string, p: unknown): p is Hol
   try {
     validateTimeZone(p["timeZone"]);
   } catch {
-    return bad(`"timeZone" is not a valid IANA time zone: ${JSON.stringify(p["timeZone"])}`);
+    return bad(`"timeZone" is not a valid IANA time zone: ${describeValue(p["timeZone"])}`);
   }
   const years = p["supportedYears"];
   if (
@@ -1756,7 +1758,7 @@ export function compileHolidaySource<Kind extends string>(
       c.error(
         "invalid-time-zone",
         "timeZone",
-        `Invalid time zone: ${JSON.stringify(options["timeZone"])}`,
+        `Invalid time zone: ${describeValue(options["timeZone"])}`,
       );
     }
   } else {
@@ -1814,7 +1816,7 @@ function loadProviderYear<Kind extends string>(
       throw providerDataError(
         provider,
         year,
-        `item ${i} has an invalid date ${JSON.stringify(date)}`,
+        `item ${i} has an invalid date ${describeValue(date)}`,
       );
     }
     if (seen.has(date)) throw providerDataError(provider, year, `duplicate date ${date}`);
@@ -1846,7 +1848,7 @@ function loadProviderYear<Kind extends string>(
         throw providerDataError(
           provider,
           year,
-          `item ${i} (${date}) key must match ${String(HOLIDAY_KEY_PATTERN)}: ${JSON.stringify(h["key"])}`,
+          `item ${i} (${date}) key must match ${String(HOLIDAY_KEY_PATTERN)}: ${describeValue(h["key"])}`,
         );
       }
       holiday.key = h["key"];
@@ -1867,13 +1869,13 @@ function checkNames(names: unknown): string | undefined {
     try {
       canonical = Intl.getCanonicalLocales(tag)[0];
     } catch {
-      return `${JSON.stringify(tag)} is not a BCP 47 language tag`;
+      return `${describeValue(tag)} is not a BCP 47 language tag`;
     }
     if (canonical !== tag) {
-      return `${JSON.stringify(tag)} must be written in canonical form ${JSON.stringify(canonical)}`;
+      return `${describeValue(tag)} must be written in canonical form ${describeValue(canonical)}`;
     }
     if (typeof value !== "string" || value === "") {
-      return `${JSON.stringify(tag)} must be a non-empty string`;
+      return `${describeValue(tag)} must be a non-empty string`;
     }
   }
   return undefined;
@@ -1952,7 +1954,8 @@ export function createHolidayLookup<Kind extends string>(
   const dateOf = (input: DateInput): DateString => toCivil(input, timeZone).date;
 
   function holidaysInYear(year: number): readonly Holiday<Kind>[] {
-    if (!Number.isInteger(year)) throw rangeError("invalid-argument", `Invalid year: ${year}`);
+    if (!Number.isInteger(year))
+      throw rangeError("invalid-argument", `Invalid year: ${describeValue(year)}`);
     return Object.freeze(
       [...holidayMap(year).values()].sort((a, b) =>
         a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
@@ -1973,7 +1976,13 @@ export function createHolidayLookup<Kind extends string>(
     civilOf: ((input: DateInput) =>
       toDateTimeParts(input, timeZone)) as HolidayLookup<Kind>["civilOf"],
     instantOf: (date, time) => toInstant(date, time, timeZone),
-    today: (now = new Date()) => instantToCivil(now.getTime(), timeZone).date,
+    today: (now = new Date()) => {
+      // 数（Date.now() など）や文字列を黙って受けない。別の実行環境の Date も受ける（input.ts の isDate）
+      if (!isDate(now)) {
+        throw rangeError("invalid-argument", `today expects a Date: ${describeValue(now)}`);
+      }
+      return instantToCivil(Date.prototype.getTime.call(now), timeZone).date;
+    },
     isHoliday: (input) => holidayOfDate(dateOf(input)) !== undefined,
     holidayOn: (input) => holidayOfDate(dateOf(input)),
     getHoliday: (input) => holidayOfDate(dateOf(input)),
@@ -2147,8 +2156,11 @@ export function compileScheduleOptions<Value, Kind extends string>(
   return { source, weekly, holiday, annual, dates, recurring };
 }
 
-/** 振替元をさかのぼる日数と、祝日の翌日・祝前日の塊を調べる日数の上限（祝日と飛ばす曜日が続く日数。2019 年の大型連休でも 10 日） */
-const MAX_HOLIDAY_RUN = 31;
+/**
+ * @internal 振替元をさかのぼる日数と、祝日の翌日・祝前日の塊を調べる日数の上限（祝日と飛ばす曜日が続く日数。2019 年の大型連休でも 10 日）。
+ * 診断の expired も、"after-holiday" の規則の振替が届きうる最も遠い日として使う
+ */
+export const MAX_HOLIDAY_RUN = 31;
 
 /** @internal 毎年の月日の規則の形がその月日 "MM-DD" に当てはまるか（有効期間は考えない） */
 export function matchMonthDay(rule: AnnualRule<unknown>, monthDay: string): boolean {
