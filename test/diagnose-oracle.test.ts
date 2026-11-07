@@ -591,6 +591,24 @@ const BASES: Readonly<Record<string, unknown>> = {
     timeZone: "UTC",
     closedWeekdays: [0, 6],
   }),
+  // 窓の中（2027 年）だけで投げる: 2001〜2028 年を対応年にし、2027 年の祝日だけが未確定（代表の 28 年間では投げないので、
+  // 週の狭め方だけの効果を分けて測れる）
+  BASIS_INSIDE: lib["createCalendar"]!({
+    holidayProvider: {
+      ...SHORT_PROVIDER,
+      id: "SHORT-INSIDE",
+      supportedYears: { from: 2001, to: 2028 },
+      holidaysInYear: (year: number) =>
+        year < 2025 || year > 2027
+          ? []
+          : SHORT_PROVIDER.holidaysInYear(year).map((h) =>
+              year === 2027 ? { ...h, confirmed: false } : h,
+            ),
+    },
+    timeZone: "UTC",
+    closedWeekdays: [0, 6],
+    unconfirmedHolidayPolicy: "throw",
+  }),
   // 2026 年からの祝日が未確定で、未確定の祝日のある月で投げる（対応年の外でも投げる）
   BASIS_UNCONFIRMED: lib["createCalendar"]!({
     holidayProvider: shortWith("SHORT-UNCONFIRMED", 2027, 2026),
@@ -641,39 +659,30 @@ const schedulePathsOf = (list: readonly ScheduleItem[]): string[] => {
   return list.map(({ key }) => `${key}[${(count[key] = (count[key] ?? -1) + 1)}]`);
 };
 /**
- * 素朴な定義の「分からない規則」（実装の内部を使わない。docs/decisions.md の 31 番）: 元の設定の valueOn で投げる日がある月を
- * 判定できない月とし、項目の有効期間と窓の重なりがその月に重なれば（週の規則は前後 1 か月も）分からない。基準のカレンダーを
- * 持たない繰り返しの規則の never-matches は、規則の形だけで決まるので分かる（実装と同じ例外）
+ * 素朴な定義の「分からない規則」（判定できない日の求め方の内部を使わない。docs/decisions.md の 31 番）: 項目の有効期間 ∩
+ * 窓に、元の設定の valueOn で投げた日が 1 日でもあれば分からない（投げた日は実際の評価で決まるので、週の前後の余白は要らない）。
+ * 窓は診断が規則どうしを調べる期間（rulesScanWindow。比べる 2025〜2027 年より広いことがある）で、その全日の valueOn を見る。基準の
+ * カレンダーを持たない繰り返しの規則の never-matches は、規則の形だけで決まるので分かる（実装と同じ例外）
  */
 const naiveUnsureFor = (
   list: readonly ScheduleItem[],
-  values: readonly string[],
+  thrown: readonly string[],
 ): ((code: string, path: string) => boolean) => {
-  const monthOf = (date: string): number =>
-    Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1;
-  const thrown = new Set(SHORT_DAYS.filter((_, i) => values[i] === "E").map(monthOf));
   const paths = schedulePathsOf(list);
-  const first = monthOf(SHORT_DAYS[0]!);
-  const last = monthOf(SHORT_DAYS[SHORT_DAYS.length - 1]!);
   return (code, path) => {
     if (code !== "never-matches" && code !== "redundant") return false;
     const index = paths.indexOf(path);
-    if (index < 0 || thrown.size === 0) return false;
+    if (index < 0 || thrown.length === 0) return false;
     const { key, entry } = list[index]!;
     if (key === "recurringRules" && entry["calendar"] === undefined && code === "never-matches")
       return false;
-    const margin = "businessDayOfWeek" in entry ? 1 : 0;
-    const start =
-      typeof entry["effectiveFrom"] === "string" ? monthOf(entry["effectiveFrom"]) : first;
-    const end = typeof entry["effectiveTo"] === "string" ? monthOf(entry["effectiveTo"]) : last;
-    const from = Math.max(first, start) - margin;
-    const to = Math.min(last, end) + margin;
-    for (const m of thrown) if (m >= from && m <= to) return true;
-    return false;
+    const from = typeof entry["effectiveFrom"] === "string" ? entry["effectiveFrom"] : "0000-01-01";
+    const to = typeof entry["effectiveTo"] === "string" ? entry["effectiveTo"] : "9999-12-31";
+    return thrown.some((day) => day >= from && day <= to);
   };
 };
 /**
- * 実装の「分からない規則」（今のソースの unjudgeableMonths・unsureOf）。完全性の除外にだけ使う（実装が出さないと決めた
+ * 実装の「分からない規則」（今のソースの unjudgeableDays・unsureOf）。完全性の除外にだけ使う（実装が出さないと決めた
  * 規則は出ない）。ORACLE_TARGET の版では除外しない
  */
 const unsureCore = target
@@ -690,11 +699,33 @@ const unsureFor = (o: Obj): ((code: string, path: string) => boolean) => {
   const compiled = unsureCore.compile(new unsureCore.collector(), o);
   if (compiled === undefined) return () => false;
   const window = unsureCore.diagnose["rulesScanWindow"]!(compiled);
-  const months = unsureCore.diagnose["unjudgeableMonths"]!(compiled, window);
-  return unsureCore.diagnose["unsureOf"]!(compiled, months) as (c: string, p: string) => boolean;
+  const unknown = unsureCore.diagnose["unjudgeableDays"]!(compiled, window);
+  return unsureCore.diagnose["unsureOf"]!(compiled, unknown) as (c: string, p: string) => boolean;
 };
-/** pnpm check（ORACLE_FULL なし）は、全件の設定から、この間隔の決まった抜き出しだけを試す */
-const SCHEDULE_SAMPLE_EVERY = 5;
+/** 診断が規則どうしを調べる期間の全日のうち、元の設定の valueOn で投げる日（素朴な定義の入力） */
+const scheduleCompile = (await coreOf(undefined, "schedule"))["compileScheduleOptions"]!;
+const thrownInWindow = (o: Obj): string[] => {
+  const compiled = scheduleCompile(new scanCore.collector(), o);
+  if (compiled === undefined) return [];
+  const window = scanCore.window(compiled) as
+    | { ranges: { from: number; to: number }[] }
+    | undefined;
+  if (window === undefined) return [];
+  const schedule = lib["createSchedule"]!(o) as { valueOn(d: string): unknown };
+  const thrown: string[] = [];
+  for (const { from, to } of window.ranges)
+    for (let n = from; n <= to; n++) {
+      const day = scanCore.fromDay(n) as string;
+      try {
+        schedule.valueOn(day);
+      } catch {
+        thrown.push(day);
+      }
+    }
+  return thrown;
+};
+/** pnpm check（ORACLE_FULL なし）は、全件の設定から、この間隔の決まった抜き出しだけを試す（固定の設定の形は常に含める） */
+const SCHEDULE_SAMPLE_EVERY = 20;
 const schedulePlan = (() => {
   const all: { list: ScheduleItem[]; policy: string; weekdays: readonly number[] }[] = [];
   const pick = random(20261108);
@@ -707,8 +738,15 @@ const schedulePlan = (() => {
           all.push({ list, policy, weekdays });
         }
     }
+  // 抜き出しでも、固定の設定の形は項目 1 つ・方針 closed・定休日 [0, 6] の設定を常に含める
+  const always = (c: (typeof all)[number]) =>
+    c.list.length === 1 &&
+    c.list[0]!.shape !== undefined &&
+    c.policy === "closed" &&
+    c.weekdays.length === 2;
   return all.filter(
-    (_, n) => (FULL || n % SCHEDULE_SAMPLE_EVERY === 0) && (!SHARD || n % SHARD.n === SHARD.k),
+    (c, n) =>
+      (FULL || n % SCHEDULE_SAMPLE_EVERY === 0 || always(c)) && (!SHARD || n % SHARD.n === SHARD.k),
   );
 })();
 
@@ -736,7 +774,10 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
     const paths = schedulePathsOf(list);
     const unsure = unsureFor(o);
     const base = scheduleValues(o);
-    const naive = naiveUnsureFor(list, base);
+    const naive = naiveUnsureFor(
+      list,
+      list.some((x) => typeof x.entry["calendar"] === "string") ? thrownInWindow(o) : [],
+    );
     // 分からない規則への約束（素朴な定義で確かめる。実装の集合が狭すぎて、出してはいけない診断を出すことを見つける）
     for (const x of d)
       if (naive(x["code"] as string, x["path"] as string))
@@ -783,11 +824,11 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
   const lines = [
     "### スケジュールのオラクル",
     "",
-    `試した設定 ${schedulePlan.length} 件（${FULL ? "全件" : `${SCHEDULE_SAMPLE_EVERY} 件に 1 件の抜き出し`}${SHARD ? `、${SHARD.n} 個に分けた ${SHARD.k} 番目` : ""}）、誤り ${unsound.length} 件`,
+    `試した設定 ${schedulePlan.length} 件（${FULL ? "全件" : `${SCHEDULE_SAMPLE_EVERY} 件に 1 件の抜き出しと、固定の設定の形`}${SHARD ? `、${SHARD.n} 個に分けた ${SHARD.k} 番目` : ""}）、誤り ${unsound.length} 件`,
     `基準ごとの項目: ${JSON.stringify(byBasis)}`,
     `固定の設定の形ごと: ${JSON.stringify(byShape)}`,
-    `取り除けるのに出ない項目（素朴な定義でも分からない。月の単位の限界）: ${unsureBoth} 件`,
-    `取り除けるのに出ない項目（実装だけが分からないとする。求めすぎ。判定できない月の狭め方が減らす対象）: ${unsureOnlyImpl} 件`,
+    `取り除けるのに出ない項目（素朴な定義でも分からない）: ${unsureBoth} 件`,
+    `取り除けるのに出ない項目（実装だけが分からないとする。求めすぎ）: ${unsureOnlyImpl} 件`,
     `取り除けるのに出ない項目（分からない規則を除く）: ${incomplete.size === 0 ? "なし" : JSON.stringify([...incomplete])}`,
     "",
   ];
@@ -806,7 +847,8 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
       assert.ok((byBasis[basis] ?? 0) > 0, `基準 ${basis} を試していない`);
     for (const shape of new Set(scheduleItems.flatMap((x) => (x.shape ? [x.shape] : []))))
       assert.ok((byShape[shape] ?? 0) > 0, `形「${shape}」を試していない`);
-    assert.ok(unsureOnlyImpl > 0, "実装の求めすぎが 0 件（網が狭め方の対象を捉えていない）");
+    // 判定できない日（日の単位）は、素朴な定義と同じ項目を分からないとする（求めすぎは 0 件。0.31.0 で狭めた結果）
+    assert.equal(unsureOnlyImpl, 0, "実装の求めすぎ（素朴な定義では判定できるのに出さない項目）");
     assert.ok(unsureBoth > 0, "素朴な定義でも分からない項目が 0 件（素朴な定義が働いていない）");
   }
 });

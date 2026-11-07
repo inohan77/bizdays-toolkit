@@ -677,6 +677,24 @@
         "date": "01-01",
         "value": "x"
       }
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfWeek": 1,
+        "weekStart": 1,
+        "calendar": "BASIS_INSIDE",
+        "value": "x"
+      },
+      "shape": "窓の中だけで投げる基準の週の規則"
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": 1,
+        "calendar": "BASIS_INSIDE",
+        "value": "x"
+      }
     }
   ]
 }

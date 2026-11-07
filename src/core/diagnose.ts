@@ -547,90 +547,106 @@ function guardBases<Value, Kind extends string>(
  */
 const UNSURE_CODES = new Set(["never-matches", "redundant"]);
 
+/** @internal 判定できない日（窓の日の通し番号）と、基準が投げる月（年 × 12 + 月 - 1。見張りに使う） */
+export interface Unjudgeable {
+  readonly days: ReadonlySet<number>;
+  readonly months: ReadonlySet<number>;
+}
+
 /**
- * @internal 判定できない月（年 × 12 + 月 - 1）を、規則を評価せずに決める（docs/decisions.md の 31 番）。
+ * @internal 判定できない日の集合 U を、規則を評価せずに決める（docs/decisions.md の 31 番）。単位は「その日について、結果の
+ * 分からない規則があるか」。基準のカレンダーを持つ規則ごとに、
  *
- * 判定できない月は、基準のカレンダーを持つ規則が、形（months。週の規則は前後 1 か月）と有効期間から基準を評価しうる月の
- * うち、基準が投げる月。窓の月は有効期間で絞り、規則の形を調べる代表の 28 年間（2001〜2028 年）は有効期間にかかわらず
- * 求める（patternBits が有効期間にかかわらず基準を評価する）。週の規則の基準が投げる月は、その前後の月も判定できない月に
- * し、すべての規則に効かせる（その週にかかる日の判定が、結果の分からない週の規則に左右される）。
- * 求めすぎは安全側（診断が減るだけ）で、見張り（dropUnsure）は求めていない月で基準が投げたことだけを確かめる。
- * 基準は繰り返しの規則に依存しないので、規則の並びや取り除きの順に左右されない
+ * - 月の規則: 有効期間 ∩ 窓のうち months に当てはまる月で、基準が投げる月の日（有効期間 ∩ 窓の中）
+ * - 週の規則: 有効期間 ∩ 窓に 1 日でも入る週（weekStart で区切る）のうち、months に当てはまる日を含む週で、その 7 日が
+ *   属する月のどれかで基準が投げる週の 7 日
+ *
+ * U はその和。規則の形を調べる代表の 28 年間は含めない（第 n 営業日の規則の形は setCovers で比べ、代表の 28 年間で基準を
+ * 評価しない）。基準は繰り返しの規則に依存しないので、規則の並びや取り除きの順に左右されない
  */
-export function unjudgeableMonths<Value, Kind extends string>(
+export function unjudgeableDays<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
   window:
     | { readonly ranges: readonly { readonly from: number; readonly to: number }[] }
     | undefined,
-): ReadonlySet<number> {
+): Unjudgeable {
+  const days = new Set<number>();
   const months = new Set<number>();
   const bases = compiled.recurring.filter((r) => r.basis !== null && r.calendar !== null);
-  if (!window || bases.length === 0) return months;
-  const throws = (r: RecurringRuleCompiled<Value>, m: number): boolean => {
-    try {
-      r.basis!(Math.floor(m / 12), (m % 12) + 1);
-      return false;
-    } catch (error) {
-      // 判定できない月の印（対応年の外・未確定の祝日）だけを数える。ほかの例外は、規則どうしの診断が報告する
-      return UNJUDGEABLE.has(String((error as { code?: unknown }).code));
-    }
-  };
+  if (!window || bases.length === 0) return { days, months };
   const monthOf = (day: number): number => {
     const { year, month } = parseDate(fromDayNumber(day));
     return year * 12 + month - 1;
   };
-  const windowMonths: number[] = [];
-  for (const { from, to } of window.ranges)
-    for (let m = monthOf(from); m <= monthOf(to); m++) windowMonths.push(m);
-  const patternMonths: number[] = [];
-  for (let m = monthOf(PATTERN_FROM); m <= monthOf(PATTERN_FROM + PATTERN_DAYS - 1); m++)
-    patternMonths.push(m);
   for (const r of bases) {
-    const week = r.weekStart !== null;
-    const first = r.effectiveFrom === null ? -Infinity : monthOf(r.effectiveFrom);
-    const last = r.effectiveTo === null ? Infinity : monthOf(r.effectiveTo);
-    // 規則が基準を評価しうる月: 窓の月は有効期間で絞り、代表の 28 年間は有効期間にかかわらず（patternBits）。どちらも months で絞る
-    const reached = [...windowMonths.filter((m) => m >= first && m <= last), ...patternMonths];
-    // 週の規則は、週が月をまたぐので、絞った月の直前・直後の月も求める
-    const candidates = new Set(week ? reached.flatMap((m) => [m - 1, m, m + 1]) : reached);
+    const thrown = new Map<number, boolean>();
+    const throws = (m: number): boolean => {
+      let result = thrown.get(m);
+      if (result === undefined) {
+        try {
+          r.basis!(Math.floor(m / 12), (m % 12) + 1);
+          result = false;
+        } catch (error) {
+          // 判定できない月の印（対応年の外・未確定の祝日）だけを数える。ほかの例外は、規則どうしの診断が報告する
+          result = UNJUDGEABLE.has(String((error as { code?: unknown }).code));
+        }
+        thrown.set(m, result);
+        if (result) months.add(m);
+      }
+      return result;
+    };
     const inMonths = (m: number): boolean => r.months === null || r.months.has((m % 12) + 1);
-    for (const m of candidates) {
-      const evaluated = week ? inMonths(m - 1) || inMonths(m) || inMonths(m + 1) : inMonths(m);
-      if (!evaluated || !throws(r, m)) continue;
-      months.add(m);
-      if (week) {
-        months.add(m - 1);
-        months.add(m + 1);
+    for (const range of window.ranges) {
+      const from = Math.max(range.from, r.effectiveFrom ?? -Infinity);
+      const to = Math.min(range.to, r.effectiveTo ?? Infinity);
+      if (from > to) continue;
+      if (r.weekStart === null) {
+        for (let n = from; n <= to; n++)
+          if (inMonths(monthOf(n)) && throws(monthOf(n))) days.add(n);
+        continue;
+      }
+      // 週の規則: weekStart で区切った週ごとに、その 7 日が属する月で基準が投げるか
+      const start = from - ((weekdayOf(fromDayNumber(from)) - r.weekStart + 7) % 7);
+      for (let w = start; w <= to; w += 7) {
+        const week = [0, 1, 2, 3, 4, 5, 6].map((i) => w + i);
+        const weekMonths = [...new Set(week.map(monthOf))];
+        if (!weekMonths.some(inMonths)) continue;
+        // 投げる月はすべて記録する（見張りの入力。some で途中で止めない）
+        if (weekMonths.map(throws).some(Boolean)) for (const n of week) days.add(n);
       }
     }
   }
-  return months;
+  return { days, months };
 }
 
 /**
- * @internal 判定できない月の影響を受けうる診断（never-matches・redundant）か。診断の項目は、path の先頭が規則の位置と一致する
+ * @internal 判定できない日の影響を受けうる診断（never-matches・redundant）か。診断の項目は、path の先頭が規則の位置と一致する
  * もので引く（規則の中のオプションの位置も同じ規則に当たる）。
  *
  * - 基準のカレンダーを持たない繰り返しの規則の never-matches と、その規則の中のオプションの診断は、規則の形と設定だけで
  *   決まり、基準のカレンダーを評価しないので分かる
- * - それ以外は、その項目の有効期間（個別の日付はその期間。期間がなければ全期間）に判定できない月があれば分からない。
+ * - それ以外は、その項目の有効期間（個別の日付はその期間。期間がなければ全期間）に判定できない日があれば分からない。
  *   redundant は、取り除いた設定と元の設定の結果を比べるので、ほかの規則の基準のカレンダーの評価にも依存する
  * - 規則に当たらない path の診断は分からない
  */
 export function unsureOf<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
-  unknownMonths: ReadonlySet<number>,
+  unknown: Unjudgeable,
 ): (code: string, path: string) => boolean {
-  if (unknownMonths.size === 0) return () => false;
-  const monthOf = (day: number): number => {
-    const { year, month } = parseDate(fromDayNumber(day));
-    return year * 12 + month - 1;
-  };
+  if (unknown.days.size === 0) return () => false;
+  const sorted = [...unknown.days].sort((a, b) => a - b);
   const overlaps = (start: number | null, end: number | null): boolean => {
-    const a = start === null ? -Infinity : monthOf(start);
-    const b = end === null ? Infinity : monthOf(end);
-    for (const m of unknownMonths) if (m >= a && m <= b) return true;
-    return false;
+    const a = start ?? -Infinity;
+    const b = end ?? Infinity;
+    // a 以上の最初の日を二分探索で求め、それが b 以下か
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid]! < a) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo < sorted.length && sorted[lo]! <= b;
   };
   const items: readonly DecidingRule<Value>[] = [
     ...compiled.dates,
@@ -667,10 +683,10 @@ export function dropUnsure(
   from: number,
   unsure: (code: string, path: string) => boolean,
   recorded: ReadonlySet<number>,
-  unknownMonths: ReadonlySet<number>,
+  unknown: Unjudgeable,
 ): void {
   for (const m of recorded)
-    if (!unknownMonths.has(m))
+    if (!unknown.months.has(m))
       throw internalError(`a basis threw in a month that was not found beforehand: ${m}`);
   const left = c.issues.slice(from).find((d) => unsure(d.code, d.path));
   if (left)
@@ -686,7 +702,7 @@ function analyze<Value, Kind extends string>(
 ): void {
   // 判定できない月を、規則を評価する前に、基準を直接求めて決める（基準は繰り返しの規則に依存しないので、規則の並びや
   // 取り除きの順に左右されない）。分からない規則は never-matches・redundant を出さず、逐次除去でも取り除かない（31 番）
-  const unknown = unjudgeableMonths(original, rulesScanWindow(original));
+  const unknown = unjudgeableDays(original, rulesScanWindow(original));
   const recorded = new Set<number>();
   const compiled = guardBases(original, recorded);
   const unsure = unsureOf(original, unknown);
@@ -783,7 +799,11 @@ function analyzeRules<Value, Kind extends string>(
   });
 
   // --- 繰り返しの規則: 当てはまる日がない・覆われている ---
-  const recurringBits = recurring.map(patternBits);
+  // 第 n 営業日の規則の shadowed は形の包含（setCovers）で決まり、当てはまる日の印はどの診断も使わないので求めない（求めると、
+  // 代表の 28 年間で基準のカレンダーを評価してしまう）。第 n 営業日の規則の印を使う診断を足すときは、ここと
+  // unjudgeableDays（代表の 28 年間を U に含めていない）を見直す（docs/decisions.md の 31 番）
+  const noBits = new Uint8Array(PATTERN_DAYS);
+  const recurringBits = recurring.map((r) => (r.businessDays !== null ? noBits : patternBits(r)));
   /** 祝日・祝日の翌日・祝前日の規則の判定に使う（提供元の対応年の外は祝日でないとみなす） */
   const holidayOfSafe = (date: DateString): Holiday<string> | undefined => {
     try {

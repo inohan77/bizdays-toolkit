@@ -6,6 +6,7 @@ import { createCalendar, createSchedule, type HolidayProvider } from "../src/ind
 import { diagnoseSchedule } from "../src/diagnose/index.ts";
 import { dropUnsure, unsureOf } from "../src/core/diagnose.ts";
 import { InternalError, IssueCollector } from "../src/core/errors.ts";
+import { toDayNumber } from "../src/core/date.ts";
 import { compileScheduleOptions } from "../src/core/schedule.ts";
 import { sg } from "../src/sg/index.ts";
 import { jp } from "../src/jp/index.ts";
@@ -154,7 +155,11 @@ test("unsureOf: 規則の位置は前方一致でも番号の途中で切らな�
   c.warning("never-matches", "recurringRules[11]", "basis-less");
   c.info("redundant", "recurringRules[1].holidayOverlapPolicy", "with a basis");
   c.info("redundant", "recurringRules[11].holidayOverlapPolicy", "basis-less");
-  const unknown = new Set([2019 * 12 + 11]);
+  // 2019 年 12 月の全日が判定できない日
+  const december = Array.from({ length: 31 }, (_, i) =>
+    toDayNumber(`2019-12-${String(i + 1).padStart(2, "0")}`),
+  );
+  const unknown = { days: new Set(december), months: new Set([2019 * 12 + 11]) };
   const unsure = unsureOf(compiled, unknown);
   const kept = c.issues.filter((d) => !unsure(d.code, d.path));
   // 見張り（dropUnsure）は、分からない診断が残っていれば作りの誤りとして投げる
@@ -183,7 +188,11 @@ test("unsureOf: 規則の中のオプションの位置は、path の先頭の�
   c.info("redundant", "recurringRules[1]", "basis-less rule, no period");
   c.info("redundant", "somewhere", "not a rule");
   c.warning("shadowed", "recurringRules[0]", "shape only");
-  const unknown = new Set([2019 * 12 + 11]);
+  // 2019 年 12 月の全日が判定できない日
+  const december = Array.from({ length: 31 }, (_, i) =>
+    toDayNumber(`2019-12-${String(i + 1).padStart(2, "0")}`),
+  );
+  const unknown = { days: new Set(december), months: new Set([2019 * 12 + 11]) };
   const unsure = unsureOf(compiled, unknown);
   const kept = c.issues.filter((d) => !unsure(d.code, d.path));
   // 見張り（dropUnsure）は、分からない診断が残っていれば作りの誤りとして投げる
@@ -377,4 +386,38 @@ test("判定できない月の範囲: 窓の月は有効期間で絞る（1970 �
   ]);
   // 有効期間がなければ、1955〜1969 年の月で基準を評価しうるので（対応年の外で投げる）、判定できない月があり、出ない
   assert.deepEqual(run(rule), []);
+});
+
+test("判定できない日（日の単位）: 1970-01-05 始まりの週の規則は、週が 1969 年 12 月にまたがないので分かる（redundant が出る）", () => {
+  // 対応年 1970〜2099 年の基準。月の単位（0.31.0-B）では、週の規則の前後 1 か月（1969 年 12 月）で基準が投げるので分からない
+  // 規則だった。日の単位では、有効期間の最初の週（1970-01-05〜01-11）が 1970 年 1 月の中に収まるので、判定できない日はない
+  const from1970: HolidayProvider = {
+    ...jp,
+    id: "JP-1970",
+    supportedYears: { from: 1970, to: 2099 },
+  };
+  const basis1970 = createCalendar({ holidayProvider: from1970, closedWeekdays: [0, 6] });
+  const run = (rule: object) =>
+    diagnoseSchedule({
+      holidayProvider: jp,
+      weekdayValues: ["a", "a", "a", "a", "a", "a", "a"],
+      recurringRules: [rule] as never,
+    })
+      .filter((d) => d.code === "redundant" || d.code === "never-matches")
+      .map((d) => [d.code, d.path]);
+  // 終わりも、窓の最後の週（2099-12-28〜2100-01-03）が 2100 年にまたがないよう 2099-12-27（日曜）までにする
+  const week = {
+    businessDayOfWeek: 1,
+    weekStart: 1,
+    calendar: basis1970,
+    value: "a",
+    effectiveTo: "2099-12-27",
+  };
+  assert.deepEqual(run({ ...week, effectiveFrom: "1970-01-05" }), [
+    ["redundant", "recurringRules[0]"],
+  ]);
+  // 1970-01-01 始まりなら、最初の週（1969-12-29〜1970-01-04）が 1969 年 12 月にまたぎ、そこで基準が投げるので出ない
+  assert.deepEqual(run({ ...week, effectiveFrom: "1970-01-01" }), []);
+  // 終わりを窓の最後まで延ばすと、最後の週が 2100 年 1 月にまたぎ、そこで基準が投げるので出ない
+  assert.deepEqual(run({ ...week, effectiveFrom: "1970-01-05", effectiveTo: "2099-12-31" }), []);
 });
