@@ -1,6 +1,6 @@
 /**
  * 検査のスクリプトの検査（scripts/tool-selftest.ts）の部品。スクリプトは pnpm check で動かさないので、表と例外の扱いを
- * ここに切り出し、test/tool-selftest-parts.test.ts が確かめる。
+ * ここに切り出し、test/tools/tool-selftest-parts.test.ts が確かめる。
  */
 
 /** Markdown の表のセルに入れる文字列（| は \| にし、改行は / にする。表の列がずれないため） */

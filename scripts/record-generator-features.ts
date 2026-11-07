@@ -1,7 +1,7 @@
 import "./strict-warnings.ts";
 /**
  * 生成器が実際に作った設定の特徴を記録する（test/fixtures/generator-features-0.30.3/ の作り方。
- * test/generator-features.test.ts がこの記録との包含を確かめる）。
+ * test/tools/generator-features.test.ts がこの記録との包含を確かめる）。
  *
  * 記録の作り方: 指定した版（--ref。既定 v0.30.3）の 3 つの生成器の呼び出し側を、その版のファイルのまま
  * （種と試行の数を変えずに）作業用ディレクトリで動かし、作成・診断の関数に渡された設定の特徴（test/support/features.ts の
@@ -16,10 +16,10 @@ import "./strict-warnings.ts";
  * 差し替える（設定を記録してから本物に渡す）。判定の結果は使わないので、テストの合否は記録に影響しない。
  *
  * 使い方:
- *   node scripts/record-generator-features.ts --update --ref v0.30.3  # v0.30.3 を記録して test/fixtures/generator-features-0.30.3/ に書く
+ *   node scripts/record-generator-features.ts --update --ref v0.30.3  # 0.30.3 を記録して test/fixtures/generator-features-0.30.3/ に書く
  *   node scripts/record-generator-features.ts --ref v0.30.4 --check   # v0.30.4 の呼び出し側が記録の特徴を作るかを確かめる
  *   node scripts/record-generator-features.ts --worktree --check      # 作業ツリーの呼び出し側で同じことを確かめる（CI の generator-features ジョブ）
- * --check は、記録との差を test/generator-features.test.ts と同じ関数（test/support/features-compare.ts の missingFeatures）で比べ、
+ * --check は、記録との差を test/tools/generator-features.test.ts と同じ関数（test/support/features-compare.ts の missingFeatures）で比べ、
  * 落ちた特徴があれば終了コード 1。呼び出し側ごとに拾えた特徴が記録の半分に満たなければ、比べる前に失敗にする
  * （呼び出し側が関数の呼び方を変えて、差し替えた部品が何も拾わないまま合格するのを防ぐ）。--worktree は作業ツリーのファイル（コミットしていない変更を含む）を使う。--ref HEAD は使い方の誤り（git の HEAD はコミットを指すため）。
  * 記録はコミットしておき、作り直す（--update）のは比べ方（特徴の取り出し方。test/support/features.ts）を変えたときだけにする
@@ -94,7 +94,7 @@ if (givenRef !== undefined) {
 const ref = givenRef ?? "";
 /** 報告に出す名前 */
 const label = worktree ? "作業ツリー" : ref;
-// 記録は基準の版（v0.30.3）からだけ作る。今の版から作ると、包含の検査が今の生成器と自分自身の比較になって意味を失う
+// 記録は基準の版（0.30.3）からだけ作る。今の版から作ると、包含の検査が今の生成器と自分自身の比較になって意味を失う
 if (update && ref !== RECORD_REF) {
   console.error(`--update records only from ${RECORD_REF} (the baseline), not from ${ref}`);
   process.exit(2);
@@ -337,7 +337,7 @@ registerHooks({
     } else {
       const missing = missingFeatures(recorded, record);
       const total = Object.values(missing).reduce((n, list) => n + list.length, 0);
-      console.log(`## ${label}（${version}）の呼び出し側と、v0.30.3 の記録の比較\n`);
+      console.log(`## ${label}（${version}）の呼び出し側と、0.30.3 の記録の比較\n`);
       for (const [site, list] of Object.entries(missing))
         console.log(
           `- ${site}: 拾えた特徴 ${record[site]?.length ?? 0} 件、落ちた特徴 ${list.length} 件` +

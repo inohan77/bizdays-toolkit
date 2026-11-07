@@ -320,6 +320,8 @@ jobs:
       - uses: ./.github/actions/setup-toolchain
         with:
           node-version: "26.13.0"
+      - name: Test the test tools (test/tools)
+        run: pnpm test:tools
       - name: Check that the check scripts fail on injected errors
         run: |
           node scripts/tool-selftest.ts | tee -a "${GITHUB_STEP_SUMMARY}"

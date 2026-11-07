@@ -1,9 +1,9 @@
 // 規則と設定の目録（テスト拡充案の T2）。乱数のテスト・オラクル・result-compare の生成器は、ここから設定を作る。
 // 公開の型（etc/api.md）の設定のキー・規則の形・選択肢の値が、すべてここにあるか、理由付きで除外されていることを
-// test/catalog.test.ts が確かめる。規則の形やキーを足したら、ここにも足す（足さないと pnpm check が止まる）。
-// 値の候補を狭めると、test/generator-features.test.ts が「前の版の生成器が作っていた特徴を作らない」で止める。
+// test/tools/catalog.test.ts が確かめる。規則の形やキーを足したら、ここにも足す（足さないと pnpm check が止まる）。
+// 値の候補を狭めると、test/tools/generator-features.test.ts が「前の版の生成器が作っていた特徴を作らない」で止める。
 
-/** mulberry32: 種から決まる、再現可能な乱数（新しい依存を足さない。docs/decisions.md の 34 番） */
+/** mulberry32: 種から決まる、再現可能な乱数（新しい依存を足さない。RELEASING.md の「品質の仕組みの理由」の「依存を足さない」） */
 export function random(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -73,7 +73,7 @@ const markInvalid = (rule: Obj): Obj => {
 export const isIntendedInvalid = (rule: unknown): boolean =>
   typeof rule === "object" && rule !== null && INTENDED_INVALID.has(rule);
 
-/** 呼び出し側の文脈。生成器の到達性（test/catalog.test.ts）は、ここに載せた文脈ごとに確かめる */
+/** 呼び出し側の文脈。生成器の到達性（test/tools/catalog.test.ts）は、ここに載せた文脈ごとに確かめる */
 export const CONTEXTS = {
   /** test/properties.test.ts（日本の提供元） */
   properties: {
@@ -345,7 +345,7 @@ export const SHAPES: readonly Shape[] = [
 export const COMMON_RULE_KEYS = ["effectiveFrom", "effectiveTo", "name"] as const;
 
 /**
- * 公開の型にあるが生成器が作らないキー（"型.キー"）と、その理由。test/catalog.test.ts は、ここに載っていないキーを漏れとして、
+ * 公開の型にあるが生成器が作らないキー（"型.キー"）と、その理由。test/tools/catalog.test.ts は、ここに載っていないキーを漏れとして、
  * 載っているのに etc/api.md にないキー・生成器が実際に作っているキーを、食い違いとして止める
  */
 export const EXCLUDED_KEYS: Readonly<Record<string, string>> = {

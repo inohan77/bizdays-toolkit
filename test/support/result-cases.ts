@@ -1,5 +1,5 @@
 // result-compare（scripts/result-compare.ts）が比べる設定の集まり。種で決まる設定と、過去の退行を書き留めた固定の設定。
-// 生成範囲の包含の検査（test/generator-features.test.ts）も、同じ関数で同じ設定を作って特徴を数える。
+// 生成範囲の包含の検査（test/tools/generator-features.test.ts）も、同じ関数で同じ設定を作って特徴を数える。
 // 提供元は名前のまま持ち、比べるときに読み込んだ版の提供元に置き換える。
 
 import {
@@ -441,7 +441,7 @@ export const BASIS_MARK = Symbol.for("bizdays-toolkit.result-compare.basis");
  * カレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）。定休日は basisClosedWeekdays。基準のカレンダーの
  * outOfRangePolicy は、スケジュールの設定のものを受け継ぐ（basisOutOfRangePolicy。特徴の付け方と同じ関数）。
  * result-compare（scripts/result-compare.ts）が前の版と今回の版の両方に使う。両方を同じ作り方で比べるので、この処理が壊れても
- * 差分にならない。そのため、ここに置いて test/result-traits.test.ts で直接確かめる
+ * 差分にならない。そのため、ここに置いて test/tools/result-traits.test.ts で直接確かめる
  */
 export function withCalendars(lib: BasisLib, c: Case, naming: "new" | "old", options: Obj): Obj {
   const key = naming === "old" ? "recurring" : "recurringRules";

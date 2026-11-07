@@ -5,7 +5,8 @@
  * 同じものを使う（2 つの検査の範囲と形がずれないように）。
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
+import { releaseSections } from "./release-sections.ts";
 
 /** 決定の番号の参照。番号は「・」「、」「,」で並べてよい（decisionNumbers で分ける）。「番目」は数えない */
 export const DECISION_REFERENCE = /decisions\.md`? の ([\d・、, ]+?) ?番(?!目)/g;
@@ -33,7 +34,14 @@ export function currentFiles(): string[] {
     "RELEASING.md",
     "SECURITY.md",
     ...readdirSync("docs")
-      .filter((f) => f.endsWith(".md") && f !== "decisions.md" && f !== "migration.md")
+      // 履歴を書いたファイル（決定の文書・移行ガイド・開発の記録）は、改名・削除の前の名前を正しく含むので除く
+      .filter(
+        (f) =>
+          f.endsWith(".md") &&
+          f !== "decisions.md" &&
+          f !== "migration.md" &&
+          f !== "development-log.md",
+      )
       .map((f) => `docs/${f}`),
     ...readdirSync("docs/sources").map((f) => `docs/sources/${f}`),
   ];
@@ -54,11 +62,11 @@ export function changelogSections(): { version: string; text: string; oldNumberi
       if (v[i] !== RENUMBERED_AFTER[i]) return v[i]! < RENUMBERED_AFTER[i]!;
     return true;
   };
-  return readFileSync("CHANGELOG.md", "utf8")
-    .split(/^## \[/m)
-    .slice(1)
-    .map((text) => {
-      const version = text.slice(0, text.indexOf("]"));
-      return { version, text, oldNumbering: isOld(version) };
-    });
+  // 0.31.0 から、開発の記録は docs/development-log.md にある。同じ版の節をつなげて、参照の数を移動の前後でそろえる
+  const sections = releaseSections();
+  return [...sections].map(([version, text]) => ({
+    version,
+    text: `${version}]${text}`,
+    oldNumbering: isOld(version),
+  }));
 }

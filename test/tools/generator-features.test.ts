@@ -1,4 +1,4 @@
-// 生成範囲を減らさない。3 つの呼び出し側が今作る設定の特徴が、v0.30.3 の呼び出し側が実際に作った設定の特徴
+// 生成範囲を減らさない。3 つの呼び出し側が今作る設定の特徴が、0.30.3 の呼び出し側が実際に作った設定の特徴
 // （test/fixtures/generator-features-0.30.3/。作り方は scripts/record-generator-features.ts）を、呼び出し側ごとに
 // すべて含むことを確かめる。比べ方は test/support/features-compare.ts の 1 か所で、スクリプトの --check と同じ。
 // 呼び出し側の設定は test/support/sites.ts の関数で、呼び出し側と同じ種と試行の数で作り、3 つの呼び出し側とも設定の並びまで
@@ -11,9 +11,9 @@
 // 設定だけを作るこのテストには、その問い合わせが出ない。設定の特徴（scan 以外）は両方で同じ。
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { jp } from "../src/jp/index.ts";
-import { COMBINATIONS, NOT_APPLICABLE } from "./support/combinations.ts";
-import { featuresOf } from "./support/features.ts";
+import { jp } from "../../src/jp/index.ts";
+import { COMBINATIONS, NOT_APPLICABLE } from "../support/combinations.ts";
+import { featuresOf } from "../support/features.ts";
 import {
   DROPPED_FEATURES,
   SITES,
@@ -21,8 +21,8 @@ import {
   readRecord,
   staleDropped,
   type FeatureRecord,
-} from "./support/features-compare.ts";
-import { JP_FULL_RANGE, siteTrials, trialScanFeatures } from "./support/sites.ts";
+} from "../support/features-compare.ts";
+import { JP_FULL_RANGE, siteTrials, trialScanFeatures } from "../support/sites.ts";
 
 const recorded = readRecord();
 
@@ -32,7 +32,7 @@ test("記録は 3 つの呼び出し側のもので、どれも特徴がある",
 });
 
 for (const site of SITES)
-  test(`生成範囲（${site}）: v0.30.3 の呼び出し側が作った特徴を、今の呼び出し側もすべて作る`, () => {
+  test(`生成範囲（${site}）: 0.30.3 の呼び出し側が作った特徴を、今の呼び出し側もすべて作る`, () => {
     const current = new Set<string>();
     for (const t of siteTrials(site)) {
       for (const f of featuresOf(t.options, t.kind)) current.add(f);

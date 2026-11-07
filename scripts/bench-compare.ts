@@ -7,12 +7,13 @@
  * 絶対値は記録として表に残す（GitHub の Job Summary に書くには、出力を $GITHUB_STEP_SUMMARY に渡す）。
  *
  * 正しさのために遅くなることを受け入れる版は、CHANGELOG の今の版（または [Unreleased]）の「### 開発」に「性能の退行」という
- * 言葉を含めて理由を書く。そのときは上限を超えても表に記録して合格にする（decisions.md の 37 番。サイズの上限と同じ形）。
+ * 言葉を含めて理由を書く。そのときは上限を超えても表に記録して合格にする（RELEASING.md の「品質の仕組みの理由」の「前の版と比べる」。サイズの上限と同じ形）。
  *
  * 使い方: node scripts/bench-compare.ts <base.json> <head.json> [--ratio 2] [--base-label <label>] [--head-label <label>]
  */
 
 import "./strict-warnings.ts";
+import { releaseSections } from "./release-sections.ts";
 import { readFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
@@ -67,23 +68,19 @@ lines.push(
   `最も遅くなった計測の比率: ${worst.toFixed(2)}x（上限 ${ratioLimit}x。ランナーの性能のぶれは比率には現れにくい）`,
 );
 console.log(lines.join("\n"));
-/** CHANGELOG の今の版（または [Unreleased]）の「### 開発」に「性能の退行」の記載があるか */
+/** 今の版（または [Unreleased]）の開発の記録（docs/development-log.md。0.29.x 以前は CHANGELOG の「開発」）に「性能の退行」の記載があるか */
 function performanceNoted(): boolean {
-  let changelog: string;
   let version: string;
   try {
-    changelog = readFileSync("CHANGELOG.md", "utf8");
     version = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
   } catch {
     return false;
   }
-  const sections = changelog.split(/^## \[/m).slice(1);
-  return sections
-    .filter((sec) => sec.startsWith("Unreleased]") || sec.startsWith(`${version}]`))
-    .some((sec) => {
-      const dev = /^### 開発\n([\s\S]*?)(?=^### |(?![\s\S]))/m.exec(sec);
-      return dev !== null && dev[1]!.includes("性能の退行");
-    });
+  // 0.31.0 から「開発」は docs/development-log.md に書く。CHANGELOG.md と両方の節を見る（scripts/release-sections.ts）
+  const sections = releaseSections();
+  return ["Unreleased", version].some(
+    (name) => sections.get(name)?.includes("性能の退行") === true,
+  );
 }
 if (failed) {
   if (performanceNoted()) {

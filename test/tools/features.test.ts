@@ -1,7 +1,7 @@
 // 特徴の取り出し（test/support/features.ts）の、診断の走査の範囲（src/core/diagnose.ts の scanWindow の基準の範囲）
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { diagnoseRangeOf } from "./support/features.ts";
+import { diagnoseRangeOf } from "../support/features.ts";
 
 const provider = (from: number, to: number) => ({ id: "T", supportedYears: { from, to } });
 

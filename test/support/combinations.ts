@@ -1,5 +1,5 @@
 // 必ず作る組み合わせ（生成範囲の検査が守る個々の特徴とは別に、危険の分かっている特徴の組み合わせを、呼び出し側ごとに
-// 1 回以上作ることを test/generator-features.test.ts が確かめる）。過去の不具合と、オラクルが見つけた誤りの種類から選ぶ。
+// 1 回以上作ることを test/tools/generator-features.test.ts が確かめる）。過去の不具合と、オラクルが見つけた誤りの種類から選ぶ。
 
 type Obj = Record<string, unknown>;
 

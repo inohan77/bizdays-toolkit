@@ -23,7 +23,7 @@
 - **繰り返しの規則**: 「第 3 水曜定休」「隔週水曜定休」「毎月末日は棚卸」「月曜休館（祝日の場合は次の祝日でない日）」「祝日の翌日（前日）は休館」「bank holiday の前の最終平日」「4 勤 2 休の交替制」を、祝日に当たったときの扱いと有効期間つきで書けます
 - **日ごとの値と合成**: 曜日・祝日・特定日で変わる営業時間のようなスケジュール、そこから作る営業日カレンダー、複数のカレンダーがすべて（またはどれか）営業している日の合成
 - **設定の診断**: `bizdays-toolkit/diagnose` が、決して使われない規則・覆われた規則・取り除いても結果が変わらない規則・終わった規則・キーの打ち間違い・営業日が 1 日もない設定を、例外を投げずに一覧で返します。テストに 1 行足すだけで設定を守れます
-- **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 13.1KB（日本の祝日込みで約 14.8KB、英国の祝日込みで約 15.2KB、フランスの祝日込みで約 14.0KB、シンガポールの祝日込みで約 14.0KB。0.31.0 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
+- **軽量・依存ゼロ・タイムゾーンを間違えない**: minify + gzip で約 13.3KB（日本の祝日込みで約 15.1KB、英国の祝日込みで約 15.4KB、フランスの祝日込みで約 14.2KB、シンガポールの祝日込みで約 14.2KB。0.31.0 で測定）。標準の JavaScript と `Intl` だけ、ESM・型定義同梱。Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers・Bun・Deno で確認。`Date` などの瞬間はカレンダーのタイムゾーンで暦日に変換してから判定します
 - **他の国・地域に拡張できる**: 祝日の提供元はインターフェース（`HolidayProvider`）で差し替えられ、多くの国の祝日の元になる暦の計算（月の第 n 何曜日・復活祭・週末に当たった祝日の振替）を `bizdays-toolkit/provider` が公開します
 
 ## インストール
@@ -88,7 +88,7 @@ calendar.dueDate("2026-11", { dayOfMonth: 23, convention: "following" }); // "20
 | `skipWeekdays: [0, 6]`                                    | `"after-holiday"` で土日も飛ばす（「6 月 15 日。土日祝なら翌営業日」） |
 | `effectiveFrom`・`effectiveTo`                            | 規則の有効期間                                                         |
 
-`dayInfoOn` で、その日が営業か休業かの理由（`reason`・`name`・`optionPath`）が分かります。同梱の毎年繰り返す祝日には安定した識別子 `key`（`vernal-equinox`・`good-friday`・`hari-raya-puasa` など）が付いていて、月日や曜日では書けない祝日を規則から個別に指せます。詳しくは[営業日カレンダー](./guide.ja.md#営業日カレンダー)・[繰り返しの規則](./guide.ja.md#繰り返しの規則)・[祝日の識別子](./guide.ja.md#祝日の識別子)・[よくある設定の例](./guide.ja.md#よくある設定の例)。
+`dayInfoOn` で、その日が営業か休業かの理由（`reason`・`name`・`optionPath`）が分かり、`nextClosedDay`・`previousClosedDay` で次・前の休業日を求められます。同梱の毎年繰り返す祝日には安定した識別子 `key`（`vernal-equinox`・`good-friday`・`hari-raya-puasa` など）が付いていて、月日や曜日では書けない祝日を規則から個別に指せます。詳しくは[営業日カレンダー](./guide.ja.md#営業日カレンダー)・[繰り返しの規則](./guide.ja.md#繰り返しの規則)・[祝日の識別子](./guide.ja.md#祝日の識別子)・[よくある設定の例](./guide.ja.md#よくある設定の例)。
 
 ### 期日・スケジュール・合成
 
@@ -112,7 +112,7 @@ diagnoseCalendar({
 // [["warning", "unknown-option", "closeAnnual"], ["info", "redundant", "closedRecurringRules[0]"]]
 ```
 
-`diagnoseCalendar`・`diagnoseSchedule` は、設定の問題を例外を投げずにすべて返します。キーの打ち間違い（候補つき）、決して当てはまらない規則、先の規則に覆われた規則、取り除いても結果が変わらない規則、営業日が 1 日もない設定、`{ asOf }` を渡せば終わった規則。テストに `assert.deepEqual(diagnoseCalendar(options), [])` と書くだけで設定を守れます。詳しくは[設定の診断](./guide.ja.md#設定の診断)・[エラー](./guide.ja.md#エラー)。
+`diagnoseCalendar`・`diagnoseSchedule` は、設定の問題を例外を投げずにすべて返します。キーの打ち間違い（候補つき）、決して当てはまらない規則、先の規則に覆われた規則、取り除いても結果が変わらない規則（出た規則はまとめて取り除けます）、営業日が 1 日もない設定、`{ asOf }` を渡せば終わった規則。テストに `assert.deepEqual(diagnoseCalendar(options), [])` と書くだけで設定を守れます。詳しくは[設定の診断](./guide.ja.md#設定の診断)・[エラー](./guide.ja.md#エラー)。
 
 ### 他の国・地域
 
@@ -133,7 +133,7 @@ diagnoseCalendar({
 - 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表、フランスの労働法典の改正、シンガポールの新しい年の告示と日付の改定）は**パッチ版**です。`^`・`~` のどちらで指定していても自動で届きます
 - 祝日の判定結果を固定したい場合は、版を完全一致で指定してください（例: `"bizdays-toolkit": "x.y.z"`）
 - 反映済みのデータは、提供元の `dataVersion`（日本は反映済みの官報の年月、英国・フランス・シンガポールは反映済みの GOV.UK・data.gouv.fr・data.gov.sg のデータの年月）と `confirmedThrough` で確認できます（`jp.dataVersion`・`england.confirmedThrough` など）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` のモジュールの定数 `dataVersion`・`confirmedThrough` は 0.12.0 で非推奨で、1.0.0 で削除します
-- 1.0.0 までは、マイナー版で破壊的変更を行うことがあります。マイナー版の間を移るときに利用者がする作業は、[移行ガイド](./migration.md)と、CHANGELOG の各版の「移行」にまとめています
+- 1.0.0 までは、マイナー版で破壊的変更を行うことがあります。マイナー版の間を移るときに利用者がする作業は、[移行ガイド](./migration.md)と、CHANGELOG の各版にまとめています。英語の移行の手順は、CHANGELOG の各版の Migration（0.31.0 から。それより前の版は「移行」）にあります
 - 判定の理由（`reason`）・祝日の種別（`kind`）・エラーコード・診断のコードは、将来の版で値が増えることがあります。値を列挙して分岐するときは「その他」も扱ってください（[RELEASING.md](../RELEASING.md) の「互換性の約束」）
 
 ## 出典

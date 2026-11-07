@@ -27,6 +27,30 @@
 
 次の旧名は型にはなく、実行時だけ 1.0.0 まで受け付けます: スケジュールの `weekly`（→ `weekdayValues`）、規則の `day`（→ `dayOfMonth`）、合成の `businessDay`（→ `open`）、期日の `day`（→ `dayOfMonth`）、振替の `rules`（→ `directions`）、値では、スケジュールの `holidayPolicy` の `"weekday"`（→ `"ignore"`）と日本の祝日を使う設定の `kinds` の `"national"`（→ `"regular"`。ほかの提供元と合わせた設定では、上の 0.30.0 の節の書き方）。1.0.0 では、ID `"JP"` の提供元を含む設定の `"national"` は `invalid-option` になり、含まない設定では普通の種別の文字列として扱います。
 
+## 0.31.0
+
+英語の手順は CHANGELOG の 0.31.0 の Migration にあります（同じ内容）。
+
+- **診断の結果を丸ごと比べているテスト**: `deepEqual` などで診断の結果全体を期待値にしていれば、新しい結果を期待値にします。`redundant` は、出た規則をまとめて取り除いても結果が変わらない判定（逐次除去）になり、減ることも増えることもあります。`redundant` に `relatedPath`（代わりに決める規則）が付きます。基準のカレンダーを持つスケジュールでは、判定できない月の扱いが日の単位に狭まり、`never-matches`・`redundant` が増える設定があります。出た規則を 1 つずつ外して診断をやり直す手順は要りません（まとめて外せます）
+- **`createCalendarFromSchedule` の `isOpen`**: boolean 以外（`1`・`"open"` など）を返していれば、boolean を返すように直します。作成時か、その値の日を判定したときに `code: "invalid-argument"` の `RangeError` になります
+- **例外のクラス**: `invalid-input` 以外の `code` はすべて `RangeError` になりました（`bizdays-toolkit/provider` の関数・`migrateCalendarOptions`・`migrateScheduleOptions` の `invalid-argument`、`toInstant` の `invalid-date` は、今まで `TypeError` でした）。`instanceof TypeError` で受けていれば、`isBizdaysError` と `code` で受けます
+
+```ts
+import { addDays, isBizdaysError } from "bizdays-toolkit";
+
+let code = "";
+try {
+  addDays("2026-13-01", 1);
+} catch (e) {
+  if (isBizdaysError(e)) code = e.code;
+}
+code; // "invalid-date"
+```
+
+- **`withSubstituteDays` の戻り値**: 凍結した `readonly` の配列になりました。`push` などで変えていれば、`[...result]` で複製してから変えます。TypeScript で可変の配列の型（`Holiday[]`）に代入していれば、`readonly Holiday[]` にします
+- **`code` で分岐しているコード**: 新しい `no-closed-day`（`nextClosedDay`・`previousClosedDay`）を「その他」の分岐で受けられるか確かめます（作業は要らないことが多い）
+- 作業の要らない変更: `cutoff` に `"HH:mm:ss"` が書けます。休業日の探索 `nextClosedDay`・`previousClosedDay` を足しました。旧名は 1.0.0 まで引き続き受け付けます
+
 ## 0.30.0
 
 0.30.0 は、公開する名前を 1 つの規則（`etc/naming.md`。decisions.md の 9 番）に合わせて改めた版です。0.23.0〜0.29.0 は欠番です。旧名は 1.0.0 まで実行時に受け付けます。ただし、次の 5 つは 0.30.0 に上げた時点で対応が要ります: 返す値の変更（下の「返す値」）、日本の提供元とほかの提供元を合わせた設定の `kinds` の `"regular"`（「返す値」の注 2）、対応年の端の挙動（「対応年の端で隣の日を見る規則」）、TypeScript で必須のキーの旧名（「設定のキーと値」の 2 つ目の箇条）、`dayInfoOn` の結果を丸ごと比べるテスト（「関数・メソッド・型・返す項目」の表の下）。営業日カレンダー・スケジュールの設定の旧名は、TypeScript の取り消し線と診断の `deprecated-option` が書き換え先を示します。`combineCalendars`・`createCalendarFromSchedule`・`dueDate`・`withSubstituteDays` の設定の旧名は診断の対象外で、JavaScript では 1.0.0 で `invalid-option` になるまで黙って動くので、`businessDay:`・`maxSearchDays`・`rules:`・`original:` と、`dueDate` の呼び出しの `day:`、`withSubstituteDays` の呼び出しの `name:` を検索して書き換えてください。保存した設定（JSON など）は `migrateCalendarOptions`・`migrateScheduleOptions`（`bizdays-toolkit/diagnose`）で書き換えられます。

@@ -4,12 +4,12 @@
  * このライブラリは「サーバーがどのタイムゾーンで動いていても結果が変わらない」ことを約束している。
  * 実行環境のタイムゾーンに依存する API は scripts/check-package.ts（checkPortableSource）が静的に禁止する。
  * ここでは、禁止の網から漏れた依存が日付のずれとして現れる、UTC より遅いゾーンと進んだゾーンを 1 つずつ試す
- * （UTC は既定の実行と同じ。Asia/Tokyo は Chatham と同じ進んだ側なので試さない。decisions.md の 35 番）。
+ * （UTC は既定の実行と同じ。Asia/Tokyo は Chatham と同じ進んだ側なので試さない。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
  *
  * 再実行するのは、src の Date・Intl に触れる経路（core/date.ts の日数の変換・core/input.ts の瞬間の変換・today）を
  * 通るテストだけ（TZ_FILES）。暦日の文字列だけを渡すテストは、ゾーンを変えても同じ経路を通る。瞬間・時刻を書いたテスト
  * （INSTANT_PATTERN に当たるファイル）は TZ_FILES か、理由を書いた TZ_EXCLUDED のどちらかに載っていなければ失敗にする
- * （黙って外れる検査を作らない。decisions.md の 36 番）
+ * （黙って外れる検査を作らない。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）
  */
 
 import "./strict-warnings.ts";
@@ -53,7 +53,6 @@ export const TZ_EXCLUDED: Readonly<Record<string, string>> = {
   "test/diagnose-oracle.test.ts":
     "テストの側で UTC の日数から日付を作るだけで、ライブラリには暦日を渡す",
   "test/sg-datagovsg.test.ts": "テストの側で UTC の曜日を求めるだけで、ライブラリには暦日を渡す",
-  "test/skip-policy.test.ts": "コメントに Temporal と書いてあるだけ（ライブラリを呼ばない）",
 };
 
 const problems: string[] = [];

@@ -1,11 +1,11 @@
 // result-compare（scripts/result-compare.ts）が使う test/support/result-cases.ts の部品: 意図した差分を許す単位にする設定の特徴（traitsOfCase）と、
 // スケジュールの基準のカレンダーの作り方（withCalendars・basisClosedWeekdays。前の版と今回の版を同じ作り方で比べるので、result-compare では
-// 壊れても差分にならず、基準の定休日の特徴は生成範囲の記録（v0.30.3）にないので、生成範囲の検査でも見張れない。そのため、ここで直接確かめる）。
+// 壊れても差分にならず、基準の定休日の特徴は生成範囲の記録（0.30.3）にないので、生成範囲の検査でも見張れない。そのため、ここで直接確かめる）。
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCalendar, isBizdaysError } from "../src/index.ts";
-import { sg } from "../src/sg/index.ts";
-import { CALENDAR_REF } from "./support/catalog.ts";
+import { createCalendar, isBizdaysError } from "../../src/index.ts";
+import { sg } from "../../src/sg/index.ts";
+import { CALENDAR_REF } from "../support/catalog.ts";
 import {
   basisClosedWeekdays,
   basisOutOfRangePolicy,
@@ -14,7 +14,7 @@ import {
   traitsOfCase,
   withCalendars,
   type Case,
-} from "./support/result-cases.ts";
+} from "../support/result-cases.ts";
 
 const schedule = (providers: Case["providers"], extra: object = {}): Case => ({
   id: "t",

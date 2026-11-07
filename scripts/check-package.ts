@@ -6,10 +6,10 @@
  * - ランタイムの依存（dependencies）がないこと
  * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
  * - 英語と日本語のドキュメントの対（README・guide・providers）の構成がそろい、見出しへのリンクが実在すること（checkDocPair・checkDocAnchors）
- * - ライブラリのソース（src）が Node.js 固有の機能と、実行環境のタイムゾーンに依存する API を使っていないこと（checkPortableSource。decisions.md の 35 番）
+ * - ライブラリのソース（src）が Node.js 固有の機能と、実行環境のタイムゾーンに依存する API を使っていないこと（checkPortableSource。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）
  * - ドキュメントの数値・一覧（対応年・タイムゾーン・confirmedThrough・key の表・コードの一覧・サイズを測った版）が
- *   dist とソースの型に一致し、英日の対で節ごとの数値がそろうこと（checkDocFacts・checkPairNumbers。decisions.md の 39 番）
- * - コメントと文書のファイルのパス・決定の番号の参照が実在すること（checkReferences。decisions.md の 36 番）
+ *   dist とソースの型に一致し、英日の対で節ごとの数値がそろうこと（checkDocFacts・checkPairNumbers。RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）
+ * - コメントと文書のファイルのパス・決定の番号の参照が実在すること（checkReferences。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）
  */
 
 import "./strict-warnings.ts";
@@ -142,7 +142,7 @@ if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
 
 /**
  * 英語と日本語のドキュメントの対（README.md と docs/README.ja.md、docs/guide.md と docs/guide.ja.md、
- * docs/providers.md と docs/providers.ja.md）の構成を比べる（decisions.md の 39 番）。
+ * docs/providers.md と docs/providers.ja.md）の構成を比べる（RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）。
  * 日本語版をルートに置かないのは、npm がルートの README* を files の指定にかかわらず必ず含めるため。
  *
  * - 見出しの数が段ごとに一致し、コードブロックの数が一致すること（節や例の足し忘れを見つける。文章の中身は比べない）
@@ -253,7 +253,7 @@ function checkPortableSource(dir: string): string[] {
     [/\bBuffer\b/, "Buffer"],
     [/\b__(dirname|filename)\b/, "__dirname / __filename"],
     [/\bglobal\s*\./, "global (use globalThis)"],
-    // 実行環境のタイムゾーンに依存する API（どのタイムゾーンでも結果が同じ、という約束を静的に守る。decisions.md の 35 番）
+    // 実行環境のタイムゾーンに依存する API（どのタイムゾーンでも結果が同じ、という約束を静的に守る。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）
     [
       /\.(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)\s*\(/,
       "a local-time Date method (use getUTC…/setUTC…/Date.UTC)",
@@ -316,7 +316,7 @@ errors.push(...checkDocAnchors());
 
 /**
  * 出典の記録（docs/sources/*.md）は、README.md と docs/README.ja.md の両方からリンクされていること。
- * 「出典の食い違いまで記録する」という README の説明の裏づけなので、記録を足したら README に足す（decisions.md の 36 番）
+ * 「出典の食い違いまで記録する」という README の説明の裏づけなので、記録を足したら README に足す（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）
  */
 function checkSourceRecordsLinked(): string[] {
   const problems: string[] = [];
@@ -358,7 +358,7 @@ function checkFixtureRecords(): string[] {
 errors.push(...checkFixtureRecords());
 
 // ---------------------------------------------------------------------------------------------
-// ドキュメントの数値・一覧を、ビルド済みの dist とソースの型と照合する（decisions.md の 39 番）。
+// ドキュメントの数値・一覧を、ビルド済みの dist とソースの型と照合する（RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）。
 // ---------------------------------------------------------------------------------------------
 
 /** 国のサブパスごとの国名（英語・日本語）。文の中の「for Japan」「日本は」から提供元を決めるのに使う。国を足したらここに足す */
@@ -687,11 +687,11 @@ function checkPairNumbers(enPath: string, jaPath: string): string[] {
 }
 
 /**
- * コメントと文書の参照が実在すること（decisions.md の 36 番）。
+ * コメントと文書の参照が実在すること（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。
  * - ファイルのパス（scripts/…・src/…・test/…・docs/…・etc/…・.github/…）が実在すること
  * - 「decisions.md の N 番」（decisions.md の中では「N 番」）の N が、決定の文書にある番号であること
  * 対象は今の状態を書いたファイル（ソース・スクリプト・テスト・ワークフロー・README・ガイド・RELEASING.md など）。
- * 履歴を書いたファイル（CHANGELOG・decisions.md・migration.md）は改名・削除の前の名前を正しく含むので、パスは見ない
+ * 履歴を書いたファイル（CHANGELOG・decisions.md・migration.md・development-log.md）は改名・削除の前の名前を正しく含むので、パスは見ない
  */
 function checkReferences(): string[] {
   const problems: string[] = [];
@@ -748,7 +748,7 @@ function checkReferences(): string[] {
 }
 
 /**
- * 決定の文書の目次が、本文の章と決定の見出しと一致すること（decisions.md の 36 番）。
+ * 決定の文書の目次が、本文の章と決定の見出しと一致すること（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。
  * 目次は「- **章**」と「  - N 番: 題名」、本文は「## 章」と「### N. 題名」。番号の重複も見る（欠番は許す）
  */
 function checkDecisionsToc(decisions: string): string[] {

@@ -1,7 +1,7 @@
 // 検査のスクリプトの検査（scripts/tool-selftest.ts）の部品: 表のセル、例外の文、途中で止まった写しの一覧
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cell, copyEach, errorText } from "../scripts/tool-selftest-parts.ts";
+import { cell, copyEach, errorText } from "../../scripts/tool-selftest-parts.ts";
 
 test("表のセルの | は \\| にし、改行は / にする", () => {
   assert.equal(cell("a | b"), "a \\| b");

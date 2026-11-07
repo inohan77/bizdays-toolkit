@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
-import { importArgs } from "../scripts/import-args.ts";
+import { importArgs } from "../../scripts/import-args.ts";
 
 test("子プロセスの --import の値は file:// で始まる（Windows の絶対パスをそのまま渡さない）", () => {
   const args = importArgs([

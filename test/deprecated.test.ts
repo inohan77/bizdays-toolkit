@@ -19,7 +19,6 @@ import {
 } from "../src/provider/index.ts";
 
 const FROM = "2026-01-01";
-const TO = "2026-12-31";
 
 // 旧名だけで書いた設定（型の上では旧名の一部を受けないので、実行時の入力として渡す）
 const oldCalendar = {
@@ -50,32 +49,9 @@ const newCalendar: CalendarOptions = {
   searchDayLimit: 100,
 };
 
-test("旧名: 営業日カレンダーの設定のキーと値は、新しい名前と同じ結果になる（位置は新しい名前で返す）", () => {
-  const before = createCalendar(oldCalendar);
-  const after = createCalendar(newCalendar);
-  assert.deepEqual(before.daysBetween(FROM, TO), after.daysBetween(FROM, TO));
-  assert.equal(before.dayInfoOn("2026-12-31").optionPath, "closedAnnualDates[0]");
-  assert.equal(before.outOfRangePolicy, "throw");
-});
-
-test('旧名: スケジュールの設定のキーと値（holiday: "weekday" は holidayPolicy: "ignore"）', () => {
-  const values = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-  const before = createSchedule({
-    holidays: jp,
-    weekly: values,
-    holiday: "weekday",
-    annual: [{ date: "01-02", value: "closed" }],
-    recurring: [{ day: -1, value: "short" }],
-  } as unknown as ScheduleOptions<string>);
-  const after = createSchedule<string>({
-    holidayProvider: jp,
-    weekdayValues: values,
-    holidayPolicy: "ignore",
-    annualDates: [{ date: "01-02", value: "closed" }],
-    recurringRules: [{ dayOfMonth: -1, value: "short" }],
-  });
-  assert.deepEqual(before.daysBetween(FROM, TO), after.daysBetween(FROM, TO));
-});
+// 営業日カレンダー・スケジュールの設定の旧名が新しい名前と同じ結果になることは、変形しても結果が同じ（test/metamorphic.test.ts）
+// の変形 1（旧名）が、目録の設定で確かめる。ここでは、変形 1 が試さない旧名（メソッド・返す項目・関数と、合成・スケジュール
+// からのカレンダー・期日・振替の設定）と、診断の位置・両方を書いたときの扱いを確かめる
 
 test("旧名: 診断は deprecated-option で旧名の位置（利用者が書いた位置）と新しい名前を返す", () => {
   const list = diagnoseCalendar(oldCalendar).filter((d) => d.code === "deprecated-option");
@@ -151,7 +127,7 @@ test("旧名と新しい名前の両方を書くと invalid-option（位置は�
   );
 });
 
-test("旧名: メソッド・返す項目・関数は新しい名前と同じ結果を返す", () => {
+test("旧名: 変形 1 が試さない旧名（メソッド・返す項目・関数、合成・スケジュールからのカレンダー・期日・振替の設定）は、新しい名前と同じ結果を返す", () => {
   const calendar = createCalendar(newCalendar);
   assert.deepEqual(calendar.dayInfo("2026-05-25"), calendar.dayInfoOn("2026-05-25"));
   assert.equal(
@@ -171,9 +147,6 @@ test("旧名: メソッド・返す項目・関数は新しい名前と同じ結
   assert.deepEqual(getHoliday("2026-05-05"), holidayOn("2026-05-05"));
   assert.equal(daysInMonth, lengthOfMonth);
   assert.equal(substituteDays, withSubstituteDays);
-});
-
-test("旧名: 合成・スケジュールからのカレンダー・期日・振替の設定", () => {
   const a = createCalendar({ closedWeekdays: [0] });
   const b = createCalendar({ closedWeekdays: [6] });
   const before = combineCalendars([a, b], { businessDay: "all", maxSearchDays: 30 } as never);

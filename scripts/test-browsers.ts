@@ -1,6 +1,6 @@
 import "./strict-warnings.ts";
 /**
- * 公開する dist をブラウザーで確かめる（CI の browsers・safari ジョブから実行。decisions.md の 35 番）。
+ * 公開する dist をブラウザーで確かめる（CI の browsers・safari ジョブから実行。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
  *
  *   node scripts/test-browsers.ts <chrome|firefox|edge|safari> <ドライバーのパス>
  *

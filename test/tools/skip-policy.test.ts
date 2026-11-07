@@ -11,7 +11,7 @@ import {
   POLICY_SAMPLE,
   skipWhen,
   todoFor,
-} from "./support/skip.ts";
+} from "../support/skip.ts";
 
 /**
  * 補助の関数を通さない飛ばしと、その理由（ファイル → 理由）。test/compat は Node.js 22.12 の素の JavaScript で動き、
@@ -33,6 +33,8 @@ test("飛ばしの決まり: テストの skip・todo とスクリプトの SKIP
   // テストと、テストの道具（test/support。飛ばしの一覧を定める skip.ts は除く）
   const testFiles = [
     ...filesIn("test", /\.test\.ts$/),
+    // テストのテスト（pnpm test:tools）も pnpm check で動くので、同じ決まりで確かめる
+    ...filesIn("test/tools", /\.test\.ts$/),
     ...filesIn("test/support", /\.ts$/).filter((f) => !f.endsWith("/skip.ts")),
   ];
   for (const file of testFiles) {

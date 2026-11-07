@@ -1,58 +1,37 @@
 # Changelog
 
-この形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に、版の付け方は [Semantic Versioning](https://semver.org/lang/ja/) と [RELEASING.md](./RELEASING.md) の方針に従います。区分には Keep a Changelog の Added / Changed / Deprecated / Removed / Fixed / Security に加えて、祝日データの更新を表す **Data**、マイナー版で利用者がする作業を書く **移行**（RELEASING.md）、公開物の変わらない品質の仕組み（検査・CI・リリースの手順）を書く **開発** を使います。
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/) and the policy in [RELEASING.md](./RELEASING.md). Besides the Keep a Changelog sections (Added / Changed / Deprecated / Removed / Fixed / Security), **Data** lists updates of the holiday data and **Migration** lists the work users need to do for a minor version.
 
-「開発」は 1 項目 1 行で、何を足した・やめた・変えたかだけを書きます（RELEASING.md の「区分」）。0.30.8 までの「開発」も 0.30.9 でこの形に縮めました。縮める前の文（経緯・退けた案・測定の詳しい値）は、各版のタグの `CHANGELOG.md` にあります。
+Development notes for 0.30.x and later are in [docs/development-log.md](./docs/development-log.md) (Japanese). Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their sections **移行** and **開発** correspond to Migration and the development log). Changes to the quality tooling that do not change the published package (checks, CI, release steps) are recorded in [docs/development-log.md](./docs/development-log.md) (in Japanese; not published to npm). For 0.29.x and earlier, they are in the 開発 section of each version below.
 
 ## [Unreleased]
 
 ## [0.31.0] - 2026-11-08
 
-品質改善提案（11 通目）の 0.31.0 の分です。設定の診断の `redundant` を、出た規則をまとめて取り除いても結果が変わらない判定に作り直しました。0.30.x で 0.31.0 に先送りした、新たに例外を投げる・型が狭まる変更（`isOpen` の返り値、例外のクラス、`withSubstituteDays` の凍結）をまとめて入れ、休業日の探索を足しました。
+This version rebuilds the `redundant` diagnostic so that the reported rules can be removed all together, narrows the days the diagnostics cannot judge, and brings in the changes postponed in 0.30.x that throw where nothing was thrown before or narrow a type (the return value of `isOpen`, the error classes, the frozen result of `withSubstituteDays`). It also adds the search for closed days.
 
 ### Added
 
-- `Calendar.nextClosedDay(input)`・`previousClosedDay(input)`: 入力日の翌日以降・前日以前の、営業日でない日を返す。`searchDayLimit` の日数のうちに見つからなければ `code: "no-closed-day"` の `RangeError`（新しいエラーコード）。合成したカレンダーとスケジュールから作ったカレンダーにもある
-- `BusinessDayOnOrAfterOptions.cutoff` に `"HH:mm:ss"` を書ける。入力の時刻は分の精度（秒を切り捨てた分）で、その分の始まりと比べる（`"14:00:30"` なら 14:00 の入力は締めの前）
+- `Calendar.nextClosedDay(input)` and `previousClosedDay(input)`: return the next day after the input, or the previous day before it, that is not a business day. If none is found within `searchDayLimit` days, they throw a `RangeError` with the new code `no-closed-day`. Combined calendars and calendars made from a schedule have them too
+- `BusinessDayOnOrAfterOptions.cutoff` accepts `"HH:mm:ss"`. The time of the input is taken to the minute (seconds are dropped) and compared at the start of that minute (with `"14:00:30"`, an input at 14:00 is before the cutoff)
 
 ### Changed
 
-- 設定の診断（`diagnoseCalendar`・`diagnoseSchedule`）の `redundant` を逐次除去にした。使われない規則（`shadowed`・`never-matches` など）を先に取り除き、1 つずつ（毎年の月日と繰り返しの規則を配列の順に、次に個別の日付を）、それまでに出た規則を取り除いた設定で判定し、取り除いた規則があればほかに取り除ける規則がなくなるまで繰り返す。出た規則は、まとめて取り除いても結果が変わらない（今までは「その規則を 1 つだけ外したら」の判定で、同じ規則を 2 つ書くと後が `shadowed`・前が `redundant` になり、両方を外すと結果が変わった）。影響: 同じ規則を 2 つ書いた設定で前の規則の `redundant` が出なくなるなど、`redundant` が減ることがある。覆われた規則を外すと覆っていた規則も取り除けるようになる場合（定休日のない設定で、臨時休業日を覆う臨時営業日など）は、増えることもある
-- 設定の診断: 判定できない月（スケジュールの第 n 営業日の規則の基準のカレンダーが投げる月）に有効期間が重なる規則は、規則どうしの診断の前に決め、`never-matches`・`redundant` を出さず、逐次除去でも取り除かない（0.30.9 までと同じく出さないが、診断の後で消すのをやめた。後で消すと、ほかの規則が「消した規則を外した設定」で判定されたままになるため）
-- 設定の診断: 判定できない月の扱いを日の単位に狭めた。基準のカレンダーが投げる日（月の規則はその月の日、週の第 n 営業日の規則は投げる月にかかる週の 7 日）を有効期間に含む規則だけを分からない規則にし、今までのように投げた月の前後の月や、規則の形を調べる代表の 28 年間（2001〜2028 年）で投げる月までは広げない。影響: 基準のカレンダーを持つスケジュールで、`never-matches`・`redundant` が増える設定がある
-- `createCalendarFromSchedule`: `isOpen` が boolean でない値を返すと `code: "invalid-argument"` の `RangeError`（今までは `true` でない値の日を休業日にしていた）。作成時に、曜日の値と `holidayPolicy: { value }` の値で `isOpen` を呼んで確かめ、ほかの値の日は判定したときに確かめる
-- 例外のクラスを `code` ごとの表にそろえた: `invalid-input` だけが `TypeError` で、ほかのすべての `code` は `RangeError`。今まで `TypeError` だったもの（`bizdays-toolkit/provider` の関数の引数の型の誤りの `invalid-argument`、`migrateCalendarOptions`・`migrateScheduleOptions` にオブジェクトでない値を渡したときの `invalid-argument`、`toInstant` に文字列でない日付を渡したときの `invalid-date`）が `RangeError` になる
-- `withSubstituteDays`（`bizdays-toolkit/provider`）: 返す配列を凍結し、戻り値の型を `readonly Holiday<Kind>[]` にした（返すものはすべて凍結。決定 4 番）
-- 設定の診断の `redundant` に `relatedPath` を付ける: 取り除いたときに代わりに決める規則で、その規則が決めていた日をすべて 1 つの規則が決めるときだけ（定休日の曜日や祝日の扱いが決める日があれば付かない）
+- Option diagnostics (`diagnoseCalendar`, `diagnoseSchedule`): `redundant` is now judged by sequential removal. Rules that are never used (`shadowed`, `never-matches` and the like) are removed first; then each rule (annual dates and recurring rules in array order, then specific dates) is judged with the rules already reported removed, and the pass is repeated until no other rule can be removed. The reported rules can be removed all together without changing any result (before, each rule was judged as if only that rule were removed: with the same rule written twice, the later one was `shadowed` and the earlier one `redundant`, and removing both changed the result). Impact: fewer `redundant` may be reported (for example, no `redundant` for the earlier of two identical rules), and in some settings more (for example, without closed weekdays, an open date that covers a closed date becomes `redundant` once the covered date is removed)
+- Option diagnostics: `redundant` now has `relatedPath`, the rule that decides the days instead when the rule is removed, set only when one rule decides all of them (not when a closed weekday or the holiday handling decides some of them)
+- Option diagnostics: the days the diagnostics cannot judge (where the counting calendar of a schedule's nth-business-day rule throws) are now found day by day and before the rules are compared: for a monthly rule, the days of the month where the calendar throws; for an nth business day of the week, the seven days of a week that touches such a month. Only rules whose effective period contains such a day get no `never-matches` or `redundant`, and they are not removed in the sequential removal. Before, the months next to such a month and the months of the 28 years used to compare rule shapes (2001–2028) were also treated as unknown, and the diagnostics were dropped after the comparison. Impact: in schedules with counting calendars, more `never-matches` and `redundant` may be reported
+- `createCalendarFromSchedule`: if `isOpen` returns something other than a boolean, it throws a `RangeError` with code `invalid-argument` (before, a day with a value other than `true` was closed). It calls `isOpen` with the weekday values and the value of `holidayPolicy: { value }` when the calendar is created, and checks other values when such a day is evaluated
+- Error classes follow one table by `code`: only `invalid-input` is a `TypeError`; every other code is a `RangeError`. The errors that were `TypeError` (`invalid-argument` for a wrong argument type in the functions of `bizdays-toolkit/provider`, `invalid-argument` from `migrateCalendarOptions` and `migrateScheduleOptions` given a value that is not an object, and `invalid-date` from `toInstant` given a date that is not a string) are now `RangeError`
+- `withSubstituteDays` (`bizdays-toolkit/provider`): the returned array is frozen, and its type is `readonly Holiday<Kind>[]`
 
-### 移行
+### Migration
 
-- 診断の結果を `deepEqual` などで丸ごと比べているテストは、新しい結果を期待値にする（`redundant` の増減と `relatedPath`）。出た規則を 1 つずつ外して診断をやり直していた手順は要らない（まとめて外せる）
-- `createCalendarFromSchedule` の `isOpen` が `1`・`"open"` などを返していれば、boolean を返すように直す（作成時か、その値の日の判定で例外になる）
-- 基準のカレンダーを持つスケジュールの診断を期待値にしているテストは、新しい結果を期待値にする（判定できない月の扱いが狭まり、`never-matches`・`redundant` が増える設定がある）
-- 例外を `instanceof TypeError` で受けていれば、`isBizdaysError(e)` と `e.code` で受けるように直す（`invalid-input` 以外は `RangeError` になった）
-- `withSubstituteDays` の戻り値に `push` などをしていれば、`[...result]` で複製してから変える。TypeScript で可変の配列の型（`Holiday[]`）に代入していれば、`readonly Holiday[]` にする
-- `code` で分岐しているコードは、新しい `no-closed-day` を「その他」の分岐で受けられるか確かめる（作業は要らないことが多い）
-
-### 開発
-
-- 診断のオラクル: 出た項目をまとめて取り除くテストを既定にし（`ORACLE_JOINT` と飛ばしの理由 `oracle-joint` をやめた）、完全性を「まとめて取り除いた後に取り除ける項目が残らない」にした
-- 前の版との比較: 特徴 `redundant-sequential`（規則・日付を 2 つ以上持つ設定）を足し、`etc/result-changes.json` で消える `redundant` を許す
-- 診断の性質のテスト: `redundant` を、出た項目（`shadowed`・`never-matches` を含む）とまとめて取り除いて確かめるようにした
-- サイズの上限（0.31.x の間はこの値）: `./diagnose` を 26,800 → 30,000 にした（測定 28,089）。ルート `.` を 18,500 → 19,000 にした（測定 18,594。休業日の探索・`isOpen` の確かめ・例外の形の追加）。`./jp` を 21,000 → 21,500 にした（測定 20,822。ルートと同じ理由）
-- 逐次除去の費用: 目録で項目が最も多い設定（11 項目）の `diagnoseCalendar` は 0.30.9 の 201 ms に対して 194 ms、診断のオラクル全件の 6 分割の 1 つ（健全性と完全性のテスト）は 75.7 秒に対して 79.3 秒（手元の 1 コア）
-- README（英日）のサイズの値を 0.31.0 で測り直した
-- `catch-coverage`: 逐次除去で決める日を判定し直す箇所の `catch` を消した（判定できなかった日を記録して飛ばす。到達しない `catch` を残さない）
-- 到達しない箇所の例外を、`code` を持たない `InternalError`（`internalError`）の 1 つの形にした。診断は、これを提供元の誤りとして報告せずにそのまま投げる（逐次除去の走査の上限を超えたとき・判定できない月の見張り）
-- `test/robustness.test.ts`: すべての `code` について、実際に投げさせた例外のクラスが表と一致することを確かめる（表の `code` と `KnownErrorCode` が一致しなければ失敗）
-- `test/diagnose-unjudgeable.test.ts`: 判定できない月と逐次除去の関係（分からない規則は出ず取り除かない・並べ替えても同じ・まとめて取り除ける）を足した
-- API どうしの整合の整合 10: 出た規則をまとめて取り除いても、判定できる日の結果が変わらないことを確かめる（`redundant` を 1 つずつ取り除く確かめをやめた）
-- 診断のオラクル: スケジュールの項目（`recurringRules`・`annualDates`、基準のカレンダー 4 種）の総当たりを足した。判定できない月にかかわる規則への約束は素朴な定義（`valueOn` で投げる日がある月）で確かめ、実装の求めすぎ（素朴な定義では判定できるのに出さない項目）の数を出す
-- 診断のオラクル: CI の `oracle` ジョブの行列を `ORACLE_SHARD` 3 → 4 にした（3 つの分割のうち 2 つが 480 秒を超えたため）
-- 診断: 第 n 営業日の規則では、規則の形を調べる代表の 28 年間の当てはまる日の印を求めないようにした（`shadowed` は形の包含で決まり、印はどの診断も使わない）。スケジュールのオラクルの全件が手元で 119 秒 → 42 秒
-- 診断のオラクル: スケジュールの素朴な定義を日の単位にし、診断の窓（`rulesScanWindow`）の全日の `valueOn` を見るようにした（0.31.0-D の素朴な定義は比べる 2025〜2027 年だけを見ていて、窓の外で本当に分からない項目を求めすぎに数えていた）。素朴な定義でも分からない項目は全件で 58 → 106 件（定義の誤りの修正と、窓の中だけで投げる基準 `BASIS_INSIDE` の追加の分）、求めすぎは 28 → 0 件で、0 件を確かめる形にした。抜き出しを 5 件に 1 件 → 20 件に 1 件にし、固定の設定の形は常に含める
-- 判定できない日を求める途中で、週の 7 日が属する月のうち最初に投げた月で止まり（`some`）、後の月を見張りの入力に記録し損ねる誤りを、整合 10 の全件で見張り（`dropUnsure`）が捕まえた（取り込みの前に直した）
-- 開発環境の版: npm を 12.2.1 → 12.2.2、pnpm を 12.16.1 → 12.18.0 にした（`.github/actions/setup-toolchain/action.yml`。`pnpm-lock.yaml` は変わらない）
+- Tests that compare the whole result of the diagnostics (for example with `deepEqual`) need the new results as expected values: `redundant` may decrease or increase, `relatedPath` is added, and in schedules with counting calendars more `never-matches` and `redundant` may be reported. Removing the reported rules one at a time and diagnosing again is no longer needed; they can be removed together
+- If `isOpen` of `createCalendarFromSchedule` returns values such as `1` or `"open"`, make it return a boolean (otherwise it throws when the calendar is created or when a day with that value is evaluated)
+- If you catch the errors with `instanceof TypeError`, use `isBizdaysError(e)` and `e.code` instead (every code except `invalid-input` is now a `RangeError`)
+- If you change the result of `withSubstituteDays` (for example with `push`), copy it first (`[...result]`). In TypeScript, if you assign it to a mutable array type (`Holiday[]`), use `readonly Holiday[]`
+- Code that branches on `code` should handle the new `no-closed-day` in its default branch (usually no work is needed)
+- No work is needed for `cutoff` with seconds or for `nextClosedDay` and `previousClosedDay`. The old option names are still accepted until 1.0.0
 
 ## [0.30.9] - 2026-11-07
 
@@ -68,22 +47,6 @@
   - ガイド（英日）の「繰り返しの規則」: 配列の順が効くのは優先順位の同じ段階の中だけで、`holidayPolicy: "ignore"` でも祝日の日は `"over-holiday"` の規則が `"under-holiday"` の規則より先に当たることを書いた
   - ガイド（英日）: 明示的な `undefined` は省略と同じ、を書き、「未確定の祝日」の合成の既知の不具合の記載を消した
   - 決定の文書: 17 番を実態に合わせて書き換えた（結果が祝日に依存しない設定の値だけの判定は未確定の祝日で投げない、を 0.30.6 から入れていたのに、「実行時に特別扱いを入れない」と書いていた）。6 番に明示的な `undefined` を、32 番に約束の回復の区分を、38 番に CHANGELOG の「開発」の書き方の理由を足した
-
-### 開発
-
-- RELEASING.md の区分: 約束した例外が出ていなかった不具合の修正は、新たに投げる向きでもパッチにした（「新たに例外を投げる変更はマイナー」は約束していなかった呼び出しを止める場合に限る）
-- RELEASING.md: CHANGELOG の「開発」は 1 項目 1 行にする決まりを足し、0.30.8 までの「開発」を縮めた
-- RELEASING.md のサイズの上限: 上限はマイナー版ごとに決め、パッチ版の中では上げない決まりを足した（0.31.0 から適用）
-- サイズの上限: `./diagnose` を 26,500 → 26,800 に上げた（測定 26,503）。明示的な `undefined` の扱いと旧名の読み替えの直しで増えた
-- タイムゾーンを変えたテストを、瞬間・時刻を渡すテスト（`scripts/test-tz.ts` の `TZ_FILES`）だけの再実行にし、一覧に載っていない瞬間・時刻を書いたテストがあれば失敗にした（手元で約 95 秒 → 約 17 秒）。テストの `tz-run` の飛ばしは外した
-- 合成の既知の不具合の `todo` 2 件を、並び順 × `"all"`・`"any"` の通常のテストにした。飛ばしの決まりの自己テストは見本の一覧（`POLICY_SAMPLE`）で確かめる形にした
-- 変形しても結果が同じ: 変形 7（書いていない既知の項目を明示的な `undefined` で書いても、結果・診断が同じ）を足した
-- 明示的な `undefined` のテスト（`test/explicit-undefined.test.ts`）を足した: メソッド・関数のオプション（`etc/api.md` の Options の型。設定の型は変形 7）で、書いていない項目と旧名を `undefined` で書いても結果が同じ。表にない Options の型があれば失敗する
-- API どうしの整合: 事例のテストの整合 9 を、整合 8（`never-matches` も確かめ、有効期間 3 通り）に吸収した。整合 10 は全件（CI）だけで動かす
-- 診断の性質のテスト: `pnpm check` では短い提供元・提供元なしの性質だけを動かし、第 n 営業日の規則のある設定と日本の全範囲は全件（CI）だけにした（飛ばしの理由 `ci-full-only`）
-- `test/counting-basis.test.ts`: オラクルが確かめる形（有効期間が重ならない組）のテストを 1 件消した
-- 診断のオラクル: 項目 3 つの固定の設定 `jointFixed`（同じ曜日の under・over・after の規則。品質改善提案 11 通目の反例）を `test/fixtures/oracle-items.json` に足し、まとめて取り除くテスト（`ORACLE_JOINT=1`）で試す（0.31.0 の作り直しの正解の定義。今は失敗する）
-- `src/core/schedule.ts`: 第 n 営業日の基準のキャッシュの上限（240 か月）の意味をコメントに書いた
 
 ## [0.30.8] - 2026-11-06
 
@@ -101,31 +64,6 @@
   - ガイド（英日）の「未確定の祝日」: 「`holidaysInYear`・`holidaysBetween` は投げない」を、未確定の祝日では投げない、に限った（対応年の外の `out-of-range` と、提供元のデータの誤りの `invalid-provider-data` は投げる）
   - ガイド（英日）と `BusinessDayOnOrAfterOptions.cutoff` の TSDoc: `cutoff` が `"HH:mm"` だけを受け付ける理由（入力の時刻は分の精度で比べるので、秒を持つ締め時刻は入力の秒と比べられない）を書いた。秒の受け付けは 0.31.0 で扱う
 
-### 開発
-
-- 診断のオラクル: `counting-basis` の確かめを、第 n 営業日の規則と毎週の曜日の規則の有効期間が重なる組を前提にし、前提があるのに出ないとき・出た件数が組の数と違うときも失敗にした
-- 前の版との比較: 特徴 `counting-rule-with-period-weekly-rule`（`etc/result-changes.json` で `counting-basis` が消える差分を許す）と `calendar-date-with-value`（増える向きなので許可は足さない）を足し、固定の設定 4 つを足した
-- 決定の文書: 3 番に「同じ `code` は同じクラスで投げる」を足した
-- `counting-basis` の判定を、規則どうしの走査の後の第 2 の走査にした（規則の並び順で結果が変わらないように）
-- `./diagnose` の gzip のサイズ（測定 26,322。上限 26,500）
-- 決定の文書: 「版と互換性」の章の見出しの直後にあった番号のない箇条 2 つを 31 番に移した
-- 「0.31.0 の P1」を「診断の判定の作り直し（0.31.0）」と言葉で書いた
-- API どうしの整合のテスト（`test/consistency.test.ts`）の名前の番号を整合 1〜11 に振り直した
-- `bizdays-toolkit/jp` の `jp` の TSDoc に 0.30.0 の旧名 `holidays` が残っていたのを `holidayProvider` に直した
-- `src/core/input.ts` の到達しない `replace(" ", "T")` を消した
-- `check-package`: `src` が実行環境のタイムゾーンに依存する API を使っていないことを確かめるようにし、`tool-selftest` にその誤りを 2 件足した
-- タイムゾーンを変えたテスト（`scripts/test-tz.ts`）を UTC・Asia/Tokyo・America/Los_Angeles・Pacific/Chatham の 4 ゾーンから America/Los_Angeles・Pacific/Chatham の 2 ゾーンにした
-- `check-names`: 報告のパスの区切りを `/` にそろえた
-- 前の版との比較（`scripts/result-compare.ts`）: 意図した差分として許した設定の `id` と対象を一覧に出すようにした（意図しない差分が出たときに、許した側と見比べるため）
-- `src/core/input.ts`: `Date.parse` にオフセット付きの文字列だけを渡している理由をコメントに書いた
-- 開発用のツールを更新: oxlint 1.88.0 → 1.91.0、oxfmt 0.73.0 → 0.76.0、`@types/node` 24.19.2 → 26.6.6
-- `check-package` の実行環境のタイムゾーンに依存する API の検査を直した
-- 診断の性質のテストを、ほかの全件のテストと同じ「`pnpm check` は抜き出し、全件は CI」の形にした（全件は `DIAGNOSE_PROPERTY_FULL=1`）
-- 変形しても結果が同じ（`test/metamorphic.test.ts`）の全件（`METAMORPHIC_FULL=1`）を CI の `diagnose-consistency` ジョブで動かすようにした
-- 全日の結果を比べる補助を `test/support/compare.ts` に 1 つにした
-- 同じ恒等式を 3 か所で確かめていたのを 1 か所にした
-- `check-package` の実行環境のタイムゾーンに依存する API の検査: 文字列の中身を先に空にしてから `//` のコメントを除くようにした
-
 ## [0.30.7] - 2026-11-05
 
 テスト拡充案の第 3 段です。0.30.6 の取り込みで持ち越した項目を片付け、そこで見つけた診断の不具合を 2 つ直したので、公開物の `.js` は 0.30.6 から変わります（Fixed。変わるのは `./diagnose` だけで、カレンダー・スケジュールの判定の結果は変わりません）。テストと道具では、変形しても結果が同じことの検査、文書の例と文章の主張の検査、オラクルの完全性を失敗にする切り替えを入れ、設定の結果の差分の旧名の比較の穴を直しました。設定の結果の差分の定期実行（テスト拡充案の T8）は入れず、手動の広い比較として入れました。自前の変異テスト（T9）は、0.31.0 の診断の作り直しの前に行います。
@@ -134,30 +72,6 @@
 
 - 診断: スケジュールの第 n 営業日の規則の基準のカレンダー（`calendar`）が投げる月（判定できない月）がある設定で、判定できない月の影響を受けない診断まで取り除いていた。例: シンガポールの祝日（2020〜2027 年）の基準のカレンダーを持つ規則 `{ businessDayOfMonth: 1, calendar, value }` と、当てはまる日がない規則 `{ dayOfMonth: 31, months: [2], value }` を並べた設定で、後の規則の `never-matches` が出なかった（後の規則だけの設定では出る）。0.30.6 の Fixed の 3 件目（判定できない月の扱い）の取りこぼしで、0.30.5 以前はこの設定で誤った `error` の `out-of-range` を出していた。診断の結果が増える向きの修正。項目は診断の `path` の先頭が規則の位置と一致するもので引き（規則の中のオプションの位置も同じ規則に当たる）、基準のカレンダーを持たない繰り返しの規則の `never-matches` と、その規則の中のオプションの診断は、規則の形と設定だけで決まるので残す。規則そのものの `redundant` は、取り除いた設定と元の設定の結果を比べるので、ほかの規則の基準のカレンダーにも依存し、今までどおり有効期間に判定できない月があれば出さない。旧名のキー（`recurring`・`day` など）で書いても、規則どうしの診断の `path` は新しい名前で出る（API どうしの整合の検査の持ち越しを調べて見つけた。種類は API どうしの食い違い）
 - 診断: 週の第 n 営業日の規則（`businessDayOfWeek`）で、月をまたぐ週の隣の月が判定できない月のとき、規則の有効期間がその月にかからなければ `never-matches` などを出していた。例: シンガポールの祝日の基準のカレンダーで `{ businessDayOfWeek: 3, weekStart: 1 }` を 2020-01-01〜2020-01-05 に当てると、2019-12-30 から始まる週の 2019 年の日を数えられないのに、`never-matches` を出していた（実際の第 3 営業日は 2020-01-02）。逆向きの例: `{ businessDayOfWeek: -1, weekStart: 3 }` を 2027-12-27〜2027-12-31 に当て、同じ値で 12 月 31 日を決める基準のない規則と並べると、2027-12-29 から始まる週の最後の営業日（2028 年 1 月の祝日次第で、シンガポールの 2028 年の祝日はまだ発表されていない。祝日がなければ 2028-01-04）を 2027-12-31 と数え、後の規則に誤った `redundant` を出していた。週の第 n 営業日の規則では、投げた月の前の月と次の月も判定できない月にする（安全側の扱いなので、隣の月の確かな診断も出さなくなる場合がある）。月の第 n 営業日の規則はその月の基準だけで決まるので、前後の月は記録しない。これも 0.30.6 の Fixed の 3 件目の取りこぼし（0.30.6 の取り込みで見つけた。種類は API どうしの食い違い）
-
-### 開発
-
-- サイズ（gzip）: `./diagnose` 26,158 → 26,218
-- 判定できない月の診断のテストを足した
-- API どうしの整合の検査（`test/consistency.test.ts`）の直し: 作成を試す関数は、bizdays のエラーコードを持つ例外だけを「作成できない」とみなし、ほかの例外は投げ直す
-- `scripts/result-compare.ts`: スケジュールの第 n 営業日の規則の基準のカレンダーに、スケジュールの設定の `outOfRangePolicy` を受け継がせた
-- `scripts/tool-selftest.ts`: 表のセルの `|` を `\|` にし、写しの途中で例外が出ても、そこまでに写したファイルを表の後に出し、`Error` でない値の例外も文にする
-- 飛ばしの決まり（`test/support/skip.ts`）: 事前の確認で届かなくなった枝を消した
-- ガイド（英日）の「対応年の外」: スケジュールの第 n 営業日の規則の文を独立させ、「結果が分からない年の祝日に依存するため」の理由とシンガポールの例が、隣の日を見る規則と週の第 n 営業日の規則の説明として読めるようにした
-- 変形しても結果が同じ: 文書で同じ意味だと約束している書き換えで、全日の結果と、位置を読み替えた診断が変わらないことを、目録の設定で確かめる
-- 文書の例の検査を厳しくした（テスト拡充案の T6）: 例で `createCalendar`・`createSchedule` に渡した設定を自動で診断にもかけ、`error`・`warning` があれば失敗にする
-- ガイド（英日）の「カレンダーの合成」に、2 つ以上の別々のカレンダーを渡すことを書き足した（コードにだけあった決まり）
-- `SECURITY.md` の Supply chain と Supported versions を英日の併記にそろえ、依存ゼロ（`dependencies` を持たない）と、provenance が付く版を 0.1.0 以降と正確に書いた
-- 文章の主張の検査（`scripts/check-claims.ts`。`pnpm check`）を足した。前の版から変わった決定の参照の表は `--decisions --since v<前の版>` で出す
-- テスト拡充案の T8（設定の結果の差分の定期実行）は、定期実行としては入れず、種と倍率を指定して広い比較を手動で動かすワークフローとして入れた
-- 設定の結果の差分（`scripts/result-compare.ts`）の直し: 診断の結果が増えた設定を一覧に出す
-- 目録の生成器（`test/support/catalog.ts`）が、スケジュールの個別の日付の半分ほどを期間（`dates` の `{ from, to }`）にする
-- 診断のオラクルの完全性（取り除いても結果が変わらないのに診断が何も言わない項目）を、報告から失敗に切り替えた
-- 設定の結果の差分（`scripts/result-compare.ts`）の穴を直した: `latest` との比較の旧名の回が、旧名に書き換わっていなかった
-- 設定の結果の差分の意図した差分（`etc/result-changes.json`）に、上の Fixed の 2 件目の項目を足した
-- `RELEASING.md` の監視の節: GitHub の失敗の知らせの届き先と、有効にし直すステップの影響を、事実に合わせて書いた
-- 飛ばしの決まりの検査（`test/skip-policy.test.ts`）: 省略記法・分割代入・`skip`・`todo` の import・export と変数・引数の宣言を、TypeScript のコンパイラーの API で読んで拾うようにした
-- `RELEASING.md` の確認の表: 変形しても結果が同じ（T4）と文章の主張（T7）の行を足し、ドキュメントのコード例（T6）・設定の結果の差分（T8）の行を今の検査に合わせた
 
 ## [0.30.6] - 2026-11-02
 
@@ -173,45 +87,9 @@
 
 - 合成したカレンダーの営業日の判定（`isBusinessDay` や探索）は、`open: "all"` では先のカレンダーが休業日、`open: "any"` では先のカレンダーが営業日と決めた時点で後のカレンダーを判定しないので、後のカレンダーが投げる日（未確定の祝日・提供元の誤りなど）でも投げないことがある（並び順で変わる）。ガイドの「合成したカレンダーは、どれかのカレンダーが投げるなら投げます」から外れる。直すと新たに投げる判定ができるので、0.31.0（マイナー版）で直す。ガイドの該当の箇条に注を足し、確かめるテストは `todo` にした
 
-### 開発
-
-- サイズの上限: 上限を 25,800 から 26,500 に上げた `./diagnose`（測定 26,158）
-- 診断のオラクル: カナリア（完全性の報告に必ず出る設定）が取り除ける理由を確かめた
-- 診断のオラクル: `ORACLE_FULL` なしの `ORACLE_SHARD` を例外にした
-- 生成範囲: 危険の分かっている組み合わせの一覧を作り、呼び出し側ごとに 1 回以上作ることを確かめる（作れない組み合わせは事実の理由を付けて除く）
-- 生成範囲: `test/properties.test.ts` の性質は、設定を作る乱数（性質の名前から決まる種の列）と、日付などを引く乱数を分けた
-- API どうしの整合の検査（`test/consistency.test.ts`）を入れた（全件は `CONSISTENCY_API_FULL=1` で CI の `diagnose-consistency` ジョブ）
-- 検査のスクリプトの検査の直し: 取り込み中の変更を `git status -z` で読む（日本語・スペースを含むパスを写せなかった）
-- 検査のスクリプトそのものの検査（`scripts/tool-selftest.ts`。CI の `tool-selftest` ジョブ。写しを作る場所は `TOOL_SELFTEST_DIR`）を入れた
-- `catch` 節の到達の検査: 除外の一覧の名前が 2 つ以上の節で重なるときと、節の文が `try` と同じ行にあるとき（行で数える lcov では判定できない）を失敗にした。`--lcov` は検査そのものを試すための引数で、CI は使わない
-- `catch` 節の到達の検査を入れた
-- 飛ばしの決まり: 前提がそろわないときに飛ばす箇所を補助の関数に集め、理由を意図した飛ばしの一覧から引くようにした
-- 診断と判定の一致のテストの全件（150 件）を、`CONSISTENCY_FULL=1` で CI の `diagnose-consistency` ジョブで動かす（`pnpm check` は 12 件）
-- 失敗を注入する祝日の提供元を作り、判定・診断・合成の結果が文書のとおりかを確かめるテストを足した
-- 診断のオラクル: カナリアの理由のテストで、`"over-holiday"` の開く規則を実際に取り除くと全日の結果が変わることまで確かめる
-- `scripts/record-generator-features.ts`: 作業ツリーは `--worktree` で指すようにした（`--ref HEAD` は使い方の誤り。CI の `generator-features` ジョブは `--worktree --check`）
-- `RELEASING.md`: オラクルと生成範囲の行を実装と 1 文ずつ突き合わせ、消えていた「タイムゾーンを変えた実行では、オラクルと日本の全範囲の走査を飛ばす」を戻し、組み合わせの一覧の検査・カナリアの理由の確認・0 件の検査・`ORACLE_SHARD` の条件・CI の実測の時間を書いた
-
 ## [0.30.5] - 2026-11-01
 
 0.30.4 の品質基盤の補修です。公開物の `.js` は 0.30.4 と同じです。0.30.4 で、品質基盤が「動いているように見えて、実は見ていない」箇所と、乱数のテストの生成範囲が縮んだ箇所が見つかったので、それだけを直しました。テスト拡充案の段の番号を 1 つずつずらし、第 2 段は 0.30.6、第 3 段は 0.30.7 で出します。
-
-### 開発
-
-- 生成範囲を減らさない検査を入れた（`test/generator-features.test.ts`。記録は `scripts/record-generator-features.ts --update --ref v0.30.3` でだけ作る）
-- 呼び出し側の設定の作り方を `test/support/sites.ts`・`test/support/result-cases.ts` の関数にまとめ、呼び出し側と検査が同じ関数を使うようにした
-- 生成器の到達性を、呼び出し側の文脈ごと・規則の形ごとに確かめるようにした（`test/catalog.test.ts`）
-- 目録の除外の一覧を `"型.キー"` で引くようにし、除外したキーが `etc/api.md` に実在すること、呼び出し側が実際には作らないことも確かめる
-- `scripts/result-compare.ts`: スケジュールの第 n 営業日の規則に、数える基準のカレンダー（`calendar`）を付けるようにした
-- 診断のオラクルの項目を、目録の乱数から切り離して明示した一覧にした
-- 黙って飛ばさない: `test/properties.test.ts` は飛ばした試行の件数をいつも「飛ばした試行: n / N（理由）」で出し、上限（1 割）を超えたら失敗にする。誤った値が黙って既定になっていた `ORACLE_SHARD`・`PROPERTY_SEED`・`ORACLE_FULL`・`ORACLE_JOINT` と、`result-compare.ts` の `--seed`・`--scale`、`bench-compare.ts` の `--ratio` を、例外か使い方の誤りにした
-- 診断のオラクルの完全性の報告（取り除けるのに何も出ない項目）を確かめられるようにした
-- 診断のオラクルの範囲を広げた（全件の設定 3,481 → 9,976 件。CI の `oracle` ジョブを `ORACLE_SHARD` で 3 つの行列に分けた）
-- 診断の `counting-basis` の文を、毎週の曜日の規則が開く規則か閉じる規則かの両側で確かめる単体テストを足した（文の分岐を確かめていなかった穴。種類 C）
-- 生成範囲の検査の補修: 特徴の取り出しの診断の走査の範囲（`diagnoseRangeOf`）に、対応年が 1900〜2099 年と重ならないときに先頭の 200 年にする扱いを入れ、単体テストで確かめる（`test/features.test.ts`）
-- `RELEASING.md`: 診断のオラクルの環境変数（`ORACLE_FULL`・`ORACLE_SHARD`・`ORACLE_TARGET`・`ORACLE_JOINT`）と、全件の実行の時間の決まりを書いた
-- `test/diagnose-properties.test.ts` の冒頭に二重に残っていた古い説明のコメントを消した
-- `RELEASING.md`: 品質の確認に生成範囲の行を足し、目録・オラクルの行を今の検査に合わせた
 
 ## [0.30.4] - 2026-11-01
 
@@ -220,16 +98,6 @@
 ### Fixed
 
 - 診断: 第 n 営業日の規則と、毎週の曜日を開く繰り返しの規則がある設定で、`counting-basis` の文が「その曜日の規則は数を減らさない」と、閉じる規則のときの説明をしていた。開く規則のときは「その規則が開いた日は数えない」と説明する。メッセージは API ではないので、診断の `code`・`path` は変わらない（総当たりのオラクルで約束を確かめるときに見つけた。種類は文章の主張の未検証）
-
-### 開発
-
-- 規則と設定の目録 `test/support/catalog.ts` を置き、乱数のテストと `scripts/result-compare.ts` の生成器を目録に切り替えた
-- `test/properties.test.ts` のカレンダーに、目録の繰り返しの規則を入れた（これまでは繰り返しの規則のないカレンダーだけを試していた）
-- `test/diagnose-properties.test.ts` は、対応年の短い自作の提供元（`test/support/provider.ts`）で全日を比べる（400 日の抜き出しをやめた）
-- 診断の総当たりのオラクル `test/diagnose-oracle.test.ts` を入れた（出た項目をまとめて取り除く性質は `ORACLE_JOINT=1` で試せる）
-- `scripts/test-tz.ts`: タイムゾーンを変えた実行では、オラクルを飛ばす（暦日だけで決まるので）
-- `RELEASING.md`: 品質の確認に目録とオラクルを足し、手元の確認は前の版のタグを読める状態で通すことを書いた
-- サイズ（gzip）: `./diagnose` 25,321 → 25,360（測定 25,360。上の Fixed の文の分）
 
 ## [0.30.3] - 2026-11-01
 
@@ -250,19 +118,6 @@
 - 規約を見直した（`docs/decisions.md` の 25・26・32・33・37 番、`RELEASING.md`）: 約束した挙動から外れていた不具合の修正は、入った版を問わずパッチにする（これまでは直前の版で入った退行だけ）。誤った診断を直したときは、前の版の診断の結果が消えることがある。性能の比較は、正しさのために遅くなることを CHANGELOG に書いた版を通す。同梱の提供元の内部は、前の版との祝日データの比較で差分がなければ置き換えてよい。誤った祝日の `key` を直す手順を決めた
 - ガイド（英日）の「0.30.0 より前に保存した設定」に 0.30.2 で足した、書き換えた後に診断を実行する例の設定が、`timeZone` を書いていないので `time-zone-conflict`（error）になっていた（日本と英国の提供元はタイムゾーンが違う）。例は `deprecated-option` だけを取り出していたので、コード例の検査は通っていた。`timeZone: "Asia/Tokyo"` と `holidayPolicy: "open"` を足し、診断の結果をすべて示す形にした（誤りがあれば例の検査で止まる）
 
-### 開発
-
-- `test/diagnose.test.ts`・`test/diagnose-properties.test.ts`: 上の Fixed の 4 例（月・週の第 n 営業日、閉じる・開く規則）と、スケジュールの第 n 営業日の規則では結果が変わらないことのテストを足した
-- `scripts/result-compare.ts`: 意図した差分を、診断の消えた結果のコード（`removedCodes`）で絞れるようにした
-- サイズの上限: `./diagnose` を 25,000 から 25,800 に上げた
-- サイズ（gzip）: `./diagnose` 24,753 → 25,321（測定 25,321）
-- Node.js 26 が LTS に入ったので、CI の `check` の行列を 22.23.4・24.22.2・26.13.0 に上げ、ビルド・ブラウザー・ランタイム・比較・公開・監視のジョブの固定の版を 26.13.0 にした
-- `scripts/check-package.ts`: 決定の文書の目次が本文の章・見出しと一致すること（番号の重複も）を確かめる
-- `scripts/bench-compare.ts`: CHANGELOG の今の版（または [Unreleased]）の「開発」に決まった言葉で理由を書いた版は、2 倍を超えて遅くなっても表に記録して合格にする（言葉は `RELEASING.md` の品質の確認の表）
-- `etc/result-changes.json` に 0.30.1 の修正（和集合の旧名 `"national"`）を足した
-- `scripts/result-compare.ts`: 意図した差分を許す特徴を、比べた対象ごとに付けるようにした
-- `test/fixtures/national-union-0.22.2.json` の出典の説明で、`"national"` の扱いの根拠を旧 55 番としていたのを旧 54 番（今の 10 番）に直した
-
 ## [0.30.2] - 2026-10-30
 
 0.30.0・0.30.1 の改名の後始末の続きの版です。新しい設定・関数・診断コードはありません。公開物の `.js` の挙動が変わるのは Fixed の 1 つ（診断の結果）で、カレンダー・スケジュールの判定の結果は変わりません。
@@ -281,13 +136,6 @@
 - ソースのコメントとテストで、`"national"` の扱いの根拠を 55 番としていたのを 54 番に直した
 - `docs/decisions.md`: 54 番に 0.30.2 の追記（返す値の改名は「改名は結果を変えない」の例外であること、規則どうしの診断の項を実際の挙動に合わせた）を足し、55 番の対象を「直前の版（マイナー版・パッチ版）」に改め、56 番（同じ設定の結果を前の版と CI で比べる）を足した。旧名を本文に持つ 14・16・36・43・44 番に、0.30.0 の改名の追記を足した。`RELEASING.md`: パッチの区分を「直前の版」に改め、互換性の約束の診断の項に前の版の結果は新しい版でも返すことを、品質の確認に決定の文書の旧名と返す値の改名の確かめ方を足した
 
-### 開発
-
-- CI に `result-compare` ジョブを足した（`scripts/result-compare.ts`）
-- `scripts/check-names.ts`: 前の版を動かす `scripts/result-compare.ts` を、旧名の検査（C14）の対象から外した
-- `test/national-union.test.ts` に、日本の提供元だけの設定の `shadowed` の確認を足した
-- サイズ（gzip）: ルート 18,054 → 17,997（測定 17,997）、`./jp` 20,288 → 20,226（測定 20,226）、`./diagnose` 24,492 → 24,753（測定 24,753）
-
 ## [0.30.1] - 2026-10-30
 
 0.30.0 の改名の後始末の版です。新しい設定・関数・診断コードはありません。公開物の `.js` の挙動が変わるのは Fixed の 1 つだけです。
@@ -305,13 +153,6 @@
 - 型定義の説明: `skipWeekdays` の説明が書けない項目（`WeekdayPattern.dayOfMonth`・`DayOfMonthPattern.weekday`）に付いていたのを正しい項目に移し、例の旧名 `day` を `dayOfMonth` に直した。`@example`・TSDoc の旧名（`holidays`・`recurring` など）を直し、`BusinessDayOfWeekPattern` に対応年の端の挙動を、`HolidayProvider.id` に ISO にない地域の ID（`"FR-AM"`）を書いた。`.js` は変わらない
 - README の祝日の種別の説明を今の値に直した。README（英日）の minify + gzip のサイズを測り直した（ルート 12.7 → 13.0 KB、日本込み 14.4 → 14.7 KB、英国込み 14.8 → 15.1 KB、フランス込み・シンガポール込み 13.6 → 13.9 KB）。`docs/providers.md` のコード例のコメントに残っていた置き換えの取り残し（"US federal holidayProvider:" → "US federal holidays:"）を直した
 - `docs/decisions.md`: 55 番（直前の版で入った退行の修正はパッチ）を足し、42・50・52・54 番に追記した。`RELEASING.md`: パッチの区分に退行の修正を足し、互換性の約束から型の名前の列挙をやめ、旧名（`outOfRange`）を直した。`src/core/schedule.ts`・`calendar.ts` の冒頭の判定の順番の写しを削り、ガイドと 12 番を指すようにした
-
-### 開発
-
-- `scripts/check-names.ts` に、形を分けるための `?: never` の項目に TSDoc が付いていないこと（C13）と、今の状態を書いた文書・スクリプト・型定義の TSDoc に 0.30.0 の旧名が残っていないこと（C14）の検査を足した
-- `scripts/check-size.ts`: 上限を変えた版で、CHANGELOG の測定値（「（測定 N）」の形）を 1 つも照合できなければ失敗にし、照合した件数を出すようにした
-- 和集合の `"national"` のテストを足した
-- サイズ（gzip）: ルート 17,646 → 18,054（測定 18,054）、`./jp` 19,890 → 20,288（測定 20,288）、`./diagnose` 23,919 → 24,492（測定 24,492）
 
 ## [0.30.0] - 2026-10-27
 
@@ -347,15 +188,6 @@
 - 返す値（`reason` の `"regular"`、日本の `kind` の `"national"`、エラーコード `"invalid-month-day"`、設定の中の位置の文字列）と比べているコードを改める
 - `dayInfoOn` の結果を `deepEqual` で比べているテストは、期待値に `open` と、`rulePath` があれば `optionPath` を足し、`reason` が `"regular"` なら `"default"`（`createCalendarFromSchedule` では `"open-weekday"`）に直す
 - 対応年の最後の日付の近くで祝前日・祝日の翌日・振替の規則を使っていて例外になったら、`outOfRangePolicy: "ignore"` にするか、対応年の中で使う
-
-### 開発
-
-- 名前の規則の検査 `scripts/check-names.ts` を `pnpm check` に足した
-- 改名の表を `src/core/renamed.ts` の 1 か所に置き、読み替え・診断・`migrate…` がこの表だけを使う
-- `scripts/bench.ts` は、前の版が新しい名前を知らないときは設定を旧名に戻して渡す（CI の bench が同じ場面を比べるため）
-- `scripts/check-readme-examples.ts` は、0.30.x の間だけ返す旧名の項目（削除予定の表から決める）を比べない
-- サイズの上限を上げた
-- README のサイズの値を 0.30.0 で測り直した
 
 ## [0.22.2] - 2026-10-27
 

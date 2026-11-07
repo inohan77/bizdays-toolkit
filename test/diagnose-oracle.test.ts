@@ -112,7 +112,7 @@ const fixture = JSON.parse(
 const items: readonly Item[] = fixture.items;
 
 /**
- * 項目の一覧がまだ持っていない形のキーと、その理由。test/catalog.test.ts の到達性と同じ形で、一覧が目録のすべての形と
+ * 項目の一覧がまだ持っていない形のキーと、その理由。test/tools/catalog.test.ts の到達性と同じ形で、一覧が目録のすべての形と
  * キーを含むかを確かめ、ここに載っていない不足は失敗にする（載っているのに不足していない項目も、古い記載として失敗）
  */
 const ITEM_GAPS: Readonly<Record<string, string>> = {};

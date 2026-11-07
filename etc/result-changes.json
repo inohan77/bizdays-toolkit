@@ -1,5 +1,5 @@
 {
-  "$comment": "前の版との設定の結果の比較（scripts/result-compare.ts、decisions.md の 37 番）で許す、意図した差分。trait は test/support/result-cases.ts の traitsOfCase が付ける設定の特徴。removedCodes は、診断の差分を消えた結果のコードで絞る。前の版が affectedSince 以上・introducedIn 未満で、今回の版が introducedIn 以上のときだけ許す",
+  "$comment": "前の版との設定の結果の比較（scripts/result-compare.ts、RELEASING.md の「品質の仕組みの理由」の「前の版と比べる」）で許す、意図した差分。trait は test/support/result-cases.ts の traitsOfCase が付ける設定の特徴。removedCodes は、診断の差分を消えた結果のコードで絞る。前の版が affectedSince 以上・introducedIn 未満で、今回の版が introducedIn 以上のときだけ許す",
   "changes": [
     {
       "trait": "counting-rules-with-dates",

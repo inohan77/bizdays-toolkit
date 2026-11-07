@@ -89,6 +89,7 @@ const CURRENT_MARKDOWN_DIRS = ["docs/sources/"];
  */
 const HISTORY_TEXTS: Readonly<Record<string, string>> = {
   "CHANGELOG.md": "版ごとの変更の履歴",
+  "docs/development-log.md": "版ごとの開発の記録（品質の仕組みの変更の履歴）",
   "docs/migration.md": "版ごとの移行の履歴（前の版の書き方を示す）",
   "docs/decisions.md": "決定の経緯（どの版で何を改めたかを書く）",
   "RELEASING.md": "版の区分の説明で、前の版の系列を例に書く",

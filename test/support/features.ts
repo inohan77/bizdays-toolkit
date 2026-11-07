@@ -1,4 +1,4 @@
-// 設定から「特徴」の文字列の集合を取り出す（生成範囲の包含の検査。test/generator-features.test.ts）。
+// 設定から「特徴」の文字列の集合を取り出す（生成範囲の包含の検査。test/tools/generator-features.test.ts）。
 // 特徴は、生成器が作った設定の形を区別する細かさで付ける: 規則の形・キー・値の要素・配列の長さ・日付の年代・有効期間の年・
 // 入力の誤りの種類。旧名で書いた設定は新しい名前にそろえてから付ける（値の旧名 "national" などはそのまま残す）。
 
@@ -6,7 +6,7 @@ import { RENAMED_KEYS } from "../../src/core/renamed.ts";
 
 type Obj = Record<string, unknown>;
 
-/** 規則の形（判別のキー → 公開の型の名前）。目録の SHAPES と同じ対応（test/catalog.test.ts が突き合わせる） */
+/** 規則の形（判別のキー → 公開の型の名前）。目録の SHAPES と同じ対応（test/tools/catalog.test.ts が突き合わせる） */
 export const PATTERN_OF: Readonly<Record<string, string>> = {
   weekday: "WeekdayPattern",
   dayOfMonth: "DayOfMonthPattern",

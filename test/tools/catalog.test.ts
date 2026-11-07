@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { RENAMED_KEYS } from "../src/core/renamed.ts";
+import { RENAMED_KEYS } from "../../src/core/renamed.ts";
 import {
   COMMON_RULE_KEYS,
   EXCLUDED_KEYS,
@@ -18,11 +18,11 @@ import {
   shapesIn,
   isIntendedInvalid,
   type Obj,
-} from "./support/catalog.ts";
-import { featuresOf, normalizeOptions } from "./support/features.ts";
-import { fixedCases, generateCases } from "./support/result-cases.ts";
-import { CONTEXT_USES, siteTrials } from "./support/sites.ts";
-import { SITES } from "./support/features-compare.ts";
+} from "../support/catalog.ts";
+import { featuresOf, normalizeOptions } from "../support/features.ts";
+import { fixedCases, generateCases } from "../support/result-cases.ts";
+import { CONTEXT_USES, siteTrials } from "../support/sites.ts";
+import { SITES } from "../support/features-compare.ts";
 
 const api = readFileSync("etc/api.md", "utf8");
 /** 改名の旧名（置き場所ごと。規則の holiday と、スケジュールの旧名 holiday を取り違えないため） */

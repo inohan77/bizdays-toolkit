@@ -503,16 +503,14 @@ function checkProviderData(c: IssueCollector, source: HolidaySource<string>): bo
   return ok;
 }
 
-/** 基準のカレンダーが投げて判定できない月として扱う例外の code（対応年の外・未確定の祝日） */
+/** 基準のカレンダーが投げて判定できない日として扱う例外の code（対応年の外・未確定の祝日） */
 const UNJUDGEABLE = new Set(["out-of-range", "unconfirmed-holiday"]);
 
 /**
- * スケジュールの第 n 営業日の規則の基準のカレンダーを、投げた月を「判定できない月」として記録しながら評価する（その月は
- * 営業日がないとみなす）。診断の走査の範囲（提供元のないスケジュールの 2001 年からの周期・形を調べる代表の 28 年間）で
- * 基準のカレンダーが対応年の外・未確定の祝日で投げても、診断が例外にならず、誤った error を出さないため。範囲は前もって
- * 計算しない（合成したカレンダーなど、提供元の対応年と outOfRangePolicy の組み合わせから正しく求められないため）。
- * 週の第 n 営業日の規則は、月をまたぐ週で隣の月の基準も見るので、投げた月の前の月と次の月も判定できない月にする
- * （月の第 n 営業日の規則は、その月の基準だけで決まるので記録しない）
+ * スケジュールの第 n 営業日の規則の基準のカレンダーを、投げた月を記録しながら評価する（その月は営業日がないとみなす）。
+ * 診断の走査で基準のカレンダーが対応年の外・未確定の祝日で投げても、診断が例外にならず、誤った error を出さないため。
+ * 記録は見張り（dropUnsure）の入力にだけ使い、投げた月だけを記録する。判定できない日の集合 U は、規則を評価する前に
+ * unjudgeableDays が求める（週の規則が隣の月を見る扱いも、そこで決める。docs/decisions.md の 31 番）
  */
 function guardBases<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
@@ -542,7 +540,7 @@ function guardBases<Value, Kind extends string>(
 }
 
 /**
- * 判定できない月があるときに出さない診断（分からないことは言わない）。shadowed は規則の形（集合の包含・同じ基準のカレンダーか）
+ * 判定できない日があるときに出さない診断（分からないことは言わない）。shadowed は規則の形（集合の包含・同じ基準のカレンダーか）
  * だけで決まり、基準のカレンダーを評価しないので、いつも出す
  */
 const UNSURE_CODES = new Set(["never-matches", "redundant"]);
@@ -587,7 +585,7 @@ export function unjudgeableDays<Value, Kind extends string>(
           r.basis!(Math.floor(m / 12), (m % 12) + 1);
           result = false;
         } catch (error) {
-          // 判定できない月の印（対応年の外・未確定の祝日）だけを数える。ほかの例外は、規則どうしの診断が報告する
+          // 判定できない日の印（対応年の外・未確定の祝日）だけを数える。ほかの例外は、規則どうしの診断が報告する
           result = UNJUDGEABLE.has(String((error as { code?: unknown }).code));
         }
         thrown.set(m, result);
@@ -673,10 +671,10 @@ export function unsureOf<Value, Kind extends string>(
 }
 
 /**
- * @internal 見張り: 判定できない月にかかわる never-matches・redundant が残っていないことと、診断の途中で基準が投げた月が、
- * 前もって求めた判定できない月に含まれることを確かめる。分からない規則は走査の前に決めて出さないので（走査の後で消すと、
+ * @internal 見張り: 判定できない日にかかわる never-matches・redundant が残っていないことと、診断の途中で基準が投げた月が、
+ * 前もって求めた基準の投げる月（unjudgeableDays の months）に含まれることを確かめる。分からない規則は走査の前に決めて出さないので（走査の後で消すと、
  * ほかの規則が「消した規則を外した設定」で判定されたままになる。31 番）、ここで見つかれば作りの誤り（黙って外れる検査を
- * 作らない。36 番）
+ * 作らない。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）
  */
 export function dropUnsure(
   c: IssueCollector,
@@ -700,7 +698,7 @@ function analyze<Value, Kind extends string>(
   original: CompiledSchedule<Value, Kind>,
   isCalendar: boolean,
 ): void {
-  // 判定できない月を、規則を評価する前に、基準を直接求めて決める（基準は繰り返しの規則に依存しないので、規則の並びや
+  // 判定できない日を、規則を評価する前に、基準を直接求めて決める（基準は繰り返しの規則に依存しないので、規則の並びや
   // 取り除きの順に左右されない）。分からない規則は never-matches・redundant を出さず、逐次除去でも取り除かない（31 番）
   const unknown = unjudgeableDays(original, rulesScanWindow(original));
   const recorded = new Set<number>();

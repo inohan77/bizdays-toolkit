@@ -1,6 +1,6 @@
 import "./strict-warnings.ts";
 /**
- * 開発用のツール（Node.js・npm・pnpm）の版を確かめる（pnpm check の最初に実行。decisions.md の 35 番）。
+ * 開発用のツール（Node.js・npm・pnpm）の版を確かめる（pnpm check の最初に実行。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
  *
  * - ワークフローどうしで、同じ系列の Node.js の版がそろっていること（ci.yml の check の行列が基準）
  * - ci.yml の compat の行列に、engines の下限（package.json）が入っていること

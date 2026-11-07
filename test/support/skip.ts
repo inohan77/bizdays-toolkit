@@ -1,6 +1,6 @@
 // 飛ばしの決まり（テスト拡充案の T3）。前提がそろわないときに飛ばす箇所（テストの skip・todo、スクリプトの SKIP の行）は、
 // この関数を通し、理由を下の意図した飛ばしの一覧から引く。CI（環境変数 CI が空でも "false" でもないとき）では、一覧にない理由や、
-// CI では飛ばさない理由（ci: false）の飛ばしを失敗にする。この関数を通さない飛ばしは test/skip-policy.test.ts が止める。
+// CI では飛ばさない理由（ci: false）の飛ばしを失敗にする。この関数を通さない飛ばしは test/tools/skip-policy.test.ts が止める。
 
 export interface IntendedSkip {
   /** 出力に出す理由 */
@@ -64,7 +64,7 @@ export function createSkipPolicy(table: Readonly<Record<string, IntendedSkip>>):
 const policy = createSkipPolicy(INTENDED_SKIPS);
 
 /**
- * 決まりそのものを確かめる見本の一覧（test/skip-policy.test.ts だけが使う）。既知の不具合がない時期にも todo の扱いを
+ * 決まりそのものを確かめる見本の一覧（test/tools/skip-policy.test.ts だけが使う）。既知の不具合がない時期にも todo の扱いを
  * 確かめるため、3 つの種類（CI でも飛ばす・CI では飛ばさない・既知の不具合）を 1 つずつ持つ。テストのファイルに
  * todo: と書くと飛ばしの検査に当たるので、ここに置く
  */

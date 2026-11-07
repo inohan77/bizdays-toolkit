@@ -1,6 +1,6 @@
 // 乱数のテストの呼び出し側（test/properties.test.ts・test/diagnose-properties.test.ts）が使う設定の作り方と、
 // 3 つの呼び出し側（result-compare を含む）が作る設定の一覧。呼び出し側はここの関数で設定を作り、
-// 生成範囲の包含の検査（test/generator-features.test.ts）は、同じ関数を同じ種と試行の数で呼んで特徴を数える
+// 生成範囲の包含の検査（test/tools/generator-features.test.ts）は、同じ関数を同じ種と試行の数で呼んで特徴を数える
 // （3 つの呼び出し側とも、設定の並びまで呼び出し側と同じ）。
 // 提供元は名前（"jp"）か、自作の提供元のオブジェクトで持つ（呼び出し側が本物の提供元に置き換える）。
 
@@ -217,7 +217,7 @@ export const DIAGNOSE_PROPERTY = {
    */
   sampleEvery: 3,
 } as const;
-/** 日本の提供元の全範囲（src/jp の対応年。test/generator-features.test.ts が対応年と一致することを確かめる） */
+/** 日本の提供元の全範囲（src/jp の対応年。test/tools/generator-features.test.ts が対応年と一致することを確かめる） */
 export const JP_FULL_RANGE = { from: "1955-01-01", to: "2099-12-31" } as const;
 /** 対応年の短い自作の提供元の全日 */
 export const SHORT_RANGE = { from: "2025-01-01", to: "2027-12-31" } as const;

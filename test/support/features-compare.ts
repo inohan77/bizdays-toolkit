@@ -1,4 +1,4 @@
-// 生成範囲の包含の比べ方と記録の読み書き（test/generator-features.test.ts と scripts/record-generator-features.ts が使う。
+// 生成範囲の包含の比べ方と記録の読み書き（test/tools/generator-features.test.ts と scripts/record-generator-features.ts が使う。
 // 比べ方を 1 か所にして、スクリプトとテストの結果がずれないようにする）。
 
 import { readdirSync, readFileSync } from "node:fs";
