@@ -129,8 +129,15 @@ test("スケジュールからのカレンダー: isOpen は値だけを受け�
     received.push(args);
     return args[0] !== null;
   });
+  // 作成時に、曜日の値と祝日の値（holidayPolicy: { value }）で 1 回ずつ呼ぶ（boolean を返すかを確かめる）
+  const atCreation = received.length;
+  assert.ok(atCreation > 0, "作成時に呼ばない");
   probe.isBusinessDay("2026-10-19");
-  assert.deepEqual(received, [[weekday]], "引数は値 1 つだけ");
+  assert.deepEqual(received.slice(atCreation), [[weekday]], "引数は値 1 つだけ");
+  assert.ok(
+    received.every((args) => (args as unknown[]).length === 1),
+    "作成時の呼び出しも引数は値 1 つだけ",
+  );
   // 営業時間が 17:00 までの日だけを営業日とみなす、のような値の条件も書ける
   const until18 = createCalendarFromSchedule(hours, (v) => v !== null && v.close === "18:00");
   assert.equal(until18.isBusinessDay("2026-10-17"), false, "土曜は 17:00 まで");
@@ -191,10 +198,23 @@ test("スケジュールからのカレンダー: 入力の誤り・searchDayLim
     () => never.nextBusinessDay("2026-10-19"),
     (e: unknown) => isBizdaysError(e) && e.code === "no-business-day" && /10 days/.test(e.message),
   );
-  // isOpen の戻り値は true かどうかで判定する（truthy ではない）
-  const strict = createCalendarFromSchedule(
-    hours,
-    (v) => (v === null ? 0 : 1) as unknown as boolean,
+  // isOpen が boolean でない値を返すと invalid-argument の RangeError（作成時に、曜日の値と祝日の値で確かめる）
+  assert.throws(
+    () => createCalendarFromSchedule(hours, (v) => (v === null ? 0 : 1) as unknown as boolean),
+    (e: unknown) =>
+      e instanceof RangeError &&
+      isBizdaysError(e) &&
+      e.code === "invalid-argument" &&
+      /boolean/.test(e.message),
   );
-  assert.equal(strict.isBusinessDay("2026-10-19"), false);
+  // 作成時に呼ばない値（規則の値）で boolean でない値を返すと、その日を判定したときに投げる
+  // （仕事始め（01-04）の値 { open: "11:00", close: "15:00" } は規則の値で、曜日の値・祝日の値にない）
+  const lazy = createCalendarFromSchedule(hours, (v) =>
+    v !== null && v.close === "15:00" ? ("yes" as unknown as boolean) : v !== null,
+  );
+  assert.equal(lazy.isBusinessDay("2026-10-19"), true);
+  assert.throws(
+    () => lazy.isBusinessDay("2027-01-04"),
+    (e: unknown) => e instanceof RangeError && isBizdaysError(e) && e.code === "invalid-argument",
+  );
 });

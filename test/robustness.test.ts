@@ -1,54 +1,122 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
+import { readFileSync } from "node:fs";
 import {
   addDays,
+  combineCalendars,
   createCalendar,
+  createCalendarFromSchedule,
+  toInstant,
   createSchedule,
   isBizdaysError,
   type Holiday,
   type HolidayProvider,
 } from "../src/index.ts";
 import { holidaysInYear, isHoliday, jp } from "../src/jp/index.ts";
+import { withSubstituteDays } from "../src/provider/index.ts";
+import { migrateCalendarOptions } from "../src/diagnose/index.ts";
 import { IssueCollector } from "../src/core/errors.ts";
 import { compileCalendarOptions } from "../src/core/calendar.ts";
 
-/** 例外が code を持ち、従来の例外クラスのインスタンスでもあることを確かめる */
-function throwsCode(fn: () => unknown, code: string, cls: ErrorConstructor = RangeError): void {
-  assert.throws(fn, (error: unknown) => {
-    assert.ok(error instanceof cls, `expected ${cls.name}`);
-    assert.ok(isBizdaysError(error), "expected a bizdays error");
-    assert.equal(error.code, code);
-    return true;
-  });
+/** 例外が code を持ち、表のクラス（classOf）のインスタンスであることを確かめる */
+function throwsCode(
+  fn: () => unknown,
+  code: string,
+  cls: ErrorConstructor = RangeError,
+  label = code,
+): void {
+  assert.throws(
+    fn,
+    (error: unknown) => {
+      assert.ok(isBizdaysError(error), `${label}: expected a bizdays error, got ${String(error)}`);
+      assert.equal(error.code, code, label);
+      assert.ok(
+        error instanceof cls,
+        `${label}: expected ${cls.name}, got ${error.constructor.name}`,
+      );
+      return true;
+    },
+    `${label}: no exception`,
+  );
 }
 
-test("例外にはコードが付き、従来の例外クラスのままである", () => {
-  throwsCode(() => addDays("2026-13-01", 1), "invalid-date");
-  throwsCode(() => addDays("2026-01-01", 1.5), "invalid-argument");
-  throwsCode(() => isHoliday("2026/11/23"), "invalid-date");
-  throwsCode(() => isHoliday("2026-11-23T25:00"), "invalid-time");
-  throwsCode(() => isHoliday(20261123 as unknown as string), "invalid-input", TypeError);
-  throwsCode(() => holidaysInYear(2100), "out-of-range");
-  throwsCode(() => createCalendar({ timeZone: "Asia/Nowhere" }), "invalid-time-zone");
-  throwsCode(() => createCalendar({ closedWeekdays: [7 as 0] }), "invalid-weekday");
-  throwsCode(() => createCalendar({ closedAnnualDates: ["02-30"] }), "invalid-annual-date");
-  throwsCode(
+/**
+ * code ごとの例外のクラスの表（docs/decisions.md の 3 番・src/core/errors.ts の冒頭）。invalid-input だけが TypeError で、
+ * ほかのすべての code は RangeError。code ごとに、引数の型の誤りと値の誤りの両方の経路（あれば）で投げさせる
+ */
+const classOf = (code: string): ErrorConstructor =>
+  code === "invalid-input" ? TypeError : RangeError;
+const notAProvider = { id: "X" } as unknown as HolidayProvider;
+const badDataProvider = {
+  id: "BAD",
+  timeZone: "Asia/Tokyo",
+  dataVersion: "1",
+  supportedYears: { from: 2026, to: 2026 },
+  holidaysInYear: () => [{ date: "2026-13-01" } as unknown as Holiday],
+} as HolidayProvider;
+const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
+  "invalid-date": [
+    () => addDays("2026-13-01", 1),
+    () => isHoliday("2026/11/23"),
+    () => toInstant(20261123 as unknown as string, "10:00", "UTC"),
+  ],
+  "invalid-month": [() => createCalendar().nthBusinessDayOfMonth("2026-13", 1)],
+  "invalid-annual-date": [() => createCalendar({ closedAnnualDates: ["02-30"] })],
+  "invalid-time": [
+    () => isHoliday("2026-11-23T25:00"),
+    () => createCalendar().businessDayOnOrAfter("2026-10-10T10:00", { cutoff: "25:00" }),
+  ],
+  "invalid-input": [() => isHoliday(20261123 as unknown as string)],
+  "invalid-time-zone": [() => createCalendar({ timeZone: "Asia/Nowhere" })],
+  "invalid-range": [
     () => createCalendar({ closedDates: [{ from: "2026-12-31", to: "2026-12-01" }] }),
-    "invalid-range",
-  );
-  throwsCode(
+  ],
+  "invalid-weekday": [() => createCalendar({ closedWeekdays: [7 as 0] })],
+  "invalid-argument": [
+    () => addDays("2026-01-01", 1.5),
+    () => withSubstituteDays("x" as never, { directions: {}, kind: "s" }),
+    () => withSubstituteDays([], null as never),
+    () => migrateCalendarOptions(null as never),
+    () => createCalendarFromSchedule({} as never, () => true),
+    () => createCalendar().businessDayOnOrAfter("2026-10-10", { cutoff: "10:00" }),
+  ],
+  "invalid-option": [() => createCalendar({ searchDayLimit: 0 })],
+  "time-zone-conflict": [
+    () =>
+      combineCalendars(
+        [createCalendar({ timeZone: "Asia/Tokyo" }), createCalendar({ timeZone: "UTC" })],
+        { open: "all" },
+      ),
+  ],
+  "out-of-range": [() => holidaysInYear(2100)],
+  "unconfirmed-holiday": [
+    () =>
+      createCalendar({ holidayProvider: jp, unconfirmedHolidayPolicy: "throw" }).isBusinessDay(
+        "2099-03-20",
+      ),
+  ],
+  "invalid-provider": [() => createCalendar({ holidayProvider: notAProvider })],
+  "invalid-provider-data": [
+    () => createCalendar({ holidayProvider: badDataProvider }).isBusinessDay("2026-01-01"),
+  ],
+  "no-business-day": [
     () =>
       createCalendar({ closedWeekdays: [0, 1, 2, 3, 4, 5, 6], searchDayLimit: 10 }).nextBusinessDay(
         "2026-01-01",
       ),
-    "no-business-day",
-    Error,
-  );
-  throwsCode(
-    () => createCalendar().businessDayOnOrAfter("2026-10-10", { cutoff: "25:00" }),
-    "invalid-time",
-  );
+  ],
+  "no-closed-day": [() => createCalendar({ searchDayLimit: 10 }).nextClosedDay("2026-01-01")],
+};
+
+test("例外のクラスは code ごとの表のとおり（invalid-input だけが TypeError、ほかは RangeError）で、すべての code を確かめる", () => {
+  // 確かめる code は、src/core/errors.ts の KnownErrorCode のすべて（表に漏れがあれば失敗）
+  const source = readFileSync(new URL("../src/core/errors.ts", import.meta.url), "utf8");
+  const union = /export type KnownErrorCode =([\s\S]*?);/.exec(source)![1]!;
+  const codes = [...union.matchAll(/\| "([a-z-]+)"/g)].map((m) => m[1]!);
+  assert.deepEqual(Object.keys(TRIGGERS).sort(), [...codes].sort(), "表の code と KnownErrorCode");
+  for (const [code, triggers] of Object.entries(TRIGGERS))
+    triggers.forEach((fn, i) => throwsCode(fn, code, classOf(code), `${code} の ${i} 番目`));
 });
 
 test("設定の誤りのメッセージには、設定の中の位置が入る", () => {

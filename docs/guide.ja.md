@@ -191,7 +191,7 @@ shipping.dayInfoOn("2027-01-01");
 shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.open); // [true, false, false, false, false, true]
 ```
 
-`cutoff` は `"HH:mm"` だけを受け付けます（`"14:30:00"` は `invalid-time`）。入力の時刻は分の精度で比べるため、秒を持つ締め時刻は、入力の秒と比べられないからです。
+`cutoff` は `"HH:mm"` と `"HH:mm:ss"` を受け付けます。入力の時刻は分の精度（秒を切り捨てた分）で、その分の始まりと比べます。`cutoff: "14:00:30"` なら 14:00 の入力は締めの前、14:01 の入力は締めの後です。`"14:00"`・`"14:00:00"` なら 14:00 の入力は締めの後です。
 
 `daysBetween(from, to)` は、期間のすべての日の `dayInfoOn` を返します（両端を含む）。 `businessDatesBetween`・`holidaysBetween` も両端を含みます。`diffBusinessDays(from, to)` だけは `from` 以上 `to` 未満の営業日の数で、`diffBusinessDays(a, b) + diffBusinessDays(b, c)` が `diffBusinessDays(a, c)` と等しくなり、`a` が営業日なら `diffBusinessDays(a, addBusinessDays(a, n))` が `n` になります（`addBusinessDays` の逆算）。起点が休業日のときは、`addBusinessDays` は翌営業日を 1 と数える（`n = 0` は `businessDayOnOrAfter` と同じなので `+0` と `+1` が同じ日）一方、`diffBusinessDays` は休業日の起点を数えないので、1 だけずれます。
 
@@ -477,17 +477,14 @@ businessDayIndex("2026-10-03"); // 0（土曜日は営業日でない）
 calendar.nthBusinessDayOfMonth("2026-10", 5); // "2026-10-07"
 ```
 
-**次の休業日と、その理由**：`nextClosedDay` はありませんが、`daysBetween` が毎日の `dayInfoOn` を返すので、営業日でない最初の日を取ります。
+**次の休業日と、その理由**：`nextClosedDay`・`previousClosedDay` は、次・前の営業日でない日を返します（`searchDayLimit` の日数まで探し、なければ `code: "no-closed-day"` の `RangeError`）。休業の理由は `dayInfoOn` で分かります。
 
 ```ts
-import { addDays } from "bizdays-toolkit";
-
 const calendar = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
-const nextClosedDay = (date: string) =>
-  calendar.daysBetween(addDays(date, 1), addDays(date, 60)).find((d) => !d.open);
-nextClosedDay("2026-10-05")?.date; // "2026-10-10"
-nextClosedDay("2026-10-05")?.reason; // "closed-weekday"
-nextClosedDay("2026-10-11")?.reason; // "holiday"（10 月 12 日のスポーツの日）
+calendar.nextClosedDay("2026-10-05"); // "2026-10-10"
+calendar.dayInfoOn(calendar.nextClosedDay("2026-10-05")).reason; // "closed-weekday"
+calendar.dayInfoOn(calendar.nextClosedDay("2026-10-11")).reason; // "holiday"（10 月 12 日のスポーツの日）
+calendar.previousClosedDay("2026-10-13"); // "2026-10-12"
 ```
 
 **銀行の営業日**：銀行は土日・祝日と 12 月 31 日〜1 月 3 日が休みなので、3 行で書けます。振込の着金日は、自社のカレンダーと合成して求めます（「カレンダーの合成」）。
@@ -667,7 +664,7 @@ calendar.dayInfoOn("2027-01-04");
 ```
 
 - `isOpen` は値だけで決まる純粋な関数にしてください。受け取るのは値だけ（日付は渡されません）で、カレンダーは営業日を探す間に `isOpen` を繰り返し呼ぶので、日付・時刻・外部の状態を見る関数を渡すと、結果が呼ぶたびに変わってしまいます。日付で変えたい条件は、スケジュールの規則（`dates`・`recurringRules`）に書きます
-- 営業日になるのは `true` を返した日だけです。`1` や `"open"` のような boolean でない値を返した日は休業日になります
+- `isOpen` は boolean を返してください。`1` や `"open"` のような boolean でない値を返すと、`code: "invalid-argument"` の `RangeError` になります。作成時（曜日の値と、`holidayPolicy: { value }` の祝日の値で `isOpen` を呼びます）か、ほかの値の日を判定したときに投げます
 - `dayInfoOn` の `reason` は、スケジュールの `reason` をカレンダーの `reason` に対応させたものです。`date` → `"open-date"`/`"closed-date"`、`annual` → `"open-annual"`/`"closed-annual"`、`recurring` → `"open-recurring"`/`"closed-recurring"`、`holiday` → `"holiday"`（祝日が営業でも。`holidayPolicy: "open"` と同じ）、`weekday` → `"open-weekday"`/`"closed-weekday"`。`"open-annual"` はこの作り方のカレンダーにだけ現れます（`createCalendar` の `closedAnnualDates` は休業だけのため）。`name`・`holiday`・`shiftedFrom`・`optionPath` はスケジュールの結果のままです
 - 祝日・タイムゾーン・`outOfRangePolicy` はスケジュールのものです。設定の診断は `diagnoseSchedule` でスケジュールの設定に対して行います（カレンダー自体は診断しません）。`searchDayLimit`（既定 3660）をオプションで指定できます
 - 営業・休業だけが要るなら `createCalendar`、スケジュールがどのみちあるならこちら、という使い分けです
@@ -745,7 +742,7 @@ try {
 
 ## エラー
 
-設定や入力の誤りは、従来どおり `RangeError`・`TypeError` などの例外になり、`code` を持ちます。メッセージの文言は変わることがあるので、判定には `code` を使ってください。
+設定や入力の誤りは `RangeError` の例外になり、`code` を持ちます（`TypeError` は、受け付けない種類の入力の `invalid-input` だけです）。メッセージの文言は変わることがあるので、判定には `code` を使ってください。
 
 <!-- example: allow-diagnostics invalid-date -->
 
@@ -761,7 +758,7 @@ try {
 }
 ```
 
-コード: `invalid-date`・`invalid-input`・`invalid-month`・`invalid-annual-date`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-argument`・`invalid-option`・`time-zone-conflict`・`out-of-range`・`unconfirmed-holiday`・`invalid-provider`・`invalid-provider-data`・`no-business-day`。将来の版でコードが増えることがあります。
+コード: `invalid-date`・`invalid-input`・`invalid-month`・`invalid-annual-date`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-argument`・`invalid-option`・`time-zone-conflict`・`out-of-range`・`unconfirmed-holiday`・`invalid-provider`・`invalid-provider-data`・`no-business-day`・`no-closed-day`。将来の版でコードが増えることがあります。
 
 ## 設定の診断
 

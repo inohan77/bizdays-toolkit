@@ -8,25 +8,43 @@
 
 ## [0.31.0] - 2026-11-08
 
-品質改善提案（11 通目）の 0.31.0 の分です。設定の診断の `redundant` を、出た規則をまとめて取り除いても結果が変わらない判定に作り直しました。
+品質改善提案（11 通目）の 0.31.0 の分です。設定の診断の `redundant` を、出た規則をまとめて取り除いても結果が変わらない判定に作り直しました。0.30.x で 0.31.0 に先送りした、新たに例外を投げる・型が狭まる変更（`isOpen` の返り値、例外のクラス、`withSubstituteDays` の凍結）をまとめて入れ、休業日の探索を足しました。
+
+### Added
+
+- `Calendar.nextClosedDay(input)`・`previousClosedDay(input)`: 入力日の翌日以降・前日以前の、営業日でない日を返す。`searchDayLimit` の日数のうちに見つからなければ `code: "no-closed-day"` の `RangeError`（新しいエラーコード）。合成したカレンダーとスケジュールから作ったカレンダーにもある
+- `BusinessDayOnOrAfterOptions.cutoff` に `"HH:mm:ss"` を書ける。入力の時刻は分の精度（秒を切り捨てた分）で、その分の始まりと比べる（`"14:00:30"` なら 14:00 の入力は締めの前）
 
 ### Changed
 
 - 設定の診断（`diagnoseCalendar`・`diagnoseSchedule`）の `redundant` を逐次除去にした。使われない規則（`shadowed`・`never-matches` など）を先に取り除き、1 つずつ（毎年の月日と繰り返しの規則を配列の順に、次に個別の日付を）、それまでに出た規則を取り除いた設定で判定し、取り除いた規則があればほかに取り除ける規則がなくなるまで繰り返す。出た規則は、まとめて取り除いても結果が変わらない（今までは「その規則を 1 つだけ外したら」の判定で、同じ規則を 2 つ書くと後が `shadowed`・前が `redundant` になり、両方を外すと結果が変わった）。影響: 同じ規則を 2 つ書いた設定で前の規則の `redundant` が出なくなるなど、`redundant` が減ることがある。覆われた規則を外すと覆っていた規則も取り除けるようになる場合（定休日のない設定で、臨時休業日を覆う臨時営業日など）は、増えることもある
+- 設定の診断: 判定できない月（スケジュールの第 n 営業日の規則の基準のカレンダーが投げる月）に有効期間が重なる規則は、規則どうしの診断の前に決め、`never-matches`・`redundant` を出さず、逐次除去でも取り除かない（0.30.9 までと同じく出さないが、診断の後で消すのをやめた。後で消すと、ほかの規則が「消した規則を外した設定」で判定されたままになるため）
+- `createCalendarFromSchedule`: `isOpen` が boolean でない値を返すと `code: "invalid-argument"` の `RangeError`（今までは `true` でない値の日を休業日にしていた）。作成時に、曜日の値と `holidayPolicy: { value }` の値で `isOpen` を呼んで確かめ、ほかの値の日は判定したときに確かめる
+- 例外のクラスを `code` ごとの表にそろえた: `invalid-input` だけが `TypeError` で、ほかのすべての `code` は `RangeError`。今まで `TypeError` だったもの（`bizdays-toolkit/provider` の関数の引数の型の誤りの `invalid-argument`、`migrateCalendarOptions`・`migrateScheduleOptions` にオブジェクトでない値を渡したときの `invalid-argument`、`toInstant` に文字列でない日付を渡したときの `invalid-date`）が `RangeError` になる
+- `withSubstituteDays`（`bizdays-toolkit/provider`）: 返す配列を凍結し、戻り値の型を `readonly Holiday<Kind>[]` にした（返すものはすべて凍結。決定 4 番）
 - 設定の診断の `redundant` に `relatedPath` を付ける: 取り除いたときに代わりに決める規則で、その規則が決めていた日をすべて 1 つの規則が決めるときだけ（定休日の曜日や祝日の扱いが決める日があれば付かない）
 
 ### 移行
 
 - 診断の結果を `deepEqual` などで丸ごと比べているテストは、新しい結果を期待値にする（`redundant` の増減と `relatedPath`）。出た規則を 1 つずつ外して診断をやり直していた手順は要らない（まとめて外せる）
+- `createCalendarFromSchedule` の `isOpen` が `1`・`"open"` などを返していれば、boolean を返すように直す（作成時か、その値の日の判定で例外になる）
+- 例外を `instanceof TypeError` で受けていれば、`isBizdaysError(e)` と `e.code` で受けるように直す（`invalid-input` 以外は `RangeError` になった）
+- `withSubstituteDays` の戻り値に `push` などをしていれば、`[...result]` で複製してから変える。TypeScript で可変の配列の型（`Holiday[]`）に代入していれば、`readonly Holiday[]` にする
+- `code` で分岐しているコードは、新しい `no-closed-day` を「その他」の分岐で受けられるか確かめる（作業は要らないことが多い）
 
 ### 開発
 
 - 診断のオラクル: 出た項目をまとめて取り除くテストを既定にし（`ORACLE_JOINT` と飛ばしの理由 `oracle-joint` をやめた）、完全性を「まとめて取り除いた後に取り除ける項目が残らない」にした
 - 前の版との比較: 特徴 `redundant-sequential`（規則・日付を 2 つ以上持つ設定）を足し、`etc/result-changes.json` で消える `redundant` を許す
 - 診断の性質のテスト: `redundant` を、出た項目（`shadowed`・`never-matches` を含む）とまとめて取り除いて確かめるようにした
-- サイズの上限: `./diagnose` を 26,800 → 30,000 にした（測定 27,233）。0.31.x の間はこの値
+- サイズの上限（0.31.x の間はこの値）: `./diagnose` を 26,800 → 30,000 にした（測定 27,977）。ルート `.` を 18,500 → 19,000 にした（測定 18,594。休業日の探索・`isOpen` の確かめ・例外の形の追加）。`./jp` を 21,000 → 21,500 にした（測定 20,822。ルートと同じ理由）
 - 逐次除去の費用: 目録で項目が最も多い設定（11 項目）の `diagnoseCalendar` は 0.30.9 の 201 ms に対して 194 ms、診断のオラクル全件の 6 分割の 1 つ（健全性と完全性のテスト）は 75.7 秒に対して 79.3 秒（手元の 1 コア）
 - README（英日）のサイズの値を 0.31.0 で測り直した
+- `catch-coverage`: 逐次除去で決める日を判定し直す箇所の `catch` を消した（判定できなかった日を記録して飛ばす。到達しない `catch` を残さない）
+- 到達しない箇所の例外を、`code` を持たない `InternalError`（`internalError`）の 1 つの形にした。診断は、これを提供元の誤りとして報告せずにそのまま投げる（逐次除去の走査の上限を超えたとき・判定できない月の見張り）
+- `test/robustness.test.ts`: すべての `code` について、実際に投げさせた例外のクラスが表と一致することを確かめる（表の `code` と `KnownErrorCode` が一致しなければ失敗）
+- `test/diagnose-unjudgeable.test.ts`: 判定できない月と逐次除去の関係（分からない規則は出ず取り除かない・並べ替えても同じ・まとめて取り除ける）を足した
+- API どうしの整合の整合 10: 出た規則をまとめて取り除いても、判定できる日の結果が変わらないことを確かめる（`redundant` を 1 つずつ取り除く確かめをやめた）
 - 開発環境の版: npm を 12.2.1 → 12.2.2、pnpm を 12.16.1 → 12.18.0 にした（`.github/actions/setup-toolchain/action.yml`。`pnpm-lock.yaml` は変わらない）
 
 ## [0.30.9] - 2026-11-07

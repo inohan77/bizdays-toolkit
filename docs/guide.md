@@ -191,7 +191,7 @@ shipping.dayInfoOn("2027-01-01");
 shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.open); // [true, false, false, false, false, true]
 ```
 
-`cutoff` takes `"HH:mm"` only (`"14:30:00"` is `invalid-time`): the time of the input is compared to the minute, so a cutoff with seconds could not be compared with the seconds of the input.
+`cutoff` takes `"HH:mm"` or `"HH:mm:ss"`. The time of the input is taken to the minute (seconds are dropped) and compared at the start of that minute: with `cutoff: "14:00:30"`, an input at 14:00 is before the cutoff and an input at 14:01 is after it; with `"14:00"` or `"14:00:00"`, an input at 14:00 is after it.
 
 `daysBetween(from, to)` returns `dayInfoOn` for every day in the period (both ends included). `businessDatesBetween` and `holidaysBetween` include both ends too; only `diffBusinessDays(from, to)` counts from `from` (inclusive) to `to` (exclusive), so that `diffBusinessDays(a, b) + diffBusinessDays(b, c)` equals `diffBusinessDays(a, c)` and, when `a` is a business day, `diffBusinessDays(a, addBusinessDays(a, n))` is `n` (the inverse of `addBusinessDays`). From a closed day, `addBusinessDays` counts the next business day as 1 (so `+0` and `+1` give the same day, as `n = 0` is `businessDayOnOrAfter`), while `diffBusinessDays` does not count the closed start, so the two differ by one there.
 
@@ -486,17 +486,14 @@ businessDayIndex("2026-10-03"); // 0 (Saturday: not a business day)
 calendar.nthBusinessDayOfMonth("2026-10", 5); // "2026-10-07"
 ```
 
-**The next closed day and why**: there is no `nextClosedDay`, but `daysBetween` returns `dayInfoOn` for every day, so take the first one that is not a business day.
+**The next closed day and why**: `nextClosedDay` and `previousClosedDay` return the next or previous day that is not a business day (they search up to `searchDayLimit` days, and throw a `RangeError` with code `no-closed-day` if there is none), and `dayInfoOn` tells why the day is closed.
 
 ```ts
-import { addDays } from "bizdays-toolkit";
-
 const calendar = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
-const nextClosedDay = (date: string) =>
-  calendar.daysBetween(addDays(date, 1), addDays(date, 60)).find((d) => !d.open);
-nextClosedDay("2026-10-05")?.date; // "2026-10-10"
-nextClosedDay("2026-10-05")?.reason; // "closed-weekday"
-nextClosedDay("2026-10-11")?.reason; // "holiday" (Sports Day, October 12)
+calendar.nextClosedDay("2026-10-05"); // "2026-10-10"
+calendar.dayInfoOn(calendar.nextClosedDay("2026-10-05")).reason; // "closed-weekday"
+calendar.dayInfoOn(calendar.nextClosedDay("2026-10-11")).reason; // "holiday" (Sports Day, October 12)
+calendar.previousClosedDay("2026-10-13"); // "2026-10-12"
 ```
 
 **Business days of Japanese banks**: banks are closed on weekends, holidays and December 31 to January 3, so a bank calendar is three lines. Combine it with your own calendar for a remittance date (see "Combining calendars").
@@ -676,7 +673,7 @@ calendar.dayInfoOn("2027-01-04");
 ```
 
 - `isOpen` must be a pure function of the value: it receives only the value (not the date), and the calendar calls it repeatedly while searching for business days, so a function that looks at the date, the time or outside state would make the result change from call to call. Conditions that depend on the date belong in the schedule's rules (`dates`, `recurringRules`)
-- Only `true` makes a business day: a value that is not a boolean, such as `1` or `"open"`, makes the day closed
+- `isOpen` must return a boolean. Returning anything else, such as `1` or `"open"`, throws a `RangeError` with code `invalid-argument`: when the calendar is created (it calls `isOpen` with the weekday values and the holiday value of `holidayPolicy: { value }`) or when a day with another value is evaluated
 - `dayInfoOn` maps the schedule's `reason` to the calendar's: `date` → `"open-date"`/`"closed-date"`, `annual` → `"open-annual"`/`"closed-annual"`, `recurring` → `"open-recurring"`/`"closed-recurring"`, `holiday` → `"holiday"` (whether or not the holiday is open, as with `holidayPolicy: "open"`), `weekday` → `"open-weekday"`/`"closed-weekday"`. `"open-annual"` exists only for calendars made this way, since `closedAnnualDates` of `createCalendar` only closes. `name`, `holiday`, `shiftedFrom` and `optionPath` are the schedule's
 - Holidays, the time zone and `outOfRangePolicy` are the schedule's. Diagnose the schedule's options with `diagnoseSchedule`; the calendar itself is not diagnosed. `searchDayLimit` (default 3660) can be given in the options
 - Use `createCalendar` when you only need open or closed; use this when you have a schedule anyway
@@ -754,7 +751,7 @@ try {
 
 ## Errors
 
-Invalid options and inputs throw ordinary exceptions such as `RangeError` and `TypeError`, with a `code`. Messages may change, so branch on `code`.
+Invalid options and inputs throw a `RangeError` with a `code` (only `invalid-input`, an input of an unsupported kind, is a `TypeError`). Messages may change, so branch on `code`.
 
 <!-- example: allow-diagnostics invalid-date -->
 
@@ -770,7 +767,7 @@ try {
 }
 ```
 
-Codes: `invalid-date`, `invalid-input`, `invalid-month`, `invalid-annual-date`, `invalid-time`, `invalid-range`, `invalid-weekday`, `invalid-time-zone`, `invalid-argument`, `invalid-option`, `time-zone-conflict`, `out-of-range`, `unconfirmed-holiday`, `invalid-provider`, `invalid-provider-data`, `no-business-day`. Future versions may add codes.
+Codes: `invalid-date`, `invalid-input`, `invalid-month`, `invalid-annual-date`, `invalid-time`, `invalid-range`, `invalid-weekday`, `invalid-time-zone`, `invalid-argument`, `invalid-option`, `time-zone-conflict`, `out-of-range`, `unconfirmed-holiday`, `invalid-provider`, `invalid-provider-data`, `no-business-day`, `no-closed-day`. Future versions may add codes.
 
 ## Option diagnostics
 

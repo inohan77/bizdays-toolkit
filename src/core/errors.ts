@@ -1,7 +1,9 @@
 /**
  * コード付きの例外と、入力の問題を集める仕組み。
  *
- * 例外は従来どおり RangeError・TypeError・Error のインスタンスで、code プロパティを持つ。
+ * 例外のクラスは code で決まる（decisions.md の 3 番）: invalid-input だけが TypeError（受け付けない種類の入力）で、
+ * ほかのすべての code（値の誤りも、引数の型の誤りも）は RangeError。同じ code はどの経路でも同じクラスで投げる。
+ * 到達しない箇所の例外（作りの誤り）だけは code を持たない InternalError（internalError で作る）。
  * 例外のメッセージの文言は API に含まない（変わることがある）。判定には code を使う。
  * 問題を集める仕組み（IssueCollector）は、作成時のチェックと規則の診断（diagnose）で共通。
  */
@@ -42,7 +44,9 @@ export type KnownErrorCode =
   /** 祝日の提供元が返したデータの誤り */
   | "invalid-provider-data"
   /** 指定した日数の範囲に営業日がない */
-  | "no-business-day";
+  | "no-business-day"
+  /** searchDayLimit の日数のうちに休業日が見つからない（nextClosedDay・previousClosedDay） */
+  | "no-closed-day";
 
 /**
  * エラーコード。将来の版で値が増えることがある。
@@ -76,14 +80,22 @@ export function rangeError(code: KnownErrorCode, message: string): RangeError {
   return withCode(new RangeError(message), code);
 }
 
-/** @internal */
-export function typeError(code: KnownErrorCode, message: string): TypeError {
-  return withCode(new TypeError(message), code);
+/**
+ * @internal 作りの誤り（到達しないはずの箇所・保証が破れたとき）の例外。code を持たず（isBizdaysError は false）、
+ * 診断は提供元の誤りとして報告せずにそのまま投げる。設定や入力の誤りには使わない
+ */
+export class InternalError extends Error {
+  override readonly name = "InternalError";
+}
+
+/** @internal 作りの誤りの例外を作る（到達しない箇所の例外は、すべてこの形にする） */
+export function internalError(message: string): InternalError {
+  return new InternalError(`bizdays-toolkit internal error: ${message}`);
 }
 
 /** @internal */
-export function plainError(code: KnownErrorCode, message: string): Error {
-  return withCode(new Error(message), code);
+export function typeError(code: KnownErrorCode, message: string): TypeError {
+  return withCode(new TypeError(message), code);
 }
 
 // ------------------------------------------------------------

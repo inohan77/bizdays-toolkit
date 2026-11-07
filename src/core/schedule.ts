@@ -2346,6 +2346,14 @@ export function mapDays<R>(
  */
 const INTERNAL_INFO = Symbol("bizdays-toolkit.scheduleInfo");
 
+/** スケジュールの曜日の値と祝日の値（createCalendarFromSchedule が、作成時に isOpen の返り値を確かめるために使う） */
+const INTERNAL_VALUES = Symbol("bizdays-toolkit.scheduleValues");
+
+/** @internal スケジュールの曜日の値（7 つ）と、祝日の値（holidayPolicy: { value } のとき）を取り出す */
+export function valuesOfSchedule<Value>(schedule: Schedule<Value, string>): readonly Value[] {
+  return (schedule as { [INTERNAL_VALUES]?: readonly Value[] })[INTERNAL_VALUES] ?? [];
+}
+
 /** @internal スケジュールの内部の判定を取り出す（createSchedule が作ったものでなければ undefined） */
 export function infoOfSchedule<Value, Kind extends string>(
   schedule: Schedule<Value, Kind>,
@@ -2363,10 +2371,19 @@ export function buildSchedule<Value, Kind extends string>(
   const resolve = createResolver(compiled, lookup);
   const info = (date: DateString): ScheduleDayInfo<Value, Kind> => resolve(date).day;
 
-  const schedule: Schedule<Value, Kind> & { readonly [INTERNAL_INFO]: typeof info } = {
+  const values = Object.freeze(
+    typeof compiled.holiday === "object" && "value" in compiled.holiday
+      ? [...compiled.weekly, compiled.holiday.value]
+      : [...compiled.weekly],
+  );
+  const schedule: Schedule<Value, Kind> & {
+    readonly [INTERNAL_INFO]: typeof info;
+    readonly [INTERNAL_VALUES]: readonly Value[];
+  } = {
     // 内部の判定（createCalendarFromSchedule が使う）。Symbol の項目なので列挙されず、JSON にも出ない。
     // オブジェクトリテラルに含めるのは、あとから defineProperty や WeakMap で付けると作成が数 µs 遅くなるため
     [INTERNAL_INFO]: info,
+    [INTERNAL_VALUES]: values,
     timeZone: lookup.timeZone,
     providers: lookup.providers,
     outOfRangePolicy: lookup.outOfRangePolicy,

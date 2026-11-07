@@ -99,8 +99,16 @@ test("T3 add… と diff… の対: diff(a, add(a, n)) = n（カレンダーの�
 test("T4 next…・previous… は引数より後・前、…OnOrAfter・…OnOrBefore は引数以後・以前", () => {
   const after = named(/^next|OnOrAfter$/);
   const before = named(/^previous|OnOrBefore$/);
-  assert.deepEqual(after.map(([n]) => n).sort(), ["businessDayOnOrAfter", "nextBusinessDay"]);
-  assert.deepEqual(before.map(([n]) => n).sort(), ["businessDayOnOrBefore", "previousBusinessDay"]);
+  assert.deepEqual(after.map(([n]) => n).sort(), [
+    "businessDayOnOrAfter",
+    "nextBusinessDay",
+    "nextClosedDay",
+  ]);
+  assert.deepEqual(before.map(([n]) => n).sort(), [
+    "businessDayOnOrBefore",
+    "previousBusinessDay",
+    "previousClosedDay",
+  ]);
   for (let run = 0; run < RUNS; run++) {
     const d = date();
     for (const [name, f] of after) {

@@ -38,7 +38,13 @@ import {
   type DateString,
 } from "./date.ts";
 import { compileCalendarOptions, type CalendarOptions } from "./calendar.ts";
-import { IssueCollector, rangeError, type KnownErrorCode } from "./errors.ts";
+import {
+  internalError,
+  InternalError,
+  IssueCollector,
+  rangeError,
+  type KnownErrorCode,
+} from "./errors.ts";
 import { RENAMED_KEYS, RENAMED_VALUES } from "./renamed.ts";
 import {
   compileScheduleOptions,
@@ -525,12 +531,8 @@ function guardBases<Value, Kind extends string>(
             return basis(year, month);
           } catch (error) {
             if (!UNJUDGEABLE.has(String((error as { code?: unknown }).code))) throw error;
-            const thrown = year * 12 + month - 1;
-            unknownMonths.add(thrown);
-            if (r.weekStart !== null) {
-              unknownMonths.add(thrown - 1);
-              unknownMonths.add(thrown + 1);
-            }
+            // 投げた月だけを記録する（週の規則が隣の月を見る扱いは unsureOf が決める）。記録は見張りに使う
+            unknownMonths.add(year * 12 + month - 1);
             return [];
           }
         },
@@ -546,22 +548,80 @@ function guardBases<Value, Kind extends string>(
 const UNSURE_CODES = new Set(["never-matches", "redundant"]);
 
 /**
- * @internal 判定できない月がある設定で、never-matches・redundant のうち、判定できない月の影響を受けうるものを取り除く。
- * 診断の項目は、path の先頭が規則の位置（規則の path）と一致するもので引く（規則の中のオプションの位置も同じ規則に当たる）。
+ * @internal 判定できない月（年 × 12 + 月 - 1）を、規則を評価せずに決める（docs/decisions.md の 31 番）。
+ *
+ * 判定できない月は、基準のカレンダーを持つ規則が、形（months。週の規則は前後 1 か月）と有効期間から基準を評価しうる月の
+ * うち、基準が投げる月。窓の月は有効期間で絞り、規則の形を調べる代表の 28 年間（2001〜2028 年）は有効期間にかかわらず
+ * 求める（patternBits が有効期間にかかわらず基準を評価する）。週の規則の基準が投げる月は、その前後の月も判定できない月に
+ * し、すべての規則に効かせる（その週にかかる日の判定が、結果の分からない週の規則に左右される）。
+ * 求めすぎは安全側（診断が減るだけ）で、見張り（dropUnsure）は求めていない月で基準が投げたことだけを確かめる。
+ * 基準は繰り返しの規則に依存しないので、規則の並びや取り除きの順に左右されない
+ */
+export function unjudgeableMonths<Value, Kind extends string>(
+  compiled: CompiledSchedule<Value, Kind>,
+  window:
+    | { readonly ranges: readonly { readonly from: number; readonly to: number }[] }
+    | undefined,
+): ReadonlySet<number> {
+  const months = new Set<number>();
+  const bases = compiled.recurring.filter((r) => r.basis !== null && r.calendar !== null);
+  if (!window || bases.length === 0) return months;
+  const throws = (r: RecurringRuleCompiled<Value>, m: number): boolean => {
+    try {
+      r.basis!(Math.floor(m / 12), (m % 12) + 1);
+      return false;
+    } catch (error) {
+      // 判定できない月の印（対応年の外・未確定の祝日）だけを数える。ほかの例外は、規則どうしの診断が報告する
+      return UNJUDGEABLE.has(String((error as { code?: unknown }).code));
+    }
+  };
+  const monthOf = (day: number): number => {
+    const { year, month } = parseDate(fromDayNumber(day));
+    return year * 12 + month - 1;
+  };
+  const windowMonths: number[] = [];
+  for (const { from, to } of window.ranges)
+    for (let m = monthOf(from); m <= monthOf(to); m++) windowMonths.push(m);
+  const patternMonths: number[] = [];
+  for (let m = monthOf(PATTERN_FROM); m <= monthOf(PATTERN_FROM + PATTERN_DAYS - 1); m++)
+    patternMonths.push(m);
+  for (const r of bases) {
+    const week = r.weekStart !== null;
+    const first = r.effectiveFrom === null ? -Infinity : monthOf(r.effectiveFrom);
+    const last = r.effectiveTo === null ? Infinity : monthOf(r.effectiveTo);
+    // 規則が基準を評価しうる月: 窓の月は有効期間で絞り、代表の 28 年間は有効期間にかかわらず（patternBits）。どちらも months で絞る
+    const reached = [...windowMonths.filter((m) => m >= first && m <= last), ...patternMonths];
+    // 週の規則は、週が月をまたぐので、絞った月の直前・直後の月も求める
+    const candidates = new Set(week ? reached.flatMap((m) => [m - 1, m, m + 1]) : reached);
+    const inMonths = (m: number): boolean => r.months === null || r.months.has((m % 12) + 1);
+    for (const m of candidates) {
+      const evaluated = week ? inMonths(m - 1) || inMonths(m) || inMonths(m + 1) : inMonths(m);
+      if (!evaluated || !throws(r, m)) continue;
+      months.add(m);
+      if (week) {
+        months.add(m - 1);
+        months.add(m + 1);
+      }
+    }
+  }
+  return months;
+}
+
+/**
+ * @internal 判定できない月の影響を受けうる診断（never-matches・redundant）か。診断の項目は、path の先頭が規則の位置と一致する
+ * もので引く（規則の中のオプションの位置も同じ規則に当たる）。
  *
  * - 基準のカレンダーを持たない繰り返しの規則の never-matches と、その規則の中のオプションの診断は、規則の形と設定だけで
- *   決まり、基準のカレンダーを評価しないので残す
- * - それ以外は、その項目の有効期間（個別の日付はその期間。期間を持たない項目は全期間）に判定できない月があれば取り除く。
- *   redundant は、取り除いた設定と元の設定の結果を比べるので、ほかの規則の基準のカレンダーの評価にも依存する。
- *   項目の有効期間の日がすべて判定できるなら、その日の比較は確かなので出す
- * - 規則に当たらない path の診断は取り除く
+ *   決まり、基準のカレンダーを評価しないので分かる
+ * - それ以外は、その項目の有効期間（個別の日付はその期間。期間がなければ全期間）に判定できない月があれば分からない。
+ *   redundant は、取り除いた設定と元の設定の結果を比べるので、ほかの規則の基準のカレンダーの評価にも依存する
+ * - 規則に当たらない path の診断は分からない
  */
-export function dropUnsure<Value, Kind extends string>(
-  c: IssueCollector,
-  from: number,
+export function unsureOf<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
   unknownMonths: ReadonlySet<number>,
-): void {
+): (code: string, path: string) => boolean {
+  if (unknownMonths.size === 0) return () => false;
   const monthOf = (day: number): number => {
     const { year, month } = parseDate(fromDayNumber(day));
     return year * 12 + month - 1;
@@ -581,7 +641,8 @@ export function dropUnsure<Value, Kind extends string>(
     (compiled.recurring as readonly DecidingRule<Value>[]).includes(r);
   const isDate = (r: DecidingRule<Value>): r is DateRule<Value> =>
     (compiled.dates as readonly DecidingRule<Value>[]).includes(r);
-  const unsure = (code: string, path: string): boolean => {
+  return (code, path) => {
+    if (!UNSURE_CODES.has(code)) return false;
     const item = items.find((r) => path === r.path || path.startsWith(`${r.path}.`));
     if (item === undefined) return true;
     if (
@@ -593,11 +654,29 @@ export function dropUnsure<Value, Kind extends string>(
     if (isDate(item)) return overlaps(item.from, item.to);
     return overlaps(item.effectiveFrom, item.effectiveTo);
   };
-  const kept = c.issues
-    .slice(from)
-    .filter((d) => !(UNSURE_CODES.has(d.code) && unsure(d.code, d.path)));
-  c.issues.length = from;
-  c.issues.push(...kept);
+}
+
+/**
+ * @internal 見張り: 判定できない月にかかわる never-matches・redundant が残っていないことと、診断の途中で基準が投げた月が、
+ * 前もって求めた判定できない月に含まれることを確かめる。分からない規則は走査の前に決めて出さないので（走査の後で消すと、
+ * ほかの規則が「消した規則を外した設定」で判定されたままになる。31 番）、ここで見つかれば作りの誤り（黙って外れる検査を
+ * 作らない。36 番）
+ */
+export function dropUnsure(
+  c: IssueCollector,
+  from: number,
+  unsure: (code: string, path: string) => boolean,
+  recorded: ReadonlySet<number>,
+  unknownMonths: ReadonlySet<number>,
+): void {
+  for (const m of recorded)
+    if (!unknownMonths.has(m))
+      throw internalError(`a basis threw in a month that was not found beforehand: ${m}`);
+  const left = c.issues.slice(from).find((d) => unsure(d.code, d.path));
+  if (left)
+    throw internalError(
+      `a diagnostic about an unjudgeable month was left: ${left.code} ${left.path}`,
+    );
 }
 
 function analyze<Value, Kind extends string>(
@@ -605,17 +684,22 @@ function analyze<Value, Kind extends string>(
   original: CompiledSchedule<Value, Kind>,
   isCalendar: boolean,
 ): void {
-  const unknownMonths = new Set<number>();
-  const compiled = guardBases(original, unknownMonths);
+  // 判定できない月を、規則を評価する前に、基準を直接求めて決める（基準は繰り返しの規則に依存しないので、規則の並びや
+  // 取り除きの順に左右されない）。分からない規則は never-matches・redundant を出さず、逐次除去でも取り除かない（31 番）
+  const unknown = unjudgeableMonths(original, rulesScanWindow(original));
+  const recorded = new Set<number>();
+  const compiled = guardBases(original, recorded);
+  const unsure = unsureOf(original, unknown);
   const from = c.issues.length;
-  analyzeRules(c, compiled, isCalendar);
-  if (unknownMonths.size > 0) dropUnsure(c, from, compiled, unknownMonths);
+  analyzeRules(c, compiled, isCalendar, unsure);
+  dropUnsure(c, from, unsure, recorded, unknown);
 }
 
 function analyzeRules<Value, Kind extends string>(
   c: IssueCollector,
   compiled: CompiledSchedule<Value, Kind>,
   isCalendar: boolean,
+  unsure: (code: string, path: string) => boolean = () => false,
 ): void {
   const { source, dates, annual, recurring } = compiled;
   if (!checkProviderData(c, source as HolidaySource<string>)) return;
@@ -778,7 +862,7 @@ function analyzeRules<Value, Kind extends string>(
       : businessDayBased
         ? businessDayRuleMatches(rule)
         : matchesAnyDay(rule, cycle);
-    if (!matches) {
+    if (!matches && !unsure("never-matches", rule.path)) {
       unused.add(rule);
       // kinds の "national" を、ID "JP" の提供元のない設定で書いた（id を変えて包んだ日本の提供元を含む）。
       // 改名の前の名前の可能性を添える。1.0.0 で旧名を削除した後も残す（docs/decisions.md の 10 番）
@@ -1041,9 +1125,13 @@ function analyzeRules<Value, Kind extends string>(
 
   // 毎年の月日・繰り返しの規則は、調べる期間の全日を調べる。個別の日付は有限なので除いて調べる
   // （第 n 営業日を数える規則があれば、個別の日付が数え方を変えるので残す）
-  const candidates = window ? [...annual, ...recurring].filter((r) => !unused.has(r)) : [];
+  const candidates = window
+    ? [...annual, ...recurring].filter((r) => !unused.has(r) && !unsure("redundant", r.path))
+    : [];
   /** 今の設定で各規則が決める日（調べる期間の日だけ。規則を取り除いたら、変わりうる日だけ判定し直す） */
   let decided: Map<DecidingRule<Value>, Set<number>> | undefined;
+  /** 決める日を求めたときに判定できなかった日（どの規則も決めていない。取り除いた後も判定し直さない） */
+  const unjudged = new Set<number>();
   const inWindow = (n: number): boolean =>
     window !== undefined && window.ranges.some((r) => r.from <= n && n <= r.to);
   const decidedIn = (rule: DecidingRule<Value>): Set<number> => {
@@ -1055,6 +1143,7 @@ function analyzeRules<Value, Kind extends string>(
         try {
           by = resolveNow(fromDayNumber(n)).rule;
         } catch {
+          unjudged.add(n);
           return;
         }
         if (by) map.get(by)?.add(n);
@@ -1063,19 +1152,21 @@ function analyzeRules<Value, Kind extends string>(
     }
     return decided?.get(rule) ?? new Set();
   };
-  /** 規則を取り除いた後、変わりうる日（取り除いた規則が決めていた日と、判定で調べた日）の決める規則を判定し直す */
+  /**
+   * 規則を取り除いた後、変わりうる日（取り除いた規則が決めていた日と、判定で調べた日）の決める規則を判定し直す。
+   * 決める日を求めたときに判定できなかった日は、どの規則も決めていないので飛ばす。ほかの日は投げない: refresh が判定し直す
+   * 日は、直前の redundant() が同じ設定（without(base, rule)）で評価して投げなかった日だけ。redundant() は投げた日を
+   * FAILED として「変わった」側に倒すので、投げる日のある規則は取り除かれず、ここには届かない。元の設定で判定できなかった
+   * 日は、取り除いた後に判定できるようになっても判定し直さない（約束は、判定できる日の結果についてのみ）
+   */
   const refresh = (affected: Iterable<number>): void => {
     if (!decided) return;
     const resolveNow = createResolver(current(counting.length > 0), lookup);
     for (const n of affected) {
-      if (!inWindow(n)) continue;
+      if (!inWindow(n) || unjudged.has(n)) continue;
       for (const days of decided.values()) days.delete(n);
-      try {
-        const by = resolveNow(fromDayNumber(n)).rule;
-        if (by) decided.get(by)?.add(n);
-      } catch {
-        // 判定できない日は、どの規則も決めていない
-      }
+      const by = resolveNow(fromDayNumber(n)).rule;
+      if (by) decided.get(by)?.add(n);
     }
   };
   /**
@@ -1122,7 +1213,8 @@ function analyzeRules<Value, Kind extends string>(
     return true;
   };
 
-  // 毎年の月日・繰り返しの規則を先に判定する（個別の日付を除いて判定するので、個別の日付の判定に依存しない）
+  // 毎年の月日・繰り返しの規則を先に判定する。第 n 営業日を数える規則がないときは個別の日付を除いて判定するので、個別の
+  // 日付の判定に依存しない。あるときは日付を残して判定し、日付を取り除いた後は、調べた月・週の日を判定し直す（refresh）
   // 1 回の走査で 1 件以上取り除かなければ終わるので、走査の回数は候補の数 + 1 を超えない（超えたら作りの誤り）。
   // 最後に取り除いた後に判定した規則は、同じ設定で判定し直しても同じなので、次の走査では飛ばす（version で数える）
   const maxPasses = candidates.length + dates.length + 1;
@@ -1138,10 +1230,12 @@ function analyzeRules<Value, Kind extends string>(
     refresh(affected);
   };
   for (let passes = 0, before = -1; before !== version;) {
-    if (++passes > maxPasses) throw new Error("redundant: the sequential removal did not converge");
+    if (++passes > maxPasses)
+      throw internalError("redundant: the sequential removal did not converge");
     before = version;
     for (const rule of candidates) judge(rule, judgeRule);
-    for (const rule of dates) judge(rule, (r) => judgeDate(r as DateRule<Value>));
+    for (const rule of dates)
+      if (!unsure("redundant", rule.path)) judge(rule, (r) => judgeDate(r as DateRule<Value>));
   }
   if (reported.size === 0) return;
   // relatedPath は、出た規則をすべて取り除いた設定で、その規則が決めていた日を決める規則（1 つに定まるときだけ。
@@ -1254,6 +1348,8 @@ function run<Value, Kind extends string>(
     try {
       analyze(c, compiled, isCalendar);
     } catch (error) {
+      // 作りの誤りは、提供元の誤りとして報告すると隠れるので、そのまま投げる
+      if (error instanceof InternalError) throw error;
       // 規則どうしの診断の途中の結果は、提供元の誤りで信頼できないので捨てる
       c.issues.length = before;
       const code = (error as { code?: unknown } | null)?.code;

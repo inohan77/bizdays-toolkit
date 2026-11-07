@@ -18,13 +18,13 @@ import {
 } from "./date.ts";
 import {
   checkUnknownKeys,
+  internalError,
   IssueCollector,
-  plainError,
   rangeError,
   withoutUndefined,
 } from "./errors.ts";
 import { renameKeys, writtenKey } from "./renamed.ts";
-import { parseTimeOfDay, toCivil, type DateInput } from "./input.ts";
+import { parseTimeOfDaySeconds, toCivil, type DateInput } from "./input.ts";
 import {
   checkClosingDay,
   closingDayIn,
@@ -44,6 +44,7 @@ import {
   compileRecurringRules,
   createHolidayLookup,
   infoOfSchedule,
+  valuesOfSchedule,
   isWeekday,
   mapDays,
   RECURRING_RULE_KEYS,
@@ -218,8 +219,8 @@ export interface CombineCalendarsOptions {
  */
 export interface BusinessDayOnOrAfterOptions {
   /**
-   * 締め時刻 "HH:mm"（カレンダーのタイムゾーン）。
-   * "HH:mm" のみ。入力の時刻は分の精度で比べるため（秒を持つ締め時刻は、入力の秒と比べられない）。
+   * 締め時刻 "HH:mm" または "HH:mm:ss"（カレンダーのタイムゾーン）。
+   * 入力の時刻は分の精度（秒を切り捨てた分）で、その分の始まりと比べる（"14:00:30" なら 14:00 の入力は締めの前、14:01 は後）。
    * 入力の時刻がこの時刻以降なら、その日は対象にしない。時刻を持たない入力（暦日の文字列・Temporal の PlainDate など）
    * と組み合わせると code: "invalid-argument" の Error（締め時刻が黙って無視されるのを防ぐため）
    */
@@ -280,6 +281,13 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
   nextBusinessDay(input: DateInput): DateString;
   /** 前営業日（入力日の前日以前） */
   previousBusinessDay(input: DateInput): DateString;
+  /**
+   * 翌休業日（入力日の翌日以降の、営業日でない日）。searchDayLimit 日のうちに見つからなければ
+   * code: "no-closed-day" の RangeError
+   */
+  nextClosedDay(input: DateInput): DateString;
+  /** 前休業日（入力日の前日以前の、営業日でない日）。見つからなければ code: "no-closed-day" の RangeError */
+  previousClosedDay(input: DateInput): DateString;
   /**
    * 入力日が営業日ならその日、そうでなければ翌営業日。cutoff で締め時刻を指定できる
    * （cutoff を指定するときの入力は、時刻を持つもの。時刻のない入力と組み合わせると invalid-argument）
@@ -511,7 +519,7 @@ function dayInfoFromScheduleDay<Kind extends string>(
       break;
     default: {
       const unreachable: never = known;
-      throw plainError("invalid-option", `Unexpected schedule reason: ${String(unreachable)}`);
+      throw internalError(`unexpected schedule reason: ${String(unreachable)}`);
     }
   }
   const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
@@ -541,16 +549,22 @@ function buildCalendar<Kind extends string>(
 ): Calendar<Kind> {
   const dateOf = lookup.dateOf;
 
-  function search(start: DateString, step: 1 | -1): DateString {
+  /** 営業日（open が true）または休業日（false）を、start から step の向きに searchDayLimit 日まで探す */
+  function search(start: DateString, step: 1 | -1, open = true): DateString {
     let n = toDayNumber(start);
     for (let i = 0; i < searchDayLimit; i++, n += step) {
       const date = fromDayNumber(n);
-      if (isOpen(date)) return date;
+      if (isOpen(date) === open) return date;
     }
-    throw rangeError(
-      "no-business-day",
-      `No business day found within ${searchDayLimit} days from ${start}`,
-    );
+    throw open
+      ? rangeError(
+          "no-business-day",
+          `No business day found within ${searchDayLimit} days from ${start}`,
+        )
+      : rangeError(
+          "no-closed-day",
+          `No closed day found within ${searchDayLimit} days from ${start}`,
+        );
   }
 
   function countOpen(from: number, toExclusive: number): number {
@@ -679,18 +693,21 @@ function buildCalendar<Kind extends string>(
     isBusinessDay: (input) => isOpen(dateOf(input)),
     nextBusinessDay: (input) => search(addDays(dateOf(input), 1), 1),
     previousBusinessDay: (input) => search(addDays(dateOf(input), -1), -1),
+    nextClosedDay: (input) => search(addDays(dateOf(input), 1), 1, false),
+    previousClosedDay: (input) => search(addDays(dateOf(input), -1), -1, false),
     businessDayOnOrAfter(input, opts = {}) {
       const civil = toCivil(input, lookup.timeZone);
       let start = civil.date;
       if (opts.cutoff !== undefined) {
-        const cutoff = parseTimeOfDay(opts.cutoff);
+        const cutoff = parseTimeOfDaySeconds(opts.cutoff);
         if (civil.minutes === null) {
           throw rangeError(
             "invalid-argument",
             "cutoff requires an input with a time of day (a Date, a date-time string or a Temporal value with a time); a date-only input would silently ignore the cutoff",
           );
         }
-        if (civil.minutes >= cutoff) start = addDays(start, 1);
+        // 入力の時刻は分の精度なので、入力の分の始まり（秒 0）と比べる。締め時刻の秒が 0 でなければ、同じ分の入力は締めの前
+        if (civil.minutes * 60 >= cutoff) start = addDays(start, 1);
       }
       return search(start, 1);
     },
@@ -881,7 +898,8 @@ export interface CalendarFromScheduleOptions {
 
 /**
  * スケジュール（createSchedule）から営業日カレンダーを作る。isOpen が true を返す値の日を営業日とする
- * （true だけを営業日とし、1 や "open" のような boolean でない値を返した日は休業日になる）。
+ * isOpen は boolean を返す関数にする（boolean でない値を返すと code: "invalid-argument" の RangeError。作成時に曜日の値と
+ * holidayPolicy: { value } の値で呼んで確かめ、ほかの値の日は判定したときに確かめる）。
  * 営業時間表のような日ごとの値が設定の正本で、営業日の計算（加減算・調整・期日など）も同じ設定から行いたいときに使う
  * （営業日カレンダーを別に書いて同期を取る必要がなくなる）。
  *
@@ -913,8 +931,21 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {
     throw rangeError("invalid-option", "searchDayLimit must be a positive integer");
   }
+  // isOpen は boolean を返す関数でなければならない（1 や "open" を黙って休業日にしない）。作成時に曜日の値と祝日の値で確かめ、
+  // 判定のたびにも確かめる（規則の値は作成時には分からない）
+  const judge = (value: Value): boolean => {
+    const result: unknown = isOpen(value);
+    if (typeof result !== "boolean") {
+      throw rangeError(
+        "invalid-argument",
+        `isOpen must return a boolean, but returned ${typeof result} for a value of the schedule`,
+      );
+    }
+    return result;
+  };
+  for (const value of valuesOfSchedule(schedule)) judge(value);
   // 値だけを求める判定（結果が祝日に依存しない設定なら未確定の祝日で投げない。祝日は引くので、対応年の外は今までどおり投げる）
-  const open = (date: DateString): boolean => isOpen(schedule.valueOn(date)) === true;
+  const open = (date: DateString): boolean => judge(schedule.valueOn(date));
   return buildCalendar(
     schedule,
     open,
@@ -923,7 +954,7 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
       // 変換は value を読まない（営業・休業は open で渡す）ので、boolean の値として扱ってよい
       return dayInfoFromScheduleDay(
         day as ScheduleDayInfo<unknown, Kind> as ScheduleDayInfo<boolean, Kind>,
-        isOpen(day.value) === true,
+        judge(day.value),
         true,
       );
     },

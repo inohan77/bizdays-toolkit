@@ -24,7 +24,7 @@ import {
   type Weekday,
 } from "../core/date.ts";
 import { renameKeys } from "../core/renamed.ts";
-import { rangeError, typeError } from "../core/errors.ts";
+import { rangeError } from "../core/errors.ts";
 import { HOLIDAY_KEY_PATTERN, type Holiday } from "../core/types.ts";
 
 function checkYear(year: unknown): asserts year is number {
@@ -154,13 +154,13 @@ export interface WithSubstituteDaysOptions<Kind extends string> {
 
 function checkHolidays<Kind extends string>(holidays: unknown): readonly Holiday<Kind>[] {
   if (!Array.isArray(holidays)) {
-    throw typeError("invalid-argument", "holidays must be an array of Holiday");
+    throw rangeError("invalid-argument", "holidays must be an array of Holiday");
   }
   let year: number | undefined;
   const seen = new Set<string>();
   holidays.forEach((h: unknown, i) => {
     if (typeof h !== "object" || h === null) {
-      throw typeError("invalid-argument", `holidays[${i}] is not an object`);
+      throw rangeError("invalid-argument", `holidays[${i}] is not an object`);
     }
     const { date, name, nameEn, kind, confirmed, key } = h as Record<string, unknown>;
     if (!isValidDate(date)) {
@@ -181,16 +181,16 @@ function checkHolidays<Kind extends string>(holidays: unknown): readonly Holiday
       throw rangeError("invalid-argument", `holidays has a duplicate date ${date}`);
     seen.add(date);
     if (typeof name !== "string" || typeof nameEn !== "string" || typeof kind !== "string") {
-      throw typeError(
+      throw rangeError(
         "invalid-argument",
         `holidays[${i}] (${date}) must have string name, nameEn and kind`,
       );
     }
     if (typeof confirmed !== "boolean") {
-      throw typeError("invalid-argument", `holidays[${i}] (${date}) must have boolean confirmed`);
+      throw rangeError("invalid-argument", `holidays[${i}] (${date}) must have boolean confirmed`);
     }
     if (key !== undefined && (typeof key !== "string" || !HOLIDAY_KEY_PATTERN.test(key))) {
-      throw typeError(
+      throw rangeError(
         "invalid-argument",
         `holidays[${i}] (${date}) key must match ${String(HOLIDAY_KEY_PATTERN)}: ${JSON.stringify(key)}`,
       );
@@ -211,12 +211,12 @@ interface CheckedOptions<Kind extends string> {
 
 function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kind> {
   if (typeof options !== "object" || options === null || Array.isArray(options)) {
-    throw typeError("invalid-argument", "options must be an object");
+    throw rangeError("invalid-argument", "options must be an object");
   }
   const o = renameKeys("throw", ["substitute"], "options", options as Record<string, unknown>);
   const { directions: rules, kind, renameSubstitute: name, originalPolicy: original } = o;
   if (typeof rules !== "object" || rules === null) {
-    throw typeError(
+    throw rangeError(
       "invalid-argument",
       'options.directions must be an object of { [weekday]: "next" | "previous" }',
     );
@@ -236,10 +236,10 @@ function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kin
     }
   }
   if (typeof kind !== "string" || kind === "") {
-    throw typeError("invalid-argument", "options.kind must be a non-empty string (Holiday.kind)");
+    throw rangeError("invalid-argument", "options.kind must be a non-empty string (Holiday.kind)");
   }
   if (name !== undefined && typeof name !== "function") {
-    throw typeError(
+    throw rangeError(
       "invalid-argument",
       "options.renameSubstitute must be a function (holiday) => { name, nameEn }",
     );
@@ -275,7 +275,7 @@ function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kin
 export function withSubstituteDays<Kind extends string>(
   holidays: readonly Holiday<Kind>[],
   options: WithSubstituteDaysOptions<Kind>,
-): Holiday<Kind>[] {
+): readonly Holiday<Kind>[] {
   const input = checkHolidays<Kind>(holidays);
   const {
     directions: rules,
@@ -285,7 +285,7 @@ export function withSubstituteDays<Kind extends string>(
   } = checkOptions<Kind>(options);
   const sorted = [...input].sort((a, b) => (a.date < b.date ? -1 : 1));
   const taken = new Set<DateString>(sorted.map((h) => h.date));
-  // 入力のまま返す祝日も、振替日と同じ項目だけを持つ凍結した複製にする（返すものはすべて凍結。4 番）
+  // 入力のまま返す祝日も、振替日と同じ項目だけを持つ凍結した複製にする
   const result: Holiday<Kind>[] = sorted
     .filter((h) => original !== "drop" || rules[weekdayOf(h.date)] === undefined)
     .map((h) =>
@@ -319,7 +319,8 @@ export function withSubstituteDays<Kind extends string>(
       }),
     );
   }
-  return result.sort((a, b) => (a.date < b.date ? -1 : 1));
+  // 返す配列も凍結する（返すものはすべて凍結。4 番）
+  return Object.freeze(result.sort((a, b) => (a.date < b.date ? -1 : 1)));
 }
 
 /**

@@ -569,7 +569,7 @@ test("整合 8: 基準のカレンダーが投げる月がある設定（合成�
 // 整合 9（事例の再現）は 0.30.9 で整合 8 の有効期間の組に吸収した（番号は振り直さない）
 
 test(
-  "整合 10: 基準のカレンダーを持つスケジュールで、診断が never-matches・redundant と出した規則は、取り除いても判定できる日の結果が変わらない",
+  "整合 10: 基準のカレンダーを持つスケジュールで、診断が never-matches と出した規則は 1 つずつ、出た規則（redundant・shadowed を含む）はまとめて取り除いても、判定できる日の結果が変わらない",
   { skip: skipWhen("ci-full-only", !FULL) },
   () => {
     const rand = random(20261111);
@@ -623,27 +623,40 @@ test(
       );
       if (code !== undefined) continue;
       const schedule = createSchedule(options as unknown as ScheduleOptions<unknown>);
-      for (const d of issues) {
-        const m =
-          d.code === "never-matches" || d.code === "redundant"
-            ? /^recurringRules\[(\d+)\]$/.exec(d.path)
-            : null;
-        if (!m) continue;
-        count(`整合 10（${d.code} と判定できる日）`);
+      const sameOnJudgeableDays = (removed: ReadonlySet<number>, label: string): void => {
         const reduced = createSchedule({
           ...options,
-          recurringRules: rules.filter((_, i) => i !== Number(m[1])),
+          recurringRules: rules.filter((_, i) => !removed.has(i)),
         } as unknown as ScheduleOptions<unknown>);
         for (const day of days) {
           const a = outcome(schedule, day);
           if (a === "unjudgeable") continue;
-          assert.equal(outcome(reduced, day), a, `run=${run} ${d.path} ${day}`);
+          assert.equal(outcome(reduced, day), a, `run=${run} ${label} ${day}`);
         }
+      };
+      const removable = new Set<number>();
+      for (const d of issues) {
+        const m = ["never-matches", "redundant", "shadowed"].includes(d.code)
+          ? /^recurringRules\[(\d+)\]$/.exec(d.path)
+          : null;
+        if (!m) continue;
+        removable.add(Number(m[1]));
+        if (d.code === "shadowed") continue;
+        count(`整合 10（${d.code} と判定できる日）`);
+        // never-matches は 1 つだけ取り除いても変わらない（決して当てはまらない）。redundant はまとめて取り除けることだけを
+        // 約束する（逐次除去。31 番）ので、下でまとめて確かめる
+        if (d.code === "never-matches") sameOnJudgeableDays(new Set([Number(m[1])]), d.path);
+      }
+      // 出た規則をまとめて取り除いても、判定できる日の結果が変わらない（逐次除去。判定できない月にかかわる規則は出ない）
+      if (removable.size > 0) {
+        count("整合 10（まとめて取り除く）");
+        sameOnJudgeableDays(removable, `まとめて ${JSON.stringify([...removable])}`);
       }
     }
     report("整合 10（基準のカレンダーを持つスケジュールの作成と診断）");
     report("整合 10（never-matches と判定できる日）", "診断の項目");
     report("整合 10（redundant と判定できる日）", "診断の項目");
+    report("整合 10（まとめて取り除く）");
   },
 );
 

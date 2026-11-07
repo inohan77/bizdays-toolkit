@@ -119,6 +119,23 @@ test("provider: 提供元を書く例（米国の連邦祝日の一部）がカ�
 
 const label = (h: Holiday) => `${h.date} ${h.name} ${h.kind} ${h.key ?? "-"} ${h.confirmed}`;
 
+test("provider: withSubstituteDays が返す配列と、入力のまま返す祝日・振替日は、どれも凍結している", () => {
+  // 返す配列と、入力のまま返す祝日・振替日は、どれも凍結している（4 番）。入力のまま返す祝日も入力とは別のもの
+  const input = [
+    { date: "2026-01-04", name: "X", nameEn: "X", kind: "regular", confirmed: true },
+    { date: "2026-01-07", name: "Y", nameEn: "Y", kind: "regular", confirmed: true },
+  ] as const;
+  const result = withSubstituteDays([...input], { directions: { 0: "next" }, kind: "substitute" });
+  assert.deepEqual(
+    result.map((h) => h.date),
+    ["2026-01-04", "2026-01-05", "2026-01-07"],
+  );
+  for (const h of result) assert.ok(Object.isFrozen(h), h.date);
+  assert.ok(!input.some((h) => result.includes(h as never)));
+  assert.ok(Object.isFrozen(result));
+  assert.throws(() => (result as unknown as unknown[]).push(input[0]), TypeError);
+});
+
 test("provider: withSubstituteDays は日本の振替休日（2007 年以降の祝日法）を再現する", () => {
   for (let y = 2007; y <= 2099; y++) {
     const all = jp.holidaysInYear(y);

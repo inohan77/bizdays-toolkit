@@ -4,7 +4,7 @@
  */
 
 import type { CalendarOptions } from "./calendar.ts";
-import { typeError } from "./errors.ts";
+import { rangeError } from "./errors.ts";
 import { RENAMED_KEYS, RENAMED_VALUES, type RenamedPlace } from "./renamed.ts";
 import type { ScheduleOptions } from "./schedule.ts";
 
@@ -117,7 +117,7 @@ function migrate<Options>(
   ruleLists: readonly string[],
   policyValueKey: string | null,
 ): OptionsMigration<Options> {
-  if (!isPlain(input)) throw typeError("invalid-argument", "options must be a plain object");
+  if (!isPlain(input)) throw rangeError("invalid-argument", "options must be a plain object");
   const changes: OptionChange[] = [];
   const copied = clone(input) as Record<string, unknown>;
   const jp = onlyJp(copied);

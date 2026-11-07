@@ -289,21 +289,9 @@ export function parseTimeOfDaySeconds(value: unknown): number {
  */
 export function toInstant(date: DateString, time: string, timeZone: string): Date {
   const zone = validateTimeZone(timeZone);
-  if (typeof date !== "string") throw typeError("invalid-date", `Invalid date: ${String(date)}`);
+  if (typeof date !== "string") throw rangeError("invalid-date", `Invalid date: ${String(date)}`);
   parseDate(date);
   const seconds = parseTimeOfDaySeconds(time);
   const ms = civilToInstant(date, Math.floor(seconds / 60), zone) + (seconds % 60) * 1000;
   return new Date(ms);
-}
-
-/** @internal "HH:mm" を 0 時からの経過分に変換する（00:00〜23:59） */
-export function parseTimeOfDay(value: string): number {
-  const m = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!m) {
-    throw rangeError(
-      "invalid-time",
-      `Invalid time of day: ${JSON.stringify(value)} (expected HH:mm)`,
-    );
-  }
-  return wallTime(Number(m[1]), Number(m[2]));
 }

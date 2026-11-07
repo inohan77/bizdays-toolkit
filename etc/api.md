@@ -146,6 +146,8 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
     isBusinessDay(input: DateInput): boolean;
     nextBusinessDay(input: DateInput): DateString;
     previousBusinessDay(input: DateInput): DateString;
+    nextClosedDay(input: DateInput): DateString;
+    previousClosedDay(input: DateInput): DateString;
     businessDayOnOrAfter(input: DateInput, options?: BusinessDayOnOrAfterOptions): DateString;
     businessDayOnOrBefore(input: DateInput): DateString;
     addBusinessDays(input: DateInput, n: number): DateString;
@@ -600,7 +602,7 @@ export type KnownDayReason = "open-date" | "closed-date" | "open-annual" | "clos
 ### KnownErrorCode (@public)
 
 ```ts
-export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-annual-date" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "unconfirmed-holiday" | "invalid-provider" | "invalid-provider-data" | "no-business-day";
+export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-annual-date" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "unconfirmed-holiday" | "invalid-provider" | "invalid-provider-data" | "no-business-day" | "no-closed-day";
 ```
 
 ### KnownScheduleDayReason (@public)
@@ -1287,7 +1289,7 @@ export type SubstituteDirection = "next" | "previous";
 ### withSubstituteDays (@public)
 
 ```ts
-export declare function withSubstituteDays<Kind extends string>(holidays: readonly Holiday<Kind>[], options: WithSubstituteDaysOptions<Kind>): Holiday<Kind>[];
+export declare function withSubstituteDays<Kind extends string>(holidays: readonly Holiday<Kind>[], options: WithSubstituteDaysOptions<Kind>): readonly Holiday<Kind>[];
 ```
 
 ### WithSubstituteDaysOptions (@public)

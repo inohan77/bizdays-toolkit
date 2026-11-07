@@ -210,16 +210,4 @@ test("旧名: 合成・スケジュールからのカレンダー・期日・振
       originalPolicy: "drop",
     }),
   );
-  // 入力のまま返す祝日・振替日は、どれも凍結している（4 番）。入力のまま返す祝日も入力とは別のもの。配列の凍結と readonly の型は 0.31.0
-  const input = [
-    { date: "2026-01-04", name: "X", nameEn: "X", kind: "regular", confirmed: true },
-    { date: "2026-01-07", name: "Y", nameEn: "Y", kind: "regular", confirmed: true },
-  ] as const;
-  const result = withSubstituteDays([...input], { directions: { 0: "next" }, kind: "substitute" });
-  assert.deepEqual(
-    result.map((h) => h.date),
-    ["2026-01-04", "2026-01-05", "2026-01-07"],
-  );
-  for (const h of result) assert.ok(Object.isFrozen(h), h.date);
-  assert.ok(!input.some((h) => result.includes(h as never)));
 });

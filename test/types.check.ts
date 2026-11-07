@@ -449,11 +449,15 @@ void withoutNames;
   // @ts-expect-error -- 既知の値の型なので、知らない文字列は誤り
   const badKey: KnownJpHolidayKey = "golden-week";
   void badKey;
-  const substituted: Holiday<"regular" | "substitute">[] = withSubstituteDays(
+  const substituted: readonly Holiday<"regular" | "substitute">[] = withSubstituteDays(
     [{ date: "2026-01-01", name: "X", nameEn: "X", kind: "regular", confirmed: true }],
     { directions: { 0: "next" }, kind: "substitute", originalPolicy: "drop" },
   );
   void substituted;
+  // 返す配列は凍結した readonly の配列なので、可変の配列の型には代入できない（4 番）
+  // @ts-expect-error -- readonly の配列は可変の配列の型に代入できない
+  const mutable: Holiday<"regular" | "substitute">[] = substituted;
+  void mutable;
   // @ts-expect-error -- 向きは "next" か "previous"
   withSubstituteDays([], { directions: { 0: "nearest" }, kind: "substitute" });
 }

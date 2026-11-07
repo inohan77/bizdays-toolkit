@@ -215,6 +215,19 @@ export function fixedCases(): Case[] {
       closedAnnualDates: ["05-01"],
       closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
     }),
+    // 基準のカレンダーを持つ月の規則だけの設定は、窓の外の月で基準を求めず、判定できない月を作らない（0.31.0-B の作り直しの
+    // 途中で、窓の外の月を数えて never-matches・redundant を消した退行の形。規則 1 つの診断の消失はどの特徴でも許されない）
+    sch("fixed-unjudgeable-month-rule-day25", ["jp"], {
+      weekdayValues: ["a", "a", "a", "a", "a", "a", "a"],
+      recurringRules: [{ businessDayOfMonth: 25, calendar: CALENDAR_REF, value: "x" }],
+    }),
+    sch("fixed-unjudgeable-month-rules-january", ["jp"], {
+      weekdayValues: ["a", "a", "a", "a", "a", "a", "a"],
+      recurringRules: [
+        { businessDayOfMonth: 1, months: [1], calendar: CALENDAR_REF, value: "x" },
+        { businessDayOfMonth: 1, calendar: CALENDAR_REF, value: "x" },
+      ],
+    }),
     // スケジュールの第 n 営業日の規則の基準のカレンダーは、スケジュールの outOfRangePolicy を受け継ぐ（basisOutOfRangePolicy）。
     // "ignore" の基準は対応年の外で投げないので、診断は判定できない月を作らない。旧名の比較では outOfRange として渡る。
     // 比べる期間はシンガポールの対応年（2020〜2027 年）の外まで広げる（対応年の内側では "ignore" と "throw" の結果が同じため）
