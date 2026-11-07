@@ -544,5 +544,139 @@
         ]
       ]
     }
+  ],
+  "scheduleItems": [
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": 1,
+        "calendar": "BASIS_NONE",
+        "value": "x"
+      }
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": 1,
+        "months": [1],
+        "calendar": "BASIS_NONE",
+        "value": "x"
+      },
+      "shape": "表: months [1] と無期限の月の規則"
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": 25,
+        "calendar": "BASIS_NONE",
+        "value": "x"
+      },
+      "shape": "表: 第 25 営業日"
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": 1,
+        "calendar": "BASIS_IN",
+        "value": "x"
+      }
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": -1,
+        "calendar": "BASIS_IN",
+        "value": "x",
+        "effectiveTo": "2026-06-30"
+      }
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": 1,
+        "months": [2],
+        "calendar": "BASIS_UNCONFIRMED",
+        "value": "y"
+      },
+      "shape": "months [2] で絞った基準の規則"
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": 1,
+        "calendar": "BASIS_UNCONFIRMED",
+        "value": "y"
+      }
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfMonth": 1,
+        "calendar": "BASIS_EDGE",
+        "value": "x",
+        "effectiveFrom": "2025-03-01"
+      },
+      "shape": "窓の中で始まる月の規則（1975 年からの形）"
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfWeek": 1,
+        "weekStart": 1,
+        "calendar": "BASIS_EDGE",
+        "value": "x"
+      },
+      "shape": "表: 窓の端の週の規則"
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfWeek": 1,
+        "weekStart": 1,
+        "calendar": "BASIS_EDGE",
+        "value": "x",
+        "effectiveFrom": "2025-01-06"
+      },
+      "shape": "月をまたがない週で始まる週の規則（1970-01-05 の形）"
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "businessDayOfWeek": 1,
+        "weekStart": 1,
+        "calendar": "BASIS_NONE",
+        "value": "x"
+      },
+      "shape": "表: 投げない基準の週の規則"
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "weekday": 3,
+        "value": "x"
+      }
+    },
+    {
+      "key": "recurringRules",
+      "entry": {
+        "dayOfMonth": 1,
+        "value": "x"
+      }
+    },
+    {
+      "key": "annualDates",
+      "entry": {
+        "date": "05-05",
+        "value": "open"
+      },
+      "shape": "毎年の月日（値が曜日と同じになりうる）"
+    },
+    {
+      "key": "annualDates",
+      "entry": {
+        "date": "01-01",
+        "value": "x"
+      }
+    }
   ]
 }

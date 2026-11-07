@@ -548,3 +548,265 @@ test("オラクル: no-business-day は営業日が本当にない設定だけ�
   });
   assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
 });
+
+// ------------------------------------------------------------
+// スケジュールのオラクル: 基準のカレンダーが投げる月のある設定（docs/decisions.md の 31 番）
+// ------------------------------------------------------------
+// 営業日カレンダーの第 n 営業日の規則は自分の設定で数え、基準のカレンダーを書けないので、判定できない月はスケジュール
+// （recurringRules の calendar）にしか起きない。項目をスケジュールの recurringRules・annualDates まで広げ、基準は
+// oracle-items.json に参照の印（BASIS_*）で書く。比べるのは valueOn で、元の設定で投げた日は比べない（整合 10 と同じ）
+
+interface ScheduleItem {
+  readonly key: "recurringRules" | "annualDates";
+  readonly entry: Obj;
+  /** ZIP-B・B_3 の固定の設定を短い窓に移した形（試した設定の数を形ごとに出す） */
+  readonly shape?: string;
+}
+const scheduleItems: readonly ScheduleItem[] = (
+  fixture as unknown as { scheduleItems: ScheduleItem[] }
+).scheduleItems;
+/** 2025〜2027 年の短い提供元を、対応年や未確定の年を変えて包む */
+const shortWith = (id: string, to: number, unconfirmedFrom?: number): unknown => ({
+  ...SHORT_PROVIDER,
+  id,
+  supportedYears: { from: 2025, to },
+  holidaysInYear: (year: number) =>
+    SHORT_PROVIDER.holidaysInYear(year).map((h) =>
+      unconfirmedFrom !== undefined && year >= unconfirmedFrom ? { ...h, confirmed: false } : h,
+    ),
+});
+/** 基準のカレンダー（印 → カレンダー）。どれもスケジュールと同じ UTC */
+const BASES: Readonly<Record<string, unknown>> = {
+  // 投げない（提供元なし）
+  BASIS_NONE: lib["createCalendar"]!({ timeZone: "UTC", closedWeekdays: [0, 6] }),
+  // 窓（2025〜2027 年）の中の年（2027 年）で投げる
+  BASIS_IN: lib["createCalendar"]!({
+    holidayProvider: shortWith("SHORT-2026", 2026),
+    timeZone: "UTC",
+    closedWeekdays: [0, 6],
+  }),
+  // 窓の両端の外（と、規則の形を調べる代表の 28 年間の 2001〜2024・2028 年）で投げる
+  BASIS_EDGE: lib["createCalendar"]!({
+    holidayProvider: SHORT_PROVIDER,
+    timeZone: "UTC",
+    closedWeekdays: [0, 6],
+  }),
+  // 2026 年からの祝日が未確定で、未確定の祝日のある月で投げる（対応年の外でも投げる）
+  BASIS_UNCONFIRMED: lib["createCalendar"]!({
+    holidayProvider: shortWith("SHORT-UNCONFIRMED", 2027, 2026),
+    timeZone: "UTC",
+    closedWeekdays: [0, 6],
+    unconfirmedHolidayPolicy: "throw",
+  }),
+};
+const basisOf = (item: ScheduleItem): string =>
+  typeof item.entry["calendar"] === "string" ? (item.entry["calendar"] as string) : "なし";
+const buildSchedule = (
+  list: readonly ScheduleItem[],
+  policy: string,
+  weekdays: readonly number[],
+): Obj => {
+  const o: Obj = {
+    holidayProvider: SHORT_PROVIDER,
+    timeZone: "UTC",
+    outOfRangePolicy: "ignore",
+    weekdayValues: [0, 1, 2, 3, 4, 5, 6].map((w) => (weekdays.includes(w) ? "closed" : "open")),
+    holidayPolicy:
+      policy === "closed" ? { value: "closed" } : policy === "open" ? { value: "open" } : "ignore",
+  };
+  for (const { key, entry } of list) {
+    const calendar = entry["calendar"];
+    ((o[key] ??= []) as unknown[]).push(
+      typeof calendar === "string" ? { ...entry, calendar: BASES[calendar] } : entry,
+    );
+  }
+  return o;
+};
+/** 窓の全日の値（投げた日は "E"） */
+const scheduleValues = (o: Obj): string[] => {
+  const schedule = lib["createSchedule"]!(o) as { valueOn(d: string): unknown };
+  return SHORT_DAYS.map((d) => {
+    try {
+      return JSON.stringify(schedule.valueOn(d));
+    } catch {
+      return "E";
+    }
+  });
+};
+/** 元の設定で判定できる日（投げなかった日）だけを比べる */
+const sameOnJudgeable = (base: readonly string[], other: readonly string[]): boolean =>
+  base.every((v, i) => v === "E" || v === other[i]);
+const schedulePathsOf = (list: readonly ScheduleItem[]): string[] => {
+  const count: Record<string, number> = {};
+  return list.map(({ key }) => `${key}[${(count[key] = (count[key] ?? -1) + 1)}]`);
+};
+/**
+ * 素朴な定義の「分からない規則」（実装の内部を使わない。docs/decisions.md の 31 番）: 元の設定の valueOn で投げる日がある月を
+ * 判定できない月とし、項目の有効期間と窓の重なりがその月に重なれば（週の規則は前後 1 か月も）分からない。基準のカレンダーを
+ * 持たない繰り返しの規則の never-matches は、規則の形だけで決まるので分かる（実装と同じ例外）
+ */
+const naiveUnsureFor = (
+  list: readonly ScheduleItem[],
+  values: readonly string[],
+): ((code: string, path: string) => boolean) => {
+  const monthOf = (date: string): number =>
+    Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1;
+  const thrown = new Set(SHORT_DAYS.filter((_, i) => values[i] === "E").map(monthOf));
+  const paths = schedulePathsOf(list);
+  const first = monthOf(SHORT_DAYS[0]!);
+  const last = monthOf(SHORT_DAYS[SHORT_DAYS.length - 1]!);
+  return (code, path) => {
+    if (code !== "never-matches" && code !== "redundant") return false;
+    const index = paths.indexOf(path);
+    if (index < 0 || thrown.size === 0) return false;
+    const { key, entry } = list[index]!;
+    if (key === "recurringRules" && entry["calendar"] === undefined && code === "never-matches")
+      return false;
+    const margin = "businessDayOfWeek" in entry ? 1 : 0;
+    const start =
+      typeof entry["effectiveFrom"] === "string" ? monthOf(entry["effectiveFrom"]) : first;
+    const end = typeof entry["effectiveTo"] === "string" ? monthOf(entry["effectiveTo"]) : last;
+    const from = Math.max(first, start) - margin;
+    const to = Math.min(last, end) + margin;
+    for (const m of thrown) if (m >= from && m <= to) return true;
+    return false;
+  };
+};
+/**
+ * 実装の「分からない規則」（今のソースの unjudgeableMonths・unsureOf）。完全性の除外にだけ使う（実装が出さないと決めた
+ * 規則は出ない）。ORACLE_TARGET の版では除外しない
+ */
+const unsureCore = target
+  ? undefined
+  : {
+      compile: (await coreOf(undefined, "schedule"))["compileScheduleOptions"]!,
+      collector: (await coreOf(undefined, "errors"))[
+        "IssueCollector"
+      ] as unknown as new () => unknown,
+      diagnose: await coreOf(undefined, "diagnose"),
+    };
+const unsureFor = (o: Obj): ((code: string, path: string) => boolean) => {
+  if (!unsureCore) return () => false;
+  const compiled = unsureCore.compile(new unsureCore.collector(), o);
+  if (compiled === undefined) return () => false;
+  const window = unsureCore.diagnose["rulesScanWindow"]!(compiled);
+  const months = unsureCore.diagnose["unjudgeableMonths"]!(compiled, window);
+  return unsureCore.diagnose["unsureOf"]!(compiled, months) as (c: string, p: string) => boolean;
+};
+/** pnpm check（ORACLE_FULL なし）は、全件の設定から、この間隔の決まった抜き出しだけを試す */
+const SCHEDULE_SAMPLE_EVERY = 5;
+const schedulePlan = (() => {
+  const all: { list: ScheduleItem[]; policy: string; weekdays: readonly number[] }[] = [];
+  const pick = random(20261108);
+  for (let i = 0; i < scheduleItems.length; i++)
+    for (let j = i; j < scheduleItems.length; j++) {
+      const list = i === j ? [scheduleItems[i]!] : [scheduleItems[i]!, scheduleItems[j]!];
+      for (const policy of POLICIES)
+        for (const weekdays of WEEKDAY_SETS) {
+          if (i !== j && weekdays.length !== 2 && pick() >= OTHER_WEEKDAYS_RATE) continue;
+          all.push({ list, policy, weekdays });
+        }
+    }
+  return all.filter(
+    (_, n) => (FULL || n % SCHEDULE_SAMPLE_EVERY === 0) && (!SHARD || n % SHARD.n === SHARD.k),
+  );
+})();
+
+test("スケジュールのオラクル: 基準のカレンダーが投げる月のある設定で、出た項目をまとめて取り除いても判定できる日の結果が変わらず、分からない規則には出ず、取り除いた後に取り除ける項目が残らない（分からない規則を除く）", () => {
+  const unsound: string[] = [];
+  const incomplete = new Map<string, number>();
+  let unsureBoth = 0;
+  let unsureOnlyImpl = 0;
+  const byBasis: Record<string, number> = {};
+  const byShape: Record<string, number> = {};
+  for (const { list, policy, weekdays } of schedulePlan) {
+    const o = buildSchedule(list, policy, weekdays);
+    const describe = (removed?: readonly string[]) =>
+      JSON.stringify({ items: list.map((x) => [x.key, x.entry]), policy, weekdays, removed });
+    let d: Obj[];
+    try {
+      d = diag["diagnoseSchedule"]!(o) as Obj[];
+    } catch (error) {
+      unsound.push(`診断が投げた ${String(error)} ${describe()}`);
+      continue;
+    }
+    if (d.some((x) => x["severity"] === "error")) continue;
+    for (const item of list) byBasis[basisOf(item)] = (byBasis[basisOf(item)] ?? 0) + 1;
+    for (const item of list) if (item.shape) byShape[item.shape] = (byShape[item.shape] ?? 0) + 1;
+    const paths = schedulePathsOf(list);
+    const unsure = unsureFor(o);
+    const base = scheduleValues(o);
+    const naive = naiveUnsureFor(list, base);
+    // 分からない規則への約束（素朴な定義で確かめる。実装の集合が狭すぎて、出してはいけない診断を出すことを見つける）
+    for (const x of d)
+      if (naive(x["code"] as string, x["path"] as string))
+        unsound.push(
+          `素朴な定義で分からない規則に ${String(x["code"])} ${String(x["path"])} ${describe()}`,
+        );
+    // 健全性: 出た項目をまとめて取り除いても、判定できる日の結果が変わらない
+    const removed = paths.filter((path) =>
+      d.some(
+        (x) =>
+          x["path"] === path &&
+          ["shadowed", "never-matches", "redundant"].includes(x["code"] as string),
+      ),
+    );
+    const remaining = list.filter((_, p) => !removed.includes(paths[p]!));
+    const rest = buildSchedule(remaining, policy, weekdays);
+    const restValues = scheduleValues(rest);
+    if (!sameOnJudgeable(base, restValues)) {
+      unsound.push(`まとめて取り除くと変わる ${describe(removed)}`);
+      continue;
+    }
+    // 完全性: 取り除いた後に、取り除いても判定できる日の結果が変わらない項目が残らない。分からない規則は除外して数える
+    const remainingPaths = paths.filter((p) => !removed.includes(p));
+    remaining.forEach((item, q) => {
+      const smaller = scheduleValues(
+        buildSchedule(
+          remaining.filter((_, k) => k !== q),
+          policy,
+          weekdays,
+        ),
+      );
+      if (!sameOnJudgeable(base, smaller)) return;
+      if (unsure("redundant", remainingPaths[q]!)) {
+        // 実装が分からないとして出さない項目。素朴な定義でも分からない（月の単位の限界）か、素朴な定義では判定できる
+        // （実装の求めすぎ。判定できない月の狭め方が減らす対象）かに分けて数える
+        if (naive("redundant", remainingPaths[q]!)) unsureBoth++;
+        else unsureOnlyImpl++;
+        return;
+      }
+      const key = `${item.key} ${JSON.stringify(item.entry)}`;
+      incomplete.set(key, (incomplete.get(key) ?? 0) + 1);
+    });
+  }
+  const lines = [
+    "### スケジュールのオラクル",
+    "",
+    `試した設定 ${schedulePlan.length} 件（${FULL ? "全件" : `${SCHEDULE_SAMPLE_EVERY} 件に 1 件の抜き出し`}${SHARD ? `、${SHARD.n} 個に分けた ${SHARD.k} 番目` : ""}）、誤り ${unsound.length} 件`,
+    `基準ごとの項目: ${JSON.stringify(byBasis)}`,
+    `固定の設定の形ごと: ${JSON.stringify(byShape)}`,
+    `取り除けるのに出ない項目（素朴な定義でも分からない。月の単位の限界）: ${unsureBoth} 件`,
+    `取り除けるのに出ない項目（実装だけが分からないとする。求めすぎ。判定できない月の狭め方が減らす対象）: ${unsureOnlyImpl} 件`,
+    `取り除けるのに出ない項目（分からない規則を除く）: ${incomplete.size === 0 ? "なし" : JSON.stringify([...incomplete])}`,
+    "",
+  ];
+  console.log(lines.join("\n"));
+  if (FULL && process.env["GITHUB_STEP_SUMMARY"])
+    appendFileSync(process.env["GITHUB_STEP_SUMMARY"], `${lines.join("\n")}\n`);
+  assert.deepEqual(unsound, [], "スケジュールのオラクルの健全性");
+  assert.deepEqual(
+    [...incomplete.keys()],
+    [],
+    "スケジュールのオラクルの完全性（分からない規則を除く）",
+  );
+  // 空振りしていない: 基準の 4 種と、固定の設定の形がどれも試されている（分けた実行では、ほかの分にあることがある）
+  if (SHARD === undefined) {
+    for (const basis of Object.keys(BASES))
+      assert.ok((byBasis[basis] ?? 0) > 0, `基準 ${basis} を試していない`);
+    for (const shape of new Set(scheduleItems.flatMap((x) => (x.shape ? [x.shape] : []))))
+      assert.ok((byShape[shape] ?? 0) > 0, `形「${shape}」を試していない`);
+    assert.ok(unsureOnlyImpl > 0, "実装の求めすぎが 0 件（網が狭め方の対象を捉えていない）");
+    assert.ok(unsureBoth > 0, "素朴な定義でも分からない項目が 0 件（素朴な定義が働いていない）");
+  }
+});
