@@ -166,7 +166,7 @@ test("祝日の翌日: 診断（never-matches・shadowed・redundant）", () => 
       holidayProvider: jp,
       closedRecurringRules: [{ dayAfterHoliday: true, months: [5] }, { dayAfterHoliday: true }],
     }),
-    [["info", "redundant", "closedRecurringRules[0]", ""]],
+    [["info", "redundant", "closedRecurringRules[0]", "closedRecurringRules[1]"]],
     "後の規則のほうが広いので、先の規則は覆われないが取り除いても変わらない",
   );
   // 曜日の規則とは shadowed で比べない（祝日次第で年ごとに変わる）が、取り除いて変わらなければ redundant

@@ -189,7 +189,7 @@ test("祝日の規則: 診断（never-matches・shadowed・redundant）", () => 
       ["warning", "shadowed", "closedRecurringRules[1]", "closedRecurringRules[0]"],
       ["warning", "never-matches", "closedRecurringRules[2]", ""],
       ["warning", "never-matches", "closedRecurringRules[3]", ""],
-      ["info", "redundant", "closedRecurringRules[0]", ""],
+      ["info", "redundant", "closedRecurringRules[0]", "closedRecurringRules[4]"],
     ],
     "種別・月で覆われる。提供元にない種別、2000 年以降の 6 月に祝日はない。後の広い規則は覆われず、先の狭い規則は取り除いても変わらない",
   );

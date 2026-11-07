@@ -55,6 +55,14 @@
       "introducedIn": "0.30.8",
       "source": "CHANGELOG.md",
       "summary": "第 n 営業日の規則と有効期間が重ならない、または使われない毎週の曜日の規則を理由に counting-basis を出していた誤りを直す"
+    },
+    {
+      "trait": "redundant-sequential",
+      "targets": ["diagnose"],
+      "removedCodes": ["redundant"],
+      "introducedIn": "0.31.0",
+      "source": "CHANGELOG.md",
+      "summary": "redundant を逐次除去で判定する（出た項目をまとめて取り除ける）。同じ規則を 2 つ書いたときの前の規則の redundant など、まとめて取り除くと結果が変わる redundant を出さなくし、代わりに決める規則を relatedPath に付ける"
     }
   ]
 }

@@ -6,6 +6,29 @@
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-08
+
+品質改善提案（11 通目）の 0.31.0 の分です。設定の診断の `redundant` を、出た規則をまとめて取り除いても結果が変わらない判定に作り直しました。
+
+### Changed
+
+- 設定の診断（`diagnoseCalendar`・`diagnoseSchedule`）の `redundant` を逐次除去にした。使われない規則（`shadowed`・`never-matches` など）を先に取り除き、1 つずつ（毎年の月日と繰り返しの規則を配列の順に、次に個別の日付を）、それまでに出た規則を取り除いた設定で判定し、取り除いた規則があればほかに取り除ける規則がなくなるまで繰り返す。出た規則は、まとめて取り除いても結果が変わらない（今までは「その規則を 1 つだけ外したら」の判定で、同じ規則を 2 つ書くと後が `shadowed`・前が `redundant` になり、両方を外すと結果が変わった）。影響: 同じ規則を 2 つ書いた設定で前の規則の `redundant` が出なくなるなど、`redundant` が減ることがある。覆われた規則を外すと覆っていた規則も取り除けるようになる場合（定休日のない設定で、臨時休業日を覆う臨時営業日など）は、増えることもある
+- 設定の診断の `redundant` に `relatedPath` を付ける: 取り除いたときに代わりに決める規則で、その規則が決めていた日をすべて 1 つの規則が決めるときだけ（定休日の曜日や祝日の扱いが決める日があれば付かない）
+
+### 移行
+
+- 診断の結果を `deepEqual` などで丸ごと比べているテストは、新しい結果を期待値にする（`redundant` の増減と `relatedPath`）。出た規則を 1 つずつ外して診断をやり直していた手順は要らない（まとめて外せる）
+
+### 開発
+
+- 診断のオラクル: 出た項目をまとめて取り除くテストを既定にし（`ORACLE_JOINT` と飛ばしの理由 `oracle-joint` をやめた）、完全性を「まとめて取り除いた後に取り除ける項目が残らない」にした
+- 前の版との比較: 特徴 `redundant-sequential`（規則・日付を 2 つ以上持つ設定）を足し、`etc/result-changes.json` で消える `redundant` を許す
+- 診断の性質のテスト: `redundant` を、出た項目（`shadowed`・`never-matches` を含む）とまとめて取り除いて確かめるようにした
+- サイズの上限: `./diagnose` を 26,800 → 30,000 にした（測定 27,233）。0.31.x の間はこの値
+- 逐次除去の費用: 目録で項目が最も多い設定（11 項目）の `diagnoseCalendar` は 0.30.9 の 201 ms に対して 194 ms、診断のオラクル全件の 6 分割の 1 つ（健全性と完全性のテスト）は 75.7 秒に対して 79.3 秒（手元の 1 コア）
+- README（英日）のサイズの値を 0.31.0 で測り直した
+- 開発環境の版: npm を 12.2.1 → 12.2.2、pnpm を 12.16.1 → 12.18.0 にした（`.github/actions/setup-toolchain/action.yml`。`pnpm-lock.yaml` は変わらない）
+
 ## [0.30.9] - 2026-11-07
 
 品質改善提案（11 通目）の分です。文書で約束していた挙動から外れていた不具合を 2 件直しました。合成したカレンダーが、後のカレンダーが投げる日に投げるようになります（約束の回復。新たに投げる向きですが、RELEASING.md の区分を改めてパッチとしました）。省略可能な項目に明示的に書いた `undefined` は、どの項目でも省略と同じになります（作成できなかった設定が作成できるようになる向き）。正しい設定のカレンダー・スケジュールの判定の結果は変わりません。
@@ -962,7 +985,8 @@
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.9...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.0...HEAD
+[0.31.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.9...v0.31.0
 [0.30.9]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.8...v0.30.9
 [0.30.8]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.7...v0.30.8
 [0.30.7]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.6...v0.30.7

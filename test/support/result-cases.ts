@@ -308,6 +308,23 @@ export function traitsOfCase(one: Case): string[] {
     )
   )
     traits.add("counting-rules-with-dates");
+  // 規則・日付を 2 つ以上持つ設定。redundant を逐次除去で判定し（後の規則を取り除いた後の判定）、代わりに決める規則を
+  // relatedPath に付けるので、redundant の結果が変わりうる（0.31.0。1 つだけなら、ほかの規則に依存しない）
+  const RULE_LISTS = [
+    "closedDates",
+    "openDates",
+    "dates",
+    "closedAnnualDates",
+    "annualDates",
+    "closedRecurringRules",
+    "openRecurringRules",
+    "recurringRules",
+  ];
+  const ruleCount = RULE_LISTS.reduce(
+    (n, k) => n + (Array.isArray(one.options[k]) ? (one.options[k] as unknown[]).length : 0),
+    0,
+  );
+  if (ruleCount >= 2) traits.add("redundant-sequential");
   // スケジュールの第 n 営業日の規則の基準のカレンダー（同じ提供元）の対応年が、診断の規則の形を調べる代表の 28 年間
   // （2001〜2028 年）を覆わず、基準のカレンダーが対応年の外で投げる（outOfRangePolicy が "ignore" でない）。
   // 診断が基準のカレンダーの投げた月を判定できない月として扱い、error の out-of-range を出さなくなった差分を許す

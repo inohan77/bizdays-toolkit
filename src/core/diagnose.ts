@@ -11,7 +11,8 @@
  *     never-matches  … 当てはまる日がない繰り返しの規則（2 月 30 日、有効期間の中に第 5 水曜日がない、提供元のない設定の祝日の翌日・祝前日、など）
  *     out-of-range   … 個別の日付、または規則の有効期間が祝日の提供元の対応年の外にある（relatedPath に提供元）
  *     no-business-day … 営業日が 1 日もない設定（営業日カレンダーのみ）
- * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidayPolicy: "throw" を含む）
+ * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidayPolicy: "throw" を含む）。
+ *             出た規則はまとめて取り除ける（逐次除去。relatedPath に代わりに決める規則、1 つに定まるときだけ。decisions.md の 31 番）
  *             expired: 第 2 引数の asOf より前に終わった規則・日付（asOf を渡したときだけ）
  *             counting-basis: 第 n 営業日の規則（businessDayOfMonth・businessDayOfWeek）の数える基準は繰り返しの規則を除くので、
  *                             同じ設定の毎週の曜日の規則（{ weekday }）の曜日は営業日として数えられる（relatedPath にその規則）。
@@ -983,12 +984,29 @@ function analyzeRules<Value, Kind extends string>(
     return true;
   };
 
+  // 出た項目をまとめて取り除いても結果が変わらないよう、逐次除去で判定する（31 番）: 使われないことが分かった規則
+  // （shadowed など）を先に取り除き、毎年の月日 → 繰り返しの規則 → 個別の日付の順に 1 つずつ、それまでに出た規則を
+  // 取り除いた設定で判定する。取り除いた規則があれば、その前に取り除けなかった規則も取り除けるようになりうるので、
+  // 取り除ける規則がなくなるまで繰り返す（出た項目をまとめて取り除いた設定で、ほかの規則はどれも取り除けない）。報告は配列の順
+  /** 出た規則と、その時点で決めていた日（relatedPath を求めるため） */
+  const reported = new Map<
+    DecidingRule<Value>,
+    { readonly message: string; readonly decided: readonly number[] }
+  >();
+  const gone = (r: DecidingRule<Value>): boolean => unused.has(r) || reported.has(r);
+  /** 出た規則を取り除いた設定（keepDates が false なら個別の日付も除く） */
+  const current = (keepDates: boolean): CompiledSchedule<Value, Kind> => ({
+    ...compiled,
+    dates: keepDates ? dates.filter((r) => !gone(r)) : [],
+    annual: annual.filter((r) => !gone(r)),
+    recurring: recurring.filter((r) => !gone(r)),
+  });
+
   // 個別の日付は、その期間を調べる（対応年の外で例外になる日は除く）。第 n 営業日を数える規則があれば、
   // 決めている日がなくても数え方を変えるので、期間の日を含む月・週の日をすべて調べる
-  const full = createResolver(compiled, lookup);
-  const originalFull = originalOf(full);
-  for (const rule of dates) {
-    if (unused.has(rule)) continue;
+  const judgeDate = (rule: DateRule<Value>): boolean => {
+    const base = current(true);
+    const resolve = createResolver(base, lookup);
     const decided: number[] = [];
     const span: number[] = [];
     let checked = 0;
@@ -997,7 +1015,7 @@ function analyzeRules<Value, Kind extends string>(
       span.push(n);
       let decidedBy: DecidingRule<Value> | null;
       try {
-        decidedBy = full(fromDayNumber(n)).rule;
+        decidedBy = resolve(fromDayNumber(n)).rule;
       } catch {
         continue;
       }
@@ -1007,59 +1025,143 @@ function analyzeRules<Value, Kind extends string>(
     // 決めていた日の元の結果はその規則の値なので、判定し直さない
     const ok =
       counting.length > 0
-        ? redundant(rule, compiled, countingUnits(span), originalFull)
-        : redundant(rule, compiled, decided, () => rule.value);
-    if (checked > 0 && ok) {
-      c.info(
-        "redundant",
-        rule.path,
+        ? redundant(rule, base, countingUnits(span), originalOf(resolve))
+        : redundant(rule, base, decided, () => rule.value);
+    if (checked === 0 || !ok) return false;
+    affected = counting.length > 0 ? countingUnits(span) : [];
+    reported.set(rule, {
+      message:
         decided.length === 0
           ? "This rule is never used: earlier rules cover all of its days"
           : "Removing this rule does not change any result",
-      );
-    }
-  }
+      decided,
+    });
+    return true;
+  };
 
   // 毎年の月日・繰り返しの規則は、調べる期間の全日を調べる。個別の日付は有限なので除いて調べる
   // （第 n 営業日を数える規則があれば、個別の日付が数え方を変えるので残す）
-  if (!window) return;
-  const candidates = [...annual, ...recurring].filter((r) => !unused.has(r));
-  if (candidates.length === 0) return;
-  const base = counting.length > 0 ? compiled : without(compiled, null, true);
-  const resolveBase = createResolver(base, lookup);
-  const originalBase = originalOf(resolveBase);
-  const decided = new Map<DecidingRule<Value>, number[]>(candidates.map((r) => [r, []]));
-  eachDay(window, (n) => {
-    let rule: DecidingRule<Value> | null;
-    try {
-      rule = resolveBase(fromDayNumber(n)).rule;
-    } catch {
-      return;
+  const candidates = window ? [...annual, ...recurring].filter((r) => !unused.has(r)) : [];
+  /** 今の設定で各規則が決める日（調べる期間の日だけ。規則を取り除いたら、変わりうる日だけ判定し直す） */
+  let decided: Map<DecidingRule<Value>, Set<number>> | undefined;
+  const inWindow = (n: number): boolean =>
+    window !== undefined && window.ranges.some((r) => r.from <= n && n <= r.to);
+  const decidedIn = (rule: DecidingRule<Value>): Set<number> => {
+    if (!decided && window) {
+      const map = new Map<DecidingRule<Value>, Set<number>>(candidates.map((r) => [r, new Set()]));
+      const resolveNow = createResolver(current(counting.length > 0), lookup);
+      eachDay(window, (n) => {
+        let by: DecidingRule<Value> | null;
+        try {
+          by = resolveNow(fromDayNumber(n)).rule;
+        } catch {
+          return;
+        }
+        if (by) map.get(by)?.add(n);
+      });
+      decided = map;
     }
-    if (rule) decided.get(rule)?.push(n);
-  });
-  /** 毎年の月日が当てはまる日を含む月・週（第 n 営業日を数える規則があるとき、取り除くと変わりうる日） */
-  const annualUnits = (rule: AnnualRule<Value>): Set<number> => {
-    const matched: number[] = [];
-    eachDay(window, (n) => {
-      if (matchMonthDay(rule, fromDayNumber(n).slice(5))) matched.push(n);
-    });
-    return countingUnits(matched);
+    return decided?.get(rule) ?? new Set();
   };
-  for (const rule of candidates) {
-    const days = decided.get(rule)!;
-    const ok =
+  /** 規則を取り除いた後、変わりうる日（取り除いた規則が決めていた日と、判定で調べた日）の決める規則を判定し直す */
+  const refresh = (affected: Iterable<number>): void => {
+    if (!decided) return;
+    const resolveNow = createResolver(current(counting.length > 0), lookup);
+    for (const n of affected) {
+      if (!inWindow(n)) continue;
+      for (const days of decided.values()) days.delete(n);
+      try {
+        const by = resolveNow(fromDayNumber(n)).rule;
+        if (by) decided.get(by)?.add(n);
+      } catch {
+        // 判定できない日は、どの規則も決めていない
+      }
+    }
+  };
+  /**
+   * 元の設定の結果（日ごとに 1 回だけ判定する）。出た規則を取り除いても、調べた日の結果は変わらず、ほかの日は取り除いた規則に
+   * 左右されないので、取り除いた後も同じものを使う
+   */
+  const originalNow = originalOf(createResolver(current(counting.length > 0), lookup));
+  /** 毎年の月日が当てはまる日を含む月・週（第 n 営業日を数える規則があるとき、取り除くと変わりうる日） */
+  const unitsOf = new Map<AnnualRule<Value>, Set<number>>();
+  const annualUnits = (rule: AnnualRule<Value>): Set<number> => {
+    // 規則と調べる期間だけで決まるので、走査を繰り返しても 1 回だけ求める
+    const known = unitsOf.get(rule);
+    if (known) return known;
+    const matched: number[] = [];
+    if (window)
+      eachDay(window, (n) => {
+        if (matchMonthDay(rule, fromDayNumber(n).slice(5))) matched.push(n);
+      });
+    const units = countingUnits(matched);
+    unitsOf.set(rule, units);
+    return units;
+  };
+  const judgeRule = (rule: DecidingRule<Value>): boolean => {
+    if (!window) return false;
+    const days = [...decidedIn(rule)];
+    const base = current(counting.length > 0);
+    const checkedDays =
       counting.length > 0 && annual.includes(rule as AnnualRule<Value>)
-        ? redundant(rule, base, annualUnits(rule as AnnualRule<Value>), originalBase)
-        : redundant(rule, base, days, () => rule.value);
-    if (!ok) continue;
-    c.info(
-      "redundant",
-      rule.path,
-      days.length === 0
-        ? `This rule is never used: other rules decide every day it matches (checked ${window.label})`
-        : `Removing this rule does not change any result (checked ${window.label})`,
-    );
+        ? annualUnits(rule as AnnualRule<Value>)
+        : days;
+    const ok =
+      checkedDays === days
+        ? redundant(rule, base, days, () => rule.value)
+        : redundant(rule, base, checkedDays, originalNow);
+    if (!ok) return false;
+    affected = [...days, ...checkedDays];
+    reported.set(rule, {
+      message:
+        days.length === 0
+          ? `This rule is never used: other rules decide every day it matches (checked ${window.label})`
+          : `Removing this rule does not change any result (checked ${window.label})`,
+      decided: days,
+    });
+    return true;
+  };
+
+  // 毎年の月日・繰り返しの規則を先に判定する（個別の日付を除いて判定するので、個別の日付の判定に依存しない）
+  // 1 回の走査で 1 件以上取り除かなければ終わるので、走査の回数は候補の数 + 1 を超えない（超えたら作りの誤り）。
+  // 最後に取り除いた後に判定した規則は、同じ設定で判定し直しても同じなので、次の走査では飛ばす（version で数える）
+  const maxPasses = candidates.length + dates.length + 1;
+  let version = 0;
+  const judgedAt = new Map<DecidingRule<Value>, number>();
+  /** 最後に取り除いた規則で変わりうる日（判定した関数が入れる） */
+  let affected: Iterable<number> = [];
+  const judge = (rule: DecidingRule<Value>, run: (r: DecidingRule<Value>) => boolean): void => {
+    if (gone(rule) || judgedAt.get(rule) === version) return;
+    judgedAt.set(rule, version);
+    if (!run(rule)) return;
+    version++;
+    refresh(affected);
+  };
+  for (let passes = 0, before = -1; before !== version;) {
+    if (++passes > maxPasses) throw new Error("redundant: the sequential removal did not converge");
+    before = version;
+    for (const rule of candidates) judge(rule, judgeRule);
+    for (const rule of dates) judge(rule, (r) => judgeDate(r as DateRule<Value>));
+  }
+  if (reported.size === 0) return;
+  // relatedPath は、出た規則をすべて取り除いた設定で、その規則が決めていた日を決める規則（1 つに定まるときだけ。
+  // 曜日・祝日の扱いが決める日や、判定できない日があれば付けない）
+  const resolveFinal = createResolver(current(true), lookup);
+  const relatedOf = (days: readonly number[]): string | undefined => {
+    const paths = new Set<string | null>();
+    for (const n of days) {
+      try {
+        paths.add(resolveFinal(fromDayNumber(n)).rule?.path ?? null);
+      } catch {
+        paths.add(null);
+      }
+    }
+    const [only] = paths;
+    return paths.size === 1 && only !== null ? only : undefined;
+  };
+  for (const rule of [...dates, ...candidates]) {
+    const found = reported.get(rule);
+    if (found) c.info("redundant", rule.path, found.message, relatedOf(found.decided));
   }
 }
 

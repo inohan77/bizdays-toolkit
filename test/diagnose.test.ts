@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   createCalendar,
   createSchedule,
+  type CalendarOptions,
   type HolidayProvider,
   type HolidayOverlapPolicy,
   type RecurringRule,
@@ -130,6 +131,7 @@ test("shadowed: 臨時営業日に覆われた臨時休業日（同じ種類の�
   assert.deepEqual(
     brief(
       diagnoseCalendar({
+        closedWeekdays: [0, 6], // 土日を開く臨時営業日にする（使われる）
         openDates: [{ from: "2026-12-26", to: "2026-12-28" }],
         closedDates: ["2026-12-27"],
       }),
@@ -141,6 +143,45 @@ test("shadowed: 臨時営業日に覆われた臨時休業日（同じ種類の�
         path: "closedDates[0]",
         relatedPath: "openDates[0]",
       },
+    ],
+  );
+});
+
+test("shadowed と redundant: 定休日のない設定では、覆われた休業日を取り除いた後に、覆っていた営業日の規則・日付も redundant になる（まとめて取り除ける）", () => {
+  // 営業日の規則・臨時営業日は、休業日を開くためにある。定休日がなければ、覆われた休業日を取り除いた後は営業日を開くだけで
+  // 結果を変えないので、両方とも取り除ける（逐次除去。31 番）
+  assert.deepEqual(
+    brief(
+      diagnoseCalendar({
+        openDates: [{ from: "2026-12-26", to: "2026-12-28" }],
+        closedDates: ["2026-12-27"],
+      }),
+    ),
+    [
+      {
+        severity: "warning",
+        code: "shadowed",
+        path: "closedDates[0]",
+        relatedPath: "openDates[0]",
+      },
+      { severity: "info", code: "redundant", path: "openDates[0]" },
+    ],
+  );
+  assert.deepEqual(
+    brief(
+      diagnoseCalendar({
+        openRecurringRules: [{ weekday: 6 }],
+        closedRecurringRules: [{ weekday: 6, nth: 2 }],
+      }),
+    ),
+    [
+      {
+        severity: "warning",
+        code: "shadowed",
+        path: "closedRecurringRules[0]",
+        relatedPath: "openRecurringRules[0]",
+      },
+      { severity: "info", code: "redundant", path: "openRecurringRules[0]" },
     ],
   );
 });
@@ -195,6 +236,9 @@ test("shadowed: 繰り返しの営業日は、同じ日の繰り返しの休業�
   assert.deepEqual(
     brief(
       diagnoseCalendar({
+        // 土曜を定休日にして、営業日の規則が使われるようにする（定休日でなければ、休業日の規則を取り除いた後に
+        // 営業日の規則も redundant になる。31 番）
+        closedWeekdays: [0, 6],
         openRecurringRules: [{ weekday: 6 }],
         closedRecurringRules: [{ weekday: 6, nth: 2 }],
       }),
@@ -322,6 +366,66 @@ test("redundant: 取り除いても結果が変わらない規則（info）", ()
       }),
     ),
     [{ severity: "info", code: "redundant", path: "closedDates[2]" }],
+  );
+});
+
+test("redundant: 出た規則はまとめて取り除ける（逐次除去）。relatedPath は代わりに決める規則で、1 つに定まるときだけ付く", () => {
+  // 同じ曜日の under・over・after の 3 つの規則: [0] と [1] はそれぞれ単独では取り除けるが、両方を外すと祝日の月曜が
+  // 変わる。逐次除去では [0] だけが出る（[0] を外した設定では [1] が祝日の月曜を決める）
+  const rules = [
+    { weekday: 1, holidayOverlapPolicy: "under-holiday" },
+    { weekday: 1, holidayOverlapPolicy: "over-holiday" },
+    { weekday: 1, holidayOverlapPolicy: "after-holiday" },
+  ] as const;
+  const options = {
+    holidayProvider: jp,
+    closedWeekdays: [0, 6],
+    holidayPolicy: "ignore",
+    closedRecurringRules: rules,
+  } as const;
+  assert.deepEqual(brief(diagnoseCalendar(options)), [
+    {
+      severity: "info",
+      code: "redundant",
+      path: "closedRecurringRules[0]",
+      relatedPath: "closedRecurringRules[1]",
+    },
+  ]);
+  const opens = (o: CalendarOptions) =>
+    createCalendar({ ...o, outOfRangePolicy: "ignore" })
+      .daysBetween("1955-01-01", "2099-12-31")
+      .map((d) => d.open);
+  assert.deepEqual(opens({ ...options, closedRecurringRules: rules.slice(1) }), opens(options));
+  // 同じ規則を 2 つ書くと、後が shadowed で、前は出ない（shadowed の規則を先に取り除く）
+  assert.deepEqual(
+    brief(diagnoseCalendar({ closedRecurringRules: [{ weekday: 3 }, { weekday: 3 }] })),
+    [
+      {
+        severity: "warning",
+        code: "shadowed",
+        path: "closedRecurringRules[1]",
+        relatedPath: "closedRecurringRules[0]",
+      },
+    ],
+  );
+  // 定休日の曜日が代わりに決める日は、規則ではないので relatedPath を付けない
+  assert.deepEqual(
+    brief(diagnoseCalendar({ closedWeekdays: [0], closedRecurringRules: [{ weekday: 0 }] })),
+    [{ severity: "info", code: "redundant", path: "closedRecurringRules[0]" }],
+  );
+  // 毎年の元日を、毎月 1 日の規則が代わりに決める
+  assert.deepEqual(
+    brief(
+      diagnoseCalendar({ closedAnnualDates: ["01-01"], closedRecurringRules: [{ dayOfMonth: 1 }] }),
+    ),
+    [
+      {
+        severity: "info",
+        code: "redundant",
+        path: "closedAnnualDates[0]",
+        relatedPath: "closedRecurringRules[0]",
+      },
+    ],
   );
 });
 

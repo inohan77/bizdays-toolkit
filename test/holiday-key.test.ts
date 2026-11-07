@@ -291,7 +291,7 @@ test("key: keys の検証（holiday 以外には付けられない・形式）�
     [
       ["warning", "never-matches", "openRecurringRules[0]", ""],
       ["warning", "shadowed", "openRecurringRules[2]", "openRecurringRules[1]"],
-      ["info", "redundant", "openRecurringRules[1]", ""],
+      ["info", "redundant", "openRecurringRules[1]", "openRecurringRules[3]"],
     ],
     "対応年に現れない key は never-matches、key の集合の包含は shadowed（広い集合は覆われず、後の広い規則が同じ値なので先の規則は redundant）",
   );

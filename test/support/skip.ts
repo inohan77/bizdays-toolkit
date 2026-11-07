@@ -13,10 +13,6 @@ export interface IntendedSkip {
 
 /** 意図した飛ばしの一覧。足すときは判断を仰ぐ（RELEASING.md の「品質の確認」） */
 export const INTENDED_SKIPS: Readonly<Record<string, IntendedSkip>> = {
-  "oracle-joint": {
-    reason: "診断の判定の作り直し（0.31.0）で有効にする。ORACLE_JOINT=1 で試せる",
-    ci: true,
-  },
   "ci-full-only": {
     reason:
       "pnpm check では動かさない。CI の diagnose-consistency ジョブが全件の環境変数（DIAGNOSE_PROPERTY_FULL・CONSISTENCY_API_FULL）で動かす",

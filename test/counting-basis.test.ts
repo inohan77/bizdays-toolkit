@@ -113,7 +113,8 @@ test("counting-basis: 第 n 営業日の規則より後ろの曜日の規則が 
         d.relatedPath === "closedRecurringRules[1]",
     ),
   );
-  assert.ok(all.some((d) => d.code === "redundant" && d.path === "closedRecurringRules[1]"));
+  // 同じ規則を 2 つ書くと後が shadowed で、前は redundant にならない（逐次除去で、shadowed の規則を先に取り除くため。31 番）
+  assert.ok(!all.some((d) => d.code === "redundant" && d.path === "closedRecurringRules[1]"));
   assert.deepEqual(
     relatedOf({
       ...options,

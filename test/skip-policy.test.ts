@@ -148,9 +148,9 @@ test("飛ばしの決まり: CI では、一覧にない理由と CI では飛�
     assert.throws(() => sample.skipWhen("sample-local-only", true), /CI では飛ばさない理由/);
     // 公開している skipWhen・todoFor は、意図した飛ばしの一覧（INTENDED_SKIPS）を引く
     delete process.env["CI"];
-    assert.equal(skipWhen("oracle-joint", true), INTENDED_SKIPS["oracle-joint"]!.reason);
+    assert.equal(skipWhen("ci-full-only", true), INTENDED_SKIPS["ci-full-only"]!.reason);
     assert.equal(skipWhen("no-release-tag", true), INTENDED_SKIPS["no-release-tag"]!.reason);
-    assert.throws(() => todoFor("oracle-joint"), /既知の不具合（todo）の理由ではない/);
+    assert.throws(() => todoFor("ci-full-only"), /既知の不具合（todo）の理由ではない/);
     assert.throws(() => skipWhen("sample-skip", false), /にない理由: sample-skip/);
   } finally {
     if (saved === undefined) delete process.env["CI"];

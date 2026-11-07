@@ -3,7 +3,8 @@
  * 診断した規則を実際に取り除き、結果が変わらないことを確かめる（設定の作り方は test/support/sites.ts）。
  *
  * - shadowed・never-matches … 取り除いても、dayInfoOn の結果（理由・名前を含む）が変わらない
- * - redundant              … 取り除いても、営業日かどうかが変わらない
+ * - redundant              … 出た項目（shadowed・never-matches を含む）をまとめて取り除いても、営業日かどうかが変わらない
+ *   （逐次除去。docs/decisions.md の 31 番）
  *
  * 対応年の短い自作の提供元（2025〜2027 年）と提供元なしの設定はその全日を、日本の提供元と提供元なしの一部の設定は
  * 日本の提供元の対応年の全日（1955〜2099 年）を比べる。判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。31 番）。
@@ -59,7 +60,10 @@ const snapshot = (options: Obj, range: { from: string; to: string }, full: boole
   return lines;
 };
 
-/** 設定の項目（配列の要素）に出た shadowed・never-matches・redundant を取り除き、期間の全日で結果を比べる */
+/**
+ * 設定の項目（配列の要素）に出た shadowed・never-matches は 1 つずつ、それらと redundant はまとめて取り除き、
+ * 期間の全日で結果を比べる
+ */
 function checkRemovals(
   options: Obj,
   range: { from: string; to: string },
@@ -72,26 +76,39 @@ function checkRemovals(
     list.every((d) => d.severity !== "error"),
     `作成できる設定のはず: ${describe()}`,
   );
-  let open: string[] | undefined;
   let full: string[] | undefined;
+  const removable: string[] = [];
   for (const d of list) {
-    if (!codes.includes(d.code)) continue;
     // 設定の項目（配列の要素）だけを取り除いて確かめる（unconfirmedHolidayPolicy などの redundant は対象外）
     if (!/^\w+\[\d+\]$/.test(d.path)) continue;
+    // まとめて取り除くときは、確かめる対象（codes）でなくても、使われない項目（shadowed・never-matches）も取り除く
+    // （逐次除去は、それらを先に取り除いた設定で redundant を判定する。31 番）
+    if (["shadowed", "never-matches", "redundant"].includes(d.code)) removable.push(d.path);
+    if (!codes.includes(d.code)) continue;
     found[d.code] = (found[d.code] ?? 0) + 1;
     const target = JSON.stringify(
       (options[d.path.replace(/\[\d+\]$/, "")] as unknown[])[Number(/\[(\d+)\]/.exec(d.path)![1])],
     );
     if (target.includes("effective")) found["withPeriod"] = (found["withPeriod"] ?? 0) + 1;
-    const reduced = removeItem(options, d.path);
-    if (d.code === "redundant") {
-      open ??= snapshot(options, range, false);
-      assert.deepEqual(snapshot(reduced, range, false), open, `${d.code} ${d.path}: ${describe()}`);
-    } else {
-      full ??= snapshot(options, range, true);
-      assert.deepEqual(snapshot(reduced, range, true), full, `${d.code} ${d.path}: ${describe()}`);
-    }
+    if (d.code === "redundant") continue;
+    full ??= snapshot(options, range, true);
+    assert.deepEqual(
+      snapshot(removeItem(options, d.path), range, true),
+      full,
+      `${d.code} ${d.path}: ${describe()}`,
+    );
   }
+  if (!removable.some((path) => list.some((d) => d.path === path && d.code === "redundant")))
+    return;
+  // 後ろの項目から取り除く（前の項目の位置がずれないように）
+  const reduced = [...new Set(removable)]
+    .sort((a, b) => Number(/\[(\d+)\]/.exec(b)![1]) - Number(/\[(\d+)\]/.exec(a)![1]))
+    .reduce((o, path) => removeItem(o, path), options);
+  assert.deepEqual(
+    snapshot(reduced, range, false),
+    snapshot(options, range, false),
+    `まとめて取り除く ${JSON.stringify(removable)}: ${describe()}`,
+  );
 }
 
 test("性質: 使われない・取り除いても変わらないと診断した規則は、取り除いても結果が変わらない（短い提供元・提供元なしの全日）", () => {

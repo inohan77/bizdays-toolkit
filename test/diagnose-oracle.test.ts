@@ -7,8 +7,9 @@
  * - 判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。docs/decisions.md の 31 番）
  * - pnpm check では決まった抜き出しだけを試す。すべての組み合わせは ORACLE_FULL=1 で（CI の oracle ジョブ。時間の決まりと
  *   行列の分け方は RELEASING.md の「品質の確認」）
- * - 完全性（取り除いても変わらないのに何も出ない項目）は、対応年で取り除けた項目を、診断が規則どうしを調べる期間
- *   （診断と同じ関数 rulesScanWindow で求める）でも確かめ直してから数え、既知の項目の一覧（KNOWN_INCOMPLETE）と合わなければ失敗にする
+ * - 出た項目はまとめて取り除けること（逐次除去の定義）と、取り除いた後に取り除ける項目が残らないこと（完全性）を確かめる。
+ *   完全性は、対応年で取り除けた項目を、診断が規則どうしを調べる期間（診断と同じ関数 rulesScanWindow で求める）でも
+ *   確かめ直してから数え、既知の項目の一覧（KNOWN_INCOMPLETE）と合わなければ失敗にする
  * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別の版（公開済みの版など）を試せる。ORACLE_SHARD=k/n で、
  *   全件の組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。ORACLE_FULL=1 と組み合わせたときだけ。
  *   書式の誤り・k >= n・ORACLE_FULL なしは例外）
@@ -23,7 +24,6 @@ import { COMMON_RULE_KEYS, SHAPES, random, shapeOf, type Obj } from "./support/c
 import { type DayLike, linesOf } from "./support/compare.ts";
 import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 import { flagEnv } from "./support/env.ts";
-import { skipWhen } from "./support/skip.ts";
 
 type Fn = (...args: unknown[]) => unknown;
 const target = process.env["ORACLE_TARGET"];
@@ -322,7 +322,13 @@ test("オラクル: 項目の一覧は目録のすべての形とキーを含む
 // 健全性: 出た項目を取り除いても、結果が変わらない
 // ------------------------------------------------------------
 
-/** 設定の項目を 1 つずつ取り除き、健全性（出た項目は取り除いても変わらない）と完全性（変わらないのに何も出ない項目）を数える */
+/**
+ * 健全性と完全性を数える（docs/decisions.md の 31 番の逐次除去の定義）。
+ * - 健全性: shadowed・never-matches と出た項目は、1 つだけ取り除いても全日の結果が変わらない（決して使われない）。
+ *   shadowed・never-matches・redundant と出た項目をまとめて取り除いても、全日の結果が変わらない
+ * - 完全性: 出た項目をまとめて取り除いた設定で、残りのどの項目を 1 つ取り除いても結果が変わる（これ以上取り除けない）。
+ *   変わらない項目は、診断が規則どうしを調べる期間でも確かめ直してから数える
+ */
 function checkRemovals(
   list: readonly Item[],
   policy: string,
@@ -331,37 +337,48 @@ function checkRemovals(
   weekdays: readonly number[],
 ): void {
   const paths = pathsOf(list);
-  const baseOpen = snapshot(build(list, policy, weekdays), false);
-  const baseFull = snapshot(build(list, policy, weekdays), true);
+  const codesOf = (path: string): string[] =>
+    d.filter((x) => x["path"] === path).map((x) => x["code"] as string);
+  const original = build(list, policy, weekdays);
+  const baseOpen = snapshot(original, false);
+  const baseFull = snapshot(original, true);
   paths.forEach((path, p) => {
-    const codes = d.filter((x) => x["path"] === path).map((x) => x["code"] as string);
+    const codes = codesOf(path);
+    if (!codes.includes("shadowed") && !codes.includes("never-matches")) return;
     const rest = build(
       list.filter((_, q) => q !== p),
       policy,
       weekdays,
     );
-    const restOpen = snapshot(rest, false);
-    if (
-      (codes.includes("shadowed") || codes.includes("never-matches")) &&
-      !same(snapshot(rest, true), baseFull)
-    )
+    if (!same(snapshot(rest, true), baseFull))
       r.unsound.push(`${codes.join(",")} ${describeConfig(list, policy, weekdays, path)}`);
-    if (codes.includes("redundant") && !same(restOpen, baseOpen))
-      r.unsound.push(`redundant ${describeConfig(list, policy, weekdays, path)}`);
-    if (
-      same(restOpen, baseOpen) &&
-      !codes.some((c) => ["redundant", "shadowed", "never-matches", "expired"].includes(c))
-    ) {
-      const started = performance.now();
-      const removable = removableInScanWindow(build(list, policy, weekdays), rest);
-      r.recheckMs += performance.now() - started;
-      if (!removable) {
-        r.rechecked++;
-        return;
-      }
-      const key = `${list[p]![0]} ${JSON.stringify(list[p]![1])}`;
-      r.incomplete.set(key, (r.incomplete.get(key) ?? 0) + 1);
+  });
+  const removed = paths.filter((path) =>
+    codesOf(path).some((c) => ["shadowed", "never-matches", "redundant"].includes(c)),
+  );
+  const remaining = list.filter((_, p) => !removed.includes(paths[p]!));
+  const restConfig = build(remaining, policy, weekdays);
+  const restOpen = snapshot(restConfig, false);
+  if (!same(restOpen, baseOpen)) {
+    r.unsound.push(`まとめて取り除くと変わる ${describeConfig(list, policy, weekdays, removed)}`);
+    return;
+  }
+  remaining.forEach((item, q) => {
+    const smaller = build(
+      remaining.filter((_, k) => k !== q),
+      policy,
+      weekdays,
+    );
+    if (!same(snapshot(smaller, false), restOpen)) return;
+    const started = performance.now();
+    const removable = removableInScanWindow(restConfig, smaller);
+    r.recheckMs += performance.now() - started;
+    if (!removable) {
+      r.rechecked++;
+      return;
     }
+    const key = `${item[0]} ${JSON.stringify(item[1])}`;
+    r.incomplete.set(key, (r.incomplete.get(key) ?? 0) + 1);
   });
 }
 
@@ -407,20 +424,24 @@ test("オラクル: 完全性の数え方は、診断が何も言わない取り
 
 // ------------------------------------------------------------
 
-test("オラクル: shadowed・never-matches・redundant と出た項目は、取り除いても全日の結果が変わらず、取り除ける項目には何かが出る（既知の項目を除く）", () => {
-  const report = run(checkRemovals);
+test("オラクル: shadowed・never-matches・redundant と出た項目は、まとめて取り除いても全日の結果が変わらず、取り除いた後にこれ以上取り除ける項目がない（既知の項目を除く）", () => {
+  const report = run(checkRemovals, [
+    ...configs(),
+    // 項目 3 つの固定の設定（oracle-items.json の jointFixed。組み合わせの総当たりは 2 項目までなので、ここで足す）
+    ...fixture.jointFixed.map((c) => ({ list: c.items, policy: c.policy, weekdays: c.weekdays })),
+  ]);
   summarize("健全性と完全性", report);
   assert.deepEqual(
     report.unsound,
     [],
-    "診断が取り除いても変わらないと言った項目で、結果が変わった",
+    "診断が取り除いても変わらないと言った項目（1 つずつ、またはまとめて）で、結果が変わった",
   );
   // 完全性: 一覧にない「取り除けるのに何も出ない」項目は失敗。一覧の項目が出なくなったら失敗（全件を 1 回で試すときだけ。
   // 分けた実行では、一覧の項目がほかの分にある）
   assert.deepEqual(
     [...report.incomplete.keys()].filter((k) => !(k in KNOWN_INCOMPLETE)),
     [],
-    "取り除いても結果が変わらないのに、診断が何も言わない項目がある（診断の取りこぼし。理由が分かって受け入れるなら KNOWN_INCOMPLETE に載せる）",
+    "出た項目をまとめて取り除いた後に、まだ取り除いても結果が変わらない項目がある（診断の取りこぼし。理由が分かって受け入れるなら KNOWN_INCOMPLETE に載せる）",
   );
   if (FULL && SHARD === undefined)
     assert.deepEqual(
@@ -526,47 +547,3 @@ test("オラクル: no-business-day は営業日が本当にない設定だけ�
   });
   assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
 });
-
-// ------------------------------------------------------------
-// 0.31.0 で有効にする: 出た項目をすべてまとめて取り除いても、結果が変わらない（診断の判定の作り直し（0.31.0）の正解の定義）
-// ------------------------------------------------------------
-
-test(
-  "オラクル: 出た項目をまとめて取り除いても、全日の結果が変わらない",
-  {
-    skip: skipWhen("oracle-joint", !flagEnv("ORACLE_JOINT")),
-  },
-  () => {
-    const report = run(
-      (list, policy, d, r, weekdays) => {
-        const paths = pathsOf(list);
-        const removable = new Set(
-          d
-            .filter((x) => ["shadowed", "never-matches", "redundant"].includes(x["code"] as string))
-            .map((x) => x["path"]),
-        );
-        if (removable.size < 2) return;
-        const rest = build(
-          list.filter((_, p) => !removable.has(paths[p])),
-          policy,
-          weekdays,
-        );
-        if (!same(snapshot(rest, false), snapshot(build(list, policy, weekdays), false)))
-          r.unsound.push(
-            `まとめて取り除くと変わる ${describeConfig(list, policy, weekdays, [...removable] as string[])}`,
-          );
-      },
-      [
-        ...configs(),
-        // 項目 3 つの固定の設定（oracle-items.json の jointFixed。組み合わせの総当たりは 2 項目までなので、ここで足す）
-        ...fixture.jointFixed.map((c) => ({
-          list: c.items,
-          policy: c.policy,
-          weekdays: c.weekdays,
-        })),
-      ],
-    );
-    assert.ok(report.configs > 0, "試した設定が 0 件（オラクルが空振りしている）");
-    assert.deepEqual(report.unsound, []);
-  },
-);

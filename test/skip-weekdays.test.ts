@@ -237,10 +237,9 @@ test("skipWeekdays: 診断（飛ばす曜日が違えば覆わない）", () => 
     }),
     [
       ["warning", "shadowed", "closedRecurringRules[3]", "closedRecurringRules[0]"],
-      ["info", "redundant", "closedRecurringRules[0]", ""],
-      ["info", "redundant", "closedRecurringRules[1]", ""],
-      ["info", "redundant", "closedRecurringRules[2]", ""],
+      ["info", "redundant", "closedRecurringRules[0]", "closedRecurringRules[2]"],
+      ["info", "redundant", "closedRecurringRules[1]", "closedRecurringRules[2]"],
     ],
-    "同じ skipWeekdays だけが shadowed。違う規則は redundant（取り除いても結果が変わらない）で見つかる",
+    "同じ skipWeekdays だけが shadowed。違う規則は redundant（取り除いても結果が変わらない）で見つかり、出た規則はまとめて取り除ける（[0]・[1] を取り除くと [2] が決める。31 番）",
   );
 });
