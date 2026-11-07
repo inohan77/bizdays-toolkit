@@ -264,7 +264,7 @@ if (process.argv.includes("--decisions")) {
 
 /**
  * CHANGELOG の利用者向けの区分。今の版の節か [Unreleased] に、どれか 1 つがあればよい（data-compare の「### Data」と同じ扱い）。
- * 「移行」は変更の区分（Changed・Removed など）に添えて書くもので、それだけでは何が変わったかを言わない。「開発」は利用者に
+ * 「Migration」（0.30.x 以前の「移行」）は変更の区分（Changed・Removed など）に添えて書くもので、それだけでは何が変わったかを言わない。「開発」は利用者に
  * 見えない変更（テスト・道具・文書の運用）、「既知の不具合」は公開物の変化ではないので、どれも数えない
  */
 const USER_FACING = ["Added", "Changed", "Fixed", "Deprecated", "Removed", "Data"];

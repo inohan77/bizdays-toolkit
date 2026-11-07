@@ -69,6 +69,12 @@ test("旧名: 診断は deprecated-option で旧名の位置（利用者が書�
     ],
     "設定の直下",
   );
+  // 旧名の設定で作ったカレンダーの dayInfoOn の optionPath は新しい名前で返す（変形 1 は旧名の設定の結果の位置を pathToNew で
+  // 新しい名前に読み替えてから比べるので、この点を確かめられない）
+  assert.equal(
+    createCalendar(oldCalendar).dayInfoOn("2026-12-31").optionPath,
+    "closedAnnualDates[0]",
+  );
   const all = diagnoseCalendar(oldCalendar).map((d) => d.path);
   for (const path of [
     "closedRecurring[0].day",
@@ -140,6 +146,9 @@ test("旧名: 変形 1 が試さない旧名（メソッド・返す項目・関
   );
   assert.deepEqual(calendar.getHoliday("2026-05-05"), calendar.holidayOn("2026-05-05"));
   assert.equal(calendar.outOfRange, calendar.outOfRangePolicy);
+  // 旧名 outOfRange で作ったカレンダーの outOfRangePolicy プロパティが値を持つ（変形 1 は判定の結果だけを比べ、カレンダーの
+  // プロパティを見ないので、この点を確かめられない）
+  assert.equal(createCalendar(oldCalendar).outOfRangePolicy, "throw");
   assert.equal(calendar.unconfirmedHolidays, calendar.unconfirmedHolidayPolicy);
   const day = calendar.dayInfoOn("2026-12-31");
   assert.equal(day.businessDay, day.open);

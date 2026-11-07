@@ -1,5 +1,5 @@
 /**
- * 公開する dist の確認の中身（Node.js・ブラウザー・Cloudflare Workers の共通。decisions.md の 35 番）。
+ * 公開する dist の確認の中身（Node.js・ブラウザー・Cloudflare Workers の共通。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
  *
  * どの実行環境でも動くよう、標準の JavaScript だけで書く（node:test・node:assert などは使わない）。
  * 読み込み方は環境ごとに違うので、呼び出し側が各サブパスのモジュールを渡す。

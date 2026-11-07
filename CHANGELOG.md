@@ -2,7 +2,7 @@
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/) and the policy in [RELEASING.md](./RELEASING.md). Besides the Keep a Changelog sections (Added / Changed / Deprecated / Removed / Fixed / Security), **Data** lists updates of the holiday data and **Migration** lists the work users need to do for a minor version.
 
-Development notes for 0.30.x and later are in [docs/development-log.md](./docs/development-log.md) (Japanese). Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their sections **移行** and **開発** correspond to Migration and the development log). Changes to the quality tooling that do not change the published package (checks, CI, release steps) are recorded in [docs/development-log.md](./docs/development-log.md) (in Japanese; not published to npm). For 0.29.x and earlier, they are in the 開発 section of each version below.
+Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **Migration** headings were renamed from 移行 in 0.31.0, and their section **開発** corresponds to the development notes). Development notes for 0.30.x and later (changes to the quality tooling that do not change the published package: checks, CI, release steps) are in [docs/development-log.md](./docs/development-log.md) (in Japanese; not published to npm). For versions before 0.30.0 (0.22.x and earlier), they are in the 開発 section of each version below.
 
 ## [Unreleased]
 
@@ -181,7 +181,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本の祝日の `kind` の `"national"` を `"regular"` にした（日付・名称・`key` は変わらない）
 
-### 移行
+### Migration
 
 - 実行時は旧名のままでも動くが、返す値の変更・対応年の端の挙動・TypeScript で必須のキーの旧名・`dayInfoOn` の結果を丸ごと比べるテストは 0.30.0 に上げた時点で対応が要る（下の箇条）。それ以外は TypeScript の取り消し線と診断の `deprecated-option` を手がかりに新しい名前に書き換える。保存した設定は `migrateCalendarOptions`・`migrateScheduleOptions` で書き換えられる
 - 型が旧名を持つのは省略可能なキーだけなので、スケジュールの `weekly`・合成の `businessDay`・期日の `day`・振替の `rules`・規則の `day` は、TypeScript では新しい名前に書き換える
@@ -226,7 +226,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 - `docs/decisions.md`: 53 番（日単位の周期の規則、祝日の翌日・祝前日の絞り込みと `skipWeekdays`、前への振替を足さない判断、`@public` への格上げ）を追加し、15・33・35・43・46・47 番に追記した
 - `docs/migration.md`: 1.0.0 で削除する非推奨の API の一覧を足した
 
-### 移行
+### Migration
 
 - 動作が変わる既存の API はない。祝日の翌日・祝前日の規則に `kinds`・`keys`・`skipWeekdays` を付けて `invalid-option` になることを確かめていたテストは、例外が出なくなるので失敗する。テストを書き換える（`docs/migration.md`）
 
@@ -286,7 +286,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.21.0] - 2026-10-25
 
-### 移行
+### Migration
 
 動作が変わる既存の API はない（2012 年以降の英国の祝日は変わらない）。英国の 4 つの提供元の `supportedYears.from` が 2012 から 1974 になり、これまで `out-of-range` だった 1974〜2011 年の日付が結果を返すようになる。
 
@@ -308,7 +308,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.20.0] - 2026-10-25
 
-### 移行
+### Migration
 
 動作が変わる既存の API はない。サブパス `bizdays-toolkit/fr` が増える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -333,7 +333,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.19.0] - 2026-10-25
 
-### 移行
+### Migration
 
 動作が変わる既存の API はない（`"after-holiday"` の規則に `skipWeekdays` を付けなければ振替先はこれまでどおり）。繰り返しの規則の形 `{ businessDayOfMonth }` と項目 `skipWeekdays`・`calendar`、診断コード `counting-basis` が増える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -357,7 +357,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.18.0] - 2026-10-25
 
-### 移行
+### Migration
 
 動作が変わる既存の API はない。同梱の提供元が返す祝日に省略可能な項目 `key` が加わるので、`dayInfo` の結果や `holidaysInYear` の要素を `deepEqual` で比べているテストは期待値に足す（国民の休日・臨時の祝日には付かない）。祝日の規則に省略可能な `keys` が加わる。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -393,7 +393,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.17.0] - 2026-10-25
 
-### 移行
+### Migration
 
 動作が変わる既存の API はない（既定値はこれまでどおり）。`Calendar`・`Schedule`・`HolidayLookup` に項目 `unconfirmedHolidays` が加わり、`createCalendar`・`createSchedule` の設定と `diagnoseCalendar`・`diagnoseSchedule` の第 2 引数が増える。監視のワークフローの改名（`govuk-watch.yml` → `data-watch.yml`）により、cron-job.org の URL を直す（RELEASING.md）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -420,7 +420,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.16.0] - 2026-10-23
 
-### 移行
+### Migration
 
 日時の文字列の区切りは `T` だけになり、空白で区切った文字列（`"2026-11-23 10:00"`）は `invalid-time` の Error になる（これまでは実行時だけ受け付けていた。型 `DateTimeInput` は以前から `T` 区切りだけ）。合成した `dayInfo` に `decidedByPath` が加わるので、`deepEqual` で比べているテストは期待値に足す。ほかは動作が変わらない（祝前日の規則・サブパス・合成の項目の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -446,7 +446,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.15.0] - 2026-10-21
 
-### 移行
+### Migration
 
 `businessDayOnOrAfter` に `cutoff` を指定するときは、時刻を持つ入力（`Date`・日時の文字列・時刻を持つ Temporal の値）を渡す。時刻のない入力（暦日の文字列・`PlainDate`）との組み合わせは、これまで暦日を 0 時として扱い締め時刻を黙って無視していたが、`invalid-argument` の Error になる。ほかは動作が変わらない（規則の絞り込み・カレンダーのメソッド・型の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -478,7 +478,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.14.0] - 2026-10-20
 
-### 移行
+### Migration
 
 動作は変わりません（締め期間と、暦日と時刻から瞬間への変換の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -499,7 +499,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.13.0] - 2026-10-20
 
-### 移行
+### Migration
 
 動作は変わりません（スケジュールから営業日カレンダーを作る関数と、判定の理由の新しい値の追加。CI の改善）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -521,7 +521,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.12.0] - 2026-10-20
 
-### 移行
+### Migration
 
 動作は変わりません（繰り返しの規則の新しい形・`dayInfo` の新しい項目の追加と、診断・CI の改善）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` の定数 `dataVersion`・`confirmedThrough` が非推奨になったので、使っていれば提供元の項目（`jp.dataVersion`・`england.confirmedThrough` など）に書き換える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -560,7 +560,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.11.0] - 2026-10-19
 
-### 移行
+### Migration
 
 作業は要りません（繰り返しの規則の新しい形と、カレンダーを合成する関数の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
@@ -585,7 +585,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.10.0] - 2026-10-19
 
-### 移行
+### Migration
 
 動作は変わりません（繰り返しの規則・毎年の月日の規則への省略可能な項目の追加と、診断の改善）。`bizdays-toolkit/jp` の `toJapanDate`・`toJapanDateTime` が非推奨になったので、使っていれば `toDateString(input, "Asia/Tokyo")`・`toDateTimeParts(input, "Asia/Tokyo")`（または営業日カレンダー・スケジュールの `dateOf`・`civilOf`）に書き換える。書き換え方は [docs/migration.md](./docs/migration.md)。
 
@@ -625,7 +625,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.9.0] - 2026-10-18
 
-### 移行
+### Migration
 
 作業は要りません（機能の追加だけ）。時刻を必ず持つ入力では `time` の型が `string` になったので、これまでの `null` の分岐は不要になります（残しても動く）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
