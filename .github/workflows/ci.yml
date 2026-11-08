@@ -173,9 +173,12 @@ jobs:
 
   consumer-types:
     # 公開する型定義を、利用者が使う TypeScript の複数のバージョンで型チェックする（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
-    # 各バージョンは npm の依存にせず、バージョンと SHA-256 を固定した tgz から一時的に入れる。バージョンの選び方は RELEASING.md
+    # 各バージョンは npm の依存にせず、バージョンと SHA-256 を固定した tgz から一時的に入れる。バージョンの選び方は RELEASING.md。
+    # プレリリース（prerelease: true）の行は、次のバージョンへの対応の準備として動かし、失敗してもワークフローを落とさない
+    # （continue-on-error）。失敗は Job Summary に出す
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    continue-on-error: ${{ matrix.prerelease == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -190,6 +193,11 @@ jobs:
             sha256: "da2513f4b95176d6dde8b51aab7afe8a927656c9d277369793f77f7e59371c08"
             binary: "@typescript/typescript-linux-x64"
             binary_sha256: "7ecad6f67377e831856367ab062ef394f21506a611405bf8ac0ff039348637d3"
+          - version: "7.1.0-beta"
+            sha256: "f7d45457143046af7ba31db100fd5e113aaddcae75f44c1bbb0741e57cab35c9"
+            binary: "@typescript/typescript-linux-x64"
+            binary_sha256: "59128685cb55f44c9e6644ef5edb3cb321618d9547b4ee94c3038598ffd51855"
+            prerelease: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -224,6 +232,18 @@ jobs:
         run: node scripts/check-consumer-types.ts --tsc "${RUNNER_TEMP}/typescript/node_modules/typescript/bin/tsc"
       - name: The repository's dependencies are unchanged
         run: git diff --exit-code -- package.json pnpm-lock.yaml
+      - name: Report a failure with a prerelease TypeScript
+        if: ${{ !success() && matrix.prerelease == true }}
+        env:
+          TS_VERSION: ${{ matrix.version }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "### プレリリースの TypeScript ${TS_VERSION} で失敗した（ジョブの状態: ${JOB_STATUS}）"
+            echo ""
+            echo "ワークフローは落とさない（continue-on-error）。型定義の問題なら直し、TypeScript の不具合なら報告する（RELEASING.md の品質の確認の「利用者の型チェック」）"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "::warning::consumer types failed with the prerelease TypeScript ${TS_VERSION} (job status: ${JOB_STATUS})"
 
   bench:
     # 性能の退行を、公開済みの前のバージョン（npm の latest）と同じランナーで比べて検出する（RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」）。

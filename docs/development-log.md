@@ -7,6 +7,7 @@
 ## [Unreleased]
 
 - 開発用のツールを更新: oxfmt 0.76.0 → 0.77.0、oxlint 1.91.0 → 1.92.0（どちらも公開から 48 時間以上たったもの。整形の変更と lint の指摘はなく、ビルドした `dist` は変わらない）
+- 利用者の型チェック（CI の `consumer-types`）に、プレリリースの TypeScript 7.1.0-beta の行を足した（TypeScript 7.1 への対応の準備。失敗してもワークフローを落とさず、Job Summary と警告に出す）。手元で 7.1.0-beta の `tsc` を渡して `check-consumer-types` が合格することを確かめた
 
 ## [0.31.2]
 
