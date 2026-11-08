@@ -1,5 +1,6 @@
 /**
- * 決定の番号の参照（「decisions.md の N 番」と、番号を並べた「decisions.md の M・N 番」）の形と、参照を探すファイル。
+ * 決定の番号の参照（「decisions.md の N 番」と、番号を並べた「decisions.md の M・N 番」「decisions.md の M 番・N 番」）の形と、
+ * 参照を探すファイル。
  * （例文を数字で書くと、それ自身が参照として数えられるので、ここでは N・M で書く）
  * 文書の参照の実在の検査（scripts/check-package.ts の checkReferences）と、参照の表（scripts/check-claims.ts の c）が
  * 同じものを使う（2 つの検査の範囲と形がずれないように）。
@@ -8,12 +9,15 @@
 import { readdirSync, statSync } from "node:fs";
 import { releaseSections } from "./release-sections.ts";
 
-/** 決定の番号の参照。番号は「・」「、」「,」で並べてよい（decisionNumbers で分ける）。「番目」は数えない */
-export const DECISION_REFERENCE = /decisions\.md`? の ([\d・、, ]+?) ?番(?!目)/g;
+/**
+ * 決定の番号の参照。番号は「・」「、」「,」で並べてよく、並べたそれぞれに「番」を付けてもよい（decisionNumbers で分ける）。
+ * 「番目」は数えない
+ */
+export const DECISION_REFERENCE = /decisions\.md`? の ((?:\d+ ?番?[・、,] ?)*\d+) ?番(?!目)/g;
 
-/** 参照の番号の並び（"M・N"）を番号に分ける */
+/** 参照の番号の並び（"M・N"・"M 番・N"）を番号に分ける */
 export const decisionNumbers = (list: string): number[] =>
-  list.split(/[・、,]/).map((x) => Number(x.trim()));
+  list.split(/[・、,]/).map((x) => Number(x.replace("番", "").trim()));
 
 /**
  * 今のバージョンのことを書くファイル（コメントのあるソース・道具・テスト・ワークフローと、履歴でない文書）。ファイルのパスの参照と、
