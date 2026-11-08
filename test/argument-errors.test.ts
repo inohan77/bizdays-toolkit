@@ -267,13 +267,24 @@ test("誤った引数: メッセージの値の表し方（数はそのまま、
     messageOf(() => root.addDays(D, 1n as never)),
     /: 1n$/,
   );
-  // オブジェクトでないオプションは、そのことをメッセージで伝える（code は前からのまま）
+  // オブジェクトでないオプション（Date・Map を含む）は、そのことをメッセージで伝える（code は前からのまま）
+  // Date・Map は種類で表す（JSON の形だと Date が文字列に、Map が {} に見える）
   assert.match(
-    messageOf(() => calendar.dueDate("2026-11", null as never)),
-    /dueDate options must be an object/,
+    messageOf(() => calendar.dueDate("2026-11", new Date(0) as never)),
+    /: \[object Date\]$/,
   );
   assert.match(
-    messageOf(() => root.combineCalendars([calendar, fromSchedule], null as never)),
-    /combineCalendars options must be an object/,
+    messageOf(() => calendar.dueDate("2026-11", new Map() as never)),
+    /: \[object Map\]$/,
   );
+  for (const wrong of [null, new Date(), new Map()]) {
+    assert.match(
+      messageOf(() => calendar.dueDate("2026-11", wrong as never)),
+      /dueDate options must be an object: /,
+    );
+    assert.match(
+      messageOf(() => root.combineCalendars([calendar, fromSchedule], wrong as never)),
+      /combineCalendars options must be an object: /,
+    );
+  }
 });

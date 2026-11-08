@@ -82,7 +82,7 @@ export interface CivilDateTime {
 
 // 日付と時刻の区切りは "T" だけ（型 DateTimeInput と同じ）。空白で区切った文字列は invalid-time
 const DATETIME_RE =
-  /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?$/i;
+  /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?$/i;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -159,19 +159,30 @@ function parseString(value: string, timeZone: string): CivilDateTime {
     );
   }
   const date = m[1]!;
-  parseDate(date);
+  const { year, month, day } = parseDate(date);
   const minutes = wallTime(Number(m[2]), Number(m[3]));
   if (m[4] !== undefined && Number(m[4]) > 59) {
-    throw rangeError("invalid-time", `Invalid time: ${value}`);
-  }
-  const offset = m[5];
-  if (offset === undefined) return { date, minutes };
-  // オフセット付きは瞬間として扱う（Date.parse はオフセットのない文字列を実行環境のタイムゾーンで読むので、正規表現でオフセット付きに限ったものだけを渡す）
-  const normalized = value.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
-  const ms = Date.parse(normalized);
-  if (Number.isNaN(ms)) {
     throw rangeError("invalid-time", `Invalid date/time string: ${describeValue(value)}`);
   }
+  const offset = m[6];
+  if (offset === undefined) return { date, minutes };
+  // オフセット付きは瞬間として扱う。瞬間は取り出した値から計算し、Date.parse に渡さない（ECMAScript が解釈を定めるのは
+  // 大文字の T・Z と 3 桁の小数秒だけで、小文字や 9 桁の小数秒は実行環境で結果が違う。Firefox・Safari は小文字を読めない）
+  // 時差（Z は 0）。時は 23・分は 59 まで（前の版の Date.parse と同じ。外は invalid-time）
+  const [, hh = "0", mm = "0"] = /(\d\d):?(\d\d)$/.exec(offset) ?? [];
+  if (+hh > 23 || +mm > 59)
+    throw rangeError("invalid-time", `Invalid date/time string: ${describeValue(value)}`);
+  const ms =
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+      0,
+      minutes,
+      +(m[4] ?? 0),
+      +(m[5] ?? "0").padEnd(3, "0").slice(0, 3),
+    ) -
+    (offset[0] === "-" ? -1 : 1) * (+hh * 60 + +mm) * 60_000;
   return instantToCivil(ms, timeZone);
 }
 

@@ -311,22 +311,9 @@ test("判定できない月の範囲: 月の規則は窓の外の月に左右さ
       ],
       [["redundant", "recurringRules[0]", "recurringRules[1]"]],
     ],
+    // 有効期間を狭めても、判定できない日との交わりは小さくなるだけなので（31 番）、有効期間なしで never-matches が出れば、
+    // 狭めた形でも必ず出る。有効期間を狭めた 3 例（1955-02 から・2099-11 まで・両方）は 0.31.1 で消した
     ["第 25 営業日", [day25], [["never-matches", "recurringRules[0]", null]]],
-    [
-      "第 25 営業日（1955-02 から）",
-      [{ ...day25, effectiveFrom: "1955-02-01" }],
-      [["never-matches", "recurringRules[0]", null]],
-    ],
-    [
-      "第 25 営業日（2099-11 まで）",
-      [{ ...day25, effectiveTo: "2099-11-30" }],
-      [["never-matches", "recurringRules[0]", null]],
-    ],
-    [
-      "第 25 営業日（両方）",
-      [{ ...day25, effectiveFrom: "1955-02-01", effectiveTo: "2099-11-30" }],
-      [["never-matches", "recurringRules[0]", null]],
-    ],
     // 週の規則は、窓の最初の週（1955 年 1 月）が 1954 年 12 月の基準を見るので、窓の両端で巻き込まれる（安全側。狭めるのは
     // 0.32.0 以降）
     ["週の規則（有効期間なし）", [week], []],

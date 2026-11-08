@@ -265,15 +265,16 @@ function checkPortableSource(dir: string): string[] {
       /\bnew Date\s*\((?:[^()]|\([^()]*\))*,/,
       "new Date(year, month, …) (local time; use Date.UTC)",
     ],
-    // オフセットのない文字列は実行環境のタイムゾーンで読まれる。文字列を渡す形は、正規表現でオフセット付きに限った
-    // 1 か所（下の DATE_PARSE_ALLOWED）だけを Date.parse で許し、ほかは禁止する
+    // オフセットのない文字列は実行環境のタイムゾーンで読まれ、ECMAScript が定めない形（小文字・9 桁の小数秒）は実行環境で
+    // 結果が違う。文字列から瞬間を作るときは、正規表現で取り出して Date.UTC で計算する（0.31.1 から Date.parse も使わない）
     [
       /\bnew Date\s*\(\s*["'`]/,
-      "new Date(string) (local time for strings without an offset; use Date.parse only where the string is known to carry an offset)",
+      "new Date(string) (local time for strings without an offset; extract the fields and use Date.UTC)",
     ],
   ];
-  // Date.parse を許すファイルと、その中の回数。回数が変わったら（別のファイルに足しても、許した場所から消しても）失敗する
-  const DATE_PARSE_ALLOWED: ReadonlyMap<string, number> = new Map([["src/core/input.ts", 1]]);
+  // Date.parse を許すファイルと、その中の回数。回数が変わったら（別のファイルに足しても、許した場所から消しても）失敗する。
+  // 0.31.1 で src/core/input.ts の 1 か所をやめ、今はどこにも許さない（Firefox・Safari が小文字の t・z を読めなかった）
+  const DATE_PARSE_ALLOWED: ReadonlyMap<string, number> = new Map();
   for (const file of walk(dir).filter((f) => f.endsWith(".ts"))) {
     const shown = file.replaceAll("\\", "/");
     // コメントと文字列の中の言及は数えない。先に文字列の中身を空にしてから（" //" を含む文字列で行末のコメントと
@@ -292,7 +293,7 @@ function checkPortableSource(dir: string): string[] {
     const allowedParses = DATE_PARSE_ALLOWED.get(shown) ?? 0;
     if (parses !== allowedParses) {
       problems.push(
-        `${shown}: uses Date.parse ${parses} time(s) (allowed ${allowedParses}; strings without an offset are read in the local time zone)`,
+        `${shown}: uses Date.parse ${parses} time(s) (allowed ${allowedParses}; the result depends on the runtime: extract the fields and use Date.UTC)`,
       );
     }
     // Intl.DateTimeFormat は timeZone を渡さないと実行環境のタイムゾーンになる（new の有無を問わず、引数の括弧の中に

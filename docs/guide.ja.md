@@ -812,7 +812,7 @@ diagnoseCalendar({
 - 営業日を開く規則は、覆っている休業日の規則と一緒に出ることがあります。定休日がない設定で、臨時休業日を覆う臨時営業日は、`shadowed` の臨時休業日を取り除いた後は、もともと営業日の日を開くだけなので `redundant` になります
 - 日本の祝日を使う設定では、全日を調べるため数百ミリ秒から 1 秒ほど（規則が多いほど長い）かかります。リクエストごとではなく、テストや起動時の確認で使ってください。開発・テスト用の道具なので、アプリの本体のバンドルに入らないようサブパスに分けています
 
-**終わった規則を見つける**（`asOf`）: 店舗ごとの設定を JSON で持つ多店舗のサービスなどでは、設定が年を追って溜まります。第 2 引数に `{ asOf: "YYYY-MM-DD" }` を渡すと、`effectiveTo` がその日より前の規則と、その日より前に終わる個別の日付・期間を、`info` の `expired` で返します（`redundant` とは独立です。過去には効いていた規則なので）。`holidayOverlapPolicy: "after-holiday"` の規則は、`effectiveTo` の後の日にも振り替わって効くことがある（月曜日の祝日で終わる月曜の規則は、翌日の火曜日に振り替わる）ので、振替が届きうる最も遠い日である `effectiveTo` の 31 日後を過ぎてから `expired` になります。`asOf` を渡さなければ `expired` は返さないので、`assert.deepEqual(diagnoseCalendar(options), [])` のようなテストが日付で変わることはありません。`asOf` は暦日の文字列だけを受け付けます（`Date` だとタイムゾーンが要るため）。それ以外の値は `invalid-date`、第 2 引数がオブジェクトでなければ `invalid-argument` の例外になり、知らないキーは無視します。
+**終わった規則を見つける**（`asOf`）: 店舗ごとの設定を JSON で持つ多店舗のサービスなどでは、設定が年を追って溜まります。第 2 引数に `{ asOf: "YYYY-MM-DD" }` を渡すと、`effectiveTo` がその日より前の規則と、その日より前に終わる個別の日付・期間を、`info` の `expired` で返します（`redundant` とは独立です。過去には効いていた規則なので）。`holidayOverlapPolicy: "after-holiday"` の規則は、`effectiveTo` の後の日にも振り替わって効くことがある（月曜日の祝日で終わる月曜の規則は、翌日の火曜日に振り替わる）ので、振替が届きうる最も遠い日である `effectiveTo` の 31 日後を過ぎてから `expired` になります。同じように、第 n 営業日の規則が自分の営業日を数えるときは、個別の日付・毎年の月日がその数え方を変えるので、終わりの日の属する月の末日（`businessDayOfMonth`）か、終わりの日の 6 日後（`businessDayOfWeek`）を過ぎてから `expired` になります。`asOf` を渡さなければ `expired` は返さないので、`assert.deepEqual(diagnoseCalendar(options), [])` のようなテストが日付で変わることはありません。`asOf` は暦日の文字列だけを受け付けます（`Date` だとタイムゾーンが要るため）。それ以外の値は `invalid-date`、第 2 引数がオブジェクトでなければ `invalid-argument` の例外になり、知らないキーは無視します。
 
 ```ts
 import { diagnoseCalendar } from "bizdays-toolkit/diagnose";

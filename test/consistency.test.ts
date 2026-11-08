@@ -21,7 +21,6 @@ import {
   migrateCalendarOptions,
   migrateScheduleOptions,
 } from "../src/diagnose/index.ts";
-import { RENAMED_KEYS } from "../src/core/renamed.ts";
 import {
   CALENDAR_REF,
   CONTEXTS,
@@ -34,6 +33,7 @@ import {
   type Context,
   type Obj,
 } from "./support/catalog.ts";
+import { toOld } from "./support/old-names.ts";
 import { flagEnv } from "./support/env.ts";
 import { skipWhen } from "./support/skip.ts";
 import { jp } from "../src/jp/index.ts";
@@ -233,7 +233,9 @@ test("整合 3: 起点が営業日なら、営業日の加算と差は互いに�
       assert.equal(calendar.diffBusinessDays(start, end), n, `run=${run} ${start} +${n} = ${end}`);
       assert.equal(calendar.addBusinessDays(end, -n), start, `run=${run} ${end} -${n}`);
       // 加算の結果は営業日で、逆向きの差は −n（0.30.8 までは test/properties.test.ts の性質「addBusinessDays の結果は
-      // 営業日で、n 進めて −n 戻ると…」と test/naming.test.ts の T3 が同じ恒等式を確かめていた）
+      // 営業日で、n 進めて −n 戻ると…」と test/naming.test.ts の T3 が同じ恒等式を確かめていた）。test/properties.test.ts の
+      // 「繰り返しの規則があっても、営業日の移動と数え上げの性質は保たれる」は、日本の提供元と振替のある規則の生成器
+      // （propertyMoveOptions）で同じ式を確かめるので残している（ここの短い提供元の生成器にない組み合わせ）
       assert.ok(calendar.isBusinessDay(end), `run=${run} ${end}`);
       assert.equal(calendar.diffBusinessDays(end, start), -n, `run=${run} ${end} -> ${start}`);
       // 営業日を起点にした 0 日の加算はその日（0.30.8 までは test/naming.test.ts の T3 が n = 0 を含めて確かめていた）
@@ -380,68 +382,31 @@ const hasIntendedInvalid = (options: Obj): boolean =>
     (k) => Array.isArray(options[k]) && (options[k] as unknown[]).some(isIntendedInvalid),
   );
 
-/** 新しい名前の設定を、0.30.0 の改名の前の名前で書く（キーの改名と、スケジュールの holidayPolicy の値 "ignore" → "weekday"） */
-function toOld(options: Obj, kind: "calendar" | "schedule"): Obj {
-  const rename = (o: Obj, places: readonly string[]): Obj => {
-    const out: Obj = {};
-    for (const [k, v] of Object.entries(o)) {
-      const r = RENAMED_KEYS.find((x) => places.includes(x.place) && x.to === k);
-      out[r ? r.from : k] = v;
-    }
-    return out;
-  };
-  const out = rename(options, ["source", kind]);
-  for (const key of ["closedRecurring", "openRecurring", "recurring"])
-    if (Array.isArray(out[key])) out[key] = (out[key] as Obj[]).map((r) => rename(r, ["rule"]));
-  if (kind === "schedule" && out["holiday"] === "ignore") out["holiday"] = "weekday";
-  return out;
-}
-
-test("整合 6: 移行した設定の診断に deprecated-option が残らず、移行を 2 回かけても変わらず、移行の前後で結果が同じ", () => {
+test("整合 6: 旧名で書いた設定を移行すると元の新しい名前の設定に戻り、移行を 2 回かけても変わらない", () => {
+  // 移行した設定が元の設定と一致すれば、「移行した設定に deprecated-option が残らない」（新しい名前だけで書いた設定）と
+  // 「移行の前後で結果が同じ」（旧名の設定と新しい名前の設定の結果が同じ）は、metamorphic の変形 1 が確かめる関係に帰着する。
+  // 一致は結果の比較より強い（結果が同じでも、移行が別の書き方の設定を作れば見つける）。旧名の設定の結果と診断は、変形 1 が
+  // 同じ目録の規則の形を（日本の提供元を含む生成器で）確かめる。旧名への書き換えは変形 1 と同じ補助（test/support/old-names.ts）
   const rand = random(20261110);
   for (let run = 0; run < RUNS.migrate; run++) {
     for (const kind of ["calendar", "schedule"] as const) {
       const base = kind === "calendar" ? calendarOptions(rand, run) : scheduleOptions(rand, run);
       for (const v of VARIANTS) {
         const options = withPolicy(base, v.policy);
-        const old = toOld(options, kind);
+        const old = toOld(options, kind).options;
         const migrate = (o: object) =>
           kind === "calendar" ? migrateCalendarOptions(o) : migrateScheduleOptions(o);
         const once = migrate(old);
         const twice = migrate(once.options);
         const context = `run=${run} ${kind} ${v.label}`;
+        assert.deepEqual(
+          once.options,
+          options,
+          `${context}: 移行が旧名への書き換えの逆になっていない`,
+        );
         assert.deepEqual(twice.options, once.options, `${context}: 2 回目で変わった`);
         assert.deepEqual(twice.changes, [], `${context}: 2 回目に書き換えがある`);
-        // 自作の提供元の種別は "regular"・"substitute" なので、和集合の "national" の例外は出ない
-        const issues =
-          kind === "calendar" ? diagnoseCalendar(once.options) : diagnoseSchedule(once.options);
-        assert.deepEqual(
-          issues.filter((d) => d.code === "deprecated-option").map((d) => d.path),
-          [],
-          `${context}: 移行した設定に deprecated-option が残る`,
-        );
-        const make = (o: object) =>
-          tryCreate(() =>
-            kind === "calendar"
-              ? createCalendar(o as CalendarOptions)
-              : createSchedule(o as unknown as ScheduleOptions<unknown>),
-          );
-        const before = make(old);
-        const after = make(once.options);
-        assert.equal(
-          before === undefined,
-          after === undefined,
-          `${context}: 作成の成否が移行の前後で違う`,
-        );
-        if (!before || !after) continue;
         count(`整合 6（${kind === "calendar" ? "カレンダー" : "スケジュール"}・${v.label}）`);
-        const values = (x: unknown) =>
-          JSON.stringify(
-            (x as { daysBetween(a: string, b: string): { open?: boolean; value?: unknown }[] })
-              .daysBetween(v.range.from, v.range.to)
-              .map((d) => (kind === "calendar" ? d.open : d.value)),
-          );
-        assert.equal(values(after), values(before), `${context}: 移行の前後で結果が違う`);
       }
     }
   }

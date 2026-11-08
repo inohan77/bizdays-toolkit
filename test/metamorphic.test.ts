@@ -16,7 +16,7 @@ import {
   type ScheduleOptions,
 } from "../src/index.ts";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
-import { RENAMED_KEYS, RENAMED_VALUES, type RenamedPlace } from "../src/core/renamed.ts";
+import type { RenamedPlace } from "../src/core/renamed.ts";
 import { CALENDAR_OPTION_KEYS } from "../src/core/calendar.ts";
 import { PERIOD_KEYS, RECURRING_RULE_KEYS, SCHEDULE_OPTION_KEYS } from "../src/core/schedule.ts";
 import { jp } from "../src/jp/index.ts";
@@ -33,6 +33,7 @@ import {
   type Obj,
 } from "./support/catalog.ts";
 import { flagEnv } from "./support/env.ts";
+import { OLD_RULE_LISTS, RULE_LISTS, renamedTo, toOld } from "./support/old-names.ts";
 import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 
 /** 関係ごと・種類ごとの設定の数（期間の分割と並べ替えは、当てはまる設定が少なく軽いので 4 倍） */
@@ -227,65 +228,6 @@ function eachOptions(
 // ------------------------------------------------------------
 // 1. 旧名と新しい名前
 // ------------------------------------------------------------
-
-const renamedTo = (places: readonly RenamedPlace[], from: string): string | undefined =>
-  RENAMED_KEYS.find((r) => places.includes(r.place) && r.from === from)?.to;
-const renamedFrom = (places: readonly RenamedPlace[], to: string): string | undefined =>
-  RENAMED_KEYS.find((r) => places.includes(r.place) && r.to === to)?.from;
-/** 改名した値の新しい値 → 旧い値（場所とキーで引く） */
-const oldValueOf = (place: RenamedPlace, key: string, to: unknown): string | undefined =>
-  RENAMED_VALUES.find((r) => r.place === place && r.key === key && r.to === to)?.from;
-const RULE_LISTS = ["closedRecurringRules", "openRecurringRules", "recurringRules"];
-const OLD_RULE_LISTS = RULE_LISTS.map(
-  (list) => renamedFrom(["calendar", "schedule"], list) ?? list,
-);
-
-/** 祝日の提供元がすべて ID "JP" か（kinds の旧い値 "national" は、この設定でだけ "regular" と同じ意味になる。docs/decisions.md の 10 番） */
-function onlyJapan(options: Obj): boolean {
-  const p = options["holidayProvider"];
-  const list = (Array.isArray(p) ? p : p === undefined ? [] : [p]) as HolidayProvider<string>[];
-  return list.length > 0 && list.every((x) => x.id === "JP");
-}
-
-/**
- * 新しい名前の設定を、0.30.0 の改名の前の名前と値で書く。キーは旧名の表（RENAMED_KEYS）の場所で引き、値は改名した値の表
- * （RENAMED_VALUES）で戻す: スケジュールの holidayPolicy の "ignore" → "weekday" と、日本の提供元だけの設定の規則の
- * kinds の "regular" → "national"。旧い値に戻した数も返す
- */
-function toOld(options: Obj, kind: Kind): { options: Obj; oldValues: number } {
-  const out: Obj = {};
-  let oldValues = 0;
-  const japan = onlyJapan(options);
-  for (const [k, v] of Object.entries(options)) {
-    const value = RULE_LISTS.includes(k)
-      ? (v as Obj[]).map((r) =>
-          Object.fromEntries(
-            Object.entries(r).map(([rk, rv]) => {
-              let old = rv;
-              if (japan && rk === "kinds" && Array.isArray(rv)) {
-                old = rv.map((x: unknown) => {
-                  const o = oldValueOf("rule", "kinds", x);
-                  if (o === undefined) return x;
-                  oldValues++;
-                  return o;
-                });
-              }
-              return [renamedFrom(["rule"], rk) ?? rk, old];
-            }),
-          ),
-        )
-      : v;
-    out[renamedFrom(["source", kind], k) ?? k] = value;
-  }
-  if (kind === "schedule") {
-    const old = oldValueOf("schedule", "holidayPolicy", out["holiday"]);
-    if (old !== undefined) {
-      out["holiday"] = old;
-      oldValues++;
-    }
-  }
-  return { options: out, oldValues };
-}
 
 /**
  * 診断の位置の旧名を新しい名前にする。位置の各段を、その段の場所の旧名で引く: 先頭は設定の場所（source と、カレンダー・

@@ -30,19 +30,21 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     equal(jp.holidayOn("2026-09-22")?.kind, "citizens", "holidayOn");
   });
 
-  check(
-    "オフセット付きの日時文字列（小文字の t・z と 9 桁の小数秒も、どの実行環境でも同じ瞬間）",
-    () => {
-      // ECMAScript が解釈を定める日時文字列は大文字の T・Z と 3 桁の小数秒だけで、ほかは実装に任されている
-      equal(jp.isHoliday("2026-11-22t15:30:00z"), true, "lowercase t and z");
-      equal(jp.isHoliday("2026-11-22T15:30:00.123456789Z"), true, "9-digit fraction");
-      equal(
-        jp.toJapanDateTime("2026-11-22t23:59:59.999999999-09:00"),
-        { date: "2026-11-23", time: "17:59" },
-        "lowercase t with offset",
-      );
-    },
-  );
+  // オフセット付きの日時文字列（ECMAScript が解釈を定めるのは大文字の T・Z と 3 桁の小数秒だけ。0.31.0 までは Date.parse に任せ、
+  // Firefox・Safari は小文字の t・z を読めなかった）。実行環境ごとにどれが通るかを見られるよう、形ごとに分ける
+  check("日時文字列: 小文字の t・z", () => {
+    equal(jp.isHoliday("2026-11-22t15:30:00z"), true, "lowercase t and z");
+  });
+  check("日時文字列: 9 桁の小数秒", () => {
+    equal(jp.isHoliday("2026-11-22T15:30:00.123456789Z"), true, "9-digit fraction");
+  });
+  check("日時文字列: 小文字の t とオフセット", () => {
+    equal(
+      jp.toJapanDateTime("2026-11-22t23:59:59.999999999-09:00"),
+      { date: "2026-11-23", time: "17:59" },
+      "lowercase t with offset",
+    );
+  });
 
   check("営業日カレンダー（年末年始の休業・タイムゾーンの変換・期日）", () => {
     const calendar = root.createCalendar({

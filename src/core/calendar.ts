@@ -23,6 +23,7 @@ import {
   describeValue,
   rangeError,
   withoutUndefined,
+  type KnownErrorCode,
 } from "./errors.ts";
 import { renameKeys, writtenKey } from "./renamed.ts";
 import { parseTimeOfDaySeconds, toCivil, type DateInput } from "./input.ts";
@@ -766,13 +767,12 @@ function buildCalendar<Kind extends string>(
       return Object.freeze({ from, to });
     },
     dueDate(month, options) {
-      if (!isPlainObject(options)) {
-        throw rangeError(
-          "invalid-argument",
-          `dueDate options must be an object with dayOfMonth and convention: ${describeValue(options)}`,
-        );
-      }
-      const o = withoutUndefined(renameKeys("throw", ["dueDate"], "", options));
+      const o = optionsObject(
+        options,
+        "dueDate options",
+        (v) => renameKeys("throw", ["dueDate"], "", v),
+        true,
+      );
       const day = o["dayOfMonth"];
       if (!isDayOfMonthValue(day)) {
         throw rangeError(
@@ -792,18 +792,28 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
+ * メソッド・関数のオプションとして受けるオブジェクトか。Date・Map・配列などは受けない（別の実行環境のオブジェクトも受けるよう、
+ * プロトタイプではなく種類で見る）。optionsObject・dueDate・combineCalendars で同じ判定を使う
+ */
+const isOptionsObject = (v: unknown): v is Record<string, unknown> =>
+  isPlainObject(v) && Object.prototype.toString.call(v) === "[object Object]";
+
+/**
  * メソッド・関数のオプションの引数を受ける: undefined は省略、普通のオブジェクトは明示的な undefined を除いて返す。
- * それ以外（null・数・配列・関数など）は invalid-argument（黙ってオプションなしとして通さない。decisions.md の 6 番）
+ * それ以外（null・数・配列・関数・Date・Map など）は例外（code は既定で invalid-argument。黙ってオプションなしとして通さない。
+ * decisions.md の 6 番）
  */
 function optionsObject(
   options: unknown,
   what: string,
   rename: (v: Record<string, unknown>) => Record<string, unknown> = (v) => v,
+  /** 省略できないオプション（dueDate・combineCalendars）。undefined も、オブジェクトでないことを伝える */
+  required = false,
+  code: KnownErrorCode = "invalid-argument",
 ): Record<string, unknown> {
-  if (options === undefined) return {};
-  // Date・Map などのオブジェクトも受けない（別の実行環境のオブジェクトも受けるよう、プロトタイプではなく種類で見る）
-  if (!isPlainObject(options) || Object.prototype.toString.call(options) !== "[object Object]") {
-    throw rangeError("invalid-argument", `${what} must be an object: ${describeValue(options)}`);
+  if (options === undefined && !required) return {};
+  if (!isOptionsObject(options)) {
+    throw rangeError(code, `${what} must be an object: ${describeValue(options)}`);
   }
   return withoutUndefined(rename(options));
 }
@@ -847,13 +857,13 @@ export function combineCalendars<Kind extends string = string>(
     }
   });
   // オブジェクトでないオプションも、今までどおり code は invalid-option（code をそろえるかは 0.32.0 で判断する）
-  if (!isPlainObject(options)) {
-    throw rangeError(
-      "invalid-option",
-      `combineCalendars options must be an object with open ("all" or "any"): ${describeValue(options)}`,
-    );
-  }
-  const o = withoutUndefined(renameKeys("throw", ["combine"], "", options));
+  const o = optionsObject(
+    options,
+    "combineCalendars options",
+    (v) => renameKeys("throw", ["combine"], "", v),
+    true,
+    "invalid-option",
+  );
   const mode = o["open"];
   if (mode !== "all" && mode !== "any") {
     throw rangeError("invalid-option", 'open must be "all" or "any"');

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCalendar, isBizdaysError } from "../src/index.ts";
+import { createCalendar, isBizdaysError, type CalendarOptions } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 
@@ -167,4 +167,46 @@ test("asOf: 終わりのない設定には、どの基準日でも expired を�
       [],
       asOf,
     );
+});
+
+test("asOf: 第 n 営業日を数える規則があれば、日付は数え方を変えるので、その月・週を過ぎるまで expired にしない", () => {
+  // 7 月 20 日（月曜日）を休みにすると、その週の第 1 営業日が 21 日にずれる（数える基準は繰り返しの規則を除いた設定。16 番）
+  const week: CalendarOptions = {
+    closedWeekdays: [0, 6],
+    closedRecurringRules: [{ businessDayOfWeek: [1], weekStart: 1 }],
+    closedDates: ["2026-07-20"],
+  };
+  assert.equal(createCalendar(week).isBusinessDay("2026-07-21"), false);
+  assert.equal(createCalendar({ ...week, closedDates: [] }).isBusinessDay("2026-07-21"), true);
+  for (const asOf of ["2026-07-21", "2026-07-26"])
+    assert.deepEqual(brief(diagnoseCalendar(week, { asOf })), [], asOf);
+  const d = diagnoseCalendar(week, { asOf: "2026-07-27" });
+  assert.deepEqual(brief(d), [["info", "expired", "closedDates[0]"]]);
+  assert.match(d[0]!.message, /ended on 2026-07-20 \(it could affect results until 2026-07-26/);
+  // 月の規則なら、その月の終わりまで。毎年の月日の有効期間も同じ
+  const month: CalendarOptions = {
+    closedWeekdays: [0, 6],
+    closedRecurringRules: [{ businessDayOfMonth: -1 }],
+    closedAnnualDates: [{ from: "07-20", to: "07-20", effectiveTo: "2026-07-20" }],
+  };
+  assert.deepEqual(brief(diagnoseCalendar(month, { asOf: "2026-07-31" })), []);
+  assert.deepEqual(brief(diagnoseCalendar(month, { asOf: "2026-08-01" })), [
+    ["info", "expired", "closedAnnualDates[0]"],
+  ]);
+  // 数える規則が別のカレンダーを基準にする（スケジュールの calendar）なら、スケジュールの日付は数え方を変えない
+  const schedule = {
+    weekdayValues: [0, 1, 1, 1, 1, 1, 0],
+    dates: [{ date: "2026-07-20", value: 0 }],
+    recurringRules: [
+      {
+        businessDayOfWeek: [1],
+        weekStart: 1 as const,
+        calendar: createCalendar({ closedWeekdays: [0, 6] }),
+        value: 2,
+      },
+    ],
+  };
+  assert.deepEqual(brief(diagnoseSchedule(schedule, { asOf: "2026-07-21" })), [
+    ["info", "expired", "dates[0]"],
+  ]);
 });

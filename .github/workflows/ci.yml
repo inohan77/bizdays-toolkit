@@ -359,7 +359,8 @@ jobs:
       - run: node --import ./scripts/strict-warnings.ts --test --test-name-pattern="診断と判定の一致" test/faulty-provider.test.ts
         env:
           CONSISTENCY_FULL: "1"
-      - run: node --import ./scripts/strict-warnings.ts --test test/consistency.test.ts
+      # 整合 7・8・11 は決まった設定だけを試し、件数が環境変数で変わらない（pnpm check で動かしている）ので、ここでは動かさない
+      - run: node --import ./scripts/strict-warnings.ts --test --test-skip-pattern="^整合 (7|8|11):" test/consistency.test.ts
         env:
           CONSISTENCY_API_FULL: "1"
       - run: node --import ./scripts/strict-warnings.ts --test test/diagnose-properties.test.ts

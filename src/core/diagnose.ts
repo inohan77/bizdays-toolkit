@@ -29,6 +29,7 @@
  */
 
 import {
+  formatDate,
   lengthOfMonth,
   fromDayNumber,
   isValidDate,
@@ -1312,30 +1313,48 @@ function compileDiagnoseOptions(options: unknown): { asOf: number | null } {
   return { asOf: toDayNumber(asOf) };
 }
 
-/** 基準日より前に終わった規則・日付を expired にする（暦日の大小比較だけで、祝日は引かない） */
+/**
+ * 基準日より前に終わった規則・日付を expired にする（暦日の大小比較だけで、祝日は引かない）。終わりの日の後にも結果に影響しうる
+ * 項目（"after-holiday" の振替、第 n 営業日を数える規則の基準になる日付）は、影響しうる最後の日で比べる（30 番）
+ */
 function checkExpired<Value, Kind extends string>(
   c: IssueCollector,
   compiled: CompiledSchedule<Value, Kind>,
   asOf: number,
 ): void {
-  /** last は終わりの日、reach は結果に影響しうる最後の日（振替のない項目は last と同じ） */
-  const ended = (path: string, last: number, what: string, reach = last): void => {
+  /** last は終わりの日、reach は結果に影響しうる最後の日、why はその理由（reach が last より後のとき） */
+  const ended = (path: string, last: number, what: string, reach = last, why = ""): void => {
     if (reach < asOf) {
-      const moved =
-        reach > last
-          ? ` (a day moved by "after-holiday" falls at most ${reach - last} days after it)`
-          : "";
+      const until =
+        reach > last ? ` (it could affect results until ${fromDayNumber(reach)}: ${why})` : "";
       c.info(
         "expired",
         path,
-        `This ${what} ended on ${fromDayNumber(last)}${moved}, before ${fromDayNumber(asOf)}; it no longer affects results and can be removed if the past need not be reproduced`,
+        `This ${what} ended on ${fromDayNumber(last)}${until}, before ${fromDayNumber(asOf)}; it no longer affects results and can be removed if the past need not be reproduced`,
       );
     }
   };
-  for (const r of compiled.dates) ended(r.path, r.to, "date");
-  for (const r of compiled.annual) if (r.effectiveTo !== null) ended(r.path, r.effectiveTo, "rule");
+  // 自分の設定を基準に第 n 営業日を数える規則（16 番）があれば、個別の日付・毎年の月日は数え方を変えるので、終わりの日の後も、
+  // その日の属する月（月の規則）・その日から 6 日後まで（週の規則）の結果に影響しうる（安全側。祝日を引かない）
+  const counting = compiled.recurring.filter((r) => r.businessDays !== null && r.basis === null);
+  const byMonth = counting.some((r) => r.weekStart === null);
+  const byWeek = counting.some((r) => r.weekStart !== null);
+  const countedReach = (last: number): number => {
+    let reach = last;
+    if (byMonth) {
+      const { year, month } = parseDate(fromDayNumber(last));
+      reach = toDayNumber(formatDate(year, month, lengthOfMonth(year, month)));
+    }
+    return byWeek ? Math.max(reach, last + 6) : reach;
+  };
+  const COUNTED = "a rule counting the business days of a month or week counts it";
+  for (const r of compiled.dates) ended(r.path, r.to, "date", countedReach(r.to), COUNTED);
+  for (const r of compiled.annual)
+    if (r.effectiveTo !== null)
+      ended(r.path, r.effectiveTo, "rule", countedReach(r.effectiveTo), COUNTED);
   // "after-holiday" の規則は振替元の日で有効期間を判定するので（13 番）、終わりの日の後にも振替先の日がありうる。
-  // 祝日を引かずに済むよう、振替が届きうる最も遠い日（MAX_HOLIDAY_RUN 日後）を終わりとする（安全側。30 番）
+  // 祝日を引かずに済むよう、振替が届きうる最も遠い日（MAX_HOLIDAY_RUN 日後）を終わりとする（安全側。30 番）。
+  // 繰り返しの規則は、数える規則の基準（繰り返しの規則を除いた設定）に入らないので、数え方は変えない
   for (const r of compiled.recurring)
     if (r.effectiveTo !== null)
       ended(
@@ -1345,6 +1364,7 @@ function checkExpired<Value, Kind extends string>(
         r.holidayOverlapPolicy === "after-holiday"
           ? r.effectiveTo + MAX_HOLIDAY_RUN
           : r.effectiveTo,
+        `a day moved by "after-holiday" falls at most ${MAX_HOLIDAY_RUN} days after it`,
       );
 }
 

@@ -96,18 +96,21 @@ export function internalError(message: string): InternalError {
 /**
  * @internal 例外のメッセージに値を埋め込むときの表し方。Symbol・BigInt でもメッセージを組み立てられる（テンプレート文字列と
  * JSON.stringify は、これらで TypeError を投げるか undefined を返す）。数は String の形（NaN・Infinity を JSON の null にしない）、
- * 文字列は引用符付き（空文字列や空白を見分けられる）、ほかの値は JSON の形
+ * 文字列は引用符付き（空文字列や空白を見分けられる）、Date・Map などは種類（"[object Date]"）、ほかの値は JSON の形
  */
 export function describeValue(value: unknown): string {
   if (typeof value === "number" || typeof value === "symbol") return String(value);
   if (typeof value === "bigint") return `${value}n`;
   if (typeof value === "function") return "a function";
+  // Date・Map などは種類で表す（JSON の形だと、Date が文字列に、Map が {} に見える）
+  const tag = Object.prototype.toString.call(value);
+  if (value && typeof value === "object" && !/^\[object (Object|Array)\]$/.test(tag)) return tag;
   try {
     // 前の版と同じ表し方（JSON の形）。undefined などの JSON にならない値は String の形
     return JSON.stringify(value) ?? String(value);
   } catch {
     // JSON にできないオブジェクト（循環・BigInt を含むもの・読むと投げるもの）
-    return Object.prototype.toString.call(value);
+    return tag;
   }
 }
 

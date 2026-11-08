@@ -64,3 +64,41 @@ test("日付と時刻の区切りは T だけ（空白で区切った文字列�
     );
   }
 });
+
+test("オフセット付きの日時文字列の瞬間は、ECMAScript が定める形（大文字・3 桁の小数秒）では Date.parse と一致し、小文字・9 桁でも同じ瞬間", () => {
+  // 0.31.1 から瞬間を取り出した値で計算する（Date.parse に任せない）。定められた形では、計算が Date.parse と同じことを確かめる
+  let seed = 20261108;
+  const rand = (n: number): number => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return seed % n;
+  };
+  const two = (v: number): string => String(v).padStart(2, "0");
+  for (let run = 0; run < 400; run++) {
+    const date = `${1000 + rand(9000)}-${two(1 + rand(12))}-${two(1 + rand(28))}`;
+    const time = `${two(rand(24))}:${two(rand(60))}:${two(rand(60))}.${String(rand(1000)).padStart(3, "0")}`;
+    const offset = rand(5) === 0 ? "Z" : `${rand(2) ? "+" : "-"}${two(rand(24))}:${two(rand(60))}`;
+    const upper = `${date}T${time}${offset}`;
+    const ms = Date.parse(upper);
+    let expected: string;
+    try {
+      expected = toDateString(new Date(ms), "UTC");
+    } catch (e) {
+      // 計算の結果が 1000〜9999 年の外（out-of-range）なら、文字列の入力も同じ例外
+      assert.ok(isBizdaysError(e) && e.code === "out-of-range");
+      assert.throws(() => toDateString(upper, "UTC"), { code: "out-of-range" });
+      continue;
+    }
+    assert.equal(toDateString(upper, "UTC"), expected, upper);
+    const lower = `${date}t${time}000000${offset.toLowerCase()}`;
+    assert.equal(toDateString(lower, "UTC"), expected, lower);
+  }
+  // 時差の時・分の範囲（23:59 まで）。前の版の Date.parse と同じく、外は invalid-time（メッセージも前の版と同じ書き方。
+  // 秒が 60 以上のときも同じ）
+  assert.equal(toDateString("2026-11-23T10:00+23:59", "UTC"), "2026-11-22");
+  for (const s of ["2026-11-23T10:00+24:00", "2026-11-23T10:00+23:60", "2026-11-23T10:00:60Z"])
+    assert.throws(
+      () => toDateString(s, "UTC"),
+      { code: "invalid-time", message: `Invalid date/time string: ${JSON.stringify(s)}` },
+      s,
+    );
+});

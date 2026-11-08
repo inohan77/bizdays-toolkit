@@ -8,6 +8,7 @@
  * 0.29.x 以前は CHANGELOG の「開発」）に「サイズの上限」という言葉を含めて書くこと。前の版のタグの size-limits.json と比べて、
  * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。上限を変えた版では、CHANGELOG の測定値（測定 N）も
  * 1 つ以上照合できなければ失敗する（checkChangelogFigures。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。
+ * 上げる値は数値の決まりで決める（残りが 1% 未満になったら、測定 × 1.02 を 100 バイト単位に切り上げた値。raisedLimitFor）。
  */
 
 import "./strict-warnings.ts";
@@ -65,6 +66,17 @@ function tagIsHead(tag: string): boolean {
 }
 
 /**
+ * 上限を上げる数値の決まり（RELEASING.md の品質の確認の表の「サイズの上限」）: 残りが上限の 1% 未満（測定 > 上限 × 0.99）に
+ * なったら、上限を「測定 × 1.02 を 100 バイト単位に切り上げた値」にする。上げてよいのは、前の版の上限で残りが 1% 未満の
+ * エントリーだけで、上げた値はちょうどこの値にする（余裕を大きく取ると、次の意図しない増加を見つけられないため）
+ */
+const HEADROOM = 0.01;
+const RAISE = 1.02;
+const raisedLimitFor = (size: number): number => Math.ceil((size * RAISE) / 100) * 100;
+/** 前の版のタグの上限（読めなければ undefined） */
+let baseLimitsForRule: Record<string, number> | undefined;
+
+/**
  * 前の版のタグと比べて上限が上がっていれば、CHANGELOG に理由の記載があるかを確かめる。
  *
  * 比べるタグと、記載を探す節:
@@ -110,6 +122,7 @@ function checkLimitChanges(): { ok: boolean; changed: boolean } {
     console.log(`SKIP limit changes: ${skipWhen("no-release-tag", true)}`);
     return { ok: true, changed: false };
   }
+  baseLimitsForRule = baseLimits;
   const noted = searched.some((name) => sections.get(name)?.includes("サイズの上限"));
   const raised = Object.entries(limits).filter(([entry, limit]) => {
     const before = baseLimits[entry];
@@ -188,6 +201,29 @@ for (const [subpath, target] of Object.entries(pkg.exports)) {
   }
   const ok = size <= limit;
   if (!ok) failed = true;
+  // 数値の決まり。前の版から上げたエントリーは、前の版の上限で残りが 1% 未満で、上げた値がちょうど決まりの値であること。
+  // 上げていないエントリーは、残りが 1% 以上であること（1% 未満なら、決まりの値に上げるよう求める）
+  const before = baseLimitsForRule?.[subpath];
+  const rule = raisedLimitFor(size);
+  if (before !== undefined && limit > before) {
+    if (size <= before * (1 - HEADROOM)) {
+      // 上げる理由のないエントリー。決まりの値は前の版の上限より低いこともあるので示さない
+      console.error(
+        `${subpath}: the limit was raised ${before} -> ${limit}, but a limit may be raised only when the headroom under the previous limit is below 1% (gzip ${size} / previous limit ${before}); keep it at ${before}`,
+      );
+      failed = true;
+    } else if (limit !== rule) {
+      console.error(
+        `${subpath}: the limit was raised ${before} -> ${limit}; raise it to exactly ${rule} (gzip ${size} × 1.02, rounded up to 100 bytes)`,
+      );
+      failed = true;
+    }
+  } else if (size > limit * (1 - HEADROOM)) {
+    console.error(
+      `${subpath}: the headroom is below 1% (gzip ${size} / limit ${limit}); raise the limit to ${rule} (gzip × 1.02, rounded up to 100 bytes) and write the reason in docs/development-log.md`,
+    );
+    failed = true;
+  }
   console.log(
     `${ok ? "OK  " : "OVER"} ${subpath.padEnd(10)} gzip ${String(size).padStart(6)} bytes / limit ${limit} (${Math.round((size / limit) * 100)}%, ${files.length} files)`,
   );

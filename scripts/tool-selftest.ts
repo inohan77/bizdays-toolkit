@@ -177,6 +177,17 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-package",
+    name: "src の Date.parse（0.31.1 から、どこにも許さない）",
+    args: TOOLS["check-package"]!,
+    inject: () =>
+      edit(
+        "src/core/input.ts",
+        (t) => `${t}\nexport const parseLeak = (s: string): number => Date.parse(s);\n`,
+      ),
+    expect: "src/core/input.ts: uses Date.parse 1 time(s)",
+  },
+  {
+    tool: "check-package",
     name: "src の文字列を渡す new Date",
     args: TOOLS["check-package"]!,
     inject: () =>
@@ -221,11 +232,18 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-size",
+    name: "上限を数値の決まりの外で上げた（残りが 1% 以上のエントリーを上げる）",
+    args: TOOLS["check-size"]!,
+    inject: () => edit("size-limits.json", replaceOnce(/(?<key>"\.\/uk"\s*:\s*)\d+/, "$<key>9999")),
+    expect: "a limit may be raised only when the headroom under the previous limit is below 1%",
+  },
+  {
+    tool: "check-size",
     name: "上限を上げたのに「サイズの上限」の記載がない",
     args: TOOLS["check-size"]!,
     // この版の CHANGELOG に「サイズの上限」の記載がすでにある（上限を正しく上げた版）ときも誤りになるよう、その記載も消す
     inject: () => {
-      edit("size-limits.json", replaceOnce(/("\.\/uk"\s*:\s*)(\d+)/, "$19999"));
+      edit("size-limits.json", replaceOnce(/(?<key>"\.\/uk"\s*:\s*)\d+/, "$<key>9999"));
       // この版の節（[Unreleased] の次の、最初の版の見出しから次の見出しの前まで）。CHANGELOG と開発の記録の両方
       for (const file of ["CHANGELOG.md", "docs/development-log.md"]) {
         const text = readFileSync(join(copy, file), "utf8");
