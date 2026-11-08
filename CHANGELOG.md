@@ -6,7 +6,7 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
-## [0.31.2] - 2026-11-08
+## [0.31.2] - 2026-11-09
 
 This version fixes results that were not consistent between functions or did not match the type descriptions, and corrects the documentation. The results of valid calendars and schedules do not change.
 
