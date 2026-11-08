@@ -1,12 +1,12 @@
 import "./strict-warnings.ts";
 /**
- * 開発用のツール（Node.js・npm・pnpm）の版を確かめる（pnpm check の最初に実行。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+ * 開発用のツール（Node.js・npm・pnpm）のバージョンを確かめる（pnpm check の最初に実行。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
  *
- * - ワークフローどうしで、同じ系列の Node.js の版がそろっていること（ci.yml の check の行列が基準）
+ * - ワークフローどうしで、同じ系列の Node.js のバージョンがそろっていること（ci.yml の check の行列が基準）
  * - ci.yml の compat の行列に、engines の下限（package.json）が入っていること
- * - 実行している Node.js・npm・pnpm が、CI の固定版（check の行列と setup-toolchain）と同じであること。
+ * - 実行している Node.js・npm・pnpm が、CI の固定バージョン（check の行列と setup-toolchain）と同じであること。
  *   CI ではエラー、手元では注意の表示だけにする（熟成ゲートの都合などで、手元を先に変えることがあるため。
- *   RELEASING.md の「開発環境の版」に戻すまでの間も作業を止めない）
+ *   RELEASING.md の「開発環境のバージョン」に戻すまでの間も作業を止めない）
  */
 
 import { execSync } from "node:child_process";
@@ -48,9 +48,9 @@ const checkNodes = matrixOf(ciJobs.get("check"));
 const compatNodes = matrixOf(ciJobs.get("compat"));
 if (checkNodes.length === 0) errors.push("ci.yml: the check job has no node matrix");
 
-// 1. ワークフローどうしの Node.js の版
+// 1. ワークフローどうしの Node.js のバージョン
 const places: [string, string][] = [
-  // ci.yml の check 以外のジョブ（compat のビルド・browsers・safari・workerd など）が固定する版
+  // ci.yml の check 以外のジョブ（compat のビルド・browsers・safari・workerd など）が固定するバージョン
   ...[...ciJobs]
     .filter(([name]) => name !== "check")
     .flatMap(([name, text]) =>
@@ -80,7 +80,7 @@ if (!floor) {
   }
 }
 
-// 3. 実行している版と固定版
+// 3. 実行しているバージョンと固定バージョン
 const npmPin = /NPM_VERSION: "([^"]+)"/.exec(action)?.[1];
 const pnpmPin = /PNPM_VERSION: "([^"]+)"/.exec(action)?.[1];
 const local: string[] = [];

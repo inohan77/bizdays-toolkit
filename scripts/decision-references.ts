@@ -16,7 +16,7 @@ export const decisionNumbers = (list: string): number[] =>
   list.split(/[・、,]/).map((x) => Number(x.trim()));
 
 /**
- * 今の版のことを書くファイル（コメントのあるソース・道具・テスト・ワークフローと、履歴でない文書）。ファイルのパスの参照と、
+ * 今のバージョンのことを書くファイル（コメントのあるソース・道具・テスト・ワークフローと、履歴でない文書）。ファイルのパスの参照と、
  * 決定の番号の参照（今の番号）を確かめる。decisions.md 自身と移行ガイド（履歴）は含まない
  */
 export function currentFiles(): string[] {
@@ -47,13 +47,13 @@ export function currentFiles(): string[] {
   ];
 }
 
-/** 決定の番号の参照（今の番号）を探すファイル: 今の版のことを書くファイルと、移行ガイド */
+/** 決定の番号の参照（今の番号）を探すファイル: 今のバージョンのことを書くファイルと、移行ガイド */
 export const decisionReferenceFiles = (): string[] => [...currentFiles(), "docs/migration.md"];
 
-/** 決定の番号を振り直した版。CHANGELOG のこの版までの節は、旧番号で書かれている（decisions.md の末尾の対応表） */
+/** 決定の番号を振り直したバージョン。CHANGELOG のこのバージョンまでの節は、旧番号で書かれている（decisions.md の末尾の対応表） */
 const RENUMBERED_AFTER = [0, 30, 2];
 
-/** CHANGELOG の版の節と、その節の参照が旧番号か */
+/** CHANGELOG のバージョンの節と、その節の参照が旧番号か */
 export function changelogSections(): { version: string; text: string; oldNumbering: boolean }[] {
   const isOld = (version: string): boolean => {
     if (!/^\d+\.\d+\.\d+$/.test(version)) return false;
@@ -62,7 +62,7 @@ export function changelogSections(): { version: string; text: string; oldNumberi
       if (v[i] !== RENUMBERED_AFTER[i]) return v[i]! < RENUMBERED_AFTER[i]!;
     return true;
   };
-  // 0.31.0 から、開発の記録は docs/development-log.md にある。同じ版の節をつなげて、参照の数を移動の前後でそろえる
+  // 0.31.0 から、開発の記録は docs/development-log.md にある。同じバージョンの節をつなげて、参照の数を移動の前後でそろえる
   const sections = releaseSections();
   return [...sections].map(([version, text]) => ({
     version,

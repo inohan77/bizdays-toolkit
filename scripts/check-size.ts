@@ -5,8 +5,8 @@
  * minify はしない（minify のための依存を足さないため）。README に書く minify 後のサイズは、公開前に別途測る。
  *
  * 上限を上げる（エントリーを足す）ときは、size-limits.json を手で直して、理由を開発の記録（docs/development-log.md。
- * 0.29.x 以前は CHANGELOG の「開発」）に「サイズの上限」という言葉を含めて書くこと。前の版のタグの size-limits.json と比べて、
- * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。上限を変えた版では、CHANGELOG の測定値（測定 N）も
+ * 0.29.x 以前は CHANGELOG の「開発」）に「サイズの上限」という言葉を含めて書くこと。前のバージョンのタグの size-limits.json と比べて、
+ * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。上限を変えたバージョンでは、CHANGELOG の測定値（測定 N）も
  * 1 つ以上照合できなければ失敗する（checkChangelogFigures。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。
  * 上げる値は数値の決まりで決める（残りが 1% 未満になったら、測定 × 1.02 を 100 バイト単位に切り上げた値。raisedLimitFor）。
  */
@@ -67,29 +67,29 @@ function tagIsHead(tag: string): boolean {
 
 /**
  * 上限を上げる数値の決まり（RELEASING.md の品質の確認の表の「サイズの上限」）: 残りが上限の 1% 未満（測定 > 上限 × 0.99）に
- * なったら、上限を「測定 × 1.02 を 100 バイト単位に切り上げた値」にする。上げてよいのは、前の版の上限で残りが 1% 未満の
+ * なったら、上限を「測定 × 1.02 を 100 バイト単位に切り上げた値」にする。上げてよいのは、前のバージョンの上限で残りが 1% 未満の
  * エントリーだけで、上げた値はちょうどこの値にする（余裕を大きく取ると、次の意図しない増加を見つけられないため）
  */
 const HEADROOM = 0.01;
 const RAISE = 1.02;
 const raisedLimitFor = (size: number): number => Math.ceil((size * RAISE) / 100) * 100;
-/** 前の版のタグの上限（読めなければ undefined） */
+/** 前のバージョンのタグの上限（読めなければ undefined） */
 let baseLimitsForRule: Record<string, number> | undefined;
 
 /**
- * 前の版のタグと比べて上限が上がっていれば、CHANGELOG に理由の記載があるかを確かめる。
+ * 前のバージョンのタグと比べて上限が上がっていれば、CHANGELOG に理由の記載があるかを確かめる。
  *
  * 比べるタグと、記載を探す節:
- * - 現在の版のタグがあり、HEAD 以外を指す（公開後の開発中）: そのタグと比べ、[Unreleased] を探す
- * - それ以外（公開の準備中・リリースのワークフローでタグのコミットを検査中）: CHANGELOG で 1 つ前の版のうち
- *   タグがある最新のものと比べ、[Unreleased] と現在の版の節を探す
+ * - 現在のバージョンのタグがあり、HEAD 以外を指す（公開後の開発中）: そのタグと比べ、[Unreleased] を探す
+ * - それ以外（公開の準備中・リリースのワークフローでタグのコミットを検査中）: CHANGELOG で 1 つ前のバージョンのうち
+ *   タグがある最新のものと比べ、[Unreleased] と現在のバージョンの節を探す
  *
  * タグを読めないときは、手元では確認を飛ばし、CI（環境変数 CI が設定されている）では失敗する。
  * CI のワークフローは履歴とタグを取得する（fetch-depth: 0）ので、読めないのは設定の誤り。
- * changed は、上限が上がったか、探した節に「サイズの上限」があるか（測定値の記載が必須の版か）
+ * changed は、上限が上がったか、探した節に「サイズの上限」があるか（測定値の記載が必須のバージョンか）
  */
 function checkLimitChanges(): { ok: boolean; changed: boolean } {
-  // 版の一覧と記載の節は CHANGELOG.md と docs/development-log.md の両方から引く（scripts/release-sections.ts）
+  // バージョンの一覧と記載の節は CHANGELOG.md と docs/development-log.md の両方から引く（scripts/release-sections.ts）
   const sections = releaseSections();
   const versions = [...sections.keys()].filter((v) => v !== "Unreleased");
 
@@ -147,9 +147,9 @@ function checkLimitChanges(): { ok: boolean; changed: boolean } {
 }
 
 /**
- * CHANGELOG の今の版（または [Unreleased]）の節に書いた測定値（「`<エントリー>` … 測定 N」。ルートは「ルート … 測定 N」）が、
+ * CHANGELOG の今のバージョン（または [Unreleased]）の節に書いた測定値（「`<エントリー>` … 測定 N」。ルートは「ルート … 測定 N」）が、
  * 実際の測定と一致するかを確かめる。測り直し忘れを防ぐ（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」の納品の手順）。
- * required（上限を変えた版）なのに照合できた測定値が 1 つもなければ失敗する（書き方が変わって照合が黙って外れるのを防ぐ）
+ * required（上限を変えたバージョン）なのに照合できた測定値が 1 つもなければ失敗する（書き方が変わって照合が黙って外れるのを防ぐ）
  */
 function checkChangelogFigures(measured: ReadonlyMap<string, number>, required: boolean): boolean {
   const sections = releaseSections();
@@ -201,13 +201,13 @@ for (const [subpath, target] of Object.entries(pkg.exports)) {
   }
   const ok = size <= limit;
   if (!ok) failed = true;
-  // 数値の決まり。前の版から上げたエントリーは、前の版の上限で残りが 1% 未満で、上げた値がちょうど決まりの値であること。
+  // 数値の決まり。前のバージョンから上げたエントリーは、前のバージョンの上限で残りが 1% 未満で、上げた値がちょうど決まりの値であること。
   // 上げていないエントリーは、残りが 1% 以上であること（1% 未満なら、決まりの値に上げるよう求める）
   const before = baseLimitsForRule?.[subpath];
   const rule = raisedLimitFor(size);
   if (before !== undefined && limit > before) {
     if (size <= before * (1 - HEADROOM)) {
-      // 上げる理由のないエントリー。決まりの値は前の版の上限より低いこともあるので示さない
+      // 上げる理由のないエントリー。決まりの値は前のバージョンの上限より低いこともあるので示さない
       console.error(
         `${subpath}: the limit was raised ${before} -> ${limit}, but a limit may be raised only when the headroom under the previous limit is below 1% (gzip ${size} / previous limit ${before}); keep it at ${before}`,
       );

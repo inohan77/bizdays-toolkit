@@ -109,13 +109,13 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Fixed
 
-- `holidayPolicy: "ignore"` で、祝日に従属する規則（`holiday`・`dayAfterHoliday`・`dayBeforeHoliday`・`"after-holiday"`）も祝日の上で先に判定する規則（`"over-holiday"`）もない設定で、`unconfirmedHolidayPolicy: "throw"` のとき、営業日の判定・第 n 営業日の数え方・探索（`isBusinessDay`・`valueOn`・`addBusinessDays` など。スケジュールから作ったカレンダーも）が未確定の祝日で `unconfirmed-holiday` を投げていた。そのような設定の結果は祝日に依存せず、ガイドは「結果は変わらない」、設定の診断もその `unconfirmedHolidayPolicy` を `redundant`（効き目がない）と言っているので、文書と診断に合わせてコードを直す。複数のマイナー版を経た挙動だが、投げていた判定が投げなくなる向きの修正で、結果の値は変わらない。`dayInfoOn`・`daysBetween` は `holiday` を付けるために祝日を引くので、今までどおり投げる。対応年の外（`out-of-range`）と提供元のデータの誤り（`invalid-provider-data`）は、今までどおり投げる（失敗を注入した祝日の提供元のテストで見つけた。種類は例外の経路の未検証）
+- `holidayPolicy: "ignore"` で、祝日に従属する規則（`holiday`・`dayAfterHoliday`・`dayBeforeHoliday`・`"after-holiday"`）も祝日の上で先に判定する規則（`"over-holiday"`）もない設定で、`unconfirmedHolidayPolicy: "throw"` のとき、営業日の判定・第 n 営業日の数え方・探索（`isBusinessDay`・`valueOn`・`addBusinessDays` など。スケジュールから作ったカレンダーも）が未確定の祝日で `unconfirmed-holiday` を投げていた。そのような設定の結果は祝日に依存せず、ガイドは「結果は変わらない」、設定の診断もその `unconfirmedHolidayPolicy` を `redundant`（効き目がない）と言っているので、文書と診断に合わせてコードを直す。複数のマイナーバージョンを経た挙動だが、投げていた判定が投げなくなる向きの修正で、結果の値は変わらない。`dayInfoOn`・`daysBetween` は `holiday` を付けるために祝日を引くので、今までどおり投げる。対応年の外（`out-of-range`）と提供元のデータの誤り（`invalid-provider-data`）は、今までどおり投げる（失敗を注入した祝日の提供元のテストで見つけた。種類は例外の経路の未検証）
 - 診断: `holidayPolicy: "ignore"` で祝日の上で先に判定する規則（`"over-holiday"`）がある設定でも、`unconfirmedHolidayPolicy: "throw"` を `redundant`（結果に影響しない）と出していた。祝日の日だけ `"over-holiday"` の規則が先に判定されるので、そのような設定の結果は祝日に依存し、`"throw"` は判定を投げさせる。「結果が祝日に依存しない設定」の判定を 1 つの関数にまとめ、判定（未確定の祝日で投げるか）と診断（`redundant` か）の両方がそれを使うようにした。誤った診断を直す修正で、判定の結果は変わらない（上の修正の条件を決めるときに見つけた。診断が `redundant` と出した設定で `"throw"` を `"accept"` に変えても全日の判定が変わらないことを、目録の設定で確かめるテストを足した。種類は正解と突き合わせる仕組みの不足）
 - 診断: スケジュールの第 n 営業日の規則の数える基準のカレンダー（`calendar`）が投げる月（対応年の外、`unconfirmedHolidayPolicy: "throw"` の未確定の祝日）を、診断が誤って `error`・`never-matches` にしていた。`createSchedule` は成功し、基準のカレンダーが投げない月の判定も投げないのに、対応年が診断の走査の範囲（提供元のないスケジュールの 2001 年からの周期や、規則の形を調べる代表の 28 年間）を覆わない基準（同梱のシンガポール（2020 年〜）など）では `error` の `out-of-range`（`path` は `holidayProvider`）を、未確定の祝日で投げる基準では `error` の `invalid-provider-data` を出していた。診断は、基準のカレンダーを評価して投げた月だけを「判定できない月」として扱い（その月は規則が当てはまらないとみなす）、有効期間に判定できない月がある項目には `never-matches`・`redundant` を出さないようにした（分からないことは言わない）。`shadowed` は規則の形だけで決まり、基準のカレンダーを評価しないので、今までどおり出す。範囲を前もって計算しないので、合成したカレンダーなどの基準でも、基準のカレンダーが判定できる月は今までどおり診断する。誤った診断をなくす修正で、判定の結果は変わらない（result-compare の意図した差分 `schedule-counting-basis-narrower-than-scan` に登録した）。提供元のないスケジュールに提供元のある基準のカレンダーを使う設定の判定が、基準のカレンダーの対応年の外の月で投げることをガイドの「対応年の外」に書いた（診断で知らせるかは 0.31.0 以降で判断する）（API どうしの整合の検査で見つけた。取り込みで見つかった、合成した基準での誤った never-matches の退行もあわせて直した。種類は API どうしの食い違い）
 
 ### 既知の不具合
 
-- 合成したカレンダーの営業日の判定（`isBusinessDay` や探索）は、`open: "all"` では先のカレンダーが休業日、`open: "any"` では先のカレンダーが営業日と決めた時点で後のカレンダーを判定しないので、後のカレンダーが投げる日（未確定の祝日・提供元の誤りなど）でも投げないことがある（並び順で変わる）。ガイドの「合成したカレンダーは、どれかのカレンダーが投げるなら投げます」から外れる。直すと新たに投げる判定ができるので、0.31.0（マイナー版）で直す。ガイドの該当の箇条に注を足し、確かめるテストは `todo` にした
+- 合成したカレンダーの営業日の判定（`isBusinessDay` や探索）は、`open: "all"` では先のカレンダーが休業日、`open: "any"` では先のカレンダーが営業日と決めた時点で後のカレンダーを判定しないので、後のカレンダーが投げる日（未確定の祝日・提供元の誤りなど）でも投げないことがある（並び順で変わる）。ガイドの「合成したカレンダーは、どれかのカレンダーが投げるなら投げます」から外れる。直すと新たに投げる判定ができるので、0.31.0（マイナーバージョン）で直す。ガイドの該当の箇条に注を足し、確かめるテストは `todo` にした
 
 ## [0.30.5] - 2026-11-01
 
@@ -131,30 +131,30 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.30.3] - 2026-11-01
 
-診断の不具合を直すパッチ版です。あわせて、0.30.2 の後に main で整えた決定の文書・規約・CI を含みます。カレンダー・スケジュールの判定の結果は変わりません。
+診断の不具合を直すパッチバージョンです。あわせて、0.30.2 の後に main で整えた決定の文書・規約・CI を含みます。カレンダー・スケジュールの判定の結果は変わりません。
 
 ### Fixed
 
-- 診断: 営業日カレンダーの繰り返しの規則（閉じる・開くの両方）に第 n 営業日の規則（`businessDayOfMonth`・`businessDayOfWeek`）がある設定で、数え方を変える個別の日付・毎年の月日（とそれに関わる規則）を、取り除くと同じ月・週の別の日の結果が変わるのに `redundant` としていた。`docs/decisions.md` の 16 番（第 n 営業日を数える基準には個別の日付と毎年の月日が入る）から外れていた、0.30.2 以前からある不具合。取り除いて変わりうる月・週の日をすべて調べ、規則の判定の基準にも個別の日付を残すようにした。判定できない日は、取り除ける側に倒さない（31 番）。これまでは規則どうしの診断の途中で判定が例外になると、その結果を捨てて祝日の提供元の誤り（`invalid-provider-data` など）として報告していたが、その項目を `redundant` にしないで診断を続けるようにした（判定が例外になる設定は、手元では作れていない）。該当する設定では診断の結果から `redundant` が減るので、診断の結果を `deepEqual` で比べているテストは期待値が変わることがある。減ったのは取り除くと結果が変わる項目なので、新しい結果を期待値にする。入った版を問わず不具合の修正はパッチ、という規約（`RELEASING.md` の「区分」）の最初の適用
+- 診断: 営業日カレンダーの繰り返しの規則（閉じる・開くの両方）に第 n 営業日の規則（`businessDayOfMonth`・`businessDayOfWeek`）がある設定で、数え方を変える個別の日付・毎年の月日（とそれに関わる規則）を、取り除くと同じ月・週の別の日の結果が変わるのに `redundant` としていた。`docs/decisions.md` の 16 番（第 n 営業日を数える基準には個別の日付と毎年の月日が入る）から外れていた、0.30.2 以前からある不具合。取り除いて変わりうる月・週の日をすべて調べ、規則の判定の基準にも個別の日付を残すようにした。判定できない日は、取り除ける側に倒さない（31 番）。これまでは規則どうしの診断の途中で判定が例外になると、その結果を捨てて祝日の提供元の誤り（`invalid-provider-data` など）として報告していたが、その項目を `redundant` にしないで診断を続けるようにした（判定が例外になる設定は、手元では作れていない）。該当する設定では診断の結果から `redundant` が減るので、診断の結果を `deepEqual` で比べているテストは期待値が変わることがある。減ったのは取り除くと結果が変わる項目なので、新しい結果を期待値にする。入ったバージョンを問わず不具合の修正はパッチ、という規約（`RELEASING.md` の「区分」）の最初の適用
 
 ### Changed
 
-- 旧名を受け付ける期間を「0.30.x の間」と書いていた箇所（決定の文書の 10・37 番、`RELEASING.md` の設定の結果の差分の行、移行ガイド、テストとスクリプトのコメント）を「1.0.0 より前の版」に直した。0.31.0 以降のマイナー版でも旧名は受け付け、1.0.0 で `invalid-option` にする（移行ガイドの冒頭の「1.0.0 まで」と同じ）。長く続いた挙動の扱いで CHANGELOG に書くものを「決めた結果と理由」にそろえた
+- 旧名を受け付ける期間を「0.30.x の間」と書いていた箇所（決定の文書の 10・37 番、`RELEASING.md` の設定の結果の差分の行、移行ガイド、テストとスクリプトのコメント）を「1.0.0 より前のバージョン」に直した。0.31.0 以降のマイナーバージョンでも旧名は受け付け、1.0.0 で `invalid-option` にする（移行ガイドの冒頭の「1.0.0 まで」と同じ）。長く続いた挙動の扱いで CHANGELOG に書くものを「決めた結果と理由」にそろえた
 - README（英日）から npm のダウンロード数のバッジを外した（shields.io が npm の API のレート制限を受け、「rate limited by upstream service」と表示されていたため）
-- `docs/decisions.md` を、時系列に並んだ 56 の番号から、話題ごとの 11 章・39 の番号に整理し直した。各決定は今の決定・理由・退けた案だけにし、版ごとの追記・提案書の番号・測定値は CHANGELOG と git の履歴に任せた。冒頭に目次と番号の付け方（番号は ID で振り直さない、新しい決定は章の中に置いて通しの番号を振る、追記を重ねず本文を書き換える）を、末尾に旧番号との対応表（残し続ける）を置いた。ソース・スクリプト・テスト・ワークフロー・文書の番号の参照を新しい番号に直した。CHANGELOG の 0.30.2 までの節の番号は旧番号のまま
-- `docs/decisions.md` の整理で落ちていた決定を戻した: ウェールズ語の名称を GOV.UK のリポジトリの翻訳ファイルで照合する例外（29 番）、`src` が Node.js 固有の機能を使わない検査（35 番）、和集合の `"regular"` で退けた 2 案（10 番）と結果の比較で退けた案（37 番）、`withSubstituteDays` の定義（26 番）、スケジュールの第 n 営業日の基準と `"over-holiday"` の `redundant`（16 番）、英国の臨時の祝日の名前の付け方（28 番）、時刻を数値で受けない理由（7 番）、0.23.0〜0.29.0 を欠番にした理由（9 番）。新たに例外を投げる変更は 1.0.0 以降はメジャー版であることを 6・32 番と `RELEASING.md` に書き、旧番号の対応表の行き先の漏れを足した。あわせて、整理で省いた細部のうち決定にあたるもの（`decidedByPath`・`asOf`・ID `"JP"` の判定の細部、`Policy` の選択肢の部分集合、`?: never` の項目に TSDoc を付けないことなど）を本文に戻し、誤った `key` の修正をマイナー版、性能・サイズの改善をパッチと `RELEASING.md` の区分に書いた
-- `RELEASING.md` と `docs/decisions.md` の役割を分けた: 版の区分・互換性の約束・手順・検査の一覧は `RELEASING.md` だけに書き、決定の文書の 32・33・35〜37・39 番はその理由と退けた案だけにした（同じ規則を 2 か所に書かない。36 番）。`RELEASING.md` の箇条からは理由を除き、決定の番号を指すようにした。残っていた重複（誤った `key` の直し方、提供元の内部の置き換えの条件、黙って外れる検査を作らないこと、`src` の移植性の検査）も規則を `RELEASING.md` に、理由を決定の文書に分けた
-- 外部のレビューを受けて直した: 決定の文書の 27 番に 4 か国目を選んだときに見送った候補（香港・米国・ドイツ）と理由を戻した。公開から複数のマイナー版を経た挙動が文書と違うときは、直す前にコードを直す（パッチ）・文書を挙動に合わせる・マイナー版で扱うのどれにするかを決め、その結果を CHANGELOG に書くことを `RELEASING.md` の「区分」と 32 番に足した。`scripts/result-compare.ts` の冒頭のコメントを、診断の結果が誤った診断の修正で消えうるという今の約束に合わせた
-- 規約を見直した（`docs/decisions.md` の 25・26・32・33・37 番、`RELEASING.md`）: 約束した挙動から外れていた不具合の修正は、入った版を問わずパッチにする（これまでは直前の版で入った退行だけ）。誤った診断を直したときは、前の版の診断の結果が消えることがある。性能の比較は、正しさのために遅くなることを CHANGELOG に書いた版を通す。同梱の提供元の内部は、前の版との祝日データの比較で差分がなければ置き換えてよい。誤った祝日の `key` を直す手順を決めた
+- `docs/decisions.md` を、時系列に並んだ 56 の番号から、話題ごとの 11 章・39 の番号に整理し直した。各決定は今の決定・理由・退けた案だけにし、バージョンごとの追記・提案書の番号・測定値は CHANGELOG と git の履歴に任せた。冒頭に目次と番号の付け方（番号は ID で振り直さない、新しい決定は章の中に置いて通しの番号を振る、追記を重ねず本文を書き換える）を、末尾に旧番号との対応表（残し続ける）を置いた。ソース・スクリプト・テスト・ワークフロー・文書の番号の参照を新しい番号に直した。CHANGELOG の 0.30.2 までの節の番号は旧番号のまま
+- `docs/decisions.md` の整理で落ちていた決定を戻した: ウェールズ語の名称を GOV.UK のリポジトリの翻訳ファイルで照合する例外（29 番）、`src` が Node.js 固有の機能を使わない検査（35 番）、和集合の `"regular"` で退けた 2 案（10 番）と結果の比較で退けた案（37 番）、`withSubstituteDays` の定義（26 番）、スケジュールの第 n 営業日の基準と `"over-holiday"` の `redundant`（16 番）、英国の臨時の祝日の名前の付け方（28 番）、時刻を数値で受けない理由（7 番）、0.23.0〜0.29.0 を欠番にした理由（9 番）。新たに例外を投げる変更は 1.0.0 以降はメジャーバージョンであることを 6・32 番と `RELEASING.md` に書き、旧番号の対応表の行き先の漏れを足した。あわせて、整理で省いた細部のうち決定にあたるもの（`decidedByPath`・`asOf`・ID `"JP"` の判定の細部、`Policy` の選択肢の部分集合、`?: never` の項目に TSDoc を付けないことなど）を本文に戻し、誤った `key` の修正をマイナーバージョン、性能・サイズの改善をパッチと `RELEASING.md` の区分に書いた
+- `RELEASING.md` と `docs/decisions.md` の役割を分けた: バージョンの区分・互換性の約束・手順・検査の一覧は `RELEASING.md` だけに書き、決定の文書の 32・33・35〜37・39 番はその理由と退けた案だけにした（同じ規則を 2 か所に書かない。36 番）。`RELEASING.md` の箇条からは理由を除き、決定の番号を指すようにした。残っていた重複（誤った `key` の直し方、提供元の内部の置き換えの条件、黙って外れる検査を作らないこと、`src` の移植性の検査）も規則を `RELEASING.md` に、理由を決定の文書に分けた
+- 外部のレビューを受けて直した: 決定の文書の 27 番に 4 か国目を選んだときに見送った候補（香港・米国・ドイツ）と理由を戻した。公開から複数のマイナーバージョンを経た挙動が文書と違うときは、直す前にコードを直す（パッチ）・文書を挙動に合わせる・マイナーバージョンで扱うのどれにするかを決め、その結果を CHANGELOG に書くことを `RELEASING.md` の「区分」と 32 番に足した。`scripts/result-compare.ts` の冒頭のコメントを、診断の結果が誤った診断の修正で消えうるという今の約束に合わせた
+- 規約を見直した（`docs/decisions.md` の 25・26・32・33・37 番、`RELEASING.md`）: 約束した挙動から外れていた不具合の修正は、入ったバージョンを問わずパッチにする（これまでは直前のバージョンで入った退行だけ）。誤った診断を直したときは、前のバージョンの診断の結果が消えることがある。性能の比較は、正しさのために遅くなることを CHANGELOG に書いたバージョンを通す。同梱の提供元の内部は、前のバージョンとの祝日データの比較で差分がなければ置き換えてよい。誤った祝日の `key` を直す手順を決めた
 - ガイド（英日）の「0.30.0 より前に保存した設定」に 0.30.2 で足した、書き換えた後に診断を実行する例の設定が、`timeZone` を書いていないので `time-zone-conflict`（error）になっていた（日本と英国の提供元はタイムゾーンが違う）。例は `deprecated-option` だけを取り出していたので、コード例の検査は通っていた。`timeZone: "Asia/Tokyo"` と `holidayPolicy: "open"` を足し、診断の結果をすべて示す形にした（誤りがあれば例の検査で止まる）
 
 ## [0.30.2] - 2026-10-30
 
-0.30.0・0.30.1 の改名の後始末の続きの版です。新しい設定・関数・診断コードはありません。公開物の `.js` の挙動が変わるのは Fixed の 1 つ（診断の結果）で、カレンダー・スケジュールの判定の結果は変わりません。
+0.30.0・0.30.1 の改名の後始末の続きのバージョンです。新しい設定・関数・診断コードはありません。公開物の `.js` の挙動が変わるのは Fixed の 1 つ（診断の結果）で、カレンダー・スケジュールの判定の結果は変わりません。
 
 ### Fixed
 
-- 診断: 日本の提供元だけの設定で、`"regular"` と旧名の `"national"` の同じ規則（祝日・祝日の翌日・祝前日の規則）が `shadowed` にならず、両方が `redundant` と出ていた。0.30.1 の退行で、`RELEASING.md` の互換性の約束（診断の結果は増えるだけ）から外れていた。0.30.0 と同じく、後の規則を `shadowed`（`relatedPath` は前の規則）として出す。ID `"JP"` の提供元が種別 `"national"` の祝日を返す設定では、意味が一致しないので同じものとして比べない。和集合では今までどおり `redundant` で見つかる。パッチで出す根拠は `docs/decisions.md` の 55 番（この版で、パッチ版で入った退行も対象にした）
+- 診断: 日本の提供元だけの設定で、`"regular"` と旧名の `"national"` の同じ規則（祝日・祝日の翌日・祝前日の規則）が `shadowed` にならず、両方が `redundant` と出ていた。0.30.1 の退行で、`RELEASING.md` の互換性の約束（診断の結果は増えるだけ）から外れていた。0.30.0 と同じく、後の規則を `shadowed`（`relatedPath` は前の規則）として出す。ID `"JP"` の提供元が種別 `"national"` の祝日を返す設定では、意味が一致しないので同じものとして比べない。和集合では今までどおり `redundant` で見つかる。パッチで出す根拠は `docs/decisions.md` の 55 番（このバージョンで、パッチバージョンで入った退行も対象にした）
 
 ### Changed
 
@@ -162,13 +162,13 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 - 0.30.1 の節の補足: 冒頭の「`.js` の挙動が変わるのは Fixed の 1 つだけ」は誤りだった。ほかに、`migrate…` が和集合で `"national"` を書き換えなくなったこと（Changed に記載。0.30.0 の約束に戻す修正なので、本来は Fixed）と、上の診断の退行も `.js` の挙動の変化だった
 - ガイド（英日）: 書き換えた設定を診断にかけ、`deprecated-option` が残っていないことを確かめる手順と例を足した（和集合の `"national"` は `migrate…` が書き換えない）。`shadowed` と `redundant` は規則を 1 つずつ外したときの判定で、複数の規則が出たら 1 つ外すたびに診断をやり直すことを足した
 - 和集合の `"national"` の `deprecated-option` の長いメッセージを、作成時ではなく診断のときに組み立てるようにした。診断が返すメッセージは変わらない（作成時は警告を使わないので、ルートのバンドルから文を外した）
-- README（英日）の版の固定の例を、具体的な版から `"x.y.z"` にした。minify + gzip のサイズを測り直した（ルート 13.0 → 12.9 KB、日本込み 14.7 → 14.6 KB、フランス込み・シンガポール込み 13.9 → 13.8 KB）
+- README（英日）のバージョンの固定の例を、具体的なバージョンから `"x.y.z"` にした。minify + gzip のサイズを測り直した（ルート 13.0 → 12.9 KB、日本込み 14.7 → 14.6 KB、フランス込み・シンガポール込み 13.9 → 13.8 KB）
 - ソースのコメントとテストで、`"national"` の扱いの根拠を 55 番としていたのを 54 番に直した
-- `docs/decisions.md`: 54 番に 0.30.2 の追記（返す値の改名は「改名は結果を変えない」の例外であること、規則どうしの診断の項を実際の挙動に合わせた）を足し、55 番の対象を「直前の版（マイナー版・パッチ版）」に改め、56 番（同じ設定の結果を前の版と CI で比べる）を足した。旧名を本文に持つ 14・16・36・43・44 番に、0.30.0 の改名の追記を足した。`RELEASING.md`: パッチの区分を「直前の版」に改め、互換性の約束の診断の項に前の版の結果は新しい版でも返すことを、品質の確認に決定の文書の旧名と返す値の改名の確かめ方を足した
+- `docs/decisions.md`: 54 番に 0.30.2 の追記（返す値の改名は「改名は結果を変えない」の例外であること、規則どうしの診断の項を実際の挙動に合わせた）を足し、55 番の対象を「直前のバージョン（マイナーバージョン・パッチバージョン）」に改め、56 番（同じ設定の結果を前のバージョンと CI で比べる）を足した。旧名を本文に持つ 14・16・36・43・44 番に、0.30.0 の改名の追記を足した。`RELEASING.md`: パッチの区分を「直前のバージョン」に改め、互換性の約束の診断の項に前のバージョンの結果は新しいバージョンでも返すことを、品質の確認に決定の文書の旧名と返す値の改名の確かめ方を足した
 
 ## [0.30.1] - 2026-10-30
 
-0.30.0 の改名の後始末の版です。新しい設定・関数・診断コードはありません。公開物の `.js` の挙動が変わるのは Fixed の 1 つだけです。
+0.30.0 の改名の後始末のバージョンです。新しい設定・関数・診断コードはありません。公開物の `.js` の挙動が変わるのは Fixed の 1 つだけです。
 
 ### Fixed
 
@@ -182,11 +182,11 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 - `docs/migration.md`: 和集合での `"national"` の扱いと 1.0.0 以降の書き方（日本の提供元を包んで種別を付け替える）、`id` を変えて包んだ提供元の注、週の第 n 営業日と対応年の端、0.30.0 の引数の名前の表を足した。「旧名は取り消し線と診断が示す」を、`combineCalendars`・`createCalendarFromSchedule`・`dueDate`・`withSubstituteDays` の設定の旧名は示さないので検索すること、に直した
 - 型定義の説明: `skipWeekdays` の説明が書けない項目（`WeekdayPattern.dayOfMonth`・`DayOfMonthPattern.weekday`）に付いていたのを正しい項目に移し、例の旧名 `day` を `dayOfMonth` に直した。`@example`・TSDoc の旧名（`holidays`・`recurring` など）を直し、`BusinessDayOfWeekPattern` に対応年の端の挙動を、`HolidayProvider.id` に ISO にない地域の ID（`"FR-AM"`）を書いた。`.js` は変わらない
 - README の祝日の種別の説明を今の値に直した。README（英日）の minify + gzip のサイズを測り直した（ルート 12.7 → 13.0 KB、日本込み 14.4 → 14.7 KB、英国込み 14.8 → 15.1 KB、フランス込み・シンガポール込み 13.6 → 13.9 KB）。`docs/providers.md` のコード例のコメントに残っていた置き換えの取り残し（"US federal holidayProvider:" → "US federal holidays:"）を直した
-- `docs/decisions.md`: 55 番（直前の版で入った退行の修正はパッチ）を足し、42・50・52・54 番に追記した。`RELEASING.md`: パッチの区分に退行の修正を足し、互換性の約束から型の名前の列挙をやめ、旧名（`outOfRange`）を直した。`src/core/schedule.ts`・`calendar.ts` の冒頭の判定の順番の写しを削り、ガイドと 12 番を指すようにした
+- `docs/decisions.md`: 55 番（直前のバージョンで入った退行の修正はパッチ）を足し、42・50・52・54 番に追記した。`RELEASING.md`: パッチの区分に退行の修正を足し、互換性の約束から型の名前の列挙をやめ、旧名（`outOfRange`）を直した。`src/core/schedule.ts`・`calendar.ts` の冒頭の判定の順番の写しを削り、ガイドと 12 番を指すようにした
 
 ## [0.30.0] - 2026-10-27
 
-公開する名前を 1 つの規則に合わせて改めた版です（`docs/decisions.md` の 54 番）。名前の整理の版を区切るため、版の番号を 0.30.0 にしました（0.23.0〜0.29.0 は欠番）。旧名は 1.0.0 まで受け付けます。作業は「移行」と `docs/migration.md` の 0.30.0 の節にあります。
+公開する名前を 1 つの規則に合わせて改めたバージョンです（`docs/decisions.md` の 54 番）。名前の整理のバージョンを区切るため、バージョンの番号を 0.30.0 にしました（0.23.0〜0.29.0 は欠番）。旧名は 1.0.0 まで受け付けます。作業は「移行」と `docs/migration.md` の 0.30.0 の節にあります。
 
 ### Added
 
@@ -250,7 +250,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- 提供元向けの関数（`bizdays-toolkit/provider` の `easterSunday`・`nthWeekdayOfMonth`・`daysInMonth`・`isLeapYear`・`substituteDays` と型 `SubstituteDaysOptions`・`SubstituteDirection`）と、祝日の識別子の型（`KnownJapaneseHolidayKey`・`KnownUkHolidayKey`・`KnownSgHolidayKey`・`KnownFrHolidayKey`）を `@beta` から `@public` にした。公開してから（0.16.0〜0.20.0）形が変わっておらず、同梱の 4 か国の実装で使われ方が固まったため（`key` は 46 番で版をまたいで変えないと約束済み）
+- 提供元向けの関数（`bizdays-toolkit/provider` の `easterSunday`・`nthWeekdayOfMonth`・`daysInMonth`・`isLeapYear`・`substituteDays` と型 `SubstituteDaysOptions`・`SubstituteDirection`）と、祝日の識別子の型（`KnownJapaneseHolidayKey`・`KnownUkHolidayKey`・`KnownSgHolidayKey`・`KnownFrHolidayKey`）を `@beta` から `@public` にした。公開してから（0.16.0〜0.20.0）形が変わっておらず、同梱の 4 か国の実装で使われ方が固まったため（`key` は 46 番でバージョンをまたいで変えないと約束済み）
 - エラーのメッセージ: 繰り返しの規則の形の数の誤り（`must have exactly one of …`）に `"cycle"` を、`kinds`・`keys`・`skipWeekdays` を使える規則の説明に祝日の翌日・祝前日を加えた（`code` と `path` は変わらない）
 - README（英日）の minify + gzip のサイズを測り直した（0.22.0 で測定）
 - `docs/decisions.md`: 53 番（日単位の周期の規則、祝日の翌日・祝前日の絞り込みと `skipWeekdays`、前への振替を足さない判断、`@public` への格上げ）を追加し、15・33・35・43・46・47 番に追記した
@@ -268,7 +268,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- 公開する `dist` の `.js` からコメントを除いた（`tsc --removeComments`）。型定義（`.d.ts`）の TSDoc はこれまでどおり残すので、エディターの説明は変わらない。コメントは保守する人のためのもので、利用者には型定義の TSDoc だけが要る。`dist` の `.js` の gzip が全体で約 48 KB から約 28 KB に減った（エントリーごとは下の「開発」）。動作は変わらない（`data-compare` で前の版と祝日データの差分がないこと、テスト・README のコード例・公開物の互換性の確認が通ることを確かめた）。README の minify + gzip のサイズは minify でコメントが消えるので変わらない
+- 公開する `dist` の `.js` からコメントを除いた（`tsc --removeComments`）。型定義（`.d.ts`）の TSDoc はこれまでどおり残すので、エディターの説明は変わらない。コメントは保守する人のためのもので、利用者には型定義の TSDoc だけが要る。`dist` の `.js` の gzip が全体で約 48 KB から約 28 KB に減った（エントリーごとは下の「開発」）。動作は変わらない（`data-compare` で前のバージョンと祝日データの差分がないこと、テスト・README のコード例・公開物の互換性の確認が通ることを確かめた）。README の minify + gzip のサイズは minify でコメントが消えるので変わらない
 - 型定義に出るコメント（TSDoc）の、現状に追いついていない記述を、国の列挙や件数を書かない形で直した。`Holiday.names` の「同梱の提供元（日本）は持たない」（Wales は持つ）を「同梱の提供元は、公式の出典がある言語の名称だけを付ける」に、`KnownSgHolidayKey` の「11 の祝日に 1 つずつ」（key は 10 種類）を「毎年の祝日に 1 つずつ（旧正月の 2 日は同じ key）」に、`bizdays-toolkit/provider` の「同梱の 3 つの提供元」（フランスが加わった）を「振替のある同梱の提供元」に、`easterSunday` の「英国の祝日の計算に使い」（フランスも使う）を「復活祭から日数で決まる祝日の計算に使い」にした
 - `docs/decisions.md`: 52 番（コメントと文書の参照の検査、コメントに書くことと書かないこと、`.js` からコメントを除くこと、取り込み時の重点確認）を追加した。34 番の「決めたのは 0 番」を「0 番目のカレンダー」にした（決定の番号と紛れないように）
 - `RELEASING.md`: 「品質の確認」に参照の検査とコメントの書き方の規則を、「ビルドと整形」にコメントを除くビルドを足した。ハートビートの説明の「4 つの照合」を「すべての照合」にした
@@ -276,17 +276,17 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 ### 開発
 
 - `pnpm check`（`scripts/check-package.ts`）に、コメントと文書の参照の検査を足した（decisions.md の 52 番）
-- スクリプト・ワークフロー・テスト・`src` のコメント（型定義に出る TSDoc を含む）から、決定の文書と重複する理由の説明、版の経緯（「0.18.0 で追加」など）、利用元の一覧、変わりうる事実を削り、何をするか・使い方・決定の文書の番号だけを残した（52 番）
+- スクリプト・ワークフロー・テスト・`src` のコメント（型定義に出る TSDoc を含む）から、決定の文書と重複する理由の説明、バージョンの経緯（「0.18.0 で追加」など）、利用元の一覧、変わりうる事実を削り、何をするか・使い方・決定の文書の番号だけを残した（52 番）
 - サイズの上限（`size-limits.json`）を、コメントを除いた `.js` の実測に合わせて下げた
 
 ## [0.21.3] - 2026-10-26
 
 ### Changed
 
-- ドキュメントの食い違いを直した（公開物の動作は変わらない）。ガイド（英日）のフランスの対応年を 1974〜2099 年から正しい 2000〜2099 年に、README（英日）の minify + gzip のサイズを測り直して英国込み 12.8 → 13.2 KB・日本込み 12.9 → 12.8 KB・シンガポール込み 11.9 → 12.0 KB に（測り方を `scripts/measure-bundle.ts` に固定した。0.20.0 の値は日本とシンガポールで測り方が揃っていなかった）、ガイドの診断の表に `counting-basis` を、エラーコードの一覧に `invalid-argument`・`time-zone-conflict`・`unconfirmed-holiday` を足した。英国の `unverified` の理由を「The Gazette の索引の欠け」から、1986〜1990 年の北アイルランドの Order は「オンラインにない号（Missing Gazette issues）」、1987 年分の布告と 1975 年の北アイルランドの Order は「見つかっていない」に改めた（ガイド・README・出典の記録・フィクスチャの reason。README と decisions.md の 49 番は 13 日すべてをオンラインにない号としていた）。README の版の固定の例を英日で揃え、出典の記録に付いていた「テスト用フィクスチャのみ」の誤った括弧書きを外した
+- ドキュメントの食い違いを直した（公開物の動作は変わらない）。ガイド（英日）のフランスの対応年を 1974〜2099 年から正しい 2000〜2099 年に、README（英日）の minify + gzip のサイズを測り直して英国込み 12.8 → 13.2 KB・日本込み 12.9 → 12.8 KB・シンガポール込み 11.9 → 12.0 KB に（測り方を `scripts/measure-bundle.ts` に固定した。0.20.0 の値は日本とシンガポールで測り方が揃っていなかった）、ガイドの診断の表に `counting-basis` を、エラーコードの一覧に `invalid-argument`・`time-zone-conflict`・`unconfirmed-holiday` を足した。英国の `unverified` の理由を「The Gazette の索引の欠け」から、1986〜1990 年の北アイルランドの Order は「オンラインにない号（Missing Gazette issues）」、1987 年分の布告と 1975 年の北アイルランドの Order は「見つかっていない」に改めた（ガイド・README・出典の記録・フィクスチャの reason。README と decisions.md の 49 番は 13 日すべてをオンラインにない号としていた）。README のバージョンの固定の例を英日で揃え、出典の記録に付いていた「テスト用フィクスチャのみ」の誤った括弧書きを外した
 - ガイド（英日）の「同梱の祝日の提供元」の冒頭に、4 か国の比較表（週末に当たった祝日を返すか・振替・予測・`confirmedThrough`）を足した。英国の提供元は週末に当たった祝日を返さないので、`{ holiday: true, weekdays: [6] }` のような規則は当てはまらない
-- `docs/decisions.md`: 決定の文書の現状に追いついていない記述を直した。18 番（対応年は 1974 年から。49 番）・6 番（契約の項目に `key`）・10 番（CI でだけ使う道具は actionlint のほかにもある）・29 番（古い TypeScript は 0.13.0 から CI で確かめている）・45 番（`docs/` のファイルの数の数え方と、README からガイドに移った説明）に追記し、12 番に判定の順番の番号（ガイドの 1〜8）を明記して 47 番の「12 番の 5・6」を「6（`"over-holiday"` なら 4）」に、13・31 番の「README に明記」を「ガイドに明記」に、28 番の監視の範囲を 4 か国に直した。22・49 番の脱字を直した。51 番（ドキュメントの数値の検査と、前の版との祝日データの差分）を追加した
-- `RELEASING.md`: 「CI の版は次の 2 か所で管理」を直し（実際は 6 項目）、README のサイズの値の測り方を `scripts/measure-bundle.ts` に改めた。CHANGELOG の冒頭の区分の説明に「移行」「開発」を足した
+- `docs/decisions.md`: 決定の文書の現状に追いついていない記述を直した。18 番（対応年は 1974 年から。49 番）・6 番（契約の項目に `key`）・10 番（CI でだけ使う道具は actionlint のほかにもある）・29 番（古い TypeScript は 0.13.0 から CI で確かめている）・45 番（`docs/` のファイルの数の数え方と、README からガイドに移った説明）に追記し、12 番に判定の順番の番号（ガイドの 1〜8）を明記して 47 番の「12 番の 5・6」を「6（`"over-holiday"` なら 4）」に、13・31 番の「README に明記」を「ガイドに明記」に、28 番の監視の範囲を 4 か国に直した。22・49 番の脱字を直した。51 番（ドキュメントの数値の検査と、前のバージョンとの祝日データの差分）を追加した
+- `RELEASING.md`: 「CI のバージョンは次の 2 か所で管理」を直し（実際は 6 項目）、README のサイズの値の測り方を `scripts/measure-bundle.ts` に改めた。CHANGELOG の冒頭の区分の説明に「移行」「開発」を足した
 
 ### 開発
 
@@ -340,7 +340,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-動作が変わる既存の API はない。サブパス `bizdays-toolkit/fr` が増える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+動作が変わる既存の API はない。サブパス `bizdays-toolkit/fr` が増える。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -365,7 +365,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-動作が変わる既存の API はない（`"after-holiday"` の規則に `skipWeekdays` を付けなければ振替先はこれまでどおり）。繰り返しの規則の形 `{ businessDayOfMonth }` と項目 `skipWeekdays`・`calendar`、診断コード `counting-basis` が増える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+動作が変わる既存の API はない（`"after-holiday"` の規則に `skipWeekdays` を付けなければ振替先はこれまでどおり）。繰り返しの規則の形 `{ businessDayOfMonth }` と項目 `skipWeekdays`・`calendar`、診断コード `counting-basis` が増える。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -389,7 +389,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-動作が変わる既存の API はない。同梱の提供元が返す祝日に省略可能な項目 `key` が加わるので、`dayInfo` の結果や `holidaysInYear` の要素を `deepEqual` で比べているテストは期待値に足す（国民の休日・臨時の祝日には付かない）。祝日の規則に省略可能な `keys` が加わる。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+動作が変わる既存の API はない。同梱の提供元が返す祝日に省略可能な項目 `key` が加わるので、`dayInfo` の結果や `holidaysInYear` の要素を `deepEqual` で比べているテストは期待値に足す（国民の休日・臨時の祝日には付かない）。祝日の規則に省略可能な `keys` が加わる。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -425,7 +425,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-動作が変わる既存の API はない（既定値はこれまでどおり）。`Calendar`・`Schedule`・`HolidayLookup` に項目 `unconfirmedHolidays` が加わり、`createCalendar`・`createSchedule` の設定と `diagnoseCalendar`・`diagnoseSchedule` の第 2 引数が増える。監視のワークフローの改名（`govuk-watch.yml` → `data-watch.yml`）により、cron-job.org の URL を直す（RELEASING.md）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+動作が変わる既存の API はない（既定値はこれまでどおり）。`Calendar`・`Schedule`・`HolidayLookup` に項目 `unconfirmedHolidays` が加わり、`createCalendar`・`createSchedule` の設定と `diagnoseCalendar`・`diagnoseSchedule` の第 2 引数が増える。監視のワークフローの改名（`govuk-watch.yml` → `data-watch.yml`）により、cron-job.org の URL を直す（RELEASING.md）。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -452,7 +452,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-日時の文字列の区切りは `T` だけになり、空白で区切った文字列（`"2026-11-23 10:00"`）は `invalid-time` の Error になる（これまでは実行時だけ受け付けていた。型 `DateTimeInput` は以前から `T` 区切りだけ）。合成した `dayInfo` に `decidedByPath` が加わるので、`deepEqual` で比べているテストは期待値に足す。ほかは動作が変わらない（祝前日の規則・サブパス・合成の項目の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+日時の文字列の区切りは `T` だけになり、空白で区切った文字列（`"2026-11-23 10:00"`）は `invalid-time` の Error になる（これまでは実行時だけ受け付けていた。型 `DateTimeInput` は以前から `T` 区切りだけ）。合成した `dayInfo` に `decidedByPath` が加わるので、`deepEqual` で比べているテストは期待値に足す。ほかは動作が変わらない（祝前日の規則・サブパス・合成の項目の追加）。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -465,7 +465,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 - 日時の文字列の区切りを `T` だけにし、空白で区切った文字列は `invalid-time` にした（上の「移行」）
 - README: 繰り返しの規則の節に祝前日、他の国・地域の祝日の節に `bizdays-toolkit/provider` と復活祭で決まる提供元の例、合成の節に `decidedByPath`、日付・日時の入力の節に区切りの条件、確かめている環境に Bun・Deno を足した。サイズの値を測り直した（ルート約 9.8KB・日本の祝日込み約 11.6KB・英国の祝日込み約 11.5KB。0.16.0 で測定）
 - `docs/decisions.md`: 14 番に年ごとの列挙で足りる理由、26 番に Bun・Deno、29 番に空白区切りの廃止、33 番に祝前日を足した経緯、36 番に曜日の日に `rulePath` を付けない理由の書き直し（位置は書けるが冗長）、41 番に次の月に併合する側を選んだ理由を書き、43 番（祝前日・provider・`decidedByPath`・空白区切りの廃止・Bun と Deno の確認）を追加した
-- `RELEASING.md`: 確認の表と固定する版の一覧に `bun`・`deno` ジョブを足した
+- `RELEASING.md`: 確認の表と固定するバージョンの一覧に `bun`・`deno` ジョブを足した
 
 ### 開発
 
@@ -478,7 +478,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-`businessDayOnOrAfter` に `cutoff` を指定するときは、時刻を持つ入力（`Date`・日時の文字列・時刻を持つ Temporal の値）を渡す。時刻のない入力（暦日の文字列・`PlainDate`）との組み合わせは、これまで暦日を 0 時として扱い締め時刻を黙って無視していたが、`invalid-argument` の Error になる。ほかは動作が変わらない（規則の絞り込み・カレンダーのメソッド・型の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+`businessDayOnOrAfter` に `cutoff` を指定するときは、時刻を持つ入力（`Date`・日時の文字列・時刻を持つ Temporal の値）を渡す。時刻のない入力（暦日の文字列・`PlainDate`）との組み合わせは、これまで暦日を 0 時として扱い締め時刻を黙って無視していたが、`invalid-argument` の Error になる。ほかは動作が変わらない（規則の絞り込み・カレンダーのメソッド・型の追加）。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -510,7 +510,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-動作は変わりません（締め期間と、暦日と時刻から瞬間への変換の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+動作は変わりません（締め期間と、暦日と時刻から瞬間への変換の追加）。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -531,7 +531,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-動作は変わりません（スケジュールから営業日カレンダーを作る関数と、判定の理由の新しい値の追加。CI の改善）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+動作は変わりません（スケジュールから営業日カレンダーを作る関数と、判定の理由の新しい値の追加。CI の改善）。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -540,20 +540,20 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- README: 「スケジュールから営業日カレンダーを作る」の節を足した。型定義の確認の範囲を、CI で確かめる TypeScript の版（5.0・5.5・5.8・6.0・7.0）に改めた。サイズの値を測り直した（ルート約 9.0KB・日本の祝日込み約 10.8KB・英国の祝日込み約 10.7KB。0.13.0 で測定）
-- `docs/decisions.md`: 38 番（スケジュールからのカレンダー・`"open-annual"`・利用者の TypeScript の版の確認）を追加した
+- README: 「スケジュールから営業日カレンダーを作る」の節を足した。型定義の確認の範囲を、CI で確かめる TypeScript のバージョン（5.0・5.5・5.8・6.0・7.0）に改めた。サイズの値を測り直した（ルート約 9.0KB・日本の祝日込み約 10.8KB・英国の祝日込み約 10.7KB。0.13.0 で測定）
+- `docs/decisions.md`: 38 番（スケジュールからのカレンダー・`"open-annual"`・利用者の TypeScript のバージョンの確認）を追加した
 
 ### 開発
 
 - CI に `consumer-types` ジョブを追加した
-- `scripts/check-consumer-types.ts` に `--tsc <path>` を足し、わざと型エラーを含む `test/consumer/consumer-error.mts` が各版で失敗として報告されること（検査が機能していること）も確かめるようにした
+- `scripts/check-consumer-types.ts` に `--tsc <path>` を足し、わざと型エラーを含む `test/consumer/consumer-error.mts` が各バージョンで失敗として報告されること（検査が機能していること）も確かめるようにした
 - `createCalendar` の `dayInfo` の変換を `createCalendarFromSchedule` と共用の内部関数に切り出した
 
 ## [0.12.0] - 2026-10-20
 
 ### Migration
 
-動作は変わりません（繰り返しの規則の新しい形・`dayInfo` の新しい項目の追加と、診断・CI の改善）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` の定数 `dataVersion`・`confirmedThrough` が非推奨になったので、使っていれば提供元の項目（`jp.dataVersion`・`england.confirmedThrough` など）に書き換える。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+動作は変わりません（繰り返しの規則の新しい形・`dayInfo` の新しい項目の追加と、診断・CI の改善）。`bizdays-toolkit/jp`・`bizdays-toolkit/uk` の定数 `dataVersion`・`confirmedThrough` が非推奨になったので、使っていれば提供元の項目（`jp.dataVersion`・`england.confirmedThrough` など）に書き換える。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -592,7 +592,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-作業は要りません（繰り返しの規則の新しい形と、カレンダーを合成する関数の追加）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+作業は要りません（繰り返しの規則の新しい形と、カレンダーを合成する関数の追加）。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -626,7 +626,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Deprecated
 
-- `bizdays-toolkit/jp` の `toJapanDate`・`toJapanDateTime` を非推奨にした（`@deprecated`）。同じ変換がルートの `toDateString(input, "Asia/Tokyo")`・`toDateTimeParts(input, "Asia/Tokyo")` と、営業日カレンダー・スケジュールの `dateOf`・`civilOf` にあり、国ごとの関数は日本だけの特別扱い（英国には対応物がない）だったため。少なくとも 1 つのマイナー版は残し、1.0.0 で削除する。`etc/api.md` に `@deprecated` を記録するようにした
+- `bizdays-toolkit/jp` の `toJapanDate`・`toJapanDateTime` を非推奨にした（`@deprecated`）。同じ変換がルートの `toDateString(input, "Asia/Tokyo")`・`toDateTimeParts(input, "Asia/Tokyo")` と、営業日カレンダー・スケジュールの `dateOf`・`civilOf` にあり、国ごとの関数は日本だけの特別扱い（英国には対応物がない）だったため。少なくとも 1 つのマイナーバージョンは残し、1.0.0 で削除する。`etc/api.md` に `@deprecated` を記録するようにした
 
 ### Changed
 
@@ -657,7 +657,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Migration
 
-作業は要りません（機能の追加だけ）。時刻を必ず持つ入力では `time` の型が `string` になったので、これまでの `null` の分岐は不要になります（残しても動く）。版ごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
+作業は要りません（機能の追加だけ）。時刻を必ず持つ入力では `time` の型が `string` になったので、これまでの `null` の分岐は不要になります（残しても動く）。バージョンごとの作業は [docs/migration.md](./docs/migration.md) にまとめた。
 
 ### Added
 
@@ -669,7 +669,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 - `civilOf`（スケジュール・営業日カレンダー）・`toDateTimeParts`・`toJapanDateTime` に、`DateTimeInput` を渡したときは `time` の型を `string` とするオーバーロードを加えた。返す値は変わらない。`CivilDateTimeParts` は時刻の型を引数に取る型になった（省略時はこれまでと同じ `string | null`）
 - README: スケジュールの `dayInfo` の `reason` は値を決めた規則であり、祝日の規則が `"weekday"` のときは祝日でも `"weekday"` になること（祝日かどうかは `holiday` で判定する）を書いた。`createCalendar`・`createSchedule` は作ったものを使い回すのが基本で、作成のコストも小さいこと（測った値）を書いた。1 つの配列で持つ特別営業日を `dates` と `annual` に振り分ける例と、型定義の確認の範囲（CI で `moduleResolution` の `node16`・`nodenext`・`bundler`、0.9.0 の時点で TypeScript 5.0・5.5・5.8 も手作業で確認）を足した
 - README のサイズの値を測り直した（ルート約 7.5KB・日本の祝日込み約 9.0KB・英国の祝日込み約 9.1KB。0.9.0 で測定）
-- 移行ガイド（`docs/migration.md`）を追加した。0.2.0〜0.9.0 で利用者がする作業を版ごとにまとめた
+- 移行ガイド（`docs/migration.md`）を追加した。0.2.0〜0.9.0 で利用者がする作業をバージョンごとにまとめた
 
 ### 開発
 
@@ -683,8 +683,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- README の動作環境の記述を、CI で確かめた範囲に合わせた。「Node.js・ブラウザー・エッジランタイムで動作」を、確かめている環境（Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers）の明記に改め、確かめていない環境（Deno・Bun・Vercel の Edge Runtime など）も書いた。Temporal は形で判別していることと、本物の Temporal を備えた環境では CI で確かめていることを書いた。サイズの値に測った版（0.8.1）を添えた。エラーコードの一覧に `invalid-input` を足した
-- README に、CI で確かめている Node.js の版（22.12・22・24・26）と、CommonJS の `require()` で読み込めることを CI で確かめていることを書いた。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ることも書いた（結果には影響しない）。`engines`（`>=22.12`）は変わらない
+- README の動作環境の記述を、CI で確かめた範囲に合わせた。「Node.js・ブラウザー・エッジランタイムで動作」を、確かめている環境（Node.js・Chrome・Firefox・Edge・Safari・Cloudflare Workers）の明記に改め、確かめていない環境（Deno・Bun・Vercel の Edge Runtime など）も書いた。Temporal は形で判別していることと、本物の Temporal を備えた環境では CI で確かめていることを書いた。サイズの値に測ったバージョン（0.8.1）を添えた。エラーコードの一覧に `invalid-input` を足した
+- README に、CI で確かめている Node.js のバージョン（22.12・22・24・26）と、CommonJS の `require()` で読み込めることを CI で確かめていることを書いた。Node.js 22.12 では `require()` での読み込みに実験的な機能の警告が出ることも書いた（結果には影響しない）。`engines`（`>=22.12`）は変わらない
 
 ### 開発
 
@@ -693,7 +693,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 - `pnpm check` で、README（英語・日本語）のコード例を実行し、コメントに書いた結果と比べるようにした
 - `pnpm check`（`scripts/check-package.ts`）で、`src` が Node.js 固有の機能を使っていないことを確かめるようにした
 - 自前のスクリプトとテストで Node.js の警告が出たら失敗にするようにした
-- `pnpm check` の最初に、開発用のツールの版を確かめる `scripts/check-toolchain.ts` を追加した
+- `pnpm check` の最初に、開発用のツールのバージョンを確かめる `scripts/check-toolchain.ts` を追加した
 - GOV.UK の監視のワークフローに、手動実行の入力 `simulate` を追加した（`pnpm verify:govuk --simulate`）
 - `pnpm check` のパッケージの中身の検査（`npm pack --dry-run`）を、Windows で Node.js の非推奨の警告（DEP0190）が出ない形で npm を起動するようにした
 
@@ -706,7 +706,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表）を、マイナー版ではなく**パッチ版**で公開する方針に改めた（RELEASING.md）。0.x の期間は `^0.8.0` が 0.9.0 を受け取らないため、マイナー版では臨時の祝日が利用者に届かない。パッチ版なら 0.x でも 1.0.0 以降でも、`^`・`~` のどちらの指定にも届く
+- 公式データの反映（法改正・官報公表・布告による祝日の新設・移動・臨時の祝日、春分・秋分の日の確定、GOV.UK の新しい年の公表）を、マイナーバージョンではなく**パッチバージョン**で公開する方針に改めた（RELEASING.md）。0.x の期間は `^0.8.0` が 0.9.0 を受け取らないため、マイナーバージョンでは臨時の祝日が利用者に届かない。パッチバージョンなら 0.x でも 1.0.0 以降でも、`^`・`~` のどちらの指定にも届く
 - README を英語を既定にした（`README.md`）。日本語版は `docs/README.ja.md` に移し、それぞれの冒頭に切り替えのリンクを置いた。npm に公開するファイルは変わらない（日本語版はパッケージに含めない。npm はルートの `README*` を `files` の指定にかかわらず含めるため、`docs/` に置く）。README に書いている minify + gzip のサイズを測り直し、日本の祝日込みを約 8.5KB から約 9.0KB に直した（0.7.0 までの記載が実際より小さかった）。英国の祝日込みは約 9.0KB
 
 ### 開発
@@ -741,7 +741,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### 開発
 
-- `pnpm check`（`scripts/check-package.ts`）で、CHANGELOG の版の節の並び・日付と、末尾のリンク定義が節とそろっていることを確かめるようにした（0.5.0 でリンク定義の更新漏れがあったため）
+- `pnpm check`（`scripts/check-package.ts`）で、CHANGELOG のバージョンの節の並び・日付と、末尾のリンク定義が節とそろっていることを確かめるようにした（0.5.0 でリンク定義の更新漏れがあったため）
 - リリースのワークフローで、CHANGELOG の日付が `YYYY-MM-DD` のまま・見出しがないときの表示を分かりやすくした（止まる条件は変わらない）
 - 月の計算と日付の調整の性質のテストを追加
 - サイズの上限を上げた
@@ -779,7 +779,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Deprecated
 
-- `HolidayRule` 型: `HolidayValueRule` に改名した（繰り返しの規則の `onHolidayRule` と紛れないため）。旧名は同じ型の別名として残し、次以降のマイナー版で削除する
+- `HolidayRule` 型: `HolidayValueRule` に改名した（繰り返しの規則の `onHolidayRule` と紛れないため）。旧名は同じ型の別名として残し、次以降のマイナーバージョンで削除する
 
 ### 開発
 
@@ -788,7 +788,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ## [0.3.1] - 2026-10-15
 
-ライブラリのコード・公開する API・祝日データに変更はありません。開発の検査を強めた版です。
+ライブラリのコード・公開する API・祝日データに変更はありません。開発の検査を強めたバージョンです。
 
 ### 開発
 
@@ -809,7 +809,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- `DayReason`・`ScheduleReason`・`JapaneseHolidayKind` を「開いた型」にした（将来の版で値が増えても、利用者のコードがコンパイルエラーにならない）。値を列挙して分岐しているコードは「その他」の分岐が必要になる
+- `DayReason`・`ScheduleReason`・`JapaneseHolidayKind` を「開いた型」にした（将来のバージョンで値が増えても、利用者のコードがコンパイルエラーにならない）。値を列挙して分岐しているコードは「その他」の分岐が必要になる
 - 設定の誤りのメッセージに、設定の中の位置（例: `closedDates[1].date`）を入れた
 - 設定は作る時点で複製するようにした（作ったあとに元の配列を書き換えても、結果が変わらない）
 - 提供元が返した祝日は、契約の項目だけを持つ変更できないオブジェクトにして返す
@@ -835,7 +835,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- 営業日カレンダー（`createCalendar`）を、スケジュールの真偽値版として作り直した。判定の優先順位と結果は変わらない
+- 営業日カレンダー（`createCalendar`）を、値が真偽値のスケジュールとして作り直した。判定の優先順位と結果は変わらない
 
 ## [0.1.2] - 2026-10-12
 
@@ -843,7 +843,7 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- npm への公開を staged publishing に変更した。GitHub Actions は版をステージするだけで、メンテナーが npmjs.com で 2FA 付きで承認するまで利用者には届かない。npm の Trusted Publisher の設定でも直接公開（npm publish）を許可しないようにした。GitHub Release は下書きで作成し、承認後に公開する
+- npm への公開を staged publishing に変更した。GitHub Actions はバージョンをステージするだけで、メンテナーが npmjs.com で 2FA 付きで承認するまで利用者には届かない。npm の Trusted Publisher の設定でも直接公開（npm publish）を許可しないようにした。GitHub Release は下書きで作成し、承認後に公開する
 - README のロゴの配色を変更した。文字（「bizdays」の緑と「-toolkit」の灰色）とカレンダーの留め具は、ライト・ダークどちらの背景でも読める両テーマ共通の中間色にし、アイコンの配色だけを `<picture>` でテーマに合わせて切り替える。`<picture>` の切り替えは GitHub のテーマ設定ではなく OS の設定に従うため、両者が食い違うと反対の背景にロゴが表示されて読みにくかった
 
 ## [0.1.1] - 2026-10-12
@@ -852,10 +852,10 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 ### Changed
 
-- README の先頭にロゴとバッジ（npm の版・CI・ライセンス・Node.js の対応版・依存ゼロ・型定義同梱）を追加
-- CI・リリースのワークフローで Node.js・npm・pnpm・ランナーの版を固定（Node.js 22.23.3 / 24.21.0、npm 12.2.0、pnpm 12.11.2、ubuntu-24.04）。セットアップは共通のアクション（`.github/actions/setup-toolchain`）にまとめた
-- リリースのワークフローで、同じ版がすでに npm にある場合は公開前に止めるようにした
-- 開発用の依存（devDependencies）を版の完全一致で固定
+- README の先頭にロゴとバッジ（npm のバージョン・CI・ライセンス・Node.js の対応バージョン・依存ゼロ・型定義同梱）を追加
+- CI・リリースのワークフローで Node.js・npm・pnpm・ランナーのバージョンを固定（Node.js 22.23.3 / 24.21.0、npm 12.2.0、pnpm 12.11.2、ubuntu-24.04）。セットアップは共通のアクション（`.github/actions/setup-toolchain`）にまとめた
+- リリースのワークフローで、同じバージョンがすでに npm にある場合は公開前に止めるようにした
+- 開発用の依存（devDependencies）をバージョンの完全一致で固定
 
 ## [0.1.0] - 2026-10-11
 

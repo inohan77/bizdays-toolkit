@@ -1,6 +1,6 @@
 // result-compare（scripts/result-compare.ts）が比べる設定の集まり。種で決まる設定と、過去の退行を書き留めた固定の設定。
 // 生成範囲の包含の検査（test/tools/generator-features.test.ts）も、同じ関数で同じ設定を作って特徴を数える。
-// 提供元は名前のまま持ち、比べるときに読み込んだ版の提供元に置き換える。
+// 提供元は名前のまま持ち、比べるときに読み込んだバージョンの提供元に置き換える。
 
 import {
   CALENDAR_REF,
@@ -15,7 +15,7 @@ import {
   type Obj,
 } from "./catalog.ts";
 
-/** 提供元の名前（読み込んだ版の提供元に置き換える前の形） */
+/** 提供元の名前（読み込んだバージョンの提供元に置き換える前の形） */
 export type ProviderName = "jp" | "england" | "scotland" | "metropole" | "sg";
 export const PROVIDERS: readonly ProviderName[] = ["jp", "england", "scotland", "metropole", "sg"];
 export const TIME_ZONES: Record<ProviderName, string> = {
@@ -37,11 +37,11 @@ export interface Case {
   readonly id: string;
   readonly kind: "calendar" | "schedule";
   readonly providers: readonly ProviderName[];
-  /** 提供元は名前のまま。比べるときに読み込んだ版の提供元に置き換える */
+  /** 提供元は名前のまま。比べるときに読み込んだバージョンの提供元に置き換える */
   readonly options: Obj;
   readonly from: string;
   readonly to: string;
-  /** この版より前の版とは比べない（その版で入った形を使う固定の設定） */
+  /** このバージョンより前のバージョンとは比べない（そのバージョンで入った形を使う固定の設定） */
   readonly minBase?: string;
   /** 合成するときのもう 1 つのカレンダー */
   readonly partner?: Case;
@@ -86,7 +86,7 @@ export function rangeOf(providers: readonly ProviderName[]): [string, string] {
   return [iso(from, 1, 1), iso(to, 12, 31)];
 }
 
-/** 文脈（提供元があるか・改名の前の版と比べるか）。名前は生成器の到達性のテストの名前に出る */
+/** 文脈（提供元があるか・改名の前のバージョンと比べるか）。名前は生成器の到達性のテストの名前に出る */
 export function contextOf(
   withHolidays: boolean,
   newShapes: boolean,
@@ -153,7 +153,7 @@ export function generateCases(seed: number, scale: number, newShapes: boolean): 
 
 /**
  * 過去の退行を書き留めた固定の設定（乱数では当たりにくい形）。新しい退行を見つけたら、その最小の設定を足す
- * （直した版を出した後も残す。同じ退行が戻ったら止めるため）
+ * （直したバージョンを出した後も残す。同じ退行が戻ったら止めるため）
  */
 export function fixedCases(): Case[] {
   const holiday = (kinds: string[]): Obj => ({ holiday: true, kinds });
@@ -411,7 +411,7 @@ export function traitsOfCase(one: Case): string[] {
   return [...traits];
 }
 
-/** 基準のカレンダーを作るのに要る、版の部品（作る関数と、提供元の名前 → 提供元） */
+/** 基準のカレンダーを作るのに要る、バージョンの部品（作る関数と、提供元の名前 → 提供元） */
 export interface BasisLib {
   readonly createCalendar: (options: Obj) => unknown;
   readonly providers: ReadonlyMap<string, unknown>;
@@ -437,10 +437,10 @@ export function basisClosedWeekdays(c: Case): number[] | undefined {
 export const BASIS_MARK = Symbol.for("bizdays-toolkit.result-compare.basis");
 
 /**
- * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（CALENDAR_REF）を、その版で作った同じ提供元の
- * カレンダーに置き換える（版ごとに作る。別の版のカレンダーは受け付けないため）。定休日は basisClosedWeekdays。基準のカレンダーの
+ * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（CALENDAR_REF）を、そのバージョンで作った同じ提供元の
+ * カレンダーに置き換える（バージョンごとに作る。別のバージョンのカレンダーは受け付けないため）。定休日は basisClosedWeekdays。基準のカレンダーの
  * outOfRangePolicy は、スケジュールの設定のものを受け継ぐ（basisOutOfRangePolicy。特徴の付け方と同じ関数）。
- * result-compare（scripts/result-compare.ts）が前の版と今回の版の両方に使う。両方を同じ作り方で比べるので、この処理が壊れても
+ * result-compare（scripts/result-compare.ts）が前のバージョンと今回のバージョンの両方に使う。両方を同じ作り方で比べるので、この処理が壊れても
  * 差分にならない。そのため、ここに置いて test/tools/result-traits.test.ts で直接確かめる
  */
 export function withCalendars(lib: BasisLib, c: Case, naming: "new" | "old", options: Obj): Obj {

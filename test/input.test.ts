@@ -92,7 +92,7 @@ test("オフセット付きの日時文字列の瞬間は、ECMAScript が定め
     const lower = `${date}t${time}000000${offset.toLowerCase()}`;
     assert.equal(toDateString(lower, "UTC"), expected, lower);
   }
-  // 時差の時・分の範囲（23:59 まで）。前の版の Date.parse と同じく、外は invalid-time（メッセージも前の版と同じ書き方。
+  // 時差の時・分の範囲（23:59 まで）。前のバージョンの Date.parse と同じく、外は invalid-time（メッセージも前のバージョンと同じ書き方。
   // 秒が 60 以上のときも同じ）
   assert.equal(toDateString("2026-11-23T10:00+23:59", "UTC"), "2026-11-22");
   for (const s of ["2026-11-23T10:00+24:00", "2026-11-23T10:00+23:60", "2026-11-23T10:00:60Z"])

@@ -168,7 +168,7 @@ function parseString(value: string, timeZone: string): CivilDateTime {
   if (offset === undefined) return { date, minutes };
   // オフセット付きは瞬間として扱う。瞬間は取り出した値から計算し、Date.parse に渡さない（ECMAScript が解釈を定めるのは
   // 大文字の T・Z と 3 桁の小数秒だけで、小文字や 9 桁の小数秒は実行環境で結果が違う。Firefox・Safari は小文字を読めない）
-  // 時差（Z は 0）。時は 23・分は 59 まで（前の版の Date.parse と同じ。外は invalid-time）
+  // 時差（Z は 0）。時は 23・分は 59 まで（前のバージョンの Date.parse と同じ。外は invalid-time）
   const [, hh = "0", mm = "0"] = /(\d\d):?(\d\d)$/.exec(offset) ?? [];
   if (+hh > 23 || +mm > 59)
     throw rangeError("invalid-time", `Invalid date/time string: ${describeValue(value)}`);

@@ -11,7 +11,7 @@
  *   完全性は asOf なしの診断で確かめるので、expired（asOf を渡したときだけ出る）を取り除く項目に含めない。
  *   完全性は、対応年で取り除けた項目を、診断が規則どうしを調べる期間（診断と同じ関数 rulesScanWindow で求める）でも
  *   確かめ直してから数え、既知の項目の一覧（KNOWN_INCOMPLETE）と合わなければ失敗にする
- * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別の版（公開済みの版など）を試せる。ORACLE_SHARD=k/n で、
+ * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別のバージョン（公開済みのバージョンなど）を試せる。ORACLE_SHARD=k/n で、
  *   全件の組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。ORACLE_FULL=1 と組み合わせたときだけ。
  *   書式の誤り・k >= n・ORACLE_FULL なしは例外）
  */
@@ -19,7 +19,7 @@
 import assert from "node:assert/strict";
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { test } from "node:test";
+import { after, afterEach, beforeEach, test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { COMMON_RULE_KEYS, SHAPES, random, shapeOf, type Obj } from "./support/catalog.ts";
 import { type DayLike, linesOf } from "./support/compare.ts";
@@ -39,7 +39,7 @@ const diag = (await import(
 /**
  * 診断が規則どうしを調べる期間（日付の範囲の並び。設定の作成に失敗するときと、期間が求まらないときは undefined）。診断と
  * 同じ関数で求める: 設定の組み立ては診断と同じ compileCalendarOptions、期間は analyzeRules が使う rulesScanWindow。
- * ORACLE_TARGET の版に rulesScanWindow がない（0.30.6 まで）なら、今のソースの関数を使う（期間の決め方は 0.30.x の間、
+ * ORACLE_TARGET のバージョンに rulesScanWindow がない（0.30.6 まで）なら、今のソースの関数を使う（期間の決め方は 0.30.x の間、
  * 変えていない）
  */
 type Core = Record<string, Fn>;
@@ -297,6 +297,36 @@ function run(
   }
   return report;
 }
+
+/**
+ * テストごとの時間（ミリ秒）。全件の実行では、分の設定の数と一緒に Job Summary に出す（分の時間の偏りが、設定の費用の
+ * 偏りかランナーの性能の差かを、次の実行から区別するため。RELEASING.md の「品質の確認」の診断のオラクル）
+ */
+const testTimes: [string, number][] = [];
+let testStart = 0;
+beforeEach(() => {
+  testStart = performance.now();
+});
+afterEach((t) => {
+  testTimes.push([t.name, performance.now() - testStart]);
+});
+after(() => {
+  const total = testTimes.reduce((s, [, ms]) => s + ms, 0);
+  const lines = [
+    "### テストごとの時間",
+    "",
+    plan.lines[0]!,
+    "",
+    "| テスト | 時間 |",
+    "| --- | --- |",
+    ...testTimes.map(([name, ms]) => `| ${name} | ${(ms / 1000).toFixed(1)} 秒 |`),
+    `| 合計 | ${(total / 1000).toFixed(1)} 秒 |`,
+    "",
+  ];
+  console.log(lines.join("\n"));
+  if (FULL && process.env["GITHUB_STEP_SUMMARY"])
+    appendFileSync(process.env["GITHUB_STEP_SUMMARY"], `${lines.join("\n")}\n`);
+});
 
 const summarize = (name: string, report: Report): void => {
   const top = [...report.incomplete].sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -725,7 +755,7 @@ const naiveUnsureFor = (
 };
 /**
  * 実装の「分からない規則」（今のソースの unjudgeableDays・unsureOf）。完全性の除外にだけ使う（実装が出さないと決めた
- * 規則は出ない）。ORACLE_TARGET の版では除外しない
+ * 規則は出ない）。ORACLE_TARGET のバージョンでは除外しない
  */
 const unsureCore = target
   ? undefined

@@ -1,13 +1,13 @@
 /**
- * 前の版との祝日データの差分（CI の data-compare ジョブ。RELEASING.md の「品質の仕組みの理由」の「前の版と比べる」）。
+ * 前のバージョンとの祝日データの差分（CI の data-compare ジョブ。RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」）。
  *
- * 前の版と今回の dist の同梱の提供元を、対応年が重なるすべての年について 1 日ずつ比べる。
- * 前の版にない提供元と、前の版の対応年の外の年は比べない。
- * 失敗にする条件: key が変わった、差分があるのに CHANGELOG の今の版（または [Unreleased]）に「### Data」がない、
- * 前の版の提供元がなくなったか対応年が狭まった。
+ * 前のバージョンと今回の dist の同梱の提供元を、対応年が重なるすべての年について 1 日ずつ比べる。
+ * 前のバージョンにない提供元と、前のバージョンの対応年の外の年は比べない。
+ * 失敗にする条件: key が変わった、差分があるのに CHANGELOG の今のバージョン（または [Unreleased]）に「### Data」がない、
+ * 前のバージョンの提供元がなくなったか対応年が狭まった。
  *
  * 使い方: node scripts/data-compare.ts --base <dir> [--head .] [--base-label <label>] [--changelog CHANGELOG.md]
- *   --base は前の版を展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回の
+ *   --base は前のバージョンを展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回の
  *   リポジトリ（pnpm build 済み）
  * 終了コード: 0 合格、1 失敗、2 使い方・読み込みの誤り。結果は Markdown で標準出力に書く。
  */
@@ -43,7 +43,7 @@ const baseVersion = (
 ).version;
 const baseLabel = argValue("--base-label") ?? baseVersion;
 
-/** CHANGELOG の [Unreleased] と今の版の節に「### Data」があるか */
+/** CHANGELOG の [Unreleased] と今のバージョンの節に「### Data」があるか */
 function changelogHasData(): { has: boolean; sections: string } {
   const text = readFileSync(changelogPath, "utf8");
   const parts = text.split(/^## \[([^\]]+)\][^\n]*$/m);
@@ -116,7 +116,8 @@ function compareProvider(base: BundledProvider, head: BundledProvider): Provider
   return {
     id: head.id,
     years: from <= to ? `${from}〜${to}` : "なし",
-    skipped: skippedRanges.length > 0 ? `${skippedRanges.join("・")}（前の版の対応年の外）` : "",
+    skipped:
+      skippedRanges.length > 0 ? `${skippedRanges.join("・")}（前のバージョンの対応年の外）` : "",
     diffs,
     keyChanges,
   };
@@ -155,14 +156,14 @@ for (const { provider } of head) {
   results.push(compareProvider(before, provider));
 }
 for (const id of baseById.keys()) {
-  if (!headIds.has(id)) failures.push(`${id}: 前の版にある提供元がない`);
+  if (!headIds.has(id)) failures.push(`${id}: 前のバージョンにある提供元がない`);
 }
 
 const allDiffs = results.flatMap((r) => r.diffs);
 const allKeyChanges = results.flatMap((r) => r.keyChanges);
 if (allKeyChanges.length > 0) {
   failures.push(
-    `key が変わった（${allKeyChanges.length} 件）。key は版をまたいで変えない（decisions.md の 25 番）`,
+    `key が変わった（${allKeyChanges.length} 件）。key はバージョンをまたいで変えない（decisions.md の 25 番）`,
   );
 }
 const changelog = changelogHasData();
@@ -176,7 +177,7 @@ const out: string[] = [];
 out.push(`## 祝日データの差分（${baseLabel} → ${headVersion}）`, "");
 out.push("| 提供元 | 比べた年 | 差分 | 比べなかった年 |", "| --- | --- | ---: | --- |");
 for (const r of results) out.push(`| ${r.id} | ${r.years} | ${r.diffs.length} | ${r.skipped} |`);
-for (const id of newProviders) out.push(`| ${id} | なし | 0 | 前の版にない提供元 |`);
+for (const id of newProviders) out.push(`| ${id} | なし | 0 | 前のバージョンにない提供元 |`);
 out.push("");
 const LIMIT = 200;
 if (allDiffs.length > 0) {

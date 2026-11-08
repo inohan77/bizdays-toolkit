@@ -1,13 +1,13 @@
 /**
- * 性能の比較（CI の bench ジョブ）。公開済みの前の版と今回の dist を、同じ機械で scripts/bench.ts にかけた
+ * 性能の比較（CI の bench ジョブ）。公開済みの前のバージョンと今回の dist を、同じ機械で scripts/bench.ts にかけた
  * 結果（JSON）を比べ、比率を表にする。
  *
  * ランナーの性能は実行ごとに数十%ぶれるので、絶対値では判定しない。同じ実行の中で測った 2 つの結果の
- * 比率だけを見て、どれかの計測が前の版の RATIO 倍より遅くなったら失敗にする（アルゴリズムの悪化だけを捉える）。
+ * 比率だけを見て、どれかの計測が前のバージョンの RATIO 倍より遅くなったら失敗にする（アルゴリズムの悪化だけを捉える）。
  * 絶対値は記録として表に残す（GitHub の Job Summary に書くには、出力を $GITHUB_STEP_SUMMARY に渡す）。
  *
- * 正しさのために遅くなることを受け入れる版は、開発の記録（docs/development-log.md。0.29.x 以前は CHANGELOG の「開発」）の
- * 今の版（または [Unreleased]）に「性能の退行」という言葉を含めて理由を書く。そのときは上限を超えても表に記録して合格にする（RELEASING.md の「品質の仕組みの理由」の「前の版と比べる」。サイズの上限と同じ形）。
+ * 正しさのために遅くなることを受け入れるバージョンは、開発の記録（docs/development-log.md。0.29.x 以前は CHANGELOG の「開発」）の
+ * 今のバージョン（または [Unreleased]）に「性能の退行」という言葉を含めて理由を書く。そのときは上限を超えても表に記録して合格にする（RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」。サイズの上限と同じ形）。
  *
  * 使い方: node scripts/bench-compare.ts <base.json> <head.json> [--ratio 2] [--base-label <label>] [--head-label <label>]
  */
@@ -68,7 +68,7 @@ lines.push(
   `最も遅くなった計測の比率: ${worst.toFixed(2)}x（上限 ${ratioLimit}x。ランナーの性能のぶれは比率には現れにくい）`,
 );
 console.log(lines.join("\n"));
-/** 今の版（または [Unreleased]）の開発の記録（docs/development-log.md。0.29.x 以前は CHANGELOG の「開発」）に「性能の退行」の記載があるか */
+/** 今のバージョン（または [Unreleased]）の開発の記録（docs/development-log.md。0.29.x 以前は CHANGELOG の「開発」）に「性能の退行」の記載があるか */
 function performanceNoted(): boolean {
   let version: string;
   try {
@@ -85,7 +85,7 @@ function performanceNoted(): boolean {
 if (failed) {
   if (performanceNoted()) {
     console.log(
-      `\n上限 ${ratioLimit}x を超えた計測があるが、開発の記録（docs/development-log.md）の今の版に「性能の退行」の記載があるので合格にする`,
+      `\n上限 ${ratioLimit}x を超えた計測があるが、開発の記録（docs/development-log.md）の今のバージョンに「性能の退行」の記載があるので合格にする`,
     );
   } else {
     console.error(

@@ -1,7 +1,7 @@
 // 規則と設定の目録（テスト拡充案の T2）。乱数のテスト・オラクル・result-compare の生成器は、ここから設定を作る。
 // 公開の型（etc/api.md）の設定のキー・規則の形・選択肢の値が、すべてここにあるか、理由付きで除外されていることを
 // test/tools/catalog.test.ts が確かめる。規則の形やキーを足したら、ここにも足す（足さないと pnpm check が止まる）。
-// 値の候補を狭めると、test/tools/generator-features.test.ts が「前の版の生成器が作っていた特徴を作らない」で止める。
+// 値の候補を狭めると、test/tools/generator-features.test.ts が「前のバージョンの生成器が作っていた特徴を作らない」で止める。
 
 /** mulberry32: 種から決まる、再現可能な乱数（新しい依存を足さない。RELEASING.md の「品質の仕組みの理由」の「依存を足さない」） */
 export function random(seed: number): () => number {
@@ -53,9 +53,9 @@ export interface Context {
   readonly years: readonly [from: number, to: number];
   /** 有効期間の始まりを作る年の範囲（終わりは始まりから 400 日まで） */
   readonly effectiveYears: readonly [from: number, to: number];
-  /** 0.30.0 で入った形（週の第 n 営業日）を作るか（改名の前の版と比べるときは作らない） */
+  /** 0.30.0 で入った形（週の第 n 営業日）を作るか（改名の前のバージョンと比べるときは作らない） */
   readonly newShapes: boolean;
-  /** 入力の誤りの規則（曜日に合わない起点・自分の曜日を含む飛ばす曜日）を混ぜるか（前の版とエラーコードを比べる） */
+  /** 入力の誤りの規則（曜日に合わない起点・自分の曜日を含む飛ばす曜日）を混ぜるか（前のバージョンとエラーコードを比べる） */
   readonly invalid: boolean;
 }
 
@@ -115,7 +115,7 @@ export const CONTEXTS = {
     newShapes: true,
     invalid: false,
   },
-  /** scripts/result-compare.ts（前の版との比較。提供元あり） */
+  /** scripts/result-compare.ts（前のバージョンとの比較。提供元あり） */
   "result-compare": {
     holidays: true,
     kinds: ["national", "regular", "substitute", "citizens", "special"],
@@ -138,7 +138,7 @@ export const CONTEXTS = {
   },
 } as const satisfies Record<string, Context>;
 
-/** 文脈の変形（result-compare の提供元なし・改名の前の版との比較） */
+/** 文脈の変形（result-compare の提供元なし・改名の前のバージョンとの比較） */
 export const withoutHolidays = (ctx: Context): Context => ({ ...ctx, holidays: false });
 export const beforeRename = (ctx: Context): Context => ({ ...ctx, newShapes: false });
 

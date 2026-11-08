@@ -14,7 +14,7 @@ import "./strict-warnings.ts";
  *   `<!-- example: allow-diagnostics <code>,<code> -->` で許すコードを明示する
  * - 診断の結果を filter・find で絞った例は失敗にする（絞ると、例の設定の誤りが隠れる）。絞る理由のある例は、直前の空でない行の注記
  *   `<!-- example: allow-filtered-diagnostics -->` で明示する
- * - 移行ガイド（docs/migration.md）は、最新の版の節までを実行する（それより前の節は旧名で書かれていて、1.0.0 で動かなくなる）
+ * - 移行ガイド（docs/migration.md）は、最新のバージョンの節までを実行する（それより前の節は旧名で書かれていて、1.0.0 で動かなくなる）
  */
 
 import { spawnSync } from "node:child_process";
@@ -285,7 +285,7 @@ function parse(text: string): unknown {
   const js = text.replaceAll("{…}", "__ANY__");
   return new Function("__ANY__", "return (" + js + ");")(ANY);
 }
-// 1.0.0 より前の版でだけ返す旧名の項目（docs/migration.md の削除予定の表にある、結果の型の項目）。文書の例は新しい名前だけを書くので、比べない（RELEASING.md の「1.0.0 で行う作業」で消す）
+// 1.0.0 より前のバージョンでだけ返す旧名の項目（docs/migration.md の削除予定の表にある、結果の型の項目）。文書の例は新しい名前だけを書くので、比べない（RELEASING.md の「1.0.0 で行う作業」で消す）
 const DEPRECATED_RESULT_KEYS: string[] = JSON.parse(process.env.README_DEPRECATED_KEYS ?? "[]");
 function match(actual: unknown, expected: unknown): boolean {
   if (expected === ANY) return true;
@@ -320,7 +320,7 @@ export function __check(index: number, actual: unknown): void {
 }
 `;
 
-/** コード例を実行するファイル（README と docs のガイド。英語・日本語。移行ガイドは最新の版の節まで） */
+/** コード例を実行するファイル（README と docs のガイド。英語・日本語。移行ガイドは最新のバージョンの節まで） */
 const DOC_FILES = [
   "README.md",
   "docs/README.ja.md",
@@ -331,7 +331,7 @@ const DOC_FILES = [
   "docs/migration.md",
 ];
 
-/** 実行する範囲の文章（移行ガイドは、2 つ目の版の見出し「## 0.x.y」より前まで） */
+/** 実行する範囲の文章（移行ガイドは、2 つ目のバージョンの見出し「## 0.x.y」より前まで） */
 function runnablePart(file: string, text: string): string {
   if (file !== "docs/migration.md") return text;
   const versions = [...text.matchAll(/^## \d+\.\d+\.\d+\s*$/gm)];

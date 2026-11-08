@@ -4,7 +4,7 @@
  *
  * 国ごとの祝日はサブパスから読み込む（例: "bizdays-toolkit/jp"・"bizdays-toolkit/uk"）。
  *
- * 公開する API には TSDoc の @public（安定）または @beta（マイナー版で変わりうる）を付ける。
+ * 公開する API には TSDoc の @public（安定）または @beta（マイナーバージョンで変わりうる）を付ける。
  * 公開する名前と型は etc/api.md に記録し、pnpm check で意図しない変化を検出する。
  */
 

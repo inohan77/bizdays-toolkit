@@ -47,7 +47,7 @@ export type KnownErrorCode =
   | "no-closed-day";
 
 /**
- * エラーコード。将来の版で値が増えることがある。
+ * エラーコード。将来のバージョンで値が増えることがある。
  * @public
  */
 export type ErrorCode = KnownErrorCode | (string & {});
@@ -104,7 +104,7 @@ export function describeValue(value: unknown): string {
   const tag = Object.prototype.toString.call(value);
   if (value && typeof value === "object" && !/^\[object (Object|Array)\]$/.test(tag)) return tag;
   try {
-    // 前の版と同じ表し方（JSON の形）。undefined などの JSON にならない値は String の形
+    // 前のバージョンと同じ表し方（JSON の形）。undefined などの JSON にならない値は String の形
     return JSON.stringify(value) ?? String(value);
   } catch {
     // JSON にできないオブジェクト（循環・BigInt を含むもの・読むと投げるもの）

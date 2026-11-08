@@ -80,7 +80,7 @@ const ukWide = createCalendar({ holidayProvider: [england, scotland, northernIre
 - 2000〜2011 年は GOV.UK のデータがない年です。この期間は、当時の政府が公表した一覧（DTI・BERR・directgov・Scottish Executive/Government・nidirect。Wayback Machine の保存）を正とし、The Gazette の国王の布告と北アイルランドの Order で全日を照合しています（出典は [docs/sources/uk-bank-holidays-2000-2011.md](./sources/uk-bank-holidays-2000-2011.md)）。Scotland の 3 日（2010 年 1 月 4 日・2010 年 12 月 27 日・2011 年 1 月 4 日）は当時の政府の一覧にはあるものの布告がなく、1971 年法の文言どおりなら bank holiday ではありませんが、提供元は政府の一覧に従って振替日として返します。
 - 1974〜1999 年は Web 以前で、当時の政府の一覧は残っていないので、The Gazette の国王の布告と北アイルランドの Order が正です（Hansard の書面答弁がある年はそれを第二の出典とし、日付の食い違いはありません）。この期間の祝日はすべて、1971 年法 Schedule 1 の日か、[docs/sources/uk-bank-holidays-1974-1999.md](./sources/uk-bank-holidays-1974-1999.md) に記録した布告で指定された日です。布告が見つからなかった少数の日（The Gazette のオンラインにない号に載っている 1986〜1990 年の北アイルランドの Order、見つからず、出るはずの時期に The London Gazette のオンラインにない号がある 1987 年分の毎年の布告、見つからなかった 1975 年の北アイルランドの Order）は規則どおりに返し、フィクスチャに `unverified` として記録しています。下限が 1974 年なのは、England・Wales・NI の New Year's Day が 1974 年から毎年布告されているためです（Early May は 1978 年から、Scotland の Spring も 1978 年から。提供元はこの始まりを符号化しているのであって、法の附則の変更ではありません）。名称も当時の一覧に従うので、振替日の割り当てが今の GOV.UK と違う年があります（2004 年は 12 月 27 日が Boxing Day で 28 日が Christmas Day、2000 年・2005 年の Scotland は 1 月 3 日が 2nd January で 4 日が New Year’s Day）
 - Scotland の地域（council）ごとの休日は含みません。また、bank holiday に休むかどうかは雇用契約などによります
-- 臨時の祝日は 10 日ほど前に発表されることがあります。GOV.UK との差分を毎日監視し、見つけたらパッチ版で反映します
+- 臨時の祝日は 10 日ほど前に発表されることがあります。GOV.UK との差分を毎日監視し、見つけたらパッチバージョンで反映します
 
 ### フランスの祝日
 
@@ -115,7 +115,7 @@ company.isBusinessDay("2026-05-25"); // true
 - `name` は data.gouv.fr の表記（フランス語。`1er mai`・`Lundi de Pentecôte`）、`nameEn` は英訳、`key` は安定した識別子（`labour-day`・`pentecost-monday` など。[祝日の識別子](#祝日の識別子)）
 - 2 つの祝日が同じ日に当たる年（2008 年の 5 月 1 日と 2059 年の 5 月 8 日が Ascension）は、data.gouv.fr の JSON と同じく復活祭から決まる祝日の名称・`key` で 1 件を返します。`keys: ["labour-day"]` は 2008 年の 5 月 1 日には当てはまりません
 - Lundi de Pentecôte は多くの企業が出勤日にしています（連帯の日）が、法律上は祝日のままなので、提供元は祝日として返します。出勤日にするなら上のように祝日の規則 `keys: ["pentecost-monday"]` で書きます。祝日を休みにするかどうかは利用者が決める、というこのライブラリ全体の分担です
-- 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年分・未来 5 年分が対象で、現在は 2006〜2031 年）と照合しています。差分は毎日監視しています
+- 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチバージョンで反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年分・未来 5 年分が対象で、現在は 2006〜2031 年）と照合しています。差分は毎日監視しています
 - `FR-AM` は Alsace-Moselle（Bas-Rhin・Haut-Rhin・Moselle の 3 県）に対するこのライブラリの ID です（ISO 3166-2 に 1 つのコードがないため）。祝日もタイムゾーンも違う海外県・海外領土は同梱していません
 
 ### シンガポールの祝日
@@ -133,11 +133,11 @@ sg.holidaysInYear(2026).find((h) => h.kind === "substitute");
 
 - 提供元は `sg`（ID `SG`、タイムゾーン `Asia/Singapore`）の 1 つで、地域ごとの祝日はありません。`kind` は `regular`（毎年の祝日）・`substitute`（日曜日に当たった祝日の翌日。Holidays Act により祝日になり、名称は元の祝日と同じ）・`special`（政府が告示する臨時の祝日。Polling Day など）です。土曜日に当たった祝日は振り替えません
 - 旧正月・Hari Raya Puasa・Hari Raya Haji・Vesak Day・Deepavali は太陰暦・イスラム暦・ヒンドゥー暦で決まるため、規則では計算できません。日付は MOM（Ministry of Manpower）が年ごとに告示したもので、振替は Holidays Act の規則で計算します。対応年は MOM が告示した年（現在は 2020〜2027 年。`confirmedThrough` は対応年の最後の年と同じ）で、それより後の年は予測せず対応年の外（`out-of-range`）です。`sg` が `confirmed: false` を返すことはありません
-- 日付は data.gov.sg の「Singapore Public Holidays」コレクション（MOM）と照合しています。そのデータが告示と食い違う箇所（2022 年の Hari Raya の改定後の日付と、振替 2 日の欠落）は告示に従います。data.gov.sg との差分を毎日監視し、見つけたらパッチ版で反映します
+- 日付は data.gov.sg の「Singapore Public Holidays」コレクション（MOM）と照合しています。そのデータが告示と食い違う箇所（2022 年の Hari Raya の改定後の日付と、振替 2 日の欠落）は告示に従います。data.gov.sg との差分を毎日監視し、見つけたらパッチバージョンで反映します
 
 ### 祝日の識別子
 
-同梱の、毎年繰り返す祝日には安定した識別子 `key` が付いています。規則の `{ holiday: true, keys: [...] }` で祝日を、`{ dayAfterHoliday: true, keys: [...] }`・`{ dayBeforeHoliday: true, keys: [...] }` でその前後の日を個別に指すためのもので（[繰り返しの規則](#繰り返しの規則)）、公式データに従ってパッチ版で変わりうる名称に依存せずに済みます。`key` は祝日の日付や公式の名称が変わっても変わりません（天皇誕生日は 4 月 29 日・12 月 23 日・2 月 23 日とも `emperors-birthday`、体育の日とスポーツの日はどちらも `sports`）。振替日は元の祝日の `key` を持つので、`keys: ["coming-of-age"]` は成人の日とその振替休日を指します。当日だけなら `kinds: ["regular"]` を併せて指定します。一度きりの祝日（皇室行事の休日、英国の布告による臨時の bank holiday、シンガポールの Polling Day）と日本の国民の休日は `key` を持たないので、`kinds` か `dates` で指します。
+同梱の、毎年繰り返す祝日には安定した識別子 `key` が付いています。規則の `{ holiday: true, keys: [...] }` で祝日を、`{ dayAfterHoliday: true, keys: [...] }`・`{ dayBeforeHoliday: true, keys: [...] }` でその前後の日を個別に指すためのもので（[繰り返しの規則](#繰り返しの規則)）、公式データに従ってパッチバージョンで変わりうる名称に依存せずに済みます。`key` は祝日の日付や公式の名称が変わっても変わりません（天皇誕生日は 4 月 29 日・12 月 23 日・2 月 23 日とも `emperors-birthday`、体育の日とスポーツの日はどちらも `sports`）。振替日は元の祝日の `key` を持つので、`keys: ["coming-of-age"]` は成人の日とその振替休日を指します。当日だけなら `kinds: ["regular"]` を併せて指定します。一度きりの祝日（皇室行事の休日、英国の布告による臨時の bank holiday、シンガポールの Polling Day）と日本の国民の休日は `key` を持たないので、`kinds` か `dates` で指します。
 
 ```ts
 import { createCalendar } from "bizdays-toolkit";
@@ -260,7 +260,7 @@ museum.isBusinessDay("2026-05-07"); // false（5 月 3〜6 日の連休の翌日
 - **祝日の規則**（`{ holiday: true }`）は、祝日の既定の扱いの例外を書きます。「2027 年 4 月から祝日も営業」は `holidayPolicy: "closed"` のまま `openRecurringRules: [{ holiday: true, effectiveFrom: "2027-04-01" }]`、「振替休日と国民の休日は営業」は `openRecurringRules: [{ holiday: true, kinds: ["substitute", "citizens"] }]`、スケジュールの「5 月の祝日は特別営業時間」は `recurringRules: [{ holiday: true, months: [5], value: … }]` です。`kinds` はその種別（`Holiday.kind`。種別は提供元の一覧を参照。`holidayProvider: jp` ならエディターで補完が効きます）の祝日に、`keys` は個別の祝日（`Holiday.key`。「春分の日・秋分の日は営業」は `{ holiday: true, keys: ["vernal-equinox", "autumnal-equinox"] }`。[祝日の識別子](#祝日の識別子)）に、`weekdays` はその曜日（「土曜の祝日は午前診療」は `{ holiday: true, weekdays: [6], value: … }`）に、`months` はその月に絞り、省略すればすべての祝日です。判定は「祝日の上」の段階で、`holidayPolicy` より先に行い、`holidayPolicy: "ignore"` でも当てはまります。当てはまる日は祝日なので、この規則に `holidayOverlapPolicy` は指定できません（`invalid-option`）。`holiday` には祝日がそのまま付きます
 - **祝日の翌日**は定義上祝日でないので、その規則に `holidayOverlapPolicy` は指定できません（`invalid-option`）。「祝日」は提供元の祝日で、毎年の休業日などは含みません。提供元のない設定では 1 日も当てはまりません。`weekdays` でその曜日に絞れます。美術館の「祝日の翌日は休館（土曜・日曜に当たる場合は開館）」は `{ dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] }` です（代わりに `openRecurringRules` で土日を開けると、ほかの土日の休館まで打ち消してしまいます）
 - **月の第 n 営業日**（`{ businessDayOfMonth: n }`）は、「月末最終営業日は棚卸しで休業」「四半期初の第 1・第 5 営業日は予約を止める」、スケジュールなら「最終営業日は短縮営業」を規則として書くためのものです。`{ dayOfMonth: -1 }`（暦の末日）や `{ weekday: 5, nth: -1 }`（最終金曜日）では数日ずれます。営業日を数える基準は、そのカレンダーの**繰り返しの規則をすべて除いた判定**（個別の日付・毎年の休業日・祝日（`holidayPolicy` の扱いどおり）・`closedWeekdays`）です。`closedAnnualDates: [{ from: "12-31", to: "01-03" }]` の年末年始休業があれば 2026 年 12 月の最終営業日は 30 日、31 日が土曜日の 10 月は 30 日です。繰り返しの規則を基準に入れないのは、この規則自身が繰り返しの規則で、入れると定義が循環するためです。そのため `closedRecurringRules` の `{ weekday: 0 }` で書いた定休日は営業日として数えられます。定休日は `closedWeekdays` で書いてください（そのような設定は診断が `counting-basis` で知らせます）。メソッドの `nthBusinessDayOfMonth`・`lastBusinessDayOfMonth` は規則を適用した後の実際の営業日を返すので、`{ businessDayOfMonth: -1 }` を休業にすると `lastBusinessDayOfMonth` はその前日になります。営業日が n 日に満たない月には当てはまりません（どの月にもない n は `never-matches`）。`holidayOverlapPolicy` は既定の `"under-holiday"` と `"over-holiday"` を受け、`"after-holiday"` は `invalid-option` です。`holidayPolicy: "open"` では祝日も営業日として数えるので第 n 営業日が祝日に当たることがあり、既定ではその日は祝日の段階が先に決めます（曜日の規則と同じ優先順位）。「第 1 営業日は祝日でも休業」は `holidayOverlapPolicy: "over-holiday"` で書きます（祝日が休業の設定では結果を変えず、診断が `redundant` で知らせます）。スケジュールには営業・休業の概念がないので、数える基準のカレンダーを `calendar` で指定します: `{ businessDayOfMonth: -1, calendar: branch, value: … }`（必須。タイムゾーンはスケジュールと同じ。そのカレンダーの実際の営業日で数える。カレンダーの側に `calendar` を書くと `invalid-option`）
-- **週の第 n 営業日**（`{ businessDayOfWeek: n, weekStart }`）は、同じ規則の週版です。「週の最終営業日は週次棚卸しで出荷停止」は、金曜日が祝日の週は木曜日、火曜日から年末年始の週は月曜日に動き、`{ weekday: 5 }` でも祝日の前後の規則でも書けません。週は `weekStart` の曜日（0 = 日曜日〜6 = 土曜日）から 7 日間で、週の始まりは地域・業種で違うので省略できません。`n` は 1〜7 と -1〜-7 で、数え方・`calendar`・`holidayOverlapPolicy` は `businessDayOfMonth` とまったく同じです。`months` は当てはまる日の月で絞るので、月をまたぐ週も 1 つの週として数えます
+- **週の第 n 営業日**（`{ businessDayOfWeek: n, weekStart }`）は、同じ規則を週で数える形です。「週の最終営業日は週次棚卸しで出荷停止」は、金曜日が祝日の週は木曜日、火曜日から年末年始の週は月曜日に動き、`{ weekday: 5 }` でも祝日の前後の規則でも書けません。週は `weekStart` の曜日（0 = 日曜日〜6 = 土曜日）から 7 日間で、週の始まりは地域・業種で違うので省略できません。`n` は 1〜7 と -1〜-7 で、数え方・`calendar`・`holidayOverlapPolicy` は `businessDayOfMonth` とまったく同じです。`months` は当てはまる日の月で絞るので、月をまたぐ週も 1 つの週として数えます
 
 ```ts
 import { createCalendar } from "bizdays-toolkit";
@@ -762,7 +762,7 @@ try {
 
 営業日カレンダー・スケジュールの設定（作る関数が検証するオブジェクト。オブジェクトでないことも含み、`Date`・`Map`・配列はオブジェクトとして受けません）の誤りは `invalid-option` で、設定の診断も同じコードを返します。それ以外の引数の誤りは、メソッドのオプションの誤りも含めて `invalid-argument` です。保存した設定を検証せずに書き換える関数は、読めない値を引数の誤りとして扱います。
 
-コード: `invalid-date`・`invalid-input`・`invalid-month`・`invalid-annual-date`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-argument`・`invalid-option`・`time-zone-conflict`・`out-of-range`・`unconfirmed-holiday`・`invalid-provider`・`invalid-provider-data`・`no-business-day`・`no-closed-day`。将来の版でコードが増えることがあります。
+コード: `invalid-date`・`invalid-input`・`invalid-month`・`invalid-annual-date`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-argument`・`invalid-option`・`time-zone-conflict`・`out-of-range`・`unconfirmed-holiday`・`invalid-provider`・`invalid-provider-data`・`no-business-day`・`no-closed-day`。将来のバージョンでコードが増えることがあります。
 
 ## 設定の診断
 
@@ -805,7 +805,7 @@ diagnoseCalendar({
 | `info`             | `counting-basis`        | 第 n 営業日の規則（`businessDayOfMonth`・`businessDayOfWeek`）と、有効期間の重なる毎週の曜日の規則が同じ設定にある。その曜日は営業日として数えられる（曜日の規則ごとに 1 件。[繰り返しの規則](#繰り返しの規則)）                                                                  |
 | `info`             | `expired`               | `asOf`（下記）を渡したときだけ。基準日より前に終わった規則・日付                                                                                                                                                                                                                  |
 
-- 判定には `code` を使ってください。`message` は英語で、文言は変わることがあります。`code` は将来の版で増えることがあります
+- 判定には `code` を使ってください。`message` は英語で、文言は変わることがあります。`code` は将来のバージョンで増えることがあります
 - `error` があるときは、規則どうしの診断（`shadowed`・`redundant` など）は行いません
 - `shadowed` は同じ種類の規則どうし（個別の日付どうし、毎年の月日どうし、繰り返しの規則どうし）だけを調べます。判定の順番は固定なので、種類をまたいで使われない規則は `redundant` として見つかります。臨時営業日（`openDates`）と臨時休業日（`closedDates`）は同じ種類で、先の臨時営業日に含まれる臨時休業日は `shadowed` です
 - 繰り返しの規則の `shadowed` は、祝日に当たったときの扱い（`holidayOverlapPolicy`）も見ます。たとえば `"under-holiday"` の規則は、同じ日に当たる `"over-holiday"` の規則を覆いません（祝日には後の規則が当たるため）

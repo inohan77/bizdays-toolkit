@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # サイズの上限の検査（scripts/check-size.ts）が前の版のタグを読むため、履歴とタグを取得する
+          # サイズの上限の検査（scripts/check-size.ts）が前のバージョンのタグを読むため、履歴とタグを取得する
           fetch-depth: 0
       - uses: ./.github/actions/setup-toolchain
         with:
@@ -54,7 +54,7 @@ jobs:
             echo "::error::CHANGELOG heading for ${version} has no date: ${heading:-(no heading)}; expected ## [${version}] - ${today} (Asia/Tokyo)" >&2
             exit 1
           fi
-          # 未来の日付と、タグを付けたコミットより前の日付（前の版の日付の書き換え忘れ）を止める。
+          # 未来の日付と、タグを付けたコミットより前の日付（前のバージョンの日付の書き換え忘れ）を止める。
           # 範囲で確かめるので、失敗したワークフローを翌日以降に再実行しても止まらない
           if [[ "${changelog_date}" > "${today}" ]] || [[ "${changelog_date}" < "${commit_date}" ]]; then
             echo "::error::CHANGELOG date for ${version} is ${changelog_date}; expected ${commit_date}..${today} (Asia/Tokyo)" >&2
@@ -64,7 +64,7 @@ jobs:
       - run: pnpm check
 
       - name: Stage on npm
-        # staged publishing: ステージした版は、メンテナーが npmjs.com（または npm stage approve）で
+        # staged publishing: ステージしたバージョンは、メンテナーが npmjs.com（または npm stage approve）で
         # 2FA 付きで承認するまで利用者に届かない。Trusted Publisher の設定では npm publish を許可しない
         run: |
           set -o pipefail # tee につないでも npm の失敗でステップを止める

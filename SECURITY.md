@@ -8,14 +8,14 @@ Please report vulnerabilities privately through GitHub's **Private vulnerability
 
 ## Supported versions
 
-最新のマイナー版だけを修正の対象にします（1.0.0 までは 0.x の最新）。
+最新のマイナーバージョンだけを修正の対象にします（1.0.0 までは 0.x の最新）。
 
 Only the latest minor release receives fixes (until 1.0.0, the latest 0.x minor release).
 
 ## Supply chain
 
 - 依存ゼロです。ランタイムの依存（`dependencies`）はありません
-- npm への公開は GitHub Actions から staged publishing で行い、メンテナーが 2FA 付きで承認してから利用者に届きます。0.1.0 以降のすべての版に provenance（ビルド元の証明）が付いています
+- npm への公開は GitHub Actions から staged publishing で行い、メンテナーが 2FA 付きで承認してから利用者に届きます。0.1.0 以降のすべてのバージョンに provenance（ビルド元の証明）が付いています
 - npm のアクセストークンは使いません（Trusted Publishing）
 
 - Zero dependencies: the package has no runtime dependencies (`dependencies`).

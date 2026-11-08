@@ -4,10 +4,10 @@
  * - 公開されるファイルが dist・README・CHANGELOG・LICENSE・package.json だけであること
  * - exports のすべてのエントリーが存在し、読み込めること
  * - ランタイムの依存（dependencies）がないこと
- * - CHANGELOG.md の版の節とリンク定義がそろっていること（checkChangelog）
+ * - CHANGELOG.md のバージョンの節とリンク定義がそろっていること（checkChangelog）
  * - 英語と日本語のドキュメントの対（README・guide・providers）の構成がそろい、見出しへのリンクが実在すること（checkDocPair・checkDocAnchors）
  * - ライブラリのソース（src）が Node.js 固有の機能と、実行環境のタイムゾーンに依存する API を使っていないこと（checkPortableSource。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）
- * - ドキュメントの数値・一覧（対応年・タイムゾーン・confirmedThrough・key の表・コードの一覧・サイズを測った版）が
+ * - ドキュメントの数値・一覧（対応年・タイムゾーン・confirmedThrough・key の表・コードの一覧・サイズを測ったバージョン）が
  *   dist とソースの型に一致し、英日の対で節ごとの数値がそろうこと（checkDocFacts・checkPairNumbers。RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）
  * - コメントと文書のファイルのパス・決定の番号の参照が実在すること（checkReferences。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）
  */
@@ -53,14 +53,14 @@ function isCalendarDate(date: string): boolean {
 }
 
 /**
- * CHANGELOG.md の版の節とリンク定義を確かめる。
+ * CHANGELOG.md のバージョンの節とリンク定義を確かめる。
  *
- * - 先頭が [Unreleased] の節で、その次の節が package.json の版であること
- * - 版の節が新しい順に並び、日付が "YYYY-MM-DD" で新しい順（同じ日は可）であること。
- *   日付が決まっていない現在の版だけは "YYYY-MM-DD" のままでもよい（タグの前に当日の日付にする。
+ * - 先頭が [Unreleased] の節で、その次の節が package.json のバージョンであること
+ * - バージョンの節が新しい順に並び、日付が "YYYY-MM-DD" で新しい順（同じ日は可）であること。
+ *   日付が決まっていない現在のバージョンだけは "YYYY-MM-DD" のままでもよい（タグの前に当日の日付にする。
  *   リリースのワークフローが日付の範囲を確かめ、YYYY-MM-DD のままなら止まる）
- * - リンク定義が節とちょうど対応すること（[Unreleased] は最新の版から HEAD、各版は 1 つ前の版との比較、
- *   最初の版はタグのページ）。足りない・余分・URL の誤りをすべて報告する
+ * - リンク定義が節とちょうど対応すること（[Unreleased] は最新のバージョンから HEAD、各バージョンは 1 つ前のバージョンとの比較、
+ *   最初のバージョンはタグのページ）。足りない・余分・URL の誤りをすべて報告する
  */
 function checkChangelog(text: string): string[] {
   const problems: string[] = [];
@@ -636,7 +636,7 @@ async function checkDocFacts(): Promise<string[]> {
       problems.push(`${file}: the diagnostics table lacks ${missingDiag.join(", ")}`);
   }
 
-  // README のサイズの値: 測定した版が今のマイナー系列であること（RELEASING.md の「README のサイズの値」）
+  // README のサイズの値: 測定したバージョンが今のマイナー系列であること（RELEASING.md の「README のサイズの値」）
   const minor = pkg.version.split(".").slice(0, 2).join(".");
   for (const [file, pattern] of [
     ["README.md", /measured for (\d+\.\d+)\.\d+/],
@@ -655,7 +655,7 @@ async function checkDocFacts(): Promise<string[]> {
 }
 
 /**
- * 英日の対の文書で、節ごと（見出しで区切る）の数値の集合が一致すること。年・版・サイズのような数値（32 以上の整数、
+ * 英日の対の文書で、節ごと（見出しで区切る）の数値の集合が一致すること。年・バージョン・サイズのような数値（32 以上の整数、
  * 小数点を含む数）だけを比べる（月日の数字は英語では月名になるので比べない）。コードブロックとリンクの URL は除き、
  * インラインのコードは含める。片方だけ直した数値を見つける（両方が同じ誤りなら checkDocFacts の側で見つける）
  */

@@ -7,7 +7,7 @@
  *
  * 引数:
  *   --package <dir>  そのディレクトリのパッケージ（<dir>/dist/index.js と <dir>/dist/jp/index.js）を測る。
- *                    CI で公開済みの前の版と今回の dist を同じ機械で比べるために使う（scripts/bench-compare.ts）
+ *                    CI で公開済みの前のバージョンと今回の dist を同じ機械で比べるために使う（scripts/bench-compare.ts）
  *   --json <file>    結果（計測名と 1 回あたりのミリ秒）を JSON で書き出す
  */
 
@@ -36,8 +36,8 @@ const jpModule: Jp = packageDir
   : await import("../src/jp/index.ts");
 const { jp } = jpModule;
 
-// 前の版の dist が 0.30.0 より前（新しい名前を知らない）なら、設定の新しい名前を旧名に戻して渡す。
-// CI の bench は同じ場面を前の版と比べるため（新しい名前のままだと、前の版は知らないキーとして黙って無視する）
+// 前のバージョンの dist が 0.30.0 より前（新しい名前を知らない）なら、設定の新しい名前を旧名に戻して渡す。
+// CI の bench は同じ場面を前のバージョンと比べるため（新しい名前のままだと、前のバージョンは知らないキーとして黙って無視する）
 const legacy =
   typeof (root.createCalendar({}) as { diffBusinessDays?: unknown }).diffBusinessDays !==
   "function";

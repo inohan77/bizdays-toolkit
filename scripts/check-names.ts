@@ -904,7 +904,7 @@ for (const s of sigs) {
 }
 
 // ---------------------------------------------------------------------------
-// C11（N9）: スケジュール版の型
+// C11（N9）: スケジュールの側の型
 // ---------------------------------------------------------------------------
 
 function reachable(roots: readonly string[]): Set<string> {
@@ -938,7 +938,7 @@ for (const name of exportedTypes.keys()) {
   if (!bare.startsWith("Schedule") || bare === "Schedule" || bare === "ScheduleOptions") continue;
   const counterpart = bare.slice("Schedule".length);
   if (!exportedTypes.has(counterpart))
-    report("N9/C11", name, `Schedule を除いた ${counterpart} という型（カレンダー版）がない`);
+    report("N9/C11", name, `Schedule を除いた ${counterpart} という型（カレンダーの側の型）がない`);
 }
 
 // ---------------------------------------------------------------------------
@@ -948,7 +948,7 @@ for (const name of exportedTypes.keys()) {
 /**
  * 今の状態を書いたファイルと、型定義の TSDoc（@deprecated の付いていないもの）に、0.30.0 で改名した旧名が残っていないか。
  * 旧名は 1.0.0 まで動くので、コード例の実行（RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）では見つからない。履歴を書いたファイル（CHANGELOG・decisions.md・
- * migration.md）と、文書の版の番号を見出しに持つ節（移行の説明）は見ない（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。旧名の出どころは改名の表
+ * migration.md）と、文書のバージョンの番号を見出しに持つ節（移行の説明）は見ない（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。旧名の出どころは改名の表
  * （src/core/renamed.ts のキー）・削除予定の表・migration.md の「引数の名前」の表で、今の公開名と同じ綴りのものは除く。
  * 値（"national" など）は英語の語としても現れるので、人の確認で見る（RELEASING.md の「品質の確認」）
  */
@@ -1004,7 +1004,7 @@ const CURRENT_DOCS = [
   "SECURITY.md",
 ];
 /**
- * 見ないスクリプト: 前の版を動かすもの（bench.ts・result-compare.ts。前の版の名前で呼ぶのが正しい）と、公式データを照合するもの
+ * 見ないスクリプト: 前のバージョンを動かすもの（bench.ts・result-compare.ts。前のバージョンの名前で呼ぶのが正しい）と、公式データを照合するもの
  * （verify-*。オブジェクトは外部のデータの形で、data.gov.sg の day などを持つ）
  */
 const skipScript = (name: string): boolean =>
@@ -1027,7 +1027,7 @@ const scanText = (
 };
 for (const file of CURRENT_DOCS) {
   const lines = readFileSync(file, "utf8").split("\n");
-  // 版の番号（0.30.0 など）を見出しに持つ節は移行の説明なので見ない
+  // バージョンの番号（0.30.0 など）を見出しに持つ節は移行の説明なので見ない
   let inVersionSection = false;
   let level = 0;
   const skipped = lines.map((line) => {

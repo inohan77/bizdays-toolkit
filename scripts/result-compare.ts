@@ -1,26 +1,26 @@
 /**
- * 前の版との設定の結果の比較（CI の result-compare ジョブ。RELEASING.md の「品質の仕組みの理由」の「前の版と比べる」）。
+ * 前のバージョンとの設定の結果の比較（CI の result-compare ジョブ。RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」）。
  *
- * 種（シード）で決まる設定の集まりと、過去の退行を書き留めた固定の設定を、前の版と今回の dist の両方に渡し、
+ * 種（シード）で決まる設定の集まりと、過去の退行を書き留めた固定の設定を、前のバージョンと今回の dist の両方に渡し、
  * カレンダー（直接・合成・スケジュールから）とスケジュールの結果を 1 日ずつ比べる。比べる項目は、営業日か（値）・
- * reason・name・shiftedFrom・設定の位置。診断は、前の版の結果（severity・code・path・relatedPath）がすべて
+ * reason・name・shiftedFrom・設定の位置。診断は、前のバージョンの結果（severity・code・path・relatedPath）がすべて
  * 今回の結果に含まれることを確かめる（RELEASING.md の「互換性の約束」の診断の項。誤った診断を直して消えた結果は、etc/result-changes.json で許す）。
  *
- * 設定の名前: 前の版が改名の前（0.30.0 より前）なら旧名だけ、そうでなければ新しい名前と旧名の両方で書く。
- * 改名の前の版と比べるときは、返す値の改名（reason の "regular" → "default"）と設定の位置のキーの改名をそろえてから比べる。
+ * 設定の名前: 前のバージョンが改名の前（0.30.0 より前）なら旧名だけ、そうでなければ新しい名前と旧名の両方で書く。
+ * 改名の前のバージョンと比べるときは、返す値の改名（reason の "regular" → "default"）と設定の位置のキーの改名をそろえてから比べる。
  *
- * 意図した差分は etc/result-changes.json に、設定の特徴（trait）・入った版・出典を書いて許す。診断の差分は、消えた結果のコード
+ * 意図した差分は etc/result-changes.json に、設定の特徴（trait）・入ったバージョン・出典を書いて許す。診断の差分は、消えた結果のコード
  * （removedCodes）でも絞れる。
- * 許すのは、前の版がその変更より前（affectedSince 以上・introducedIn 未満）で、今回の版がその変更を含むときだけ。
- * 失敗にする条件: 許していない差分がある。今回の版で、意図せず作成に失敗した設定がある（生成器が意図して混ぜた入力の誤り
+ * 許すのは、前のバージョンがその変更より前（affectedSince 以上・introducedIn 未満）で、今回のバージョンがその変更を含むときだけ。
+ * 失敗にする条件: 許していない差分がある。今回のバージョンで、意図せず作成に失敗した設定がある（生成器が意図して混ぜた入力の誤り
  * （test/support/catalog.ts の印を付けた規則を含む設定）は数えて Job Summary に出し（0 件なら空振りとして失敗）、それ以外の作成の失敗は、結果を比べられていないので失敗にする。
- * 名前の書き方（新しい名前・旧名）ごとに数え、前の版でも失敗した設定の数も出す。前の版と誤りが同じなら差分にならないので、
+ * 名前の書き方（新しい名前・旧名）ごとに数え、前のバージョンでも失敗した設定の数も出す。前のバージョンと誤りが同じなら差分にならないので、
  * 数えなければ黙って空振りになるため）。旧名の回で、新しい名前で書ける項目があるのに旧名に書き換わらなかった設定がある。
  *
  * 使い方: node scripts/result-compare.ts --base <dir> [--head .] [--base-label <label>] [--seed <n>] [--scale <n>] [--changes <file>]
- *   --base は前の版を展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回のリポジトリ（pnpm build 済み）。
+ *   --base は前のバージョンを展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回のリポジトリ（pnpm build 済み）。
  *   --scale は設定の数の倍率（既定 1）。--changes は意図した差分の一覧（既定は --head の etc/result-changes.json。
- *   公開済みの版どうしを比べて検査が働くかを確かめるときに、このリポジトリの一覧を渡す）
+ *   公開済みのバージョンどうしを比べて検査が働くかを確かめるときに、このリポジトリの一覧を渡す）
  * 終了コード: 0 = 合格、1 = 許していない差分・意図せず作成に失敗した設定、2 = 引数・読み込みの誤り・予期しない例外
  * （設定ごとの比較の外で投げたもの。比較が終わっていないので、差分の有無は分からない）。結果は Markdown で標準出力に書く。
  */
@@ -74,14 +74,14 @@ const headVersion = versionOf(headDir);
 const baseVersion = versionOf(baseDir);
 const baseLabel = argValue("--base-label") ?? baseVersion;
 
-/** "a.b.c" の版を比べる（プレリリースは使わない） */
+/** "a.b.c" のバージョンを比べる（プレリリースは使わない） */
 const cmp = (a: string, b: string): number => {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
   for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return (pa[i] ?? 0) - (pb[i] ?? 0);
   return 0;
 };
-/** 改名（0.30.0）より前の版か */
+/** 改名（0.30.0）より前のバージョンか */
 const baseIsBeforeRename = cmp(baseVersion, "0.30.0") < 0;
 
 // ------------------------------------------------------------
@@ -136,7 +136,7 @@ interface Renamed {
   readonly from: string;
   readonly to: string;
 }
-/** 改名の表（今回の dist の内部の表。改名の前の版と比べるときだけ使う） */
+/** 改名の表（今回の dist の内部の表。改名の前のバージョンと比べるときだけ使う） */
 let renamedKeys: readonly Renamed[] = [];
 
 const renameObject = (places: readonly string[], value: Obj, toOld: boolean): Obj => {
@@ -193,7 +193,7 @@ const withProvidersOld = (lib: Lib, options: Obj): Obj => {
   return { ...options, holidays: Array.isArray(p) ? p.map(one) : one(p) };
 };
 
-/** 改名したエラーコード（改名の前の版と比べるときにそろえる） */
+/** 改名したエラーコード（改名の前のバージョンと比べるときにそろえる） */
 const RENAMED_CODES: Readonly<Record<string, string>> = {
   "invalid-month-day": "invalid-annual-date",
 };
@@ -203,7 +203,7 @@ const errorCode = (error: unknown): string => {
 };
 
 /**
- * 1 日の結果を比べる形にそろえる。改名の前の版の reason "regular" は、改名の後の語にそろえる
+ * 1 日の結果を比べる形にそろえる。改名の前のバージョンの reason "regular" は、改名の後の語にそろえる
  * （createCalendarFromSchedule のカレンダーは "open-weekday"、それ以外は "default"。docs/migration.md の 0.30.0 の「返す値」）
  */
 function dayRecord(day: Obj, fromSchedule: boolean): string {
@@ -243,7 +243,7 @@ interface Diff {
   readonly target: string;
   readonly detail: string;
   readonly traits: readonly string[];
-  /** 診断の差分で、前の版にあって今回の版にない結果のコード */
+  /** 診断の差分で、前のバージョンにあって今回のバージョンにない結果のコード */
   readonly removedCodes?: readonly string[];
 }
 
@@ -305,8 +305,8 @@ const intendedInvalid = (c: Case): boolean =>
   );
 
 /**
- * 作成の結果の集計（今回の版で、意図した入力の誤りの設定・意図せず作成に失敗した設定）。bothFailed は、意図せず作成に失敗した
- * 設定のうち、前の版でも作成に失敗したもの（誤りが同じなら差分にならず、結果を何も比べていない空振り）。notRenamed は、旧名の回で
+ * 作成の結果の集計（今回のバージョンで、意図した入力の誤りの設定・意図せず作成に失敗した設定）。bothFailed は、意図せず作成に失敗した
+ * 設定のうち、前のバージョンでも作成に失敗したもの（誤りが同じなら差分にならず、結果を何も比べていない空振り）。notRenamed は、旧名の回で
  * 旧名に書き換わらなかった設定（新しい名前で書ける項目があるのに、書き換えた設定が新しい名前の設定と同じ）
  */
 const creation = {
@@ -370,7 +370,7 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
     const h = build(() => head.createCalendar(opts(head)));
     tally(c, h, naming, b);
     if (c.partner) {
-      // 合成の相手も、本体の設定と同じに数える（前の版の結果を渡し、旧名の回で旧名に書き換わったかも確かめる）
+      // 合成の相手も、本体の設定と同じに数える（前のバージョンの結果を渡し、旧名の回で旧名に書き換わったかも確かめる）
       const partner = c.partner;
       const partnerOpts = (lib: Lib): Obj =>
         naming === "old"
@@ -440,7 +440,7 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
     } else {
       const missing = [...bk].filter((k) => !hk.has(k));
       // 増えた結果は約束の範囲内（失敗にしない）。CHANGELOG に書くべき変化に気付くため、一覧に出す。旧名の設定の比較では、
-      // deprecated-option は旧名で書いたことを知らせるだけ（改名の前の版にはない）なので数えない。新しい名前の設定で
+      // deprecated-option は旧名で書いたことを知らせるだけ（改名の前のバージョンにはない）なので数えない。新しい名前の設定で
       // deprecated-option が増えたら、利用者に見える変化なので数える
       const added = [...hk].filter(
         (k) =>
@@ -451,7 +451,7 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
       if (missing.length > 0) {
         diffs.push({
           ...meta("diagnose"),
-          detail: `前の版の結果がない: ${missing.join(" ")}`,
+          detail: `前のバージョンの結果がない: ${missing.join(" ")}`,
           removedCodes: missing.map((k) => String((JSON.parse(k) as unknown[])[1])),
         });
       }
@@ -460,7 +460,7 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
   return diffs;
 }
 
-/** 診断の結果が増えた設定（前の版になかった結果。約束の範囲内なので失敗にしない） */
+/** 診断の結果が増えた設定（前のバージョンになかった結果。約束の範囲内なので失敗にしない） */
 const increases: string[] = [];
 
 // ------------------------------------------------------------
@@ -474,7 +474,7 @@ interface KnownChange {
   readonly introducedIn: string;
   readonly source: string;
   readonly summary: string;
-  /** 診断の差分を、前の版の結果が消えたもので、消えた結果のコードがすべてこの中にあるものだけに絞る */
+  /** 診断の差分を、前のバージョンの結果が消えたもので、消えた結果のコードがすべてこの中にあるものだけに絞る */
   readonly removedCodes?: readonly string[];
 }
 
@@ -489,7 +489,7 @@ function knownChanges(): KnownChange[] {
   return list.changes;
 }
 
-/** その差分を許すか: 前の版が変更の前で、今回の版が変更を含み、設定がその特徴を持ち、比べた対象が合う */
+/** その差分を許すか: 前のバージョンが変更の前で、今回のバージョンが変更を含み、設定がその特徴を持ち、比べた対象が合う */
 const allowedBy = (known: readonly KnownChange[], d: Diff): KnownChange | undefined =>
   known.find(
     (k) =>
@@ -514,7 +514,7 @@ try {
   base = await load(baseDir);
   head = await load(headDir);
   known = knownChanges();
-  // 旧名の回（どの比較にもある）で設定を旧名に書き換えるので、旧名の表はいつも読み込む（0.30.7 までは、改名の前の版との
+  // 旧名の回（どの比較にもある）で設定を旧名に書き換えるので、旧名の表はいつも読み込む（0.30.7 までは、改名の前のバージョンとの
   // 比較でだけ読み込んでいたので、latest との比較の旧名の回は旧名に書き換わっていなかった）
   const table = (await import(pathToFileURL(resolve(headDir, "dist/core/renamed.js")).href)) as {
     RENAMED_KEYS?: readonly Renamed[];
@@ -537,7 +537,7 @@ const cases: Case[] = [...fixed, ...generateCases(seed, scale, newShapes)];
 /**
  * 診断は時間がかかるので、固定の設定と、種で作った設定の 4 件に 1 件だけ。種で作った設定は、その中の番号を 4 で割った余り
  * （DIAGNOSED_REMAINDER）で選ぶ。固定の設定を足しても、診断する種で作った設定が変わらないようにするため。余りは、固定の設定の
- * 数で選んでいた 0.30.6 までと同じ設定になるように、改名の前の版との比較とそれ以外で分ける（生成範囲の記録を保つため）
+ * 数で選んでいた 0.30.6 までと同じ設定になるように、改名の前のバージョンとの比較とそれ以外で分ける（生成範囲の記録を保つため）
  */
 const DIAGNOSED_REMAINDER = newShapes ? 1 : 2;
 const diagnosed = (c: Case, i: number): boolean =>
@@ -570,7 +570,7 @@ out.push(
   "",
 );
 out.push(
-  `入力の誤りの設定: ${creation.intended} 件（エラーコードを比較）。意図せず作成に失敗した設定: ${creation.unintended.length} 件（名前の書き方ごと。うち前の版でも失敗した設定 ${creation.bothFailed} 件）。旧名に書き換わらなかった設定: ${creation.notRenamed.length} 件`,
+  `入力の誤りの設定: ${creation.intended} 件（エラーコードを比較）。意図せず作成に失敗した設定: ${creation.unintended.length} 件（名前の書き方ごと。うち前のバージョンでも失敗した設定 ${creation.bothFailed} 件）。旧名に書き換わらなかった設定: ${creation.notRenamed.length} 件`,
   "",
 );
 if (creation.unintended.length > 0)
@@ -622,7 +622,7 @@ if (unexpected.length > 0) {
     ...unexpected.slice(0, LIMIT).map(describe),
     "```",
     "",
-    "**失敗**（意図した変更なら、etc/result-changes.json に特徴・版・出典を書く）",
+    "**失敗**（意図した変更なら、etc/result-changes.json に特徴・バージョン・出典を書く）",
   );
 } else if (creation.unintended.length > 0) {
   out.push("**失敗**（意図せず作成に失敗した設定がある）");

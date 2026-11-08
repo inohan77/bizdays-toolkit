@@ -24,7 +24,7 @@ export interface Holiday<Kind extends string = string> {
   /**
    * その日が観測している祝日の識別子（省略可能）。/^[a-z0-9][a-z0-9-]*$/ に限る。
    * name が公式データの呼び方を写すのに対し、key は規則（{ holiday: true, keys: [...] }）から祝日を指すための安定した
-   * 識別子で、提供元が決め、版をまたいで変えない（日付の移動・公式の改名があっても同じ祝日なら同じ key）。
+   * 識別子で、提供元が決め、バージョンをまたいで変えない（日付の移動・公式の改名があっても同じ祝日なら同じ key）。
    * 振替日は元の祝日の key を持つ。種別と同じ情報しか持たない日（日本の国民の休日）や一度きりの日（臨時の祝日）は持たない。
    * 同じ年に同じ key が複数回現れることはある（振替日と元の祝日、年に 2 回ある振替休日）
    */
@@ -44,7 +44,7 @@ export interface Holiday<Kind extends string = string> {
  * code: "invalid-provider-data" の例外になる。返した祝日は、契約の項目（date・name・nameEn・names・
  * kind・confirmed・key）だけを持つ変更できないオブジェクトに複製される。
  *
- * 項目を足すときの版は RELEASING.md の区分の表による。1.0.0 以降、マイナー版で足す項目は省略可能なものに限る
+ * 項目を足すときのバージョンは RELEASING.md の区分の表による。1.0.0 以降、マイナーバージョンで足す項目は省略可能なものに限る
  * （必須にすると、自作の提供元が型エラーになるため）。
  * @public
  */
@@ -58,7 +58,7 @@ export interface HolidayProvider<Kind extends string = string> {
   readonly timeZone: string;
   /** 対応している年の範囲（両端を含む） */
   readonly supportedYears: { readonly from: number; readonly to: number };
-  /** 反映済みのデータの版（例: 反映済みの官報の年月 "2026-02"） */
+  /** 反映済みのデータのバージョン（例: 反映済みの官報の年月 "2026-02"） */
   readonly dataVersion: string;
   /** この年までは公式に確定している（それより後は confirmed: false を含みうる） */
   readonly confirmedThrough?: number;

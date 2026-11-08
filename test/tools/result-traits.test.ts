@@ -1,5 +1,5 @@
 // result-compare（scripts/result-compare.ts）が使う test/support/result-cases.ts の部品: 意図した差分を許す単位にする設定の特徴（traitsOfCase）と、
-// スケジュールの基準のカレンダーの作り方（withCalendars・basisClosedWeekdays。前の版と今回の版を同じ作り方で比べるので、result-compare では
+// スケジュールの基準のカレンダーの作り方（withCalendars・basisClosedWeekdays。前のバージョンと今回のバージョンを同じ作り方で比べるので、result-compare では
 // 壊れても差分にならず、基準の定休日の特徴は生成範囲の記録（0.30.3）にないので、生成範囲の検査でも見張れない。そのため、ここで直接確かめる）。
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -44,7 +44,7 @@ test("schedule-counting-basis-narrower-than-scan: 対応年が走査の範囲を
 });
 
 test("withCalendars: 基準のカレンダーは、スケジュールの outOfRangePolicy を受け継ぐ（新しい名前と旧名の両方）", () => {
-  // 今の src を版の部品として渡す（result-compare は前の版と今回の版の dist を渡す）
+  // 今の src をバージョンの部品として渡す（result-compare は前のバージョンと今回のバージョンの dist を渡す）
   const lib = {
     createCalendar: (options: Record<string, unknown>) => createCalendar(options),
     providers: new Map<string, unknown>([["sg", sg]]),
@@ -76,7 +76,7 @@ test("withCalendars: 基準のカレンダーは、スケジュールの outOfRa
   }
 });
 
-/** 基準のカレンダーの定休日を問う（今の src を版の部品として渡す） */
+/** 基準のカレンダーの定休日を問う（今の src をバージョンの部品として渡す） */
 const basisOf = (c: Case, naming: "new" | "old"): { isBusinessDay(d: string): boolean } => {
   const lib = {
     createCalendar: (options: Record<string, unknown>) => createCalendar(options),

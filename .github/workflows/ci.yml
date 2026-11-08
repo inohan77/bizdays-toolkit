@@ -14,19 +14,19 @@ concurrency:
 
 jobs:
   check:
-    # ubuntu-latest は 2026-10-19 から Ubuntu 26 に切り替わるため、版を固定する
+    # ubuntu-latest は 2026-10-19 から Ubuntu 26 に切り替わるため、バージョンを固定する
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # npm の動作要件を満たす版（RELEASING.md の「開発環境の版」）
+        # npm の動作要件を満たすバージョン（RELEASING.md の「開発環境のバージョン」）
         node: ["22.23.4", "24.22.2", "26.13.0"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # サイズの上限の検査（scripts/check-size.ts）が前の版のタグを読むため、履歴とタグを取得する
+          # サイズの上限の検査（scripts/check-size.ts）が前のバージョンのタグを読むため、履歴とタグを取得する
           fetch-depth: 0
       - uses: ./.github/actions/setup-toolchain
         with:
@@ -36,8 +36,8 @@ jobs:
         run: npm pack --dry-run --ignore-scripts
 
   compat:
-    # 公開する dist を、engines の下限と、check で使わない LTS・LTS 入りを控えた系列で確かめる（版は matrix。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
-    # これらの版ではテスト（.ts の直接実行）も npm 12 も動かないため、ビルドは固定の版の Node.js で行い、
+    # 公開する dist を、engines の下限と、check で使わない LTS・LTS 入りを控えた系列で確かめる（バージョンは matrix。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+    # これらのバージョンではテスト（.ts の直接実行）も npm 12 も動かないため、ビルドは固定のバージョンの Node.js で行い、
     # Node.js を切り替えてから、プレーンな JavaScript の確認（test/compat）だけを実行する
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -63,7 +63,7 @@ jobs:
 
   browsers:
     # 公開する dist を、ランナーに入っている Chrome・Firefox・Edge で確かめる（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
-    # ブラウザーの版はランナーのイメージの更新で変わる（その時点の最新の安定版で確かめる）
+    # ブラウザーのバージョンはランナーのイメージの更新で変わる（その時点の最新の安定バージョンで確かめる）
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -80,7 +80,7 @@ jobs:
       - run: node scripts/test-browsers.ts edge "${EDGEWEBDRIVER}/msedgedriver"
 
   safari:
-    # Safari は macOS のランナーでだけ動く。macos-latest は移り変わるので版を固定する
+    # Safari は macOS のランナーでだけ動く。macos-latest は移り変わるのでバージョンを固定する
     runs-on: macos-15
     timeout-minutes: 15
     steps:
@@ -96,7 +96,7 @@ jobs:
 
   workerd:
     # 公開する dist を、Cloudflare Workers の実行環境（workerd。本番と同じコード）で確かめる（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
-    # workerd は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）
+    # workerd は npm の依存にせず、バージョンと SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎたバージョンを指定すること）
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -122,7 +122,7 @@ jobs:
 
   bun:
     # 公開する dist を Bun で確かめる（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。workerd と同じく npm の依存にせず、
-    # 版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）
+    # バージョンと SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎたバージョンを指定すること）
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -172,8 +172,8 @@ jobs:
         run: '"${RUNNER_TEMP}/deno/deno" run --unstable-temporal test/compat/runtime.mjs'
 
   consumer-types:
-    # 公開する型定義を、利用者が使う TypeScript の複数の版で型チェックする（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
-    # 各版は npm の依存にせず、版と SHA-256 を固定した tgz から一時的に入れる。版の選び方は RELEASING.md
+    # 公開する型定義を、利用者が使う TypeScript の複数のバージョンで型チェックする（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+    # 各バージョンは npm の依存にせず、バージョンと SHA-256 を固定した tgz から一時的に入れる。バージョンの選び方は RELEASING.md
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -226,7 +226,7 @@ jobs:
         run: git diff --exit-code -- package.json pnpm-lock.yaml
 
   bench:
-    # 性能の退行を、公開済みの前の版（npm の latest）と同じランナーで比べて検出する（RELEASING.md の「品質の仕組みの理由」の「前の版と比べる」）。
+    # 性能の退行を、公開済みの前のバージョン（npm の latest）と同じランナーで比べて検出する（RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」）。
     # どれかの計測が 2 倍より遅ければ失敗。絶対値は Job Summary に残す
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -258,7 +258,7 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
 
   data-compare:
-    # 同梱の提供元の祝日データを、公開済みの前の版（npm の latest）と 1 日ずつ比べる（RELEASING.md の「品質の仕組みの理由」の「前の版と比べる」）。
+    # 同梱の提供元の祝日データを、公開済みの前のバージョン（npm の latest）と 1 日ずつ比べる（RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」）。
     # 失敗の条件は scripts/data-compare.ts。差分は Job Summary に残す
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -288,9 +288,13 @@ jobs:
   oracle:
     # 診断の総当たりのオラクル（test/diagnose-oracle.test.ts）を、すべての組み合わせで動かす。1 ジョブの時間を
     # RELEASING.md の決まり（10 分以内）に収めるため、ORACLE_SHARD で行列に分ける。pnpm check は決まった抜き出しだけを試す。
-    # 完全性の報告（取り除けるのに何も出ない項目）と、設定の内訳を Job Summary に残す
+    # 完全性の報告（取り除けるのに何も出ない項目）と、設定の内訳とテストごとの時間を Job Summary に残す。
+    # 最後に、ジョブの時間を同じ分の直近 3 回の main の実行と比べる（scripts/job-time.ts。actions: read はそのため）
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -306,10 +310,14 @@ jobs:
         env:
           ORACLE_FULL: "1"
           ORACLE_SHARD: ${{ matrix.shard }}
+      - name: Compare the job time with recent main runs
+        run: node scripts/job-time.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   tool-selftest:
     # 検査のスクリプトが、入れた誤りで実際に失敗することを確かめる（scripts/tool-selftest.ts）。リポジトリの写しを作業ツリーで作り、
-    # check-size が前の版のタグを読むので、履歴とタグを取得する
+    # check-size が前のバージョンのタグを読むので、履歴とタグを取得する
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -346,9 +354,13 @@ jobs:
 
   diagnose-consistency:
     # pnpm check では抜き出しだけを試す 4 つの全件を、ここで動かす: 診断と判定の一致（目録の設定の全件 150 件。pnpm check は 12 件）、
-    # API どうしの整合（test/consistency.test.ts）、診断の性質のテスト（test/diagnose-properties.test.ts）、変形しても結果が同じ（test/metamorphic.test.ts）
+    # API どうしの整合（test/consistency.test.ts）、診断の性質のテスト（test/diagnose-properties.test.ts）、変形しても結果が同じ（test/metamorphic.test.ts）。
+    # 最後に、ジョブの時間を直近 3 回の main の実行と比べる（scripts/job-time.ts。actions: read はそのため）
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -369,11 +381,15 @@ jobs:
       - run: node --import ./scripts/strict-warnings.ts --test test/metamorphic.test.ts
         env:
           METAMORPHIC_FULL: "1"
+      - name: Compare the job time with recent main runs
+        run: node scripts/job-time.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   generator-features:
     # 実際の呼び出し側（乱数のテストと result-compare）を動かし、作った設定の特徴が生成範囲の記録
     # （test/fixtures/generator-features-0.30.3/）をすべて含むことを確かめる（scripts/record-generator-features.ts）。
-    # 読み込みのフックで部品を差し替えるので、Node.js の版は 1 つに固定する。前の版の番号をタグから求めるので履歴とタグを取得する
+    # 読み込みのフックで部品を差し替えるので、Node.js のバージョンは 1 つに固定する。前のバージョンの番号をタグから求めるので履歴とタグを取得する
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -390,7 +406,7 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
 
   result-compare:
-    # 同じ設定の結果（カレンダー・スケジュール・診断）を、公開済みの前の版（npm の latest）と 1 日ずつ比べる（RELEASING.md の「品質の仕組みの理由」の「前の版と比べる」）。
+    # 同じ設定の結果（カレンダー・スケジュール・診断）を、公開済みの前のバージョン（npm の latest）と 1 日ずつ比べる（RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」）。
     # 改名の前の 0.22.2 とも、旧名の設定で比べる（改名は結果を変えないという約束を確かめるため。RELEASING.md の「1.0.0 で行う作業」で外す）。
     # 失敗の条件と意図した差分の扱いは scripts/result-compare.ts。差分は Job Summary に残す
     runs-on: ubuntu-24.04
@@ -425,7 +441,7 @@ jobs:
           node scripts/result-compare.ts --base "${RUNNER_TEMP}/${LEGACY_BASE_VERSION}/package" --head . \
             --base-label "${LEGACY_BASE_VERSION}" | tee -a "${GITHUB_STEP_SUMMARY}"
           test "${PIPESTATUS[0]}" -eq 0
-      # 文章の主張の検査（scripts/check-claims.ts）の、前の版が要る部分（d）: 変わった dist の .js・.d.ts の一覧と CHANGELOG の
+      # 文章の主張の検査（scripts/check-claims.ts）の、前のバージョンが要る部分（d）: 変わった dist の .js・.d.ts の一覧と CHANGELOG の
       # 区分。.js・.d.ts が変わったのに利用者向けの区分がなければ失敗する（決定の番号の参照の表 c は、リリースの前に手元で読む）
       - name: List the published changes
         run: |
@@ -435,7 +451,7 @@ jobs:
 
   workflows:
     # ワークフローの構文・式・シェルスクリプトの誤りを actionlint で検出する（pnpm check はワークフローを検査しない）。
-    # actionlint は npm の依存にせず、版と SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎた版を指定すること）
+    # actionlint は npm の依存にせず、バージョンと SHA-256 を固定した公式のリリースを取得する（熟成ゲートを過ぎたバージョンを指定すること）
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

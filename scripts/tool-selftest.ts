@@ -8,7 +8,7 @@ import "./strict-warnings.ts";
  * ごとに元に戻す。写し・ビルドの途中で例外が出ても、そこまでの表と後始末の問題を出してから失敗で終わる。
  *
  * 写し方: `git worktree add --detach` で HEAD の作業ツリーを作り、取り込み中の変更（git status の変更・追加・削除）を写す。
- * 作業ツリーなら、git の履歴とタグを元のリポジトリと共有するので、前の版のタグを読む検査（check-size）も写した先でそのまま動く。
+ * 作業ツリーなら、git の履歴とタグを元のリポジトリと共有するので、前のバージョンのタグを読む検査（check-size）も写した先でそのまま動く。
  * node_modules は写さず、ジャンクション（Windows）・シンボリックリンクでつなぐ。dist は写した先でビルドする。
  * 一時ディレクトリの場所は環境変数 TOOL_SELFTEST_DIR で指定できる（Windows のパスの長さの上限に当たらないよう短いパスに。
  * 指定がなければ os.tmpdir()）。終わったら（失敗しても）リンクを先に外してから作業ツリーとディレクトリを消す。リンクを外せなければ
@@ -73,7 +73,7 @@ function restore(): void {
 }
 /** 最初の一致だけを置き換える（一致しなければ edit が失敗にする） */
 const replaceOnce = (from: string | RegExp, to: string) => (text: string) => text.replace(from, to);
-/** CHANGELOG の [Unreleased] と今の版（その次の節）の利用者向けの区分の見出しを、区分でない見出しに変える */
+/** CHANGELOG の [Unreleased] と今のバージョン（その次の節）の利用者向けの区分の見出しを、区分でない見出しに変える */
 const withoutUserFacingSections = (text: string): string => {
   const start = text.indexOf("## [Unreleased]");
   const end = text.indexOf("\n## [", text.indexOf("\n## [", start + 1) + 1);
@@ -241,10 +241,10 @@ const CASES: readonly Case[] = [
     tool: "check-size",
     name: "上限を上げたのに「サイズの上限」の記載がない",
     args: TOOLS["check-size"]!,
-    // この版の CHANGELOG に「サイズの上限」の記載がすでにある（上限を正しく上げた版）ときも誤りになるよう、その記載も消す
+    // このバージョンの CHANGELOG に「サイズの上限」の記載がすでにある（上限を正しく上げたバージョン）ときも誤りになるよう、その記載も消す
     inject: () => {
       edit("size-limits.json", replaceOnce(/(?<key>"\.\/uk"\s*:\s*)\d+/, "$<key>9999"));
-      // この版の節（[Unreleased] の次の、最初の版の見出しから次の見出しの前まで）。CHANGELOG と開発の記録の両方
+      // このバージョンの節（[Unreleased] の次の、最初のバージョンの見出しから次の見出しの前まで）。CHANGELOG と開発の記録の両方
       for (const file of ["CHANGELOG.md", "docs/development-log.md"]) {
         const text = readFileSync(join(copy, file), "utf8");
         const start = text.indexOf("\n## [", text.indexOf("\n## [") + 1);
@@ -285,7 +285,7 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-claims",
-    name: "今の版より前のマイナー系列を指す語",
+    name: "今のバージョンより前のマイナー系列を指す語",
     args: TOOLS["check-claims"]!,
     inject: () => edit("SECURITY.md", (t) => `${t}\nSupported since ${OLD_SERIES}.\n`),
     expect: "refers to a minor series before",
@@ -306,7 +306,7 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-claims",
-    name: "メジャーの違う前の系列（今の版を 1.3.0 にして 1.2.x を書く）",
+    name: "メジャーの違う前の系列（今のバージョンを 1.3.0 にして 1.2.x を書く）",
     args: TOOLS["check-claims"]!,
     inject: () => {
       edit("package.json", replaceOnce(/"version": "[^"]+"/, '"version": "1.3.0"'));
@@ -316,7 +316,7 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-claims",
-    name: "dist の .js が変わったのに CHANGELOG の今の版と [Unreleased] に利用者向けの区分がない",
+    name: "dist の .js が変わったのに CHANGELOG の今のバージョンと [Unreleased] に利用者向けの区分がない",
     args: TOOLS["check-claims"]!,
     inject: () => {
       edit("dist/core/month.js", (t) => `${t}\n// injected\n`);
@@ -326,7 +326,7 @@ const CASES: readonly Case[] = [
   },
   {
     tool: "check-claims",
-    name: "dist の .d.ts の型だけが変わったのに CHANGELOG の今の版と [Unreleased] に利用者向けの区分がない",
+    name: "dist の .d.ts の型だけが変わったのに CHANGELOG の今のバージョンと [Unreleased] に利用者向けの区分がない",
     args: TOOLS["check-claims"]!,
     inject: () => {
       edit(
@@ -344,6 +344,13 @@ const CASES: readonly Case[] = [
     inject: () =>
       edit("scripts/check-size.ts", (t) => `${t}\n// injected: この検査は 1.0.0 で外す\n`),
     expect: "work for 1.0.0 that does not point to RELEASING.md",
+  },
+  {
+    tool: "check-claims",
+    name: "文書の「バージョン」を旧い用語で書いた",
+    args: TOOLS["check-claims"]!,
+    inject: () => edit("docs/migration.md", (t) => `${t}\n前の\u7248から移る手順\n`),
+    expect: 'write "バージョン"',
   },
   {
     tool: "api-report",
@@ -427,7 +434,7 @@ try {
     const r = node([tsc, "-p", "tsconfig.build.json", ...extra]);
     if (r.status !== 0) throw new Error(`build failed in the copy:\n${r.output.slice(-2000)}`);
   }
-  // 比べる相手の版（result-compare・data-compare）は、誤りを入れる前の写しのビルド
+  // 比べる相手のバージョン（result-compare・data-compare）は、誤りを入れる前の写しのビルド
   mkdirSync(base);
   cpSync(join(copy, "dist"), join(base, "dist"), { recursive: true });
   cpSync(join(copy, "package.json"), join(base, "package.json"));

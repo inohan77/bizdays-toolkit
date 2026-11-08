@@ -76,7 +76,7 @@ if (problems.length > 0) {
 
 let failed = 0;
 for (const tz of ZONES) {
-  // 結果の表示形式は Node.js の版で既定が違う（22 は TAP、24 は spec）ため、読み取れるよう TAP に固定する
+  // 結果の表示形式は Node.js のバージョンで既定が違う（22 は TAP、24 は spec）ため、読み取れるよう TAP に固定する
   const result = spawnSync(
     process.execPath,
     ["--import", "./scripts/strict-warnings.ts", "--test", "--test-reporter=tap", ...TZ_FILES],

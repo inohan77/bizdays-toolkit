@@ -3,14 +3,14 @@ import "./strict-warnings.ts";
  * 生成器が実際に作った設定の特徴を記録する（test/fixtures/generator-features-0.30.3/ の作り方。
  * test/tools/generator-features.test.ts がこの記録との包含を確かめる）。
  *
- * 記録の作り方: 指定した版（--ref。既定 v0.30.3）の 3 つの生成器の呼び出し側を、その版のファイルのまま
+ * 記録の作り方: 指定したバージョン（--ref。既定 v0.30.3）の 3 つの生成器の呼び出し側を、そのバージョンのファイルのまま
  * （種と試行の数を変えずに）作業用ディレクトリで動かし、作成・診断の関数に渡された設定の特徴（test/support/features.ts の
  * featuresOf）と、作ったカレンダー・スケジュールに問い合わせた日付の範囲（scanFeatures）を集める。
  *
  * - properties      … test/properties.test.ts を node で実行する
  * - diagnose-properties … test/diagnose-properties.test.ts を node で実行する
- * - result-compare  … scripts/result-compare.ts を、その版の公開時の比べ方（前の版との比較と、0.22.2 との旧名の比較）で
- *   2 回実行する（比べる版のパッケージは作業用ディレクトリの仮のもので、版の番号だけを持つ）
+ * - result-compare  … scripts/result-compare.ts を、そのバージョンの公開時の比べ方（前のバージョンとの比較と、0.22.2 との旧名の比較）で
+ *   2 回実行する（比べるバージョンのパッケージは作業用ディレクトリの仮のもので、バージョンの番号だけを持つ）
  *
  * 呼び出し側が読み込む src/・dist/ は、読み込みのフック（module.registerHooks）で、このリポジトリの今の src/ を包んだ部品に
  * 差し替える（設定を記録してから本物に渡す）。判定の結果は使わないので、テストの合否は記録に影響しない。
@@ -24,7 +24,7 @@ import "./strict-warnings.ts";
  * （呼び出し側が関数の呼び方を変えて、差し替えた部品が何も拾わないまま合格するのを防ぐ）。--worktree は作業ツリーのファイル（コミットしていない変更を含む）を使う。--ref HEAD は使い方の誤り（git の HEAD はコミットを指すため）。
  * 記録はコミットしておき、作り直す（--update）のは比べ方（特徴の取り出し方。test/support/features.ts）を変えたときだけにする
  * （RELEASING.md の「品質の確認」）。
- * --update は --ref v0.30.3 でだけ動く（今の版から作ると、包含の検査が自分自身との比較になるため）。
+ * --update は --ref v0.30.3 でだけ動く（今のバージョンから作ると、包含の検査が自分自身との比較になるため）。
  * 呼び出し側は strict-warnings を読み込んで動かし、Node.js の警告が出たら失敗にする（フックの警告を見落とさないため）。
  * --update では呼び出し側の終了コード 0 を必須にする（途中で止まった呼び出し側の特徴で基準が小さくなるのを防ぐ）。
  * --check では終了コードを見ない（途中で止まれば、拾えない特徴が落ちた特徴として出て、比べた結果が失敗になる）。
@@ -94,7 +94,7 @@ if (givenRef !== undefined) {
 const ref = givenRef ?? "";
 /** 報告に出す名前 */
 const label = worktree ? "作業ツリー" : ref;
-// 記録は基準の版（0.30.3）からだけ作る。今の版から作ると、包含の検査が今の生成器と自分自身の比較になって意味を失う
+// 記録は基準のバージョン（0.30.3）からだけ作る。今のバージョンから作ると、包含の検査が今の生成器と自分自身の比較になって意味を失う
 if (update && ref !== RECORD_REF) {
   console.error(`--update records only from ${RECORD_REF} (the baseline), not from ${ref}`);
   process.exit(2);
@@ -104,7 +104,7 @@ const out = resolve(argValue("--out") ?? RECORD_DIR);
 const repo = resolve(".");
 const git = (...a: string[]): string => execFileSync("git", a, { encoding: "utf8", cwd: repo });
 
-/** 版の番号（"a.b.c"）を比べる */
+/** バージョンの番号（"a.b.c"）を比べる */
 const cmp = (a: string, b: string): number => {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
@@ -130,7 +130,7 @@ try {
   const support = worktree
     ? ["test/support"]
     : git("ls-tree", "-r", "--name-only", ref, "test/support").split("\n").filter(Boolean);
-  // 呼び出し側が読み込む、版によってはないファイル（result-compare の予期しない例外の登録は 0.30.7 から）
+  // 呼び出し側が読み込む、バージョンによってはないファイル（result-compare の予期しない例外の登録は 0.30.7 から）
   const optional = ["scripts/exit-on-unexpected.ts"].filter((file) =>
     worktree
       ? existsSync(join(repo, file))
@@ -145,7 +145,7 @@ try {
   const version = (
     JSON.parse(readFileSync(join(work, "package.json"), "utf8")) as { version: string }
   ).version;
-  // その版を公開したときの「前の版」（CI の result-compare が比べた npm の latest）
+  // そのバージョンを公開したときの「前のバージョン」（CI の result-compare が比べた npm の latest）
   const previous = git("tag", "--list", "v*")
     .split("\n")
     .map((t) => t.replace(/^v/, ""))
@@ -232,7 +232,7 @@ registerHooks({
 `,
   );
 
-  // 仮のパッケージ（result-compare が版の番号を読む。dist はフックで差し替える）
+  // 仮のパッケージ（result-compare がバージョンの番号を読む。dist はフックで差し替える）
   const pkg = (name: string, v: string): string => {
     const dir = join(work, `pkg-${name}`);
     mkdirSync(join(dir, "etc"), { recursive: true });
@@ -253,7 +253,7 @@ registerHooks({
     const file = join(work, `${site}.jsonl`);
     writeFileSync(file, "");
     const started = Date.now();
-    // 種と試行の数はその版の既定のまま（種を変える PROPERTY_SEED と、TZ を変えた実行の印は渡さない）。
+    // 種と試行の数はそのバージョンの既定のまま（種を変える PROPERTY_SEED と、TZ を変えた実行の印は渡さない）。
     // 特徴はカレンダーを作るときに集めるので、抜き出し（pnpm check）ではなく全件を動かす（DIAGNOSE_PROPERTY_FULL）
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -352,7 +352,7 @@ registerHooks({
     mkdirSync(out, { recursive: true });
     for (const [site, features] of Object.entries(record)) {
       const body = {
-        note: `${ref}（${version}）の ${site} が作った設定の特徴（基準の記録。今の版からは作り直さない）。作り方は scripts/record-generator-features.ts の冒頭`,
+        note: `${ref}（${version}）の ${site} が作った設定の特徴（基準の記録。今のバージョンからは作り直さない）。作り方は scripts/record-generator-features.ts の冒頭`,
         ref,
         version,
         site,

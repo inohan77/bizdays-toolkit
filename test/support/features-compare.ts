@@ -7,7 +7,7 @@ import { join } from "node:path";
 /** 呼び出し側ごとの特徴の一覧 */
 export type FeatureRecord = Record<string, readonly string[]>;
 
-/** 記録の置き場所（呼び出し側ごとに 1 ファイル）と、記録を取った基準の版（今の版から作り直さない） */
+/** 記録の置き場所（呼び出し側ごとに 1 ファイル）と、記録を取った基準のバージョン（今のバージョンから作り直さない） */
 export const RECORD_DIR = "test/fixtures/generator-features-0.30.3";
 export const RECORD_REF = "v0.30.3";
 /** 呼び出し側の名前 */

@@ -1,7 +1,7 @@
 /**
  * 日ごとに値を返すスケジュール（営業時間・受付枠など、曜日・祝日・特定日で変わるもの）。
  * 1 日の値を決める優先順位は docs/guide.md の「Day-by-day values」と docs/decisions.md の 11 番。
- * 営業日カレンダー（createCalendar）は、このスケジュールの真偽値版として作られている。
+ * 営業日カレンダー（createCalendar）は、値が真偽値のこのスケジュールとして作られている。
  */
 
 import {
@@ -612,7 +612,7 @@ export interface ScheduleOptions<
 export type KnownScheduleDayReason = "date" | "annual" | "recurring" | "holiday" | "weekday";
 
 /**
- * 値を決めた規則。将来の版で値が増えることがあるので、分岐では「その他」も扱うこと。
+ * 値を決めた規則。将来のバージョンで値が増えることがあるので、分岐では「その他」も扱うこと。
  * すべての値を網羅したことを型で確かめたい場合は KnownScheduleDayReason を使う。
  * @public
  */
@@ -2225,7 +2225,7 @@ export function resultIgnoresHolidays(compiled: {
 
 /**
  * @internal 検証済みの規則から、1 日分の値と値を決めた規則を返す関数を作る。
- * 規則の診断では、規則を取り除いた版と結果を比べるために、祝日を調べる機能（lookup）を共有して作る
+ * 規則の診断では、規則を取り除いたバージョンと結果を比べるために、祝日を調べる機能（lookup）を共有して作る
  */
 export function createResolver<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,

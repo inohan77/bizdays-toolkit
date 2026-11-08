@@ -109,7 +109,7 @@ export type KnownDiagnosticCode =
   | "counting-basis";
 
 /**
- * 診断コード。将来の版で値が増えることがあるので、分岐では「その他」も扱うこと。
+ * 診断コード。将来のバージョンで値が増えることがあるので、分岐では「その他」も扱うこと。
  * @public
  */
 export type DiagnosticCode = KnownDiagnosticCode | (string & {});

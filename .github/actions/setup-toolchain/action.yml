@@ -1,12 +1,12 @@
 name: Set up toolchain
-description: Node.js・npm・pnpm を固定した版で用意し、依存をインストールする
+description: Node.js・npm・pnpm を固定したバージョンで用意し、依存をインストールする
 
-# npm と pnpm の版はここだけで管理する（手元の開発環境と同じ版にそろえる）。
-# 更新するときは、熟成ゲート（公開から 48 時間）を過ぎた版を指定すること。
+# npm と pnpm のバージョンはここだけで管理する（手元の開発環境と同じバージョンにそろえる）。
+# 更新するときは、熟成ゲート（公開から 48 時間）を過ぎたバージョンを指定すること。
 
 inputs:
   node-version:
-    description: Node.js の版（完全な版番号）
+    description: Node.js のバージョン（完全なバージョン番号）
     required: true
   registry-url:
     description: npm のレジストリ（公開するジョブのみ指定）

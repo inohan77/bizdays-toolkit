@@ -87,15 +87,42 @@ test('migrateScheduleOptions: holiday の "weekday" は holidayPolicy の "ignor
   assert.equal(createSchedule(options).valueOn("2026-10-31"), value);
 });
 
-test("移行: 別の実行環境で作った設定も、入れ子の規則まで同じ実行環境の設定と同じに書き換え、入力を共有しない（decisions.md の 8 番）", () => {
-  const source = "({ closedRecurring: [{ day: 1 }, { weekday: 1, nth: 2 }], maxSearchDays: 100 })";
-  // 同じ式を、この実行環境と別の実行環境で評価する
-  const local = runInThisContext(source) as Record<string, unknown>;
-  const foreign = runInNewContext(source) as Record<string, unknown>;
-  const a = migrateCalendarOptions(local);
-  const b = migrateCalendarOptions(foreign);
-  assert.equal(JSON.stringify(b.options), JSON.stringify(a.options));
-  assert.deepEqual(b.changes, a.changes);
-  const rules = (b.options as { closedRecurringRules: object[] }).closedRecurringRules;
-  assert.notEqual(rules[0], (foreign["closedRecurring"] as object[])[0]);
+test("移行: 別の実行環境で作った設定も、入れ子の規則まで同じ実行環境の設定と同じに書き換え、入力の規則を共有しない（decisions.md の 8 番）", () => {
+  // [名前, 関数, 設定の式, 書き換えた後の規則の一覧のキー, 旧名の規則の一覧のキー]
+  const cases: [
+    string,
+    (o: object) => { options: object; changes: unknown },
+    string,
+    string,
+    string,
+  ][] = [
+    [
+      "migrateCalendarOptions",
+      migrateCalendarOptions,
+      "({ closedRecurring: [{ day: 1 }, { weekday: 1, nth: 2 }], maxSearchDays: 100 })",
+      "closedRecurringRules",
+      "closedRecurring",
+    ],
+    [
+      "migrateScheduleOptions",
+      migrateScheduleOptions,
+      '({ weekly: ["c", "o", "o", "o", "o", "o", "c"], holiday: "weekday", recurring: [{ day: -1, value: { open: "10:00" } }] })',
+      "recurringRules",
+      "recurring",
+    ],
+  ];
+  for (const [name, migrate, source, to, from] of cases) {
+    // 同じ式を、この実行環境と別の実行環境で評価する
+    const local = runInThisContext(source) as Record<string, unknown>;
+    const foreign = runInNewContext(source) as Record<string, unknown>;
+    const a = migrate(local);
+    const b = migrate(foreign);
+    assert.equal(JSON.stringify(b.options), JSON.stringify(a.options), name);
+    assert.deepEqual(b.changes, a.changes, name);
+    const before = (foreign[from] as Record<string, unknown>[])[0]!;
+    const after = (b.options as Record<string, Record<string, unknown>[]>)[to]![0]!;
+    assert.notEqual(after, before, `${name}: 規則は複製する`);
+    if ("value" in before)
+      assert.equal(after["value"], before["value"], `${name}: スケジュールの値は複製しない`);
+  }
 });

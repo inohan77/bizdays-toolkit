@@ -1,5 +1,5 @@
 // 新しい名前の設定を、0.30.0 の改名の前の名前と値で書く補助（test/metamorphic.test.ts の変形 1 と、test/consistency.test.ts の
-// 整合 6 で共通。0.31.0 までは 2 つのファイルに別々にあり、整合 6 の版は kinds の旧い値を戻していなかった）
+// 整合 6 で共通。0.31.0 までは 2 つのファイルに別々にあり、整合 6 のバージョンは kinds の旧い値を戻していなかった）
 import { RENAMED_KEYS, RENAMED_VALUES, type RenamedPlace } from "../../src/core/renamed.ts";
 import type { HolidayProvider } from "../../src/index.ts";
 import type { Obj } from "./catalog.ts";

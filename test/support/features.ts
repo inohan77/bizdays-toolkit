@@ -199,7 +199,7 @@ function ruleFeatures(
     (rule["positions"] as unknown[]).includes(rule["cycle"])
   )
     out.add("CyclePattern.positions=last");
-  // 入力の誤り（作成が invalid-option になる設定。前の版とエラーコードをそろえる比較に使う）
+  // 入力の誤り（作成が invalid-option になる設定。前のバージョンとエラーコードをそろえる比較に使う）
   if (
     kind === "schedule" &&
     ("businessDayOfMonth" in rule || "businessDayOfWeek" in rule) &&

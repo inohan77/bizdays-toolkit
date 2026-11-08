@@ -1,5 +1,5 @@
 {
-  "note": "v0.30.3（0.30.3）の diagnose-properties が作った設定の特徴（基準の記録。今の版からは作り直さない）。作り方は scripts/record-generator-features.ts の冒頭",
+  "note": "v0.30.3（0.30.3）の diagnose-properties が作った設定の特徴（基準の記録。今のバージョンからは作り直さない）。作り方は scripts/record-generator-features.ts の冒頭",
   "ref": "v0.30.3",
   "version": "0.30.3",
   "site": "diagnose-properties",

@@ -6,8 +6,8 @@ import "./strict-warnings.ts";
  * わざと型エラーを含む test/consumer/consumer-error.mts が失敗することも確かめる。pnpm build の後に実行する。
  *
  * 引数:
- *   --tsc <path>   使う tsc（既定は開発用の依存の typescript/bin/tsc。CI の consumer-types ジョブは別の版を渡す）
- *   --label <text> 結果の表示に添える名前（例: "TypeScript <版>"）
+ *   --tsc <path>   使う tsc（既定は開発用の依存の typescript/bin/tsc。CI の consumer-types ジョブは別のバージョンを渡す）
+ *   --label <text> 結果の表示に添える名前（例: "TypeScript <バージョン>"）
  */
 
 import { execFileSync } from "node:child_process";

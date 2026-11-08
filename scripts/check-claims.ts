@@ -3,32 +3,35 @@ import "./strict-warnings.ts";
  * 文章の主張のうち、機械で確かめられるものの検査（テスト拡充案の T7）。
  *
  *   node scripts/check-claims.ts                 … a・b を確かめる（pnpm check）
- *   node scripts/check-claims.ts --decisions --since v<前の版>
+ *   node scripts/check-claims.ts --decisions --since v<前のバージョン>
  *                                                … 加えて、c の決定の番号の参照の表を出し、前のタグから変わった行の参照に
  *                                                  印（★）を付ける（リリースの前に人が読む。RELEASING.md の公開の手順）
- *   node scripts/check-claims.ts --base <dir>    … 加えて、d の公開物の変化を、公開済みの版のパッケージ（<dir>）と比べる
+ *   node scripts/check-claims.ts --base <dir>    … 加えて、d の公開物の変化を、公開済みのバージョンのパッケージ（<dir>）と比べる
  *
- * a. 版の範囲の語: リポジトリの Markdown のうち履歴でないもの（HISTORY_TEXTS に理由付きで挙げたもののほかすべて）とソース（src）に、
- *    今の版より前の系列を指す語（「0.29.x」「v0.29.x」「0.29.X」「0.29 系」「0.29 series」、1.0.0 の後は「1.2.x」なども）があれば
+ * a. バージョンの範囲の語: リポジトリの Markdown のうち履歴でないもの（HISTORY_TEXTS に理由付きで挙げたもののほかすべて）とソース（src）に、
+ *    今のバージョンより前の系列を指す語（「0.29.x」「v0.29.x」「0.29.X」「0.29 系」「0.29 series」、1.0.0 の後は「1.2.x」なども）があれば
  *    失敗する
  * b. 改名の表と移行ガイドの対応: src/core/renamed.ts の旧名のうち、診断の対象外の場所（合成・スケジュールから作るカレンダー・
  *    期日・振替）の旧名が、移行ガイドの「検索して書き換えてください」の案内に載っていなければ失敗する（0.30.1 の name: の漏れ）
  * c. 決定の番号の参照（半自動）: 「decisions.md の N 番」（「M・N 番」のように並べた形も）を、参照先の見出しと並べた表にする。
  *    範囲と形は、文書の参照の実在の検査（check-package）と同じ（scripts/decision-references.ts）。CHANGELOG は今の番号の節だけ。
  *    見出しのない番号は表に「（見出しなし）」と出す（失敗にはしない）。参照の実在は check-package が確かめるので、人が読むのは
- *    その版で足した・変えた参照だけ。--since <タグ> で、そのタグから変わった行（git diff -U0。コミットしていない変更も含む）の
- *    参照と、CHANGELOG の今の版の節の参照に印を付け、別の表にも並べる
- * d. 公開物の変化: 公開済みの版と比べて変わった dist の .js と .d.ts（型も利用者に見える公開物）を一覧にし、変わったのに
- *    CHANGELOG の今の版か [Unreleased] に利用者向けの区分（Added・Changed・Fixed・Deprecated・Removed・Data）がなければ失敗する。.d.ts は
+ *    そのバージョンで足した・変えた参照だけ。--since <タグ> で、そのタグから変わった行（git diff -U0。コミットしていない変更も含む）の
+ *    参照と、CHANGELOG の今のバージョンの節の参照に印を付け、別の表にも並べる
+ * d. 公開物の変化: 公開済みのバージョンと比べて変わった dist の .js と .d.ts（型も利用者に見える公開物）を一覧にし、変わったのに
+ *    CHANGELOG の今のバージョンか [Unreleased] に利用者向けの区分（Added・Changed・Fixed・Deprecated・Removed・Data）がなければ失敗する。.d.ts は
  *    コメント（JSDoc）を除いて比べる（説明の直しだけでは失敗にしない。.js はビルドでコメントを除いている）
  * e. 1.0.0 で行う作業と約束の置き場: 保守する人の作業は RELEASING.md の「1.0.0 で行う作業」、利用者への約束は移行ガイドの
  *    「1.0.0 で削除する予定の API」だけに書く。1 つの文（「。」で区切る）に「1.0.0」と、その後に外す・消す・削除・置き換え・
  *    invalid-option のどれか（または「外れたら（1.0.0）」の形）があり、その文が置き場を指していなければ失敗する。作業の側は
  *    RELEASING.md（その節を除く）と、scripts・test・.github のコメントと src の TSDoc でないコメント。約束の側は src の TSDoc
  *    のうち @deprecated の付いていないもの（@deprecated の文は check-names が移行ガイドの表と突き合わせる）
+ * f. 「版」の語: 「バージョン」にそろえる（0.31.2）。リポジトリの Markdown・src・scripts・test・.github・etc のファイルに
+ *    「版」があれば失敗する。刊行物・法令の版（docs/sources/ と test/fixtures/ のデータ、言語ごとの版（日本語版など）、
+ *    「1998 年版」「1991-02-01 版」のような法令の版）は除く。この検査自身のファイルは規則を書いているので除く
  *
  * git の作業ツリーの外（git が「not a git repository」で止まるとき。ZIP を展開しただけのフォルダー）では、a の Markdown の
- * 分類を飛ばして SKIP の行を出す（意図した飛ばし no-git。CI では失敗にする）。git のほかの失敗は飛ばさずに止まる
+ * 分類と f の Markdown を飛ばして SKIP の行を出す（意図した飛ばし no-git。CI では失敗にする）。git のほかの失敗は飛ばさずに止まる
  */
 
 import { execFileSync } from "node:child_process";
@@ -74,12 +77,12 @@ const version = (JSON.parse(read("package.json")) as { version: string }).versio
 const [major, minor] = version.split(".").map(Number) as [number, number];
 
 // ---------------------------------------------------------------------------
-// a. 版の範囲の語
+// a. バージョンの範囲の語
 // ---------------------------------------------------------------------------
 
 /**
- * リポジトリの Markdown のうち、版の範囲の語を探すもの（今の版の挙動・決まりを書く文書）。docs/sources/ の下は、祝日の
- * 出典の記録（今の版のデータの根拠）なので、まとめて探す
+ * リポジトリの Markdown のうち、バージョンの範囲の語を探すもの（今のバージョンの挙動・決まりを書く文書）。docs/sources/ の下は、祝日の
+ * 出典の記録（今のバージョンのデータの根拠）なので、まとめて探す
  */
 const CURRENT_MARKDOWN = [
   "README.md",
@@ -93,15 +96,15 @@ const CURRENT_MARKDOWN = [
 ];
 const CURRENT_MARKDOWN_DIRS = ["docs/sources/"];
 /**
- * リポジトリの Markdown のうち、版の範囲の語を探さないものと理由。新しい Markdown を足したら、探すもの（上）か、ここかに
+ * リポジトリの Markdown のうち、バージョンの範囲の語を探さないものと理由。新しい Markdown を足したら、探すもの（上）か、ここかに
  * 理由とともに分ける。どちらにも分けていなければ失敗にする
  */
 const HISTORY_TEXTS: Readonly<Record<string, string>> = {
-  "CHANGELOG.md": "版ごとの変更の履歴",
-  "docs/development-log.md": "版ごとの開発の記録（品質の仕組みの変更の履歴）",
-  "docs/migration.md": "版ごとの移行の履歴（前の版の書き方を示す）",
-  "docs/decisions.md": "決定の経緯（どの版で何を改めたかを書く）",
-  "RELEASING.md": "版の区分の説明で、前の版の系列を例に書く",
+  "CHANGELOG.md": "バージョンごとの変更の履歴",
+  "docs/development-log.md": "バージョンごとの開発の記録（品質の仕組みの変更の履歴）",
+  "docs/migration.md": "バージョンごとの移行の履歴（前のバージョンの書き方を示す）",
+  "docs/decisions.md": "決定の経緯（どのバージョンで何を改めたかを書く）",
+  "RELEASING.md": "バージョンの区分の説明で、前のバージョンの系列を例に書く",
   "etc/api.md": "公開 API の記録（scripts/api-report.ts が書く生成物で、文章ではない）",
 };
 /** リポジトリの Markdown（追跡しているものと、無視していない未追跡のもの。取り込み中の新しい文書も数える） */
@@ -124,7 +127,7 @@ const markdown = ((): string[] | undefined => {
     // git の作業ツリーの外だけを飛ばす（意図した飛ばし no-git。CI では skipWhen が失敗にする）。git がない・ほかの失敗は止まる
     const stderr = String((error as { stderr?: unknown }).stderr ?? "");
     if (!stderr.includes("not a git repository")) throw error;
-    console.log(`SKIP markdown classification: ${skipWhen("no-git", true)}`);
+    console.log(`SKIP markdown files (classification, term check): ${skipWhen("no-git", true)}`);
     return undefined;
   }
 })();
@@ -138,10 +141,10 @@ for (const file of markdown ?? [])
     failures.push(
       `${file}: not classified for the version series check (add it to CURRENT_MARKDOWN, or to HISTORY_TEXTS with a reason, in scripts/check-claims.ts)`,
     );
-/** 版の範囲の語を探す文書（履歴でないもの）とソース */
+/** バージョンの範囲の語を探す文書（履歴でないもの）とソース */
 const CURRENT_TEXTS = [...(markdown ?? []).filter(isCurrent), ...filesUnder("src", /\.ts$/)];
 /**
- * 版の範囲の語（`0.29.x`・`v0.29.x`・`0.29.X`・`0.29 系`・`0.29 series`、1.0.0 の後は `1.2.x` なども）。今の版の
+ * バージョンの範囲の語（`0.29.x`・`v0.29.x`・`0.29.X`・`0.29 系`・`0.29 series`、1.0.0 の後は `1.2.x` なども）。今のバージョンの
  * 「メジャー.マイナー」より前の系列だけを失敗にする。前に英数字・点があるもの（`10.29.x` など）は除く
  */
 const SERIES = /(?<![\w.])v?(\d+)\.(\d+)(?:\.[xX](?!\w)|\s*系|\s+series\b)/g;
@@ -238,7 +241,7 @@ if (process.argv.includes("--decisions")) {
       });
   }
   // CHANGELOG は、今の番号で書いた節だけを表に入れる（番号を振り直す前の節は旧番号で、今の見出しと照らせないため）。
-  // --since では、今の版の節（と [Unreleased]）の参照に印を付ける
+  // --since では、今のバージョンの節（と [Unreleased]）の参照に印を付ける
   let oldReferences = 0;
   for (const { version: v, text, oldNumbering } of changelogSections())
     for (const m of text.matchAll(DECISION_REFERENCE)) {
@@ -391,11 +394,45 @@ let oneZeroChecked = 0;
 }
 
 // ---------------------------------------------------------------------------
+// f. 「版」の語
+// ---------------------------------------------------------------------------
+
+/** 「版」（ソフトウェアのバージョンの意味では使わない） */
+const HAN = /\u7248/g;
+/** 除く形: 言語ごとの版、年・日付の付いた法令の版 */
+const HAN_ALLOWED = /(?:日本|英|ウェールズ)語\u7248|\d{4} 年\u7248|\d{4}-\d{2}-\d{2} \u7248/g;
+let hanChecked = 0;
+{
+  const texts = [
+    ...(markdown ?? []).filter((f) => !f.startsWith("docs/sources/")),
+    ...["src", "scripts", "test", ".github", "etc"].flatMap((dir) =>
+      filesUnder(dir, /\.(?:ts|mjs|cjs|ya?ml|json|md)$/),
+    ),
+  ].filter(
+    (f, i, all) =>
+      all.indexOf(f) === i && !f.startsWith("test/fixtures/") && f !== "scripts/check-claims.ts",
+  );
+  for (const file of texts) {
+    hanChecked++;
+    read(file)
+      .split("\n")
+      .forEach((line, i) => {
+        const rest = line.replace(HAN_ALLOWED, "");
+        if (HAN.test(rest))
+          failures.push(
+            `${file}:${i + 1}: uses "\u7248"; write "バージョン" (0.31.2. Only editions of publications and laws keep it)`,
+          );
+        HAN.lastIndex = 0;
+      });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // d. 公開物の変化
 // ---------------------------------------------------------------------------
 
 /**
- * CHANGELOG の利用者向けの区分。今の版の節か [Unreleased] に、どれか 1 つがあればよい（data-compare の「### Data」と同じ扱い）。
+ * CHANGELOG の利用者向けの区分。今のバージョンの節か [Unreleased] に、どれか 1 つがあればよい（data-compare の「### Data」と同じ扱い）。
  * 「Migration」（0.30.x 以前の「移行」）は変更の区分（Changed・Removed など）に添えて書くもので、それだけでは何が変わったかを言わない。「開発」は利用者に
  * 見えない変更（テスト・道具・文書の運用）、「既知の不具合」は公開物の変化ではないので、どれも数えない
  */
@@ -476,5 +513,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `OK   claims: no earlier minor series in ${seriesChecked} files; ${searchNeeded.size} renamed keys outside the diagnostics are in the migration guide's search guidance; work for 1.0.0 points to its section in ${oneZeroChecked} files`,
+  `OK   claims: no earlier minor series in ${seriesChecked} files; ${searchNeeded.size} renamed keys outside the diagnostics are in the migration guide's search guidance; work for 1.0.0 points to its section in ${oneZeroChecked} files; no \u7248 in ${hanChecked} files`,
 );

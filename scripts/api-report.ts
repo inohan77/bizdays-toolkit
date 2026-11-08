@@ -53,7 +53,7 @@ function releaseTag(node: ts.Node): string | undefined {
   return undefined;
 }
 
-/** 宣言に @deprecated が付いているか（非推奨の記録。削除は少なくとも 1 つのマイナー版の後。RELEASING.md） */
+/** 宣言に @deprecated が付いているか（非推奨の記録。削除は少なくとも 1 つのマイナーバージョンの後。RELEASING.md） */
 function isDeprecated(node: ts.Node): boolean {
   const target = ts.isVariableDeclaration(node) ? node.parent.parent : node;
   return ts.getJSDocTags(target).some((tag) => tag.tagName.text === "deprecated");

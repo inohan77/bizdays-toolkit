@@ -10,8 +10,8 @@ name: Watch holiday data (GOV.UK, data.gov.sg, the Cabinet Office and data.gouv.
 #   CSV の形式の変更（解析の失敗）も、2 月の作業を待たずに見つける
 # - フランス: data.gouv.fr「Jours fériés en France」の JSON（metropole・alsace-moselle）。照合は scripts/verify-datagouv.ts（pnpm verify:datagouv と同じ）。
 #   ラベル datagouv-data。祝日は法令で定まるので差分は法改正のとき。JSON の窓（過去 20 年・未来 5 年）は毎年 1 月に動くので、
-#   そのときはフィクスチャの差分だけが出る（--write で更新。版は要らない）
-# 差分を見つけたら、フィクスチャとその国の src/<国>/rules.ts を 1 つのコミットで直してパッチ版を出す（RELEASING.md）。
+#   そのときはフィクスチャの差分だけが出る（--write で更新。バージョンは要らない）
+# 差分を見つけたら、フィクスチャとその国の src/<国>/rules.ts を 1 つのコミットで直してパッチバージョンを出す（RELEASING.md）。
 # 照合は 1 回の起動で順に行い、すべてが動いたときだけハートビートを知らせる。
 #
 # 起動のしかた（decisions.md の 29 番）:

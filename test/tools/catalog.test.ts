@@ -165,7 +165,10 @@ function excludedShapes(ctx: (typeof CONTEXT_USES)[number]["ctx"]): Map<string, 
     if (s.holiday && !ctx.holidays)
       out.set(s.pattern, "提供元のない設定では作らない（祝日に従属する形は提供元が要る）");
     else if (s.sinceRename && !ctx.newShapes)
-      out.set(s.pattern, "改名の前の版（0.22.2）にない形なので、その版と比べる設定では作らない");
+      out.set(
+        s.pattern,
+        "改名の前のバージョン（0.22.2）にない形なので、そのバージョンと比べる設定では作らない",
+      );
   }
   return out;
 }
