@@ -6,6 +6,23 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.31.2] - 2026-11-08
+
+This version fixes results that were not consistent between functions or did not match the type descriptions, and corrects the documentation. The results of valid calendars and schedules do not change.
+
+### Fixed
+
+- The bundled providers' `holidaysInYear` (`jp`, the UK providers, the French providers and `sg`) threw `out-of-range` for a year that is not an integer (such as the string `"2026"`), while `KnownErrorCode` describes `out-of-range` as a year outside the supported range and the calendars and `bizdays-toolkit/jp` already threw `invalid-argument`. They now throw `invalid-argument`; an integer outside the supported years is still `out-of-range`. If you branch on `out-of-range` for a non-integer year passed to a provider, branch on `invalid-argument`
+- `createCalendarFromSchedule` now throws `invalid-option` (was `invalid-argument`) when its options are not an object, like the other functions that create a calendar or a schedule, and like the errors inside its options. The rule is now written in the design decisions (8). If you branch on `invalid-argument` for this case, branch on `invalid-option`
+- Options and option arguments given a `Date`, a `Map`, a `Set`, a `RegExp` or a boxed primitive were not handled in one way: `createCalendar` and `diagnoseCalendar` took such a value as empty options, and `diagnoseCalendar` and `diagnoseSchedule` took it as empty diagnose options, while `createSchedule`, the methods and `migrateCalendarOptions` rejected it. They are now all rejected like other values that are not an object: `invalid-option` for the options of a function that creates a calendar or a schedule (an `invalid-option` error in the result of the diagnostics), `invalid-argument` for other arguments. The functions that rewrite saved options (`migrateCalendarOptions`, `migrateScheduleOptions`) now also accept options created in another realm and objects created by a class, as the other functions do, and rename the rules inside them as well. The rule is in the design decisions (8). If you passed such a value to `createCalendar` to get a calendar with no options, pass `{}` or nothing
+- Error messages: the functions of `bizdays-toolkit/provider` given a year that is not a number show it in quotes (`"2026"`), so that it does not read as the number 2026 (the code is unchanged)
+- Type descriptions: `KnownErrorCode` now says which errors are `invalid-option` (the options of a calendar or a schedule, including options that are not an object) and which are `invalid-argument` (other arguments, including the options of a method), and that `out-of-range` is for dates computed outside the years 1000–9999, while a wrong year given to the functions of `bizdays-toolkit/provider` is `invalid-argument`. The `HolidayProvider` description promised that no required member would be added before a major version, which is stronger than the versioning policy for 0.x; it now refers to the policy (from 1.0.0, members added in a minor version are optional)
+- Documentation: the migration guide and the guide did not say that the diagnostic code `deprecated-option` is removed in 1.0.0; the guide now explains which errors are `invalid-option` and which are `invalid-argument`, and that until 1.0.0 the result of `dayInfoOn` also carries the deprecated `businessDay` and `rulePath`; the provider guide now says that a substitute day can fall in the next year. The migration guide now says that patch versions need no work when you use the documented results, and that breaking changes before 1.0.0 come in minor versions
+
+### Changed
+
+- The type definitions no longer include internal declarations (`@internal`) that cannot be imported through the package exports
+
 ## [0.31.1] - 2026-11-08
 
 This version fixes behaviour that did not match the documentation and corrects the documentation. The results of valid calendars and schedules do not change.
@@ -855,7 +872,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.2...HEAD
+[0.31.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.1...v0.31.2
 [0.31.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.0...v0.31.1
 [0.31.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.9...v0.31.0
 [0.30.9]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.8...v0.30.9

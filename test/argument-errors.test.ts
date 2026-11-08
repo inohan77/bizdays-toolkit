@@ -4,6 +4,7 @@
 // 対象は実行時に列挙して決める。関数・メソッドを足すと、正しい呼び出しの見本（SAMPLES）がないことで失敗する
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import * as root from "../src/index.ts";
 import * as provider from "../src/provider/index.ts";
 import * as diagnose from "../src/diagnose/index.ts";
@@ -179,40 +180,109 @@ test("誤った引数: どの関数・メソッドも、このライブラリの
   assert.deepEqual(problems, []);
 });
 
-test("誤った引数: オブジェクトでないオプションを、オプションなしとして黙って通さない", () => {
-  // [見本の名前, オプションの位置, 期待する code（undefined なら code を問わない）]
-  const places: [string, number, string | undefined][] = [
-    ["businessDayOnOrAfter", 1, "invalid-argument"],
-    ["createCalendarFromSchedule", 2, "invalid-argument"],
-    // 必須の項目（open・dayOfMonth）がないことで投げる
-    ["combineCalendars", 1, undefined],
-    ["dueDate", 1, undefined],
-  ];
+const isOptionsLike = (v: unknown): boolean =>
+  Object.prototype.toString.call(v) === "[object Object]";
+const isCalendarOrSchedule = (v: unknown): boolean =>
+  typeof v === "object" && v !== null && ("dayInfoOn" in v || "valueOn" in v);
+
+test("誤った引数: オブジェクトでないオプションを黙って通さず、設定は invalid-option、ほかは invalid-argument（decisions.md の 8 番）", () => {
+  // 位置と code は関数名の一覧で決めず、見本から決める（関数を足しても規則がそのまま当たる）。
+  // 見本の引数のうち普通のオブジェクト（カレンダー・スケジュールを除く）をオプションの位置とみなし、
+  // - 見本の戻り値が営業日カレンダーかスケジュールなら作る関数: その位置は設定で、invalid-option を投げる
+  // - bizdays-toolkit/diagnose の、配列（診断）を返す関数: 第 1 引数は診断する設定で、invalid-option を error の結果で返す
+  // - それ以外（メソッドのオプション、移行の関数、診断のオプションなど）: invalid-argument を投げる
   const wrongs: [string, () => unknown][] = [
     // 普通のオブジェクト（空のオブジェクトなど）はオプションとして受ける
-    ...WRONG.filter(([, wrong]) => Object.prototype.toString.call(wrong()) !== "[object Object]"),
+    ...WRONG.filter(([, wrong]) => !isOptionsLike(wrong())),
     ["NaN", () => NaN],
+    // 普通のオブジェクトでないオブジェクト（decisions.md の 8 番。オブジェクトでないものとして扱う）
     ["Date", () => new Date()],
+    ["Map", () => new Map()],
+    ["包んだ文字列", () => new String("x")],
   ];
-  const all = targets();
-  let checked = 0;
-  for (const [name, at, code] of places) {
-    const list = all.filter(([, n]) => n === name);
-    assert.ok(list.length > 0, name);
-    for (const [label, , f] of list) {
-      for (const [kind, wrong] of wrongs) {
-        const args = SAMPLES[name]!();
+  const diagnoseFns = new Set<unknown>(Object.values(diagnose));
+  const counts: Record<string, number> = { 設定: 0, 診断する設定: 0, 引数: 0 };
+  for (const [label, name, f] of targets()) {
+    const sample = SAMPLES[name];
+    if (sample === undefined) continue; // 見本のない関数は、最初のテストが失敗にする
+    const ret = f(...sample());
+    const creates = isCalendarOrSchedule(ret);
+    sample().forEach((arg, at) => {
+      if (!isOptionsLike(arg) || isCalendarOrSchedule(arg)) return;
+      const kind = creates
+        ? "設定"
+        : diagnoseFns.has(f) && Array.isArray(ret) && at === 0
+          ? "診断する設定"
+          : "引数";
+      for (const [wrongLabel, wrong] of wrongs) {
+        const args = sample();
         args[at] = wrong();
-        checked++;
+        const where = `${label} の引数 ${at + 1} に${wrongLabel}（${kind}）`;
+        counts[kind]!++;
+        if (kind === "診断する設定") {
+          const result = f(...args) as { code: string; severity: string }[];
+          assert.ok(
+            result.some((d) => d.code === "invalid-option" && d.severity === "error"),
+            `${where}: ${JSON.stringify(result.map((d) => d.code))}`,
+          );
+          continue;
+        }
+        const code = kind === "設定" ? "invalid-option" : "invalid-argument";
         assert.throws(
           () => f(...args),
-          (e: unknown) => root.isBizdaysError(e) && (code === undefined || e.code === code),
-          `${label} の引数 ${at + 1} に${kind}`,
+          (e: unknown) => root.isBizdaysError(e) && e.code === code,
+          `${where}: ${code} を期待`,
         );
       }
+    });
+  }
+  console.log(`確かめた呼び出し: ${JSON.stringify(counts)}`);
+  for (const [kind, n] of Object.entries(counts)) assert.ok(n > 0, `${kind}の呼び出しが 0 回`);
+});
+
+test("正しい引数: 設定・オプションは、プロトタイプのないもの・クラスで作ったもの・別の実行環境のものも普通のオブジェクトとして受ける（decisions.md の 8 番）", () => {
+  const forms: [string, (o: Record<string, unknown>) => object][] = [
+    ["プロトタイプのない", (o) => Object.assign(Object.create(null) as object, o)],
+    ["クラスで作った", (o) => Object.assign(new (class Options {})(), o)],
+    ["別の実行環境の", (o) => Object.assign(runInNewContext("({})") as object, o)],
+  ];
+  let checked = 0;
+  for (const [label, name, f] of targets()) {
+    const sample = SAMPLES[name];
+    if (sample === undefined) continue;
+    sample().forEach((arg, at) => {
+      if (!isOptionsLike(arg) || isCalendarOrSchedule(arg)) return;
+      for (const [form, make] of forms) {
+        const args = sample();
+        args[at] = make(arg as Record<string, unknown>);
+        checked++;
+        assert.doesNotThrow(() => f(...args), `${label} の引数 ${at + 1} に${form}オブジェクト`);
+      }
+    });
+  }
+  assert.ok(checked > 0);
+});
+
+test("誤った引数: holidaysInYear の整数でない年は、どの経路でも invalid-argument（範囲の外の整数は out-of-range）", () => {
+  // 提供元のオブジェクト・bizdays-toolkit/jp の関数・カレンダーとスケジュールのメソッドのすべて（KnownErrorCode の説明）
+  const all = targets().filter(([, n]) => n === "holidaysInYear");
+  assert.ok(all.length >= 9, all.map(([label]) => label).join(", "));
+  for (const [label, , f] of all) {
+    for (const year of ["2026", 2026.5, NaN, Infinity, null]) {
+      assert.throws(
+        () => f(year),
+        (e: unknown) => root.isBizdaysError(e) && e.code === "invalid-argument",
+        `${label}(${typeof year === "string" ? JSON.stringify(year) : String(year)})`,
+      );
+    }
+    for (const year of [999, 10000]) {
+      assert.throws(
+        () => f(year),
+        (e: unknown) => root.isBizdaysError(e) && e.code === "out-of-range",
+        `${label}(${year})`,
+      );
     }
   }
-  console.log(`確かめた呼び出し ${checked} 回`);
 });
 
 test("誤った引数: today は Date だけを受ける（Date.now() の数を渡す誤りを黙って通さない）", () => {

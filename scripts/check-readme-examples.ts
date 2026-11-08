@@ -285,7 +285,7 @@ function parse(text: string): unknown {
   const js = text.replaceAll("{…}", "__ANY__");
   return new Function("__ANY__", "return (" + js + ");")(ANY);
 }
-// 1.0.0 より前の版でだけ返す旧名の項目（docs/migration.md の削除予定の表にある、結果の型の項目）。文書の例は新しい名前だけを書くので、比べない
+// 1.0.0 より前の版でだけ返す旧名の項目（docs/migration.md の削除予定の表にある、結果の型の項目）。文書の例は新しい名前だけを書くので、比べない（RELEASING.md の「1.0.0 で行う作業」で消す）
 const DEPRECATED_RESULT_KEYS: string[] = JSON.parse(process.env.README_DEPRECATED_KEYS ?? "[]");
 function match(actual: unknown, expected: unknown): boolean {
   if (expected === ANY) return true;

@@ -191,9 +191,12 @@ function baseHolidays(y: number): Entry[] {
 
 /** @internal その年の祝日・休日（日付順） */
 export function computeJapaneseHolidays(year: number): Holiday<JpHolidayKind>[] {
-  // 整数でない年（文字列の "2026" など）を範囲の外と言わない（code は out-of-range のまま。0.32.0 で見直す）
+  // 整数でない年（文字列の "2026" など）は範囲の外ではなく引数の誤り（KnownErrorCode の説明）
   if (!Number.isInteger(year))
-    throw rangeError("out-of-range", `Invalid year: ${describeValue(year)} (expected an integer)`);
+    throw rangeError(
+      "invalid-argument",
+      `Invalid year: ${describeValue(year)} (expected an integer)`,
+    );
   if (year < SUPPORTED_YEARS.from || year > SUPPORTED_YEARS.to) {
     throw rangeError(
       "out-of-range",

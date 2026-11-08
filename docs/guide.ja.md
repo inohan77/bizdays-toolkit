@@ -115,7 +115,7 @@ company.isBusinessDay("2026-05-25"); // true
 - `name` は data.gouv.fr の表記（フランス語。`1er mai`・`Lundi de Pentecôte`）、`nameEn` は英訳、`key` は安定した識別子（`labour-day`・`pentecost-monday` など。[祝日の識別子](#祝日の識別子)）
 - 2 つの祝日が同じ日に当たる年（2008 年の 5 月 1 日と 2059 年の 5 月 8 日が Ascension）は、data.gouv.fr の JSON と同じく復活祭から決まる祝日の名称・`key` で 1 件を返します。`keys: ["labour-day"]` は 2008 年の 5 月 1 日には当てはまりません
 - Lundi de Pentecôte は多くの企業が出勤日にしています（連帯の日）が、法律上は祝日のままなので、提供元は祝日として返します。出勤日にするなら上のように祝日の規則 `keys: ["pentecost-monday"]` で書きます。祝日を休みにするかどうかは利用者が決める、というこのライブラリ全体の分担です
-- 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年・未来 5 年の窓で現在 2006〜2031 年）と照合しています。差分は毎日監視しています
+- 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチ版で反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年分・未来 5 年分が対象で、現在は 2006〜2031 年）と照合しています。差分は毎日監視しています
 - `FR-AM` は Alsace-Moselle（Bas-Rhin・Haut-Rhin・Moselle の 3 県）に対するこのライブラリの ID です（ISO 3166-2 に 1 つのコードがないため）。祝日もタイムゾーンも違う海外県・海外領土は同梱していません
 
 ### シンガポールの祝日
@@ -190,6 +190,8 @@ shipping.dayInfoOn("2027-01-01");
 // { date: "2027-01-01", weekday: 5, open: false, reason: "closed-annual", name: "年末年始", holiday: {…}, optionPath: "closedAnnualDates[0]" }
 shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.open); // [true, false, false, false, false, true]
 ```
+
+1.0.0 までは、結果に非推奨の `businessDay`（`open` と同じ）と `rulePath`（`optionPath` と同じ）も付きます。このガイドの例では省いています。結果のオブジェクト全体ではなく、使う項目を比べてください。
 
 `cutoff` は `"HH:mm"` と `"HH:mm:ss"` を受け付けます。入力の時刻は分の精度（秒を切り捨てた分）で、その分の始まりと比べます。`cutoff: "14:00:30"` なら 14:00 の入力は締めの前、14:01 の入力は締めの後です。`"14:00"`・`"14:00:00"` なら 14:00 の入力は締めの後です。
 
@@ -432,7 +434,7 @@ anyStore.isBusinessDay("2026-12-29"); // true
 
 ## よくある設定の例
 
-**国民の休日（祝日に挟まれた日）を営業日として扱う**：祝日の提供元を包んで、種別で除外します。
+**国民の休日（祝日に挟まれた日）を営業日として扱う**: 祝日の提供元を包んで、種別で除外します。
 
 ```ts
 import { jp } from "bizdays-toolkit/jp";
@@ -447,7 +449,7 @@ const calendar = createCalendar({
 });
 ```
 
-**1 つの配列で持っている特別営業日を振り分ける**：年月日（`"YYYY-MM-DD"`）は `dates`、毎年の月日（`"MM-DD"`）は `annualDates` に渡します。
+**1 つの配列で持っている特別営業日を振り分ける**: 年月日（`"YYYY-MM-DD"`）は `dates`、毎年の月日（`"MM-DD"`）は `annualDates` に渡します。
 
 ```ts
 type Hours = { open: string; close: string } | null;
@@ -464,7 +466,7 @@ const special = createSchedule<Hours>({
 special.valueOn("2027-01-01"); // null
 ```
 
-**その日が月の第何営業日か**：月初からその日の前日までの営業日数に 1 を足します。`diffBusinessDays` は `to` を含まないので、その日の分が `+ 1` です。`nthBusinessDayOfMonth` の逆算になります。
+**その日が月の第何営業日か**: 月初からその日の前日までの営業日数に 1 を足します。`diffBusinessDays` は `to` を含まないので、その日の分が `+ 1` です。`nthBusinessDayOfMonth` の逆算になります。
 
 ```ts
 import { monthOf } from "bizdays-toolkit";
@@ -477,7 +479,7 @@ businessDayIndex("2026-10-03"); // 0（土曜日は営業日でない）
 calendar.nthBusinessDayOfMonth("2026-10", 5); // "2026-10-07"
 ```
 
-**次の休業日と、その理由**：`nextClosedDay`・`previousClosedDay` は、次・前の営業日でない日を返します（`searchDayLimit` の日数まで探し、なければ `code: "no-closed-day"` の `RangeError`）。休業の理由は `dayInfoOn` で分かります。
+**次の休業日と、その理由**: `nextClosedDay`・`previousClosedDay` は、次・前の営業日でない日を返します（`searchDayLimit` の日数まで探し、なければ `code: "no-closed-day"` の `RangeError`）。休業の理由は `dayInfoOn` で分かります。
 
 ```ts
 const calendar = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
@@ -487,7 +489,7 @@ calendar.dayInfoOn(calendar.nextClosedDay("2026-10-11")).reason; // "holiday"（
 calendar.previousClosedDay("2026-10-13"); // "2026-10-12"
 ```
 
-**銀行の営業日**：銀行は土日・祝日と 12 月 31 日〜1 月 3 日が休みなので、3 行で書けます。振込の着金日は、自社のカレンダーと合成して求めます（「カレンダーの合成」）。
+**銀行の営業日**: 銀行は土日・祝日と 12 月 31 日〜1 月 3 日が休みなので、3 行で書けます。振込の着金日は、自社のカレンダーと合成して求めます（「カレンダーの合成」）。
 
 ```ts
 const bank = createCalendar({
@@ -499,7 +501,7 @@ bank.isBusinessDay("2026-12-30"); // true
 bank.nextBusinessDay("2026-12-30"); // "2027-01-04"
 ```
 
-**共通の設定から店舗ごとのカレンダーを作る**：設定は普通のオブジェクトなので、展開して足します。
+**共通の設定から店舗ごとのカレンダーを作る**: 設定は普通のオブジェクトなので、展開して足します。
 
 ```ts
 const base = {
@@ -758,6 +760,8 @@ try {
 }
 ```
 
+営業日カレンダー・スケジュールの設定（作る関数が検証するオブジェクト。オブジェクトでないことも含み、`Date`・`Map`・配列はオブジェクトとして受けません）の誤りは `invalid-option` で、設定の診断も同じコードを返します。それ以外の引数の誤りは、メソッドのオプションの誤りも含めて `invalid-argument` です。保存した設定を検証せずに書き換える関数は、読めない値を引数の誤りとして扱います。
+
 コード: `invalid-date`・`invalid-input`・`invalid-month`・`invalid-annual-date`・`invalid-time`・`invalid-range`・`invalid-weekday`・`invalid-time-zone`・`invalid-argument`・`invalid-option`・`time-zone-conflict`・`out-of-range`・`unconfirmed-holiday`・`invalid-provider`・`invalid-provider-data`・`no-business-day`・`no-closed-day`。将来の版でコードが増えることがあります。
 
 ## 設定の診断
@@ -787,19 +791,19 @@ diagnoseCalendar({
 // ]
 ```
 
-| 重さ（`severity`） | `code`                  | 内容                                                                                                                                                                                                                                  |
-| ------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `error`            | 例外と同じコード        | `createCalendar`・`createSchedule` で例外になる誤り。作成時は最初の 1 件で止まりますが、診断ではすべて返します                                                                                                                        |
-| `error`            | `invalid-provider-data` | 祝日の提供元が返したデータの誤り。作成時は使った年だけを調べますが、診断では対応年のすべての年を調べます                                                                                                                              |
-| `warning`          | `unknown-option`        | 知らないキー（作成時は無視されます）。近い既知のキーがあれば `message` に候補を挙げます                                                                                                                                               |
-| `warning`          | `deprecated-option`     | 0.30.0 で改名した旧名のキー・値（1.0.0 までは新しい名前と同じに扱います）。`path` は旧名を書いた位置で、`message` に新しい名前を挙げます。保存した設定は `migrateCalendarOptions`・`migrateScheduleOptions` で書き換えられます        |
-| `warning`          | `shadowed`              | 同じ種類の先の規則（`relatedPath`）に完全に含まれ、決して使われない規則                                                                                                                                                               |
-| `warning`          | `never-matches`         | 当てはまる日がない繰り返しの規則（`{ dayOfMonth: 30, months: [2] }`、有効期間の中に第 5 水曜日がない、提供元のない設定の `dayAfterHoliday`、など）                                                                                    |
-| `warning`          | `out-of-range`          | 個別の日付、または規則の有効期間が、祝日の提供元（`relatedPath`）の対応年の外                                                                                                                                                         |
-| `warning`          | `no-business-day`       | 営業日が 1 日もない設定（営業日カレンダーのみ。営業日を探すと例外になります）                                                                                                                                                         |
-| `info`             | `redundant`             | 取り除いても結果が変わらない規則（先の規則の組み合わせに覆われる、定休日の曜日と同じ、スケジュールで曜日の値と同じ値など）、または判定に祝日を使わない設定の `unconfirmedHolidayPolicy: "throw"`（`relatedPath`: 代わりに決める規則） |
-| `info`             | `counting-basis`        | 第 n 営業日の規則（`businessDayOfMonth`・`businessDayOfWeek`）と、有効期間の重なる毎週の曜日の規則が同じ設定にある。その曜日は営業日として数えられる（曜日の規則ごとに 1 件。[繰り返しの規則](#繰り返しの規則)）                      |
-| `info`             | `expired`               | `asOf`（下記）を渡したときだけ。基準日より前に終わった規則・日付                                                                                                                                                                      |
+| 重さ（`severity`） | `code`                  | 内容                                                                                                                                                                                                                                                                              |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error`            | 例外と同じコード        | `createCalendar`・`createSchedule` で例外になる誤り。作成時は最初の 1 件で止まりますが、診断ではすべて返します                                                                                                                                                                    |
+| `error`            | `invalid-provider-data` | 祝日の提供元が返したデータの誤り。作成時は使った年だけを調べますが、診断では対応年のすべての年を調べます                                                                                                                                                                          |
+| `warning`          | `unknown-option`        | 知らないキー（作成時は無視されます）。近い既知のキーがあれば `message` に候補を挙げます                                                                                                                                                                                           |
+| `warning`          | `deprecated-option`     | 0.30.0 で改名した旧名のキー・値（1.0.0 までは新しい名前と同じに扱います。このコードは 1.0.0 で削除します。移行ガイドを参照）。`path` は旧名を書いた位置で、`message` に新しい名前を挙げます。保存した設定は `migrateCalendarOptions`・`migrateScheduleOptions` で書き換えられます |
+| `warning`          | `shadowed`              | 同じ種類の先の規則（`relatedPath`）に完全に含まれ、決して使われない規則                                                                                                                                                                                                           |
+| `warning`          | `never-matches`         | 当てはまる日がない繰り返しの規則（`{ dayOfMonth: 30, months: [2] }`、有効期間の中に第 5 水曜日がない、提供元のない設定の `dayAfterHoliday`、など）                                                                                                                                |
+| `warning`          | `out-of-range`          | 個別の日付、または規則の有効期間が、祝日の提供元（`relatedPath`）の対応年の外                                                                                                                                                                                                     |
+| `warning`          | `no-business-day`       | 営業日が 1 日もない設定（営業日カレンダーのみ。営業日を探すと例外になります）                                                                                                                                                                                                     |
+| `info`             | `redundant`             | 取り除いても結果が変わらない規則（先の規則の組み合わせに覆われる、定休日の曜日と同じ、スケジュールで曜日の値と同じ値など）、または判定に祝日を使わない設定の `unconfirmedHolidayPolicy: "throw"`（`relatedPath`: 代わりに決める規則）                                             |
+| `info`             | `counting-basis`        | 第 n 営業日の規則（`businessDayOfMonth`・`businessDayOfWeek`）と、有効期間の重なる毎週の曜日の規則が同じ設定にある。その曜日は営業日として数えられる（曜日の規則ごとに 1 件。[繰り返しの規則](#繰り返しの規則)）                                                                  |
+| `info`             | `expired`               | `asOf`（下記）を渡したときだけ。基準日より前に終わった規則・日付                                                                                                                                                                                                                  |
 
 - 判定には `code` を使ってください。`message` は英語で、文言は変わることがあります。`code` は将来の版で増えることがあります
 - `error` があるときは、規則どうしの診断（`shadowed`・`redundant` など）は行いません

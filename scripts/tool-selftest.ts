@@ -338,6 +338,14 @@ const CASES: readonly Case[] = [
     expect: "has a user-facing section",
   },
   {
+    tool: "check-claims",
+    name: "RELEASING.md の「1.0.0 で行う作業」を指さない、1.0.0 の作業のコメント",
+    args: TOOLS["check-claims"]!,
+    inject: () =>
+      edit("scripts/check-size.ts", (t) => `${t}\n// injected: この検査は 1.0.0 で外す\n`),
+    expect: "work for 1.0.0 that does not point to RELEASING.md",
+  },
+  {
     tool: "api-report",
     name: "公開 API と etc/api.md の不一致",
     args: TOOLS["api-report"]!,

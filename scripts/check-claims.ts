@@ -21,12 +21,21 @@ import "./strict-warnings.ts";
  * d. 公開物の変化: 公開済みの版と比べて変わった dist の .js と .d.ts（型も利用者に見える公開物）を一覧にし、変わったのに
  *    CHANGELOG の今の版か [Unreleased] に利用者向けの区分（Added・Changed・Fixed・Deprecated・Removed・Data）がなければ失敗する。.d.ts は
  *    コメント（JSDoc）を除いて比べる（説明の直しだけでは失敗にしない。.js はビルドでコメントを除いている）
+ * e. 1.0.0 で行う作業と約束の置き場: 保守する人の作業は RELEASING.md の「1.0.0 で行う作業」、利用者への約束は移行ガイドの
+ *    「1.0.0 で削除する予定の API」だけに書く。1 つの文（「。」で区切る）に「1.0.0」と、その後に外す・消す・削除・置き換え・
+ *    invalid-option のどれか（または「外れたら（1.0.0）」の形）があり、その文が置き場を指していなければ失敗する。作業の側は
+ *    RELEASING.md（その節を除く）と、scripts・test・.github のコメントと src の TSDoc でないコメント。約束の側は src の TSDoc
+ *    のうち @deprecated の付いていないもの（@deprecated の文は check-names が移行ガイドの表と突き合わせる）
+ *
+ * git の作業ツリーの外（git が「not a git repository」で止まるとき。ZIP を展開しただけのフォルダー）では、a の Markdown の
+ * 分類を飛ばして SKIP の行を出す（意図した飛ばし no-git。CI では失敗にする）。git のほかの失敗は飛ばさずに止まる
  */
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
+import { skipWhen } from "../test/support/skip.ts";
 import { RENAMED_KEYS, type RenamedPlace } from "../src/core/renamed.ts";
 import {
   DECISION_REFERENCE,
@@ -96,26 +105,41 @@ const HISTORY_TEXTS: Readonly<Record<string, string>> = {
   "etc/api.md": "公開 API の記録（scripts/api-report.ts が書く生成物で、文章ではない）",
 };
 /** リポジトリの Markdown（追跡しているものと、無視していない未追跡のもの。取り込み中の新しい文書も数える） */
-const markdown = execFileSync(
-  "git",
-  ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*.md"],
-  { encoding: "utf8" },
-)
-  .split("\0")
-  .filter((f) => f !== "" && !f.startsWith("node_modules/"))
-  .sort();
+const markdown = ((): string[] | undefined => {
+  try {
+    return execFileSync(
+      "git",
+      ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*.md"],
+      // git のメッセージを英語にそろえる（下の「not a git repository」の判定のため）
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, LC_ALL: "C", LANGUAGE: "C" },
+      },
+    )
+      .split("\0")
+      .filter((f) => f !== "" && !f.startsWith("node_modules/"))
+      .sort();
+  } catch (error) {
+    // git の作業ツリーの外だけを飛ばす（意図した飛ばし no-git。CI では skipWhen が失敗にする）。git がない・ほかの失敗は止まる
+    const stderr = String((error as { stderr?: unknown }).stderr ?? "");
+    if (!stderr.includes("not a git repository")) throw error;
+    console.log(`SKIP markdown classification: ${skipWhen("no-git", true)}`);
+    return undefined;
+  }
+})();
 for (const file of [...CURRENT_MARKDOWN, ...Object.keys(HISTORY_TEXTS)])
-  if (!markdown.includes(file))
+  if (markdown !== undefined && !markdown.includes(file))
     failures.push(`${file}: listed in scripts/check-claims.ts, but not found`);
 const isCurrent = (f: string): boolean =>
   CURRENT_MARKDOWN.includes(f) || CURRENT_MARKDOWN_DIRS.some((d) => f.startsWith(d));
-for (const file of markdown)
+for (const file of markdown ?? [])
   if (!isCurrent(file) && !(file in HISTORY_TEXTS))
     failures.push(
       `${file}: not classified for the version series check (add it to CURRENT_MARKDOWN, or to HISTORY_TEXTS with a reason, in scripts/check-claims.ts)`,
     );
 /** 版の範囲の語を探す文書（履歴でないもの）とソース */
-const CURRENT_TEXTS = [...markdown.filter(isCurrent), ...filesUnder("src", /\.ts$/)];
+const CURRENT_TEXTS = [...(markdown ?? []).filter(isCurrent), ...filesUnder("src", /\.ts$/)];
 /**
  * 版の範囲の語（`0.29.x`・`v0.29.x`・`0.29.X`・`0.29 系`・`0.29 series`、1.0.0 の後は `1.2.x` なども）。今の版の
  * 「メジャー.マイナー」より前の系列だけを失敗にする。前に英数字・点があるもの（`10.29.x` など）は除く
@@ -259,6 +283,114 @@ if (process.argv.includes("--decisions")) {
 }
 
 // ---------------------------------------------------------------------------
+// e. 1.0.0 で行う作業と約束の置き場
+// ---------------------------------------------------------------------------
+
+const WORK_SECTION = "1.0.0 で行う作業";
+const PROMISE_SECTION = "1.0.0 で削除する予定の API";
+/** 1.0.0 の後に、外す・消す・削除・置き換え・invalid-option が続く文（または「外れたら（1.0.0）」の形） */
+const ONE_ZERO_WORK =
+  /1\.0\.0.*?(?:外[さしすせれ]|消[さしすせえ]|削除|置き換え|invalid-option)|外れたら（1\.0\.0）/s;
+/** コメントの本文（行頭の記号を除いたもの）を、続いている行どうしまとめて返す */
+function commentsOf(file: string): { text: string; line: number; doc: boolean }[] {
+  const source = read(file);
+  const lineOf = (pos: number): number => source.slice(0, pos).split("\n").length;
+  if (file.endsWith(".yml") || file.endsWith(".yaml")) {
+    const out: { text: string; line: number; doc: boolean }[] = [];
+    source.split("\n").forEach((l, i) => {
+      const m = /(?:^|\s)#\s?(.*)$/.exec(l);
+      if (m === null) return;
+      const last = out.at(-1);
+      if (last !== undefined && last.line + last.text.split("\n").length === i + 1)
+        last.text += `\n${m[1]!}`;
+      else out.push({ text: m[1]!, line: i + 1, doc: false });
+    });
+    return out;
+  }
+  // コメントの位置は構文木の字句（記号を含む）から集める（字句だけで読むと、正規表現のリテラルの後を読み違える。
+  // 型の「|」の前のコメントは、どのノードの前にも付かないので、記号の字句まで見る）
+  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const ranges = new Map<number, ts.CommentRange>();
+  const collect = (node: ts.Node): void => {
+    for (const r of [
+      ...(ts.getLeadingCommentRanges(source, node.pos) ?? []),
+      ...(ts.getTrailingCommentRanges(source, node.end) ?? []),
+    ])
+      ranges.set(r.pos, r);
+    for (const child of node.getChildren(sf)) collect(child);
+  };
+  collect(sf);
+  for (const r of ts.getLeadingCommentRanges(source, sf.endOfFileToken.pos) ?? [])
+    ranges.set(r.pos, r);
+  const out: { text: string; line: number; doc: boolean; end: number }[] = [];
+  for (const r of [...ranges.values()].sort((x, y) => x.pos - y.pos)) {
+    const raw = source.slice(r.pos, r.end);
+    const line = lineOf(r.pos);
+    if (r.kind === ts.SyntaxKind.SingleLineCommentTrivia) {
+      const text = raw.slice(2).trim();
+      const last = out.at(-1);
+      if (last !== undefined && !last.doc && last.end === line - 1) {
+        last.text += `\n${text}`;
+        last.end = line;
+      } else out.push({ text, line, doc: false, end: line });
+    } else {
+      const text = raw
+        .replace(/^\/\*\*?|\*\/$/g, "")
+        .split("\n")
+        .map((l) => l.replace(/^\s*\* ?/, ""))
+        .join("\n");
+      out.push({ text, line, doc: raw.startsWith("/**"), end: lineOf(r.end) });
+    }
+  }
+  return out;
+}
+/** 文ごとに、置き場を指していない 1.0.0 の作業の記述を返す */
+const strayOneZero = (text: string, place: string, lines = false): string[] =>
+  (lines ? text : text.replaceAll("\n", ""))
+    .split(lines ? /。|\n/ : "。")
+    .filter((s) => ONE_ZERO_WORK.test(s) && !s.includes(place) && !s.includes(PROMISE_SECTION));
+let oneZeroChecked = 0;
+{
+  const releasing = read("RELEASING.md");
+  const start = releasing.indexOf(`### ${WORK_SECTION}\n`);
+  if (start < 0) failures.push(`RELEASING.md: the section "${WORK_SECTION}" is missing`);
+  const end = start < 0 ? -1 : releasing.indexOf("\n#", start + 1);
+  const outside =
+    start < 0 ? releasing : releasing.slice(0, start) + (end < 0 ? "" : releasing.slice(end));
+  oneZeroChecked++;
+  for (const s of strayOneZero(outside, WORK_SECTION, true))
+    failures.push(
+      `RELEASING.md: work for 1.0.0 outside the section "${WORK_SECTION}" (move it there): ${s.trim().slice(0, 80)}`,
+    );
+  const workFiles = [
+    ...filesUnder("scripts", /\.(?:ts|mjs)$/),
+    ...filesUnder("test", /\.(?:ts|mjs)$/),
+    ...filesUnder(".github", /\.ya?ml$/),
+  ];
+  // この検査自身の説明（このファイルのコメント）は規則を書いたもので、作業ではないので除く
+  for (const file of [...workFiles, ...filesUnder("src", /\.ts$/)].filter(
+    (f) => f !== "scripts/check-claims.ts",
+  )) {
+    oneZeroChecked++;
+    for (const c of commentsOf(file)) {
+      if (file.startsWith("src/") && c.doc) {
+        // 約束の側: @deprecated の付いていない TSDoc は、移行ガイドの節を指す
+        if (c.text.includes("@deprecated")) continue;
+        for (const s of strayOneZero(c.text, PROMISE_SECTION))
+          failures.push(
+            `${file}:${c.line}: a TSDoc about 1.0.0 that does not point to the migration guide's "${PROMISE_SECTION}": ${s.trim().slice(0, 80)}`,
+          );
+        continue;
+      }
+      for (const s of strayOneZero(c.text, WORK_SECTION))
+        failures.push(
+          `${file}:${c.line}: work for 1.0.0 that does not point to RELEASING.md "${WORK_SECTION}": ${s.trim().slice(0, 80)}`,
+        );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // d. 公開物の変化
 // ---------------------------------------------------------------------------
 
@@ -344,5 +476,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `OK   claims: no earlier minor series in ${seriesChecked} files; ${searchNeeded.size} renamed keys outside the diagnostics are in the migration guide's search guidance`,
+  `OK   claims: no earlier minor series in ${seriesChecked} files; ${searchNeeded.size} renamed keys outside the diagnostics are in the migration guide's search guidance; work for 1.0.0 points to its section in ${oneZeroChecked} files`,
 );

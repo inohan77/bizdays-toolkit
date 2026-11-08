@@ -297,9 +297,12 @@ function isWeekend(date: DateString): boolean {
 
 /** @internal その年・区分の祝日（日付順） */
 export function computeUkHolidays(division: UkDivision, year: number): Holiday<UkHolidayKind>[] {
-  // 整数でない年（文字列の "2026" など）を範囲の外と言わない（code は out-of-range のまま。0.32.0 で見直す）
+  // 整数でない年（文字列の "2026" など）は範囲の外ではなく引数の誤り（KnownErrorCode の説明）
   if (!Number.isInteger(year))
-    throw rangeError("out-of-range", `Invalid year: ${describeValue(year)} (expected an integer)`);
+    throw rangeError(
+      "invalid-argument",
+      `Invalid year: ${describeValue(year)} (expected an integer)`,
+    );
   if (year < SUPPORTED_YEARS.from || year > SUPPORTED_YEARS.to) {
     throw rangeError(
       "out-of-range",

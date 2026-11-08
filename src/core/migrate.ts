@@ -5,6 +5,7 @@
 
 import type { CalendarOptions } from "./calendar.ts";
 import { rangeError } from "./errors.ts";
+import { isOptionsObject } from "./options.ts";
 import { RENAMED_KEYS, RENAMED_VALUES, type RenamedPlace } from "./renamed.ts";
 import type { ScheduleOptions } from "./schedule.ts";
 
@@ -29,20 +30,15 @@ export interface OptionsMigration<Options> {
   readonly changes: readonly OptionChange[];
 }
 
-const isPlain = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" &&
-  v !== null &&
-  !Array.isArray(v) &&
-  (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
-
 /** 複製しないキー（提供元・カレンダーの参照、スケジュールの値） */
 const SHARED_KEYS = new Set(["holidayProvider", "holidays", "calendar", "value"]);
 /** 要素がスケジュールの値の配列 */
 const VALUE_LISTS = new Set(["weekdayValues", "weekly"]);
 
+/** 複製する（普通のオブジェクトの判定は設定の入口と同じ isOptionsObject。別の実行環境のものも複製して読み替える） */
 function clone(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(clone);
-  if (!isPlain(v)) return v;
+  if (!isOptionsObject(v)) return v;
   const out: Record<string, unknown> = {};
   for (const [k, x] of Object.entries(v)) {
     // 曜日ごとの値は配列だけを複製し、値（スケジュールの値）は同じものを入れる
@@ -117,7 +113,8 @@ function migrate<Options>(
   ruleLists: readonly string[],
   policyValueKey: string | null,
 ): OptionsMigration<Options> {
-  if (!isPlain(input)) throw rangeError("invalid-argument", "options must be a plain object");
+  if (!isOptionsObject(input))
+    throw rangeError("invalid-argument", "options must be a plain object");
   const changes: OptionChange[] = [];
   const copied = clone(input) as Record<string, unknown>;
   const jp = onlyJp(copied);
@@ -133,7 +130,7 @@ function migrate<Options>(
     if (!Array.isArray(rules)) continue;
     const at = written.get(list) ?? list;
     out[list] = rules.map((rule: unknown, i) => {
-      if (!isPlain(rule)) return rule;
+      if (!isOptionsObject(rule)) return rule;
       const renamed = renameObject(rule, ["rule"], `${at}[${i}]`, changes);
       if (jp && renamed["kinds"] !== undefined)
         renamed["kinds"] = renameValues(

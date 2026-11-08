@@ -985,7 +985,7 @@ const patterns: { name: string; re: RegExp; codeOnly?: RegExp }[] = [
   })),
   // holidays は普通の語（holidaysInYear など）としても現れるので、キーの形のほかに、日本語の TSDoc で引数名として書く形
   // （「の」「に」で挟む形）だけを足す。このファイルも検査の対象なので、その形をここに直接書かない。
-  // 旧名の表から holidays が外れたら（1.0.0）、この形も一緒に消す（下の確かめで止まる）
+  // 旧名の表から holidays が外れたら（RELEASING.md の「1.0.0 で行う作業」）、この形も一緒に消す（下の確かめで止まる）
   { name: "holidays（日本語の TSDoc の引数名）", re: new RegExp(`の ${"holidays"} に`) },
   ...oldWords.map((w) => ({ name: w, re: new RegExp(`\\b${escape(w)}\\b`) })),
   ...oldParams.map((p) => ({

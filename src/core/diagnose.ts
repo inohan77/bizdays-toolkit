@@ -47,6 +47,7 @@ import {
   rangeError,
   type KnownErrorCode,
 } from "./errors.ts";
+import { isOptionsObject } from "./options.ts";
 import { RENAMED_KEYS, RENAMED_VALUES } from "./renamed.ts";
 import {
   compileScheduleOptions,
@@ -94,7 +95,7 @@ export type KnownDiagnosticCode =
   | KnownErrorCode
   /** 知らないキー（作成時は無視される） */
   | "unknown-option"
-  /** 0.30.0 で改名した旧名のキー・値（新しい名前と同じに扱う。1.0.0 で invalid-option になる） */
+  /** 0.30.0 で改名した旧名のキー・値（新しい名前と同じに扱う。1.0.0 での扱いは移行ガイドの「1.0.0 で削除する予定の API」） */
   | "deprecated-option"
   /** 同じ種類の先の規則に完全に覆われ、決して使われない */
   | "shadowed"
@@ -886,7 +887,7 @@ function analyzeRules<Value, Kind extends string>(
     if (!matches && !unsure("never-matches", rule.path)) {
       unused.add(rule);
       // kinds の "national" を、ID "JP" の提供元のない設定で書いた（id を変えて包んだ日本の提供元を含む）。
-      // 改名の前の名前の可能性を添える。1.0.0 で旧名を削除した後も残す（docs/decisions.md の 10 番）
+      // 改名の前の名前の可能性を添える。旧名を削除した後も残す（docs/decisions.md の 10 番。RELEASING.md の「1.0.0 で行う作業」）
       const national =
         holidayBased &&
         source.providers.length > 0 &&
@@ -1296,7 +1297,7 @@ export interface DiagnoseOptions {
 /** 第 2 引数を検証する（設定の誤りは診断結果で返すが、引数の誤りは例外。知らないキーは無視する） */
 function compileDiagnoseOptions(options: unknown): { asOf: number | null } {
   if (options === undefined) return { asOf: null };
-  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+  if (!isOptionsObject(options)) {
     throw rangeError(
       "invalid-argument",
       "the second argument must be an object of diagnose options",

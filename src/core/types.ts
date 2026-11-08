@@ -44,7 +44,8 @@ export interface Holiday<Kind extends string = string> {
  * code: "invalid-provider-data" の例外になる。返した祝日は、契約の項目（date・name・nameEn・names・
  * kind・confirmed・key）だけを持つ変更できないオブジェクトに複製される。
  *
- * 互換性の約束: このインターフェースに項目を足すときは、メジャー版以外では省略可能な項目に限る。
+ * 項目を足すときの版は RELEASING.md の区分の表による。1.0.0 以降、マイナー版で足す項目は省略可能なものに限る
+ * （必須にすると、自作の提供元が型エラーになるため）。
  * @public
  */
 export interface HolidayProvider<Kind extends string = string> {

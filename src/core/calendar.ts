@@ -25,6 +25,7 @@ import {
   withoutUndefined,
   type KnownErrorCode,
 } from "./errors.ts";
+import { isOptionsObject } from "./options.ts";
 import { renameKeys, writtenKey } from "./renamed.ts";
 import { parseTimeOfDaySeconds, toCivil, type DateInput } from "./input.ts";
 import {
@@ -375,11 +376,11 @@ export function compileCalendarOptions<Kind extends string>(
   c: IssueCollector,
   options: unknown,
 ): CompiledCalendar<Kind> | undefined {
-  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+  if (!isOptionsObject(options)) {
     c.error("invalid-option", "", "options must be an object");
     return undefined;
   }
-  const written = options as Record<string, unknown>;
+  const written = options;
   const places = ["source", "calendar"] as const;
   const renamed = renameKeys(c, places, "", written);
   checkUnknownKeys(c, "", renamed, CALENDAR_OPTION_KEYS);
@@ -788,20 +789,10 @@ function buildCalendar<Kind extends string>(
   return Object.freeze(calendar);
 }
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-
-/**
- * メソッド・関数のオプションとして受けるオブジェクトか。Date・Map・配列などは受けない（別の実行環境のオブジェクトも受けるよう、
- * プロトタイプではなく種類で見る）。optionsObject・dueDate・combineCalendars で同じ判定を使う
- */
-const isOptionsObject = (v: unknown): v is Record<string, unknown> =>
-  isPlainObject(v) && Object.prototype.toString.call(v) === "[object Object]";
-
 /**
  * メソッド・関数のオプションの引数を受ける: undefined は省略、普通のオブジェクトは明示的な undefined を除いて返す。
- * それ以外（null・数・配列・関数・Date・Map など）は例外（code は既定で invalid-argument。黙ってオプションなしとして通さない。
- * decisions.md の 6 番）
+ * それ以外（null・数・配列・関数・Date・Map など）は例外（code は既定で invalid-argument、作る関数の設定は invalid-option。
+ * decisions.md の 8 番。黙ってオプションなしとして通さない。6 番）
  */
 function optionsObject(
   options: unknown,
@@ -856,7 +847,6 @@ export function combineCalendars<Kind extends string = string>(
       );
     }
   });
-  // オブジェクトでないオプションも、今までどおり code は invalid-option（code をそろえるかは 0.32.0 で判断する）
   const o = optionsObject(
     options,
     "combineCalendars options",
@@ -966,9 +956,13 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
   if (typeof isOpen !== "function") {
     throw rangeError("invalid-argument", "isOpen must be a function (value) => boolean");
   }
-  // オプションがオブジェクトでなければ invalid-argument（黙って無視しない。dueDate・combineCalendars と同じく受け付けない）
-  const o = optionsObject(options, "createCalendarFromSchedule options", (v) =>
-    renameKeys("throw", ["fromSchedule"], "", v),
+  // 設定がオブジェクトでなければ invalid-option（黙って無視しない。decisions.md の 8 番）
+  const o = optionsObject(
+    options,
+    "createCalendarFromSchedule options",
+    (v) => renameKeys("throw", ["fromSchedule"], "", v),
+    false,
+    "invalid-option",
   );
   const searchDayLimit = (o["searchDayLimit"] ?? 3660) as number;
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {

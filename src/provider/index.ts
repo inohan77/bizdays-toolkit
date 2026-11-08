@@ -25,13 +25,14 @@ import {
 } from "../core/date.ts";
 import { renameKeys } from "../core/renamed.ts";
 import { describeValue, rangeError } from "../core/errors.ts";
+import { isOptionsObject } from "../core/options.ts";
 import { HOLIDAY_KEY_PATTERN, type Holiday } from "../core/types.ts";
 
 function checkYear(year: unknown): asserts year is number {
   if (!Number.isInteger(year) || (year as number) < 1000 || (year as number) > 9999) {
     throw rangeError(
       "invalid-argument",
-      `year must be an integer from 1000 to 9999: ${String(year)}`,
+      `year must be an integer from 1000 to 9999: ${describeValue(year)}`,
     );
   }
 }
@@ -207,7 +208,7 @@ interface CheckedOptions<Kind extends string> {
 }
 
 function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kind> {
-  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+  if (!isOptionsObject(options)) {
     throw rangeError("invalid-argument", "options must be an object");
   }
   const o = renameKeys("throw", ["substitute"], "options", options as Record<string, unknown>);

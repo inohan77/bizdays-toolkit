@@ -1,6 +1,7 @@
 // 保存済みの設定の書き換え migrateCalendarOptions・migrateScheduleOptions（0.30.0）
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { runInNewContext, runInThisContext } from "node:vm";
 import { createCalendar, createSchedule } from "../src/index.ts";
 import {
   diagnoseCalendar,
@@ -84,4 +85,17 @@ test('migrateScheduleOptions: holiday の "weekday" は holidayPolicy の "ignor
   assert.equal(options.recurringRules![0]!.value, value, "スケジュールの値は複製しない");
   assert.equal(options.weekdayValues[0], value, "曜日ごとの値も複製しない");
   assert.equal(createSchedule(options).valueOn("2026-10-31"), value);
+});
+
+test("移行: 別の実行環境で作った設定も、入れ子の規則まで同じ実行環境の設定と同じに書き換え、入力を共有しない（decisions.md の 8 番）", () => {
+  const source = "({ closedRecurring: [{ day: 1 }, { weekday: 1, nth: 2 }], maxSearchDays: 100 })";
+  // 同じ式を、この実行環境と別の実行環境で評価する
+  const local = runInThisContext(source) as Record<string, unknown>;
+  const foreign = runInNewContext(source) as Record<string, unknown>;
+  const a = migrateCalendarOptions(local);
+  const b = migrateCalendarOptions(foreign);
+  assert.equal(JSON.stringify(b.options), JSON.stringify(a.options));
+  assert.deepEqual(b.changes, a.changes);
+  const rules = (b.options as { closedRecurringRules: object[] }).closedRecurringRules;
+  assert.notEqual(rules[0], (foreign["closedRecurring"] as object[])[0]);
 });

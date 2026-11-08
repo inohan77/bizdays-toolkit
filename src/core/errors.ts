@@ -1,10 +1,8 @@
 /**
  * コード付きの例外と、入力の問題を集める仕組み。
  *
- * 例外のクラスは code で決まる（decisions.md の 3 番）: invalid-input だけが TypeError（受け付けない種類の入力）で、
- * ほかのすべての code（値の誤りも、引数の型の誤りも）は RangeError。同じ code はどの経路でも同じクラスで投げる。
+ * 例外のクラスと code の対応、メッセージの扱いは decisions.md の 3 番、どの誤りがどの code になるかは 8 番。
  * 到達しない箇所の例外（作りの誤り）だけは code を持たない InternalError（internalError で作る）。
- * 例外のメッセージの文言は API に含まない（変わることがある）。判定には code を使う。
  * 問題を集める仕組み（IssueCollector）は、作成時のチェックと規則の診断（diagnose）で共通。
  */
 
@@ -29,13 +27,13 @@ export type KnownErrorCode =
   | "invalid-range"
   /** 曜日の番号（0〜6）の誤り */
   | "invalid-weekday"
-  /** 引数の値の誤り（整数でない日数など） */
+  /** 設定以外の引数の誤り（メソッドのオプションの誤り、整数でない日数など） */
   | "invalid-argument"
-  /** 設定の値の誤り */
+  /** 設定の誤り。設定は営業日カレンダー・スケジュールを作る関数が検証するオブジェクトで、オブジェクトでないことも含む（decisions.md の 8 番） */
   | "invalid-option"
   /** 祝日の提供元どうしのタイムゾーンが異なり、timeZone の指定が必要 */
   | "time-zone-conflict"
-  /** 対応している年の範囲の外（提供元の対応年、または日付として扱える 1000〜9999 年の外） */
+  /** 対応している年の範囲の外（提供元の対応年、または日付の計算が 1000〜9999 年の外に出た）。bizdays-toolkit/provider の関数の年の引数の誤りは invalid-argument */
   | "out-of-range"
   /** 判定が未確定の祝日（confirmed: false）に触れた（unconfirmedHolidayPolicy: "throw"） */
   | "unconfirmed-holiday"

@@ -24,6 +24,7 @@ import {
   withoutUndefined,
   type KnownErrorCode,
 } from "./errors.ts";
+import { isOptionsObject } from "./options.ts";
 import { RENAMED_VALUES, renameKeys, renameValue, writtenKey } from "./renamed.ts";
 import {
   instantToCivil,
@@ -2062,7 +2063,7 @@ export function compileScheduleOptions<Value, Kind extends string>(
   c: IssueCollector,
   options: unknown,
 ): CompiledSchedule<Value, Kind> | undefined {
-  if (!isObject(options)) {
+  if (!isOptionsObject(options)) {
     c.error("invalid-option", "", "options must be an object");
     return undefined;
   }

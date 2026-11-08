@@ -191,6 +191,8 @@ shipping.dayInfoOn("2027-01-01");
 shipping.daysBetween("2026-12-30", "2027-01-04").map((d) => d.open); // [true, false, false, false, false, true]
 ```
 
+Until 1.0.0 the result also carries the deprecated `businessDay` (same as `open`) and `rulePath` (same as `optionPath`), which the examples in this guide leave out. Compare the properties you use rather than the whole object.
+
 `cutoff` takes `"HH:mm"` or `"HH:mm:ss"`. The time of the input is taken to the minute (seconds are dropped) and compared at the start of that minute: with `cutoff: "14:00:30"`, an input at 14:00 is before the cutoff and an input at 14:01 is after it; with `"14:00"` or `"14:00:00"`, an input at 14:00 is after it.
 
 `daysBetween(from, to)` returns `dayInfoOn` for every day in the period (both ends included). `businessDatesBetween` and `holidaysBetween` include both ends too; only `diffBusinessDays(from, to)` counts from `from` (inclusive) to `to` (exclusive), so that `diffBusinessDays(a, b) + diffBusinessDays(b, c)` equals `diffBusinessDays(a, c)` and, when `a` is a business day, `diffBusinessDays(a, addBusinessDays(a, n))` is `n` (the inverse of `addBusinessDays`). From a closed day, `addBusinessDays` counts the next business day as 1 (so `+0` and `+1` give the same day, as `n = 0` is `businessDayOnOrAfter`), while `diffBusinessDays` does not count the closed start, so the two differ by one there.
@@ -767,6 +769,8 @@ try {
 }
 ```
 
+An error in the options of a calendar or a schedule (the object that the function creating it validates, including options that are not an object; a `Date`, a `Map` or an array is not taken as an object) is an `invalid-option`; the option diagnostics report the same codes. An error in any other argument, including the options of a method, is an `invalid-argument`. Functions that rewrite saved options without validating them treat a value they cannot read as a wrong argument.
+
 Codes: `invalid-date`, `invalid-input`, `invalid-month`, `invalid-annual-date`, `invalid-time`, `invalid-range`, `invalid-weekday`, `invalid-time-zone`, `invalid-argument`, `invalid-option`, `time-zone-conflict`, `out-of-range`, `unconfirmed-holiday`, `invalid-provider`, `invalid-provider-data`, `no-business-day`, `no-closed-day`. Future versions may add codes.
 
 ## Option diagnostics
@@ -801,7 +805,7 @@ diagnoseCalendar({
 | `error`    | The same codes as exceptions | Errors that make `createCalendar` or `createSchedule` throw. Creation stops at the first one; diagnostics return them all                                                                                                                                                                              |
 | `error`    | `invalid-provider-data`      | Errors in the data returned by a holiday provider. Creation checks only the years used; diagnostics check every supported year                                                                                                                                                                         |
 | `warning`  | `unknown-option`             | Unknown keys (ignored at creation). If a close known key exists, `message` suggests it                                                                                                                                                                                                                 |
-| `warning`  | `deprecated-option`          | A key or value renamed in 0.30.0 (accepted as the new name until 1.0.0). `path` is where you wrote the old name and `message` names the new one; `migrateCalendarOptions` and `migrateScheduleOptions` rewrite saved options                                                                           |
+| `warning`  | `deprecated-option`          | A key or value renamed in 0.30.0 (accepted as the new name until 1.0.0; this code is removed in 1.0.0, see the migration guide). `path` is where you wrote the old name and `message` names the new one; `migrateCalendarOptions` and `migrateScheduleOptions` rewrite saved options                   |
 | `warning`  | `shadowed`                   | A rule fully covered by an earlier rule of the same type (`relatedPath`) and never used                                                                                                                                                                                                                |
 | `warning`  | `never-matches`              | A recurring rule that matches no day (such as `{ dayOfMonth: 30, months: [2] }`, a 5th Wednesday with an effective period that has none, or `dayAfterHoliday` without a holiday provider)                                                                                                              |
 | `warning`  | `out-of-range`               | A specific date, or the effective period of a rule, outside the supported years of the holiday provider (`relatedPath`)                                                                                                                                                                                |

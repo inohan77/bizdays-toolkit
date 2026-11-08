@@ -6,7 +6,7 @@ import "./strict-warnings.ts";
  * - ci.yml の compat の行列に、engines の下限（package.json）が入っていること
  * - 実行している Node.js・npm・pnpm が、CI の固定版（check の行列と setup-toolchain）と同じであること。
  *   CI ではエラー、手元では注意の表示だけにする（熟成ゲートの都合などで、手元を先に変えることがあるため。
- *   RELEASING.md の「手元と CI で同じ版を使う」に戻すまでの間も作業を止めない）
+ *   RELEASING.md の「開発環境の版」に戻すまでの間も作業を止めない）
  */
 
 import { execSync } from "node:child_process";

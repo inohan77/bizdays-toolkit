@@ -186,9 +186,12 @@ interface Entry {
 
 /** @internal その年の祝日（表と振替の規則から。日付順） */
 export function computeSgHolidays(year: number): Holiday<SgHolidayKind>[] {
-  // 整数でない年（文字列の "2026" など）を範囲の外と言わない（code は out-of-range のまま。0.32.0 で見直す）
+  // 整数でない年（文字列の "2026" など）は範囲の外ではなく引数の誤り（KnownErrorCode の説明）
   if (!Number.isInteger(year))
-    throw rangeError("out-of-range", `Invalid year: ${describeValue(year)} (expected an integer)`);
+    throw rangeError(
+      "invalid-argument",
+      `Invalid year: ${describeValue(year)} (expected an integer)`,
+    );
   const movable = MOVABLE[year];
   if (movable === undefined) {
     throw rangeError(

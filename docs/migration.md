@@ -1,8 +1,8 @@
 # 移行ガイド
 
-マイナー版の間を移るときに、利用者がする作業をまとめます（1.0.0 までは、マイナー版で破壊的変更を行うことがあります）。版を飛ばして移るときは、移り先までの各版の作業をすべて行ってください。変更の全体は [CHANGELOG](../CHANGELOG.md) を見てください。0.9.0 以降は、CHANGELOG の各マイナー版にも「Migration」の小見出し（0.31.0 から英語。それより前の版は日本語）で同じ内容を書きます。
+マイナー版の間を移るときに、利用者がする作業をまとめます（1.0.0 までは、破壊的変更をマイナー版で出します。パッチ版では出しません）。版を飛ばして移るときは、移り先までの各版の作業をすべて行ってください。変更の全体は [CHANGELOG](../CHANGELOG.md) を見てください。0.9.0 以降は、CHANGELOG の各マイナー版にも「Migration」の小見出し（0.31.0 から英語。それより前の版は日本語）で同じ内容を書きます。
 
-パッチ版（0.x.y の y）は、公式データの反映と不具合の修正なので、作業は要りません。
+パッチ版（0.x.y の y）は、公式データの反映と不具合の修正なので、文書・型の説明のとおりに使っていれば作業は要りません。文書にない結果（呼び出しによって違っていた code など）に頼っていた場合は、その版の CHANGELOG の Fixed を確かめてください。
 
 ## 1.0.0 で削除する予定の API
 
@@ -26,6 +26,8 @@
 | `substituteDays`・`daysInMonth`・`SubstituteDaysOptions`（`bizdays-toolkit/provider`）                                                                                                                                  | 0.30.0           | `substituteDays` → `withSubstituteDays`、`daysInMonth` → `lengthOfMonth`、`SubstituteDaysOptions` → `WithSubstituteDaysOptions`                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 次の旧名は型にはなく、実行時だけ 1.0.0 まで受け付けます: スケジュールの `weekly`（→ `weekdayValues`）、規則の `day`（→ `dayOfMonth`）、合成の `businessDay`（→ `open`）、期日の `day`（→ `dayOfMonth`）、振替の `rules`（→ `directions`）、値では、スケジュールの `holidayPolicy` の `"weekday"`（→ `"ignore"`）と日本の祝日を使う設定の `kinds` の `"national"`（→ `"regular"`。ほかの提供元と合わせた設定では、上の 0.30.0 の節の書き方）。1.0.0 では、ID `"JP"` の提供元を含む設定の `"national"` は `invalid-option` になり、含まない設定では普通の種別の文字列として扱います。
+
+診断コード `deprecated-option` も 1.0.0 で削除します。1.0.0 では旧名は `invalid-option` になり、診断は `error` として返します。`deprecated-option` を期待値に書いたテストや、このコードで分岐するコードは、1.0.0 より前に設定の旧名を書き換えてから外してください。
 
 ## 0.31.0
 

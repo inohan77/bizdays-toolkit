@@ -104,9 +104,12 @@ const EASTER_BASED_ALSACE_MOSELLE: readonly (readonly [
 
 /** @internal その年・地域の祝日（日付順） */
 export function computeFrHolidays(zone: FrZone, year: number): Holiday<FrHolidayKind>[] {
-  // 整数でない年（文字列の "2026" など）を範囲の外と言わない（code は out-of-range のまま。0.32.0 で見直す）
+  // 整数でない年（文字列の "2026" など）は範囲の外ではなく引数の誤り（KnownErrorCode の説明）
   if (!Number.isInteger(year))
-    throw rangeError("out-of-range", `Invalid year: ${describeValue(year)} (expected an integer)`);
+    throw rangeError(
+      "invalid-argument",
+      `Invalid year: ${describeValue(year)} (expected an integer)`,
+    );
   if (year < SUPPORTED_YEARS.from || year > SUPPORTED_YEARS.to) {
     throw rangeError(
       "out-of-range",

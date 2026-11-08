@@ -273,7 +273,7 @@ function checkPortableSource(dir: string): string[] {
     ],
   ];
   // Date.parse を許すファイルと、その中の回数。回数が変わったら（別のファイルに足しても、許した場所から消しても）失敗する。
-  // 0.31.1 で src/core/input.ts の 1 か所をやめ、今はどこにも許さない（Firefox・Safari が小文字の t・z を読めなかった）
+  // src では Date.parse をどこにも許さない（Firefox・Safari が小文字の t・z を読めないため。経緯は開発の記録の 0.31.1）
   const DATE_PARSE_ALLOWED: ReadonlyMap<string, number> = new Map();
   for (const file of walk(dir).filter((f) => f.endsWith(".ts"))) {
     const shown = file.replaceAll("\\", "/");
@@ -636,7 +636,7 @@ async function checkDocFacts(): Promise<string[]> {
       problems.push(`${file}: the diagnostics table lacks ${missingDiag.join(", ")}`);
   }
 
-  // README のサイズの値: 測定した版が今のマイナー系列であること（RELEASING.md の「マイナー版を出すときに測り直す」）
+  // README のサイズの値: 測定した版が今のマイナー系列であること（RELEASING.md の「README のサイズの値」）
   const minor = pkg.version.split(".").slice(0, 2).join(".");
   for (const [file, pattern] of [
     ["README.md", /measured for (\d+\.\d+)\.\d+/],

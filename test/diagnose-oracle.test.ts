@@ -253,6 +253,21 @@ interface Report {
   recheckMs: number;
 }
 
+/**
+ * 設定ごとの診断（asOf なし）の結果。テストどうしで使い回す（同じ設定の同じ診断を何度も計算しない）。診断は決定的で
+ * （decisions.md の 30 番）、返す配列は凍結されている（4 番）ので、あるテストの扱いが別のテストの結果に影響しない。
+ * 鍵は設定のオブジェクトそのもの（plan.chosen の要素。JSON にすると、明示的な undefined のような違いが消える）
+ */
+const DIAG_CACHE = new WeakMap<Config, Obj[]>();
+const diagnoseOnce = (config: Config): Obj[] => {
+  let d = DIAG_CACHE.get(config);
+  if (d === undefined) {
+    d = diag["diagnoseCalendar"]!(build(config.list, config.policy, config.weekdays)) as Obj[];
+    DIAG_CACHE.set(config, d);
+  }
+  return d;
+};
+
 function run(
   check: (
     list: readonly Item[],
@@ -271,9 +286,9 @@ function run(
     rechecked: 0,
     recheckMs: 0,
   };
-  for (const { list: items, policy, weekdays } of list) {
-    const o = build(items, policy, weekdays);
-    const d = diag["diagnoseCalendar"]!(o) as Obj[];
+  for (const config of list) {
+    const { list: items, policy, weekdays } = config;
+    const d = diagnoseOnce(config);
     if (d.some((x) => x["severity"] === "error")) continue;
     report.configs++;
     for (const x of d)
@@ -483,9 +498,16 @@ test("オラクル: expired は、終わりが基準日より前で、基準日�
   let diagnosed = 0;
   for (const asOf of AS_OFS) {
     const fromIndex = SHORT_DAYS.indexOf(asOf);
-    const report = run((list, policy, _d, r, weekdays) => {
-      if (!list.some((item) => (endOf(item) ?? asOf) < asOf)) return;
+    // 終わりが基準日より前の項目を含む設定だけを、先に選んで回す（使わない診断を計算しない）
+    const chosen = configs().filter(
+      (c) =>
+        c.list.some((item) => (endOf(item) ?? asOf) < asOf) &&
+        !diagnoseOnce(c).some((x) => x["severity"] === "error"),
+    );
+    assert.ok(chosen.length > 0, `診断した設定が 0 件（基準日 ${asOf}。オラクルが空振りしている）`);
+    for (const { list, policy, weekdays } of chosen) {
       diagnosed++;
+      const unsound: string[] = [];
       const d = diag["diagnoseCalendar"]!(build(list, policy, weekdays), { asOf }) as Obj[];
       const paths = pathsOf(list);
       const base = snapshot(build(list, policy, weekdays), false);
@@ -494,7 +516,7 @@ test("オラクル: expired は、終わりが基準日より前で、基準日�
         checked++;
         const end = endOf(list[p]!);
         if (end === undefined || end >= asOf)
-          r.unsound.push(
+          unsound.push(
             `expired の終わりが基準日以降（基準日 ${asOf}） ${describeConfig(list, policy, weekdays, path)}`,
           );
         if (
@@ -511,13 +533,12 @@ test("オラクル: expired は、終わりが基準日より前で、基準日�
             fromIndex,
           )
         )
-          r.unsound.push(
+          unsound.push(
             `expired を取り除くと基準日以降が変わる（基準日 ${asOf}） ${describeConfig(list, policy, weekdays, path)}`,
           );
       });
-      assert.deepEqual(r.unsound, []);
-    });
-    assert.ok(report.configs > 0, `試した設定が 0 件（基準日 ${asOf}。オラクルが空振りしている）`);
+      assert.deepEqual(unsound, []);
+    }
   }
   console.log(
     `expired: 基準日 ${AS_OFS.join("・")} で診断した設定 ${diagnosed} 件、expired ${checked} 件`,

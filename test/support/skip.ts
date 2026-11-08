@@ -20,6 +20,11 @@ export const INTENDED_SKIPS: Readonly<Record<string, IntendedSkip>> = {
   },
   "temporal-unavailable-runtime": { reason: "no Temporal in this runtime", ci: true },
   "temporal-unavailable-browser": { reason: "no Temporal in this browser", ci: true },
+  "no-git": {
+    reason:
+      "not in a git work tree, so the Markdown files cannot be classified (run it in a clone)",
+    ci: false,
+  },
   "no-release-tag": {
     reason: "no release tag readable with git (run git fetch --tags)",
     ci: false,
