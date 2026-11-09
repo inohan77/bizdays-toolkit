@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { combineCalendars, createCalendar, isBizdaysError } from "../src/index.ts";
+import {
+  addDays,
+  combineCalendars,
+  createCalendar,
+  isBizdaysError,
+  type Calendar,
+} from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
+import { sg } from "../src/sg/index.ts";
 import { england } from "../src/uk/index.ts";
 
 const company = createCalendar({
@@ -264,4 +271,102 @@ test("合成: 入力の誤り", () => {
       code,
     );
   }
+});
+
+test("合成: 方針の違うカレンダーを合成しても、合成が投げるのは構成カレンダーのどれかが投げる日だけで、isBusinessDay と dayInfoOn・祝日のメソッドで例外の有無がそろう（decisions.md の 17 番）", () => {
+  // 0.31.2 まで、合成は和集合の提供元に「どれかが throw なら throw」を一律に当て、どの構成カレンダーも投げない日に投げていた
+  const utc = { closedWeekdays: [0, 6] as const, timeZone: "UTC" };
+  const jpThrow = createCalendar({
+    ...utc,
+    holidayProvider: jp,
+    unconfirmedHolidayPolicy: "throw",
+  });
+  const englandAccept = createCalendar({ ...utc, holidayProvider: england });
+  const sgIgnore = createCalendar({ ...utc, holidayProvider: sg, outOfRangePolicy: "ignore" });
+  const jpDefault = createCalendar({ ...utc, holidayProvider: jp });
+  const cases: [string, Calendar[]][] = [
+    ["日本（未確定で throw）と英国（accept）", [jpThrow, englandAccept]],
+    ["英国（accept）と日本（未確定で throw）", [englandAccept, jpThrow]],
+    ["日本（対応年の外で throw）とシンガポール（ignore）", [jpDefault, sgIgnore]],
+    ["シンガポール（ignore）と日本（未確定で throw）", [sgIgnore, jpThrow]],
+  ];
+  const throws = (f: () => unknown): string | undefined => {
+    try {
+      f();
+      return undefined;
+    } catch (e) {
+      if (!isBizdaysError(e)) throw e;
+      return e.code;
+    }
+  };
+  const days: string[] = [];
+  for (let d = "2024-01-01"; d <= "2036-12-31"; d = addDays(d, 5)) days.push(d);
+  let combinedThrew = 0;
+  for (const [name, calendars] of cases)
+    for (const open of ["all", "any"] as const) {
+      const c = combineCalendars(calendars, { open });
+      const nested = combineCalendars([c, calendars[0]!], { open });
+      for (const date of days) {
+        const where = `${name}・${open}・${date}`;
+        // 構成カレンダーのどれかが投げれば、その code で投げる（先のカレンダーの code）
+        const expectInfo = calendars.map((k) => throws(() => k.dayInfoOn(date))).find((x) => x);
+        assert.equal(
+          throws(() => c.dayInfoOn(date)),
+          expectInfo,
+          `dayInfoOn ${where}`,
+        );
+        assert.equal(
+          throws(() => c.isBusinessDay(date)),
+          expectInfo,
+          `isBusinessDay ${where}`,
+        );
+        assert.equal(
+          throws(() => nested.dayInfoOn(date)),
+          expectInfo,
+          `入れ子の dayInfoOn ${where}`,
+        );
+        const expectHoliday = calendars.map((k) => throws(() => k.isHoliday(date))).find((x) => x);
+        assert.equal(
+          throws(() => c.isHoliday(date)),
+          expectHoliday,
+          `isHoliday ${where}`,
+        );
+        assert.equal(
+          throws(() => c.holidayOn(date)),
+          expectHoliday,
+          `holidayOn ${where}`,
+        );
+        if (expectInfo !== undefined) combinedThrew++;
+        if (expectInfo === undefined && expectHoliday === undefined) {
+          // 祝日は、先頭から最初に祝日を持つカレンダーのもの
+          const holiday = calendars.map((k) => k.holidayOn(date)).find((h) => h !== undefined);
+          assert.deepEqual(c.dayInfoOn(date).holiday, holiday, `holiday ${where}`);
+          assert.deepEqual(c.holidayOn(date), holiday, `holidayOn の値 ${where}`);
+        }
+      }
+      for (let year = 2024; year <= 2036; year++) {
+        const expected = calendars.map((k) => throws(() => k.holidaysInYear(year))).find((x) => x);
+        assert.equal(
+          throws(() => c.holidaysInYear(year)),
+          expected,
+          `holidaysInYear ${name}・${year}`,
+        );
+        if (expected !== undefined) continue;
+        const byDate = new Map<string, unknown>();
+        for (const k of calendars)
+          for (const h of k.holidaysInYear(year)) if (!byDate.has(h.date)) byDate.set(h.date, h);
+        assert.deepEqual(
+          c.holidaysInYear(year),
+          [...byDate.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, h]) => h),
+          `holidaysInYear の値 ${name}・${year}`,
+        );
+        assert.deepEqual(
+          c.holidaysBetween(`${year}-01-01`, `${year}-12-31`),
+          c.holidaysInYear(year),
+          `holidaysBetween ${name}・${year}`,
+        );
+      }
+    }
+  // 構成カレンダーが投げる日も試していること（空振りしない）
+  assert.ok(combinedThrew > 0, "構成カレンダーが投げる日がない");
 });

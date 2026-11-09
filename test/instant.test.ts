@@ -169,3 +169,35 @@ test("instantOf: カレンダー・スケジュールのタイムゾーンで。
   const utc = createCalendar({ timeZone: "UTC" });
   assert.equal(utc.instantOf("2026-11-23", "10:00").toISOString(), "2026-11-23T10:00:00.000Z");
 });
+
+test("瞬間の入力は、カレンダーのタイムゾーンで暦日・時刻になる（壁時計の日時と、それを +09:00 の瞬間にしたものが同じ）", () => {
+  // 0.31.3 で test/properties.test.ts の性質から移した（タイムゾーンを変えた再実行の対象をこのファイルに絞るため）。
+  // 乱数の 300 件の代わりに、年の境目・月末・うるう日と、タイムゾーンを変えた再実行（scripts/test-tz.ts）の 2 つの
+  // タイムゾーンの夏時間の切り替え日（America/Los_Angeles の 2026-03-08・2026-11-01、Pacific/Chatham の 2026-04-05・
+  // 2026-09-27）を含む日の、1 日のすべての 7 分おきの時刻を確かめる
+  const calendar = createCalendar({ holidayProvider: jp });
+  const days = [
+    "1999-12-31",
+    "2000-01-01",
+    "2024-02-29",
+    "2026-03-08",
+    "2026-03-31",
+    "2026-04-05",
+    "2026-09-27",
+    "2026-11-01",
+    "2026-11-23",
+    "2099-12-31",
+  ];
+  let checked = 0;
+  for (const day of days)
+    for (let minutes = 0; minutes < 24 * 60; minutes += 7) {
+      const wall = `${day}T${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+      assert.deepEqual(
+        calendar.civilOf(new Date(`${wall}:00+09:00`)),
+        calendar.civilOf(wall),
+        wall,
+      );
+      checked++;
+    }
+  assert.equal(checked, days.length * Math.ceil((24 * 60) / 7));
+});

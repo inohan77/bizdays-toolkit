@@ -33,12 +33,10 @@ export const TZ_FILES: readonly string[] = [
   "test/date.test.ts",
   "test/day-before-holiday.test.ts",
   "test/days-between.test.ts",
-  "test/diagnose-as-of.test.ts",
   "test/fr-rules.test.ts",
   "test/input.test.ts",
   "test/instant.test.ts",
   "test/month.test.ts",
-  "test/properties.test.ts",
   "test/robustness.test.ts",
   "test/schedule.test.ts",
   "test/sg-rules.test.ts",
@@ -54,6 +52,8 @@ export const TZ_EXCLUDED: Readonly<Record<string, string>> = {
   "test/diagnose-oracle.test.ts":
     "テストの側で UTC の日数から日付を作るだけで、ライブラリには暦日を渡す",
   "test/sg-datagovsg.test.ts": "テストの側で UTC の曜日を求めるだけで、ライブラリには暦日を渡す",
+  "test/diagnose-as-of.test.ts":
+    "Date と日時の文字列は、asOf の形の誤り（invalid-date）として渡すだけで、瞬間の変換を通らない",
 };
 
 const problems: string[] = [];

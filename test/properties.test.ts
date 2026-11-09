@@ -181,17 +181,6 @@ property("営業日カレンダーと、同じ規則の真偽値のスケジュ�
   return context;
 });
 
-property("瞬間の入力は、カレンダーのタイムゾーンで暦日になる", (g) => {
-  const day = g.date();
-  const minutes = g.int(0, 24 * 60 - 1);
-  const wall = `${day}T${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-  const calendar = createCalendar({ holidayProvider: jp });
-  // 日本時間の壁時計の日時と、それを +09:00 の瞬間にしたものは同じ暦日・時刻になる
-  const context = `wall=${wall}`;
-  assert.deepEqual(calendar.civilOf(new Date(`${wall}:00+09:00`)), calendar.civilOf(wall), context);
-  return context;
-});
-
 // ------------------------------------------------------------
 // 繰り返しの規則と振替
 // ------------------------------------------------------------

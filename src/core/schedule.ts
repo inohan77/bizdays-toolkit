@@ -25,6 +25,7 @@ import {
   type KnownErrorCode,
 } from "./errors.ts";
 import { isOptionsObject } from "./options.ts";
+import { checkNames } from "./names.ts";
 import { RENAMED_VALUES, renameKeys, renameValue, writtenKey } from "./renamed.ts";
 import {
   instantToCivil,
@@ -1856,30 +1857,6 @@ function loadProviderYear<Kind extends string>(
     }
     return Object.freeze(holiday);
   });
-}
-
-/** 祝日のほかの言語の名称を検証する（誤りがあれば理由を返す） */
-function checkNames(names: unknown): string | undefined {
-  // 普通のオブジェクト（別の実行環境で作られたものも可）。継承した項目を持つものは受け付けない
-  const proto: unknown = isObject(names) ? Object.getPrototypeOf(names) : undefined;
-  if (!isObject(names) || (proto !== null && Object.getPrototypeOf(proto) !== null)) {
-    return "must be a plain object of { [language tag]: name }";
-  }
-  for (const [tag, value] of Object.entries(names)) {
-    let canonical: string | undefined;
-    try {
-      canonical = Intl.getCanonicalLocales(tag)[0];
-    } catch {
-      return `${describeValue(tag)} is not a BCP 47 language tag`;
-    }
-    if (canonical !== tag) {
-      return `${describeValue(tag)} must be written in canonical form ${describeValue(canonical)}`;
-    }
-    if (typeof value !== "string" || value === "") {
-      return `${describeValue(tag)} must be a non-empty string`;
-    }
-  }
-  return undefined;
 }
 
 /** @internal 祝日を調べる機能を作る（設定は検証済みであること） */

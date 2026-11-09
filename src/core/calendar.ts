@@ -744,14 +744,19 @@ function buildCalendar<Kind extends string>(
       }
       return Object.freeze(result);
     },
-    adjust: (input, options) => adjustDate(dateOf(input), options),
+    adjust: (input, options) => adjustDate(dateOf(input), adjustOptions(options, "adjust options")),
     nthBusinessDayOfMonth: nthOfMonth,
     firstBusinessDayOfMonth: (month) => nthOfMonth(month, 1),
     lastBusinessDayOfMonth: (month) => nthOfMonth(month, -1),
-    closingMonth: (input, closingDayOfMonth, options) =>
-      formatMonth(closingMonthOf(dateOf(input), closingDayOfMonth, options)),
-    closingPeriod(input, closingDayOfMonth, options) {
+    // 締め日のメソッドは、締め日 → オプション → 入力の順に確かめる（2 つが誤っているときの code を 2 つのメソッドでそろえる）
+    closingMonth(input, closingDayOfMonth, rawOptions) {
       checkClosingDay(closingDayOfMonth);
+      const options = adjustOptions(rawOptions, "closingMonth options");
+      return formatMonth(closingMonthOf(dateOf(input), closingDayOfMonth, options));
+    },
+    closingPeriod(input, closingDayOfMonth, rawOptions) {
+      checkClosingDay(closingDayOfMonth);
+      const options = adjustOptions(rawOptions, "closingPeriod options");
       // "YYYY-MM" だけを月として扱い、それ以外（暦日・日時の文字列・Date・Temporal の値）は dateOf で暦日にする
       const isMonth = typeof input === "string" && /^\d{4}-\d{2}$/.test(input);
       const month = isMonth
@@ -778,7 +783,7 @@ function buildCalendar<Kind extends string>(
       if (!isDayOfMonthValue(day)) {
         throw rangeError(
           "invalid-argument",
-          `dayOfMonth must be an integer from 1 to 31, or -1 (last day): ${String(day)}`,
+          `dayOfMonth must be an integer from 1 to 31, or -1 (last day): ${describeValue(day)}`,
         );
       }
       return adjustDate(dayOfMonth(parseMonth(month), day), o as unknown as AdjustOptions);
@@ -798,7 +803,7 @@ function optionsObject(
   options: unknown,
   what: string,
   rename: (v: Record<string, unknown>) => Record<string, unknown> = (v) => v,
-  /** 省略できないオプション（dueDate・combineCalendars）。undefined も、オブジェクトでないことを伝える */
+  /** 省略できないオプション（dueDate・combineCalendars・adjust・closingMonth・closingPeriod）。undefined も、オブジェクトでないことを伝える */
   required = false,
   code: KnownErrorCode = "invalid-argument",
 ): Record<string, unknown> {
@@ -808,6 +813,10 @@ function optionsObject(
   }
   return withoutUndefined(rename(options));
 }
+
+/** 調整の規則のオプション（adjust・closingMonth・closingPeriod）。省略できず、普通のオブジェクトだけを受ける（8 番） */
+const adjustOptions = (options: unknown, what: string): AdjustOptions =>
+  optionsObject(options, what, undefined, true) as unknown as AdjustOptions;
 
 const isCalendarLike = (v: unknown): v is Calendar =>
   typeof v === "object" &&
@@ -823,7 +832,8 @@ const isCalendarLike = (v: unknown): v is Calendar =>
  *
  * - dayInfoOn の reason・name・shiftedFrom・optionPath は、合成結果と同じ判定をした最初のカレンダーの結果で、
  *   その番号を decidedBy で返す。入れ子の合成では、内側の番号まで含めた列を decidedByPath で返す。
- *   holiday・isHoliday などは、すべてのカレンダーの祝日の提供元の和集合で判定する
+ *   holiday・isHoliday・holidaysInYear などは、すべてのカレンダーの同じ参照を呼び、日付ごとに先のカレンダーの祝日を採る
+ *   （同じ提供元は 1 回だけ数え、同じ日付なら先のカレンダーの提供元の祝日）。どれかのカレンダーが投げる日だけ投げる
  * - タイムゾーンはすべてのカレンダーで同じでなければならない（time-zone-conflict）。
  *   2 つ未満、同じカレンダーを 2 回渡した場合は invalid-argument
  * - 合成したカレンダーをさらに合成することもできる。規則の診断（diagnoseCalendar）の対象にはならないので、
@@ -872,15 +882,36 @@ export function combineCalendars<Kind extends string = string>(
   const providers: HolidayProvider<Kind>[] = [];
   for (const c of calendars)
     for (const p of c.providers) if (!providers.includes(p)) providers.push(p);
-  const lookup = createHolidayLookup<Kind>({
+  // 合成の参照は、タイムゾーンの変換と提供元・方針の値（要約。どれかが "throw" なら "throw"）のためだけに使う。祝日は和集合から
+  // 引かず、構成カレンダーの結果から求める（和集合に方針を一律に当てると、あるカレンダーの方針が別のカレンダーにしか
+  // 属さない提供元にまで当たり、どの構成カレンダーも投げない日に投げる。decisions.md の 17 番）
+  const base = createHolidayLookup<Kind>({
     providers: Object.freeze(providers),
     timeZone: zones[0]!,
     outOfRangePolicy: calendars.every((c) => c.outOfRangePolicy === "ignore") ? "ignore" : "throw",
-    // 未確定の祝日も同じ考え方: どれかが "throw" なら、そのカレンダーの判定が例外になるので合成の holiday も "throw"
     unconfirmedHolidayPolicy: calendars.some((c) => c.unconfirmedHolidayPolicy === "throw")
       ? "throw"
       : "accept",
   });
+  /** 構成カレンダーの祝日の一覧を、日付ごとに先のカレンダーの祝日を採ってまとめる（すべてのカレンダーを呼んでから） */
+  const merge = (lists: readonly (readonly Holiday<Kind>[])[]): readonly Holiday<Kind>[] => {
+    const byDate = new Map<string, Holiday<Kind>>();
+    for (const list of lists) for (const h of list) if (!byDate.has(h.date)) byDate.set(h.date, h);
+    return Object.freeze(
+      [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+    );
+  };
+  /** 構成カレンダーの祝日（すべてのカレンダーを呼び、先のカレンダーの祝日を採る） */
+  const holidayOn = (input: DateInput): Holiday<Kind> | undefined =>
+    calendars.map((c) => c.holidayOn(input)).find((h) => h !== undefined);
+  const lookup: HolidayLookup<Kind> = {
+    ...base,
+    isHoliday: (input) => holidayOn(input) !== undefined,
+    holidayOn,
+    getHoliday: holidayOn,
+    holidaysInYear: (year) => merge(calendars.map((c) => c.holidaysInYear(year))),
+    holidaysBetween: (from, to) => merge(calendars.map((c) => c.holidaysBetween(from, to))),
+  };
 
   // すべてのカレンダーを判定する（結果が決まった時点で止めると、後のカレンダーが投げる日に投げない。17 番）
   const isOpen = (date: DateString): boolean => {
@@ -893,22 +924,23 @@ export function combineCalendars<Kind extends string = string>(
     const open = mode === "all" ? results.every((r) => r.open) : results.some((r) => r.open);
     // 合成結果と同じ判定をした最初のカレンダー（"all" で休業なら最初に休みのもの、営業ならすべて営業なので 0 番）
     const decidedBy = results.findIndex((r) => r.open === open);
-    const base = results[decidedBy]!;
+    const decided = results[decidedBy]!;
     const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
       date,
-      weekday: base.weekday,
+      weekday: decided.weekday,
       open,
       businessDay: open,
-      reason: base.reason,
+      reason: decided.reason,
     };
-    if (base.name !== undefined) result.name = base.name;
-    const holiday = lookup.holidayOfDate(date);
+    if (decided.name !== undefined) result.name = decided.name;
+    // 祝日は、求めた構成カレンダーの結果から先頭の 1 つを採る（引き直さない。構成カレンダーが投げる日は上で投げている）
+    const holiday = results.find((r) => r.holiday !== undefined)?.holiday;
     if (holiday !== undefined) result.holiday = holiday;
-    if (base.shiftedFrom !== undefined) result.shiftedFrom = base.shiftedFrom;
-    if (base.optionPath !== undefined) result.optionPath = result.rulePath = base.optionPath;
+    if (decided.shiftedFrom !== undefined) result.shiftedFrom = decided.shiftedFrom;
+    if (decided.optionPath !== undefined) result.optionPath = result.rulePath = decided.optionPath;
     result.decidedBy = decidedBy;
     // 内側が合成したカレンダーなら、その経路の前に自分の番号を付ける（入れ子でなければ長さ 1）
-    result.decidedByPath = Object.freeze([decidedBy, ...(base.decidedByPath ?? [])]);
+    result.decidedByPath = Object.freeze([decidedBy, ...(decided.decidedByPath ?? [])]);
     return Object.freeze(result);
   }
 

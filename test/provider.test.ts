@@ -340,3 +340,57 @@ test("provider: withSubstituteDays の入力の誤りは code 付きの例外", 
   );
   assert.deepEqual(withSubstituteDays([], opts), [], "空の入力は空");
 });
+
+test("withSubstituteDays: directions は普通のオブジェクトだけを受け、undefined の曜日は省略と同じ。すべての曜日は入口で止め、names は検証して凍結した複製を返す", () => {
+  const holidays = [
+    { date: "2026-01-04", name: "A", nameEn: "A", kind: "k", confirmed: true, names: { cy: "Aa" } },
+    { date: "2026-03-07", name: "B", nameEn: "B", kind: "k", confirmed: true },
+  ];
+  const code = (c: string) => (e: unknown) => isBizdaysError(e) && e.code === c;
+  // 明示的な undefined は省略と同じ（decisions.md の 6 番）
+  assert.deepEqual(
+    withSubstituteDays(holidays, {
+      // exactOptionalPropertyTypes を使わない利用者の型は undefined を通す
+      directions: { 0: "next", 6: undefined } as never,
+      kind: "s",
+    }).map((h) => h.date),
+    withSubstituteDays(holidays, { directions: { 0: "next" }, kind: "s" }).map((h) => h.date),
+  );
+  // Map・配列を黙って空として受けない（8 番）
+  for (const directions of [new Map([[0, "next"]]), ["next"]])
+    assert.throws(
+      () => withSubstituteDays(holidays, { directions: directions as never, kind: "s" }),
+      code("invalid-argument"),
+    );
+  // すべての曜日に向きがあると振替日がない（年の範囲の外まで探さず、入口で止める）
+  const all = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, "next"]));
+  assert.throws(
+    () => withSubstituteDays(holidays, { directions: all, kind: "s" }),
+    code("invalid-argument"),
+  );
+  // names は凍結した複製（入力と共有しない。4 番）
+  const out = withSubstituteDays(holidays, { directions: { 0: "next" }, kind: "s" });
+  for (const h of out.filter((x) => x.names !== undefined)) {
+    assert.ok(Object.isFrozen(h.names), h.date);
+    assert.notEqual(h.names, holidays[0]!.names, h.date);
+    assert.deepEqual(h.names, { cy: "Aa" });
+  }
+  // 入力の names と、renameSubstitute が返す名称も検証する（26 番）
+  assert.throws(
+    () =>
+      withSubstituteDays([{ ...holidays[0]!, names: 123 as never }], {
+        directions: { 0: "next" },
+        kind: "s",
+      }),
+    code("invalid-argument"),
+  );
+  assert.throws(
+    () =>
+      withSubstituteDays(holidays, {
+        directions: { 0: "next" },
+        kind: "s",
+        renameSubstitute: () => ({ name: 1 as never, nameEn: "x" }),
+      }),
+    code("invalid-argument"),
+  );
+});

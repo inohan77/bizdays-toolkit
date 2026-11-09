@@ -6,6 +6,19 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.31.3] - 2026-11-09
+
+This version fixes results that did not keep what the guide, the type descriptions and the design decisions promise. The results of valid calendars and schedules do not change, except that combined calendars no longer throw on days when none of their calendars throws.
+
+### Fixed
+
+- Combined calendars (`combineCalendars`) threw on days when none of their calendars throws: the holidays were looked up in the union of the providers with one policy ("throw" if any calendar throws), so the policy of one calendar was applied to the providers of another. For example, a calendar with `unconfirmedHolidayPolicy: "throw"` and Japanese holidays combined with an English calendar threw `unconfirmed-holiday` in `dayInfoOn` for a predicted English holiday, while `isBusinessDay` returned a result. `dayInfoOn`, `isHoliday`, `holidayOn`, `holidaysInYear` and `holidaysBetween` now ask each calendar and throw only when one of them throws, as the guide says (the holiday shown is still the one of the earlier calendar). The rule is now written in the design decisions (17). Calls that threw now return values; other results are unchanged. When two calendars throw for different reasons on the same day, the code is now the one of the earlier calendar
+- `adjust`, `closingMonth` and `closingPeriod` took an array, a function or a `Date` carrying a `convention` as their options; like `dueDate`, they now take only a plain object and throw `invalid-argument` otherwise (design decisions 8). If you passed such a value, pass a plain object
+- `withSubstituteDays` (`bizdays-toolkit/provider`): `directions` with an explicit `undefined` weekday (such as `{ 0: "next", 6: undefined }`) threw; it is now the same as leaving the weekday out (design decisions 6). `directions` given as a `Map` or an array was taken as empty and added no substitute days; it now throws `invalid-argument`. `directions` with all seven weekdays searched until the end of the supported years and threw `out-of-range`; it now throws `invalid-argument` at once. The `names` of the returned holidays were the input objects; they are now frozen copies, as the type description says. `names` of the input holidays and the `name` and `nameEn` returned by `renameSubstitute` are now checked (`invalid-argument`) instead of being returned as they are
+- A Temporal-like date (`{ year, month, day }`) with a year that is not an integer from 1000 to 9999 threw `out-of-range`, while the same date as a string, and a wrong month or day, threw `invalid-date`. It now throws `invalid-date`; `out-of-range` is left for dates computed from an instant or by date arithmetic outside the years 1000–9999 (design decisions 1). If you branch on `out-of-range` for such input, branch on `invalid-date`
+- Error messages: the `month`, `weekday` and `n` of `bizdays-toolkit/provider`, the `dayOfMonth` of `dueDate` and the `date` of `toInstant` are shown in quotes when they are strings, like the other values (the codes are unchanged)
+- Documentation: the guide said that the separator `t` in date-time strings is part of the `DateTimeInput` type; the type has only the upper-case `T`, and a lower-case `t` is accepted at run time (the `time` returned by `civilOf` is then typed `string | null`). The guide now also says that the policies of a combined calendar are a summary and that it throws only when one of its calendars throws
+
 ## [0.31.2] - 2026-11-09
 
 This version fixes results that were not consistent between functions or did not match the type descriptions, and corrects the documentation. The results of valid calendars and schedules do not change.
@@ -872,7 +885,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.2...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.3...HEAD
+[0.31.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.2...v0.31.3
 [0.31.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.1...v0.31.2
 [0.31.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.0...v0.31.1
 [0.31.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.30.9...v0.31.0

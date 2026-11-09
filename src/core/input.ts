@@ -216,6 +216,13 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
           `Unsupported calendar: ${input.calendarId} (only iso8601)`,
         );
       }
+      // 渡された年の誤りは、文字列の暦日と同じ invalid-date（範囲の外に出た計算の out-of-range ではない。decisions.md の 1 番）
+      if (!Number.isInteger(input.year) || input.year < 1000 || input.year > 9999) {
+        throw rangeError(
+          "invalid-date",
+          `Invalid date: year must be an integer from 1000 to 9999: ${describeValue(input.year)}`,
+        );
+      }
       const date = formatDate(input.year, input.month, input.day);
       if (typeof input.hour === "number") {
         return { date, minutes: wallTime(input.hour, input.minute ?? 0) };
@@ -302,7 +309,8 @@ export function parseTimeOfDaySeconds(value: unknown): number {
  */
 export function toInstant(date: DateString, time: string, timeZone: string): Date {
   const zone = validateTimeZone(timeZone);
-  if (typeof date !== "string") throw rangeError("invalid-date", `Invalid date: ${String(date)}`);
+  if (typeof date !== "string")
+    throw rangeError("invalid-date", `Invalid date: ${describeValue(date)}`);
   parseDate(date);
   const seconds = parseTimeOfDaySeconds(time);
   const ms = civilToInstant(date, Math.floor(seconds / 60), zone) + (seconds % 60) * 1000;

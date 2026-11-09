@@ -102,3 +102,16 @@ test("オフセット付きの日時文字列の瞬間は、ECMAScript が定め
       s,
     );
 });
+
+test("Temporal の形の年月日の年の誤りは、文字列の暦日と同じ invalid-date。瞬間の変換が年の範囲を出たときだけ out-of-range（decisions.md の 1 番）", () => {
+  const code = (c: string) => (e: unknown) => isBizdaysError(e) && e.code === c;
+  for (const year of [2026.5, Number.NaN, 999, 10000])
+    assert.throws(
+      () => toDateString({ year, month: 1, day: 1 }, "UTC"),
+      code("invalid-date"),
+      String(year),
+    );
+  assert.throws(() => toDateString("0999-01-01", "UTC"), code("invalid-date"));
+  assert.throws(() => toDateString({ year: 2026, month: 13, day: 1 }, "UTC"), code("invalid-date"));
+  assert.throws(() => toDateString(new Date(Date.UTC(10000, 0, 1)), "UTC"), code("out-of-range"));
+});

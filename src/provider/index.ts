@@ -25,6 +25,7 @@ import {
 } from "../core/date.ts";
 import { renameKeys } from "../core/renamed.ts";
 import { describeValue, rangeError } from "../core/errors.ts";
+import { checkNames } from "../core/names.ts";
 import { isOptionsObject } from "../core/options.ts";
 import { HOLIDAY_KEY_PATTERN, type Holiday } from "../core/types.ts";
 
@@ -39,7 +40,10 @@ function checkYear(year: unknown): asserts year is number {
 
 function checkMonth(month: unknown): asserts month is number {
   if (!Number.isInteger(month) || (month as number) < 1 || (month as number) > 12) {
-    throw rangeError("invalid-argument", `month must be an integer from 1 to 12: ${String(month)}`);
+    throw rangeError(
+      "invalid-argument",
+      `month must be an integer from 1 to 12: ${describeValue(month)}`,
+    );
   }
 }
 
@@ -71,13 +75,13 @@ export function nthWeekdayOfMonth(
   if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
     throw rangeError(
       "invalid-weekday",
-      `weekday must be an integer from 0 (Sunday) to 6 (Saturday): ${String(weekday)}`,
+      `weekday must be an integer from 0 (Sunday) to 6 (Saturday): ${describeValue(weekday)}`,
     );
   }
   if (!Number.isInteger(n) || n === 0 || n < -1 || n > 5) {
     throw rangeError(
       "invalid-argument",
-      `n must be an integer from 1 to 5, or -1 (last): ${String(n)}`,
+      `n must be an integer from 1 to 5, or -1 (last): ${describeValue(n)}`,
     );
   }
   const days = daysInMonthOf(year, month);
@@ -163,7 +167,7 @@ function checkHolidays<Kind extends string>(holidays: unknown): readonly Holiday
     if (typeof h !== "object" || h === null) {
       throw rangeError("invalid-argument", `holidays[${i}] is not an object`);
     }
-    const { date, name, nameEn, kind, confirmed, key } = h as Record<string, unknown>;
+    const { date, name, nameEn, kind, confirmed, key, names } = h as Record<string, unknown>;
     if (!isValidDate(date)) {
       throw rangeError("invalid-date", `holidays[${i}] has an invalid date ${describeValue(date)}`);
     }
@@ -193,6 +197,10 @@ function checkHolidays<Kind extends string>(holidays: unknown): readonly Holiday
         `holidays[${i}] (${date}) key must match ${String(HOLIDAY_KEY_PATTERN)}: ${describeValue(key)}`,
       );
     }
+    // 提供元のデータと同じ検証（decisions.md の 26 番）
+    const problem = names === undefined ? undefined : checkNames(names);
+    if (problem !== undefined)
+      throw rangeError("invalid-argument", `holidays[${i}] (${date}) names: ${problem}`);
   });
   return holidays as readonly Holiday<Kind>[];
 }
@@ -213,13 +221,16 @@ function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kin
   }
   const o = renameKeys("throw", ["substitute"], "options", options as Record<string, unknown>);
   const { directions: rules, kind, renameSubstitute: name, originalPolicy: original } = o;
-  if (typeof rules !== "object" || rules === null) {
+  // 普通のオブジェクトだけを受ける（Map・配列を黙って空として受けない。decisions.md の 8 番）
+  if (!isOptionsObject(rules)) {
     throw rangeError(
       "invalid-argument",
-      'options.directions must be an object of { [weekday]: "next" | "previous" }',
+      `options.directions must be an object of { [weekday]: "next" | "previous" }: ${describeValue(rules)}`,
     );
   }
-  for (const [weekday, direction] of Object.entries(rules)) {
+  // 値が undefined の曜日は、省略と同じ（decisions.md の 6 番）
+  const entries = Object.entries(rules).filter(([, direction]) => direction !== undefined);
+  for (const [weekday, direction] of entries) {
     if (!/^[0-6]$/.test(weekday)) {
       throw rangeError(
         "invalid-weekday",
@@ -233,6 +244,13 @@ function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kin
       );
     }
   }
+  // すべての曜日に向きがあると、振替日がない（入口で止める。skipWeekdays と同じ考え方。decisions.md の 13 番）
+  if (entries.length === 7) {
+    throw rangeError(
+      "invalid-argument",
+      "options.directions must leave at least one weekday without a direction (there would be no day to move a holiday to)",
+    );
+  }
   if (typeof kind !== "string" || kind === "") {
     throw rangeError("invalid-argument", "options.kind must be a non-empty string (Holiday.kind)");
   }
@@ -245,7 +263,7 @@ function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kin
   if (original !== undefined && original !== "keep" && original !== "drop") {
     throw rangeError("invalid-argument", 'options.originalPolicy must be "keep" or "drop"');
   }
-  return o as unknown as CheckedOptions<Kind>;
+  return { ...o, directions: Object.fromEntries(entries) } as unknown as CheckedOptions<Kind>;
 }
 
 /**
@@ -282,6 +300,10 @@ export function withSubstituteDays<Kind extends string>(
     originalPolicy: original,
   } = checkOptions<Kind>(options);
   const sorted = [...input].sort((a, b) => (a.date < b.date ? -1 : 1));
+  // ほかの言語の名称は、入力と共有しない凍結した複製にする（返すものはすべて凍結。4 番）
+  const namesOf = new Map(
+    sorted.map((h) => [h, h.names === undefined ? undefined : Object.freeze({ ...h.names })]),
+  );
   const taken = new Set<DateString>(sorted.map((h) => h.date));
   // 入力のまま返す祝日も、振替日と同じ項目だけを持つ凍結した複製にする
   const result: Holiday<Kind>[] = sorted
@@ -291,7 +313,7 @@ export function withSubstituteDays<Kind extends string>(
         date: h.date,
         name: h.name,
         nameEn: h.nameEn,
-        ...(h.names === undefined ? {} : { names: h.names }),
+        ...(namesOf.get(h) === undefined ? {} : { names: namesOf.get(h)! }),
         kind: h.kind,
         confirmed: h.confirmed,
         ...(h.key === undefined ? {} : { key: h.key }),
@@ -305,12 +327,24 @@ export function withSubstituteDays<Kind extends string>(
     while (taken.has(day) || rules[weekdayOf(day)] !== undefined) day = addDays(day, step);
     taken.add(day);
     const named = name === undefined ? { name: h.name, nameEn: h.nameEn } : name(h);
+    // 呼び出し側の関数が返した名称も確かめる（提供元に使った後で初めて誤りが分かる形にしない。26 番）
+    if (
+      typeof named !== "object" ||
+      named === null ||
+      typeof named.name !== "string" ||
+      typeof named.nameEn !== "string"
+    ) {
+      throw rangeError(
+        "invalid-argument",
+        `options.renameSubstitute must return { name, nameEn } as strings (for ${h.date}): ${describeValue(named)}`,
+      );
+    }
     result.push(
       Object.freeze({
         date: day,
         name: named.name,
         nameEn: named.nameEn,
-        ...(h.names === undefined ? {} : { names: h.names }),
+        ...(namesOf.get(h) === undefined ? {} : { names: namesOf.get(h)! }),
         kind,
         confirmed: h.confirmed,
         ...(h.key === undefined ? {} : { key: h.key }),

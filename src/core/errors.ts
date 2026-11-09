@@ -11,7 +11,7 @@
  * @public
  */
 export type KnownErrorCode =
-  /** 日付 "YYYY-MM-DD" の形式・値の誤り */
+  /** 日付の形式・値の誤り（"YYYY-MM-DD" の文字列と、Temporal の形の年月日。年が 1000〜9999 の外も含む。decisions.md の 1 番） */
   | "invalid-date"
   /** 月 "YYYY-MM" の形式・値の誤り */
   | "invalid-month"

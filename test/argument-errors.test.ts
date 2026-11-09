@@ -214,7 +214,14 @@ test("誤った引数: オブジェクトでないオプションを黙って通
         : diagnoseFns.has(f) && Array.isArray(ret) && at === 0
           ? "診断する設定"
           : "引数";
-      for (const [wrongLabel, wrong] of wrongs) {
+      // 見本の項目をそのまま持たせた、普通のオブジェクトでないもの（項目を読むだけの検証では通ってしまう形）
+      const shaped: [string, () => unknown][] = [
+        ["項目を持つ配列", () => Object.assign([], arg)],
+        ["項目を持つ関数", () => Object.assign(() => {}, arg)],
+        ["項目を持つ Date", () => Object.assign(new Date(), arg)],
+        ["項目を持つ Map", () => Object.assign(new Map(), arg)],
+      ];
+      for (const [wrongLabel, wrong] of [...wrongs, ...shaped]) {
         const args = sample();
         args[at] = wrong();
         const where = `${label} の引数 ${at + 1} に${wrongLabel}（${kind}）`;
@@ -261,6 +268,43 @@ test("正しい引数: 設定・オプションは、プロトタイプのない
     });
   }
   assert.ok(checked > 0);
+});
+
+test("誤った引数: 数を受ける引数に数の文字列を渡すと、メッセージでは引用符付きで表す（数に見せない）", () => {
+  // 位置は見本から決める: 見本の引数のうち数の位置に、同じ数の文字列を渡す
+  let checked = 0;
+  for (const [label, name, f] of targets()) {
+    const sample = SAMPLES[name];
+    if (sample === undefined) continue;
+    sample().forEach((arg, at) => {
+      if (typeof arg !== "number") return;
+      const args = sample();
+      args[at] = String(arg);
+      let message: string | undefined;
+      try {
+        f(...args);
+      } catch (e) {
+        if (!root.isBizdaysError(e)) throw e;
+        message = e.message;
+      }
+      if (message === undefined) return; // 数の文字列を受ける引数（日数の文字列は受けないが、年月の文字列などは受ける）
+      checked++;
+      assert.ok(
+        message.includes(JSON.stringify(String(arg))),
+        `${label} の引数 ${at + 1}: ${message}`,
+      );
+    });
+  }
+  assert.ok(checked > 0);
+  // 入れ子の数（dueDate の dayOfMonth）と、暦日の文字列でない値（toInstant の date）
+  assert.throws(
+    () => calendar.dueDate("2026-11", { dayOfMonth: "23" as never, convention: "following" }),
+    /: "23"$/,
+  );
+  assert.throws(
+    () => root.toInstant(["2026-11-23"] as never, "10:00", "UTC"),
+    /: \["2026-11-23"\]$/,
+  );
 });
 
 test("誤った引数: holidaysInYear の整数でない年は、どの経路でも invalid-argument（範囲の外の整数は out-of-range）", () => {
