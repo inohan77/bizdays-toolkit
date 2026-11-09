@@ -832,8 +832,8 @@ const isCalendarLike = (v: unknown): v is Calendar =>
  *
  * - dayInfoOn の reason・name・shiftedFrom・optionPath は、合成結果と同じ判定をした最初のカレンダーの結果で、
  *   その番号を decidedBy で返す。入れ子の合成では、内側の番号まで含めた列を decidedByPath で返す。
- *   holiday・isHoliday・holidaysInYear などは、すべてのカレンダーの同じ参照を呼び、日付ごとに先のカレンダーの祝日を採る
- *   （同じ提供元は 1 回だけ数え、同じ日付なら先のカレンダーの提供元の祝日）。どれかのカレンダーが投げる日だけ投げる
+ *   holiday・isHoliday・holidaysInYear などは、すべてのカレンダーの同じ参照を呼び、日付ごとに先のカレンダー
+ *   （その中では先の提供元）の祝日を採る。方針は各カレンダーのもので、どれかのカレンダーが投げる日だけ投げる
  * - タイムゾーンはすべてのカレンダーで同じでなければならない（time-zone-conflict）。
  *   2 つ未満、同じカレンダーを 2 回渡した場合は invalid-argument
  * - 合成したカレンダーをさらに合成することもできる。規則の診断（diagnoseCalendar）の対象にはならないので、
