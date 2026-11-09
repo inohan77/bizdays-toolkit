@@ -9,6 +9,7 @@ import {
   type RecurringRule,
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
+import { SHORT_PROVIDER } from "./support/provider.ts";
 import { diagnoseCalendar, diagnoseSchedule, type Diagnostic } from "../src/diagnose/index.ts";
 
 /** 判定に使う項目だけにする（message は API に含まない） */
@@ -23,8 +24,12 @@ const brief = (list: readonly Diagnostic[]) =>
     return r;
   });
 
+// 既定は短い提供元（2025〜2027 年）。shadowed などは規則の形で決まり、祝日の年に依存しないので、日本の全範囲（1955〜2099 年）を
+// 走査しない。日本の対応年に依存する確かめは、extra で holidayProvider: jp を明示する
 const recurring = (rules: RecurringRule[], extra: object = {}) =>
-  brief(diagnoseCalendar({ holidayProvider: jp, closedRecurringRules: rules, ...extra }));
+  brief(
+    diagnoseCalendar({ holidayProvider: SHORT_PROVIDER, closedRecurringRules: rules, ...extra }),
+  );
 
 test("問題のない設定は空の配列", () => {
   const options = {
@@ -256,18 +261,21 @@ test("shadowed: 繰り返しの営業日は、同じ日の繰り返しの休業�
 
 test("never-matches: 当てはまる日がない繰り返しの規則", () => {
   assert.deepEqual(
-    recurring([
-      { dayOfMonth: 30, months: [2] },
-      { dayOfMonth: [30, 31], months: [2] },
-    ]),
+    recurring(
+      [
+        { dayOfMonth: 30, months: [2] },
+        { dayOfMonth: [30, 31], months: [2] },
+      ],
+      { holidayProvider: jp },
+    ),
     [
       { severity: "warning", code: "never-matches", path: "closedRecurringRules[0]" },
       { severity: "warning", code: "never-matches", path: "closedRecurringRules[1]" },
     ],
   );
   // うるう年の 2 月 29 日・2 月の第 5 曜日はありうる
-  assert.deepEqual(recurring([{ dayOfMonth: 29, months: [2] }]), []);
-  assert.deepEqual(recurring([{ weekday: 0, nth: 5, months: [2] }]), []);
+  assert.deepEqual(recurring([{ dayOfMonth: 29, months: [2] }], { holidayProvider: jp }), []);
+  assert.deepEqual(recurring([{ weekday: 0, nth: 5, months: [2] }], { holidayProvider: jp }), []);
 });
 
 test("out-of-range: 個別の日付が祝日の提供元の対応年の外", () => {
@@ -507,7 +515,7 @@ test("診断した設定でも、作成の結果は変わらない", () => {
 
 test("shadowed・never-matches・out-of-range: 有効期間", () => {
   const shadowed = (rules: RecurringRule[], extra: object = {}) =>
-    recurring(rules, extra)
+    recurring(rules, { holidayProvider: jp, ...extra })
       .filter((d) => d.code === "shadowed")
       .map((d) => `${d.path}<${d.relatedPath}`);
   assert.deepEqual(
@@ -558,24 +566,30 @@ test("shadowed・never-matches・out-of-range: 有効期間", () => {
   );
   // 期間の中に当てはまる日がない
   assert.deepEqual(
-    recurring([{ weekday: 3, nth: 5, effectiveFrom: "2027-04-01", effectiveTo: "2027-04-20" }]),
+    recurring([{ weekday: 3, nth: 5, effectiveFrom: "2027-04-01", effectiveTo: "2027-04-20" }], {
+      holidayProvider: jp,
+    }),
     [{ severity: "warning", code: "never-matches", path: "closedRecurringRules[0]" }],
   );
   assert.deepEqual(
-    recurring([{ weekday: 3, nth: 5, effectiveFrom: "2027-03-01", effectiveTo: "2027-03-31" }]),
+    recurring([{ weekday: 3, nth: 5, effectiveFrom: "2027-03-01", effectiveTo: "2027-03-31" }], {
+      holidayProvider: jp,
+    }),
     [],
     "2027 年 3 月には第 5 水曜日（3/31）がある",
   );
   assert.deepEqual(
-    recurring([
-      { dayOfMonth: 29, months: [2], effectiveFrom: "2029-01-01", effectiveTo: "2031-12-31" },
-    ]),
+    recurring(
+      [{ dayOfMonth: 29, months: [2], effectiveFrom: "2029-01-01", effectiveTo: "2031-12-31" }],
+      { holidayProvider: jp },
+    ),
     [{ severity: "warning", code: "never-matches", path: "closedRecurringRules[0]" }],
     "期間にうるう年がない",
   );
   // 有効期間が提供元の対応年の外（対応年の外で例外になる設定では、その規則は使われない）
   assert.deepEqual(
     recurring([{ weekday: 1, effectiveTo: "1950-12-31" }], {
+      holidayProvider: jp,
       closedAnnualDates: [{ date: "01-02", effectiveFrom: "2100-01-01" }],
     }),
     [
@@ -594,7 +608,10 @@ test("shadowed・never-matches・out-of-range: 有効期間", () => {
     ],
   );
   assert.deepEqual(
-    recurring([{ weekday: 1, effectiveFrom: "2100-01-01" }], { outOfRangePolicy: "ignore" }),
+    recurring([{ weekday: 1, effectiveFrom: "2100-01-01" }], {
+      holidayProvider: jp,
+      outOfRangePolicy: "ignore",
+    }),
     [
       {
         severity: "warning",

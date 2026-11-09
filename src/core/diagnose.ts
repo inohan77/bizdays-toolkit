@@ -4,25 +4,14 @@
  * 設定を作るときと同じ検証（IssueCollector）で誤りと知らないキーを集め、誤りがなければ
  * 規則どうしの関係を調べる。例外は投げず、見つけた問題を配列で返す。
  *
- * - error   … createCalendar・createSchedule で例外になる誤り（code は例外と同じ）
- * - warning … 作れるが、意図と違う可能性が高いもの
- *     unknown-option … 知らないキー（作成時は無視される）。近い既知のキーがあれば message に候補を挙げる
- *     shadowed       … 同じ種類の先の規則に完全に覆われ、決して使われない（relatedPath に先の規則）
- *     never-matches  … 当てはまる日がない繰り返しの規則（2 月 30 日、有効期間の中に第 5 水曜日がない、提供元のない設定の祝日の翌日・祝前日、など）
- *     out-of-range   … 個別の日付、または規則の有効期間が祝日の提供元の対応年の外にある（relatedPath に提供元）
- *     no-business-day … 営業日が 1 日もない設定（営業日カレンダーのみ）
- * - info    … redundant: 取り除いても結果が変わらない規則・設定（判定に祝日を使わない設定の unconfirmedHolidayPolicy: "throw" を含む）。
- *             出た規則はまとめて取り除ける（逐次除去。relatedPath に代わりに決める規則、1 つに定まるときだけ。decisions.md の 31 番）
- *             expired: 第 2 引数の asOf より前に終わった規則・日付（asOf を渡したときだけ）
- *             counting-basis: 第 n 営業日の規則（businessDayOfMonth・businessDayOfWeek）の数える基準は繰り返しの規則を除くので、
- *                             同じ設定の毎週の曜日の規則（{ weekday }）の曜日は営業日として数えられる（relatedPath にその規則）。
- *                             有効期間が重なり、使われている曜日の規則ごとに 1 件
+ * 重さは error（createCalendar・createSchedule で例外になる誤り。code は例外と同じ）・warning（作れるが、意図と違う可能性が
+ * 高いもの）・info（知らせ）の 3 つ。診断のコードと重さの一覧はガイドの診断の表（docs/guide.md の「Option diagnostics」）、
+ * redundant の逐次除去と relatedPath は decisions.md の 31 番
  *
  * 未確定の祝日の扱い（unconfirmedHolidayPolicy）は診断では常に "accept" で評価する。診断は設定の形を調べるもので、
  * 祝日が確定しているかどうかは関係がなく、"throw" のまま評価すると例外を握りつぶして「当てはまらない」と誤判定するため
  *
- * 判定の順番（個別の日付 → 毎年の月日 → 繰り返し（over）→ 祝日 → 繰り返し（under・振替先）→ 曜日）は
- * 固定なので、shadowed は同じ種類の規則どうしに限って調べる。種類をまたいで使われない規則は
+ * 判定の順番は固定（decisions.md の 11 番）なので、shadowed は同じ種類の規則どうしに限って調べる。種類をまたいで使われない規則は
  * redundant（取り除いても結果が変わらない）として見つかる。
  * 有効期間（effectiveFrom・effectiveTo）のある規則は期間の包含も、周期（interval・cycle）のある規則は周期の包含も
  * shadowed の条件にする。redundant の走査の範囲は、周期がそろう長さと、範囲の外にある有効期間まで広げる
@@ -480,13 +469,22 @@ function without<Value, Kind extends string>(
 }
 
 /**
+ * 提供元の診断の位置。提供元が 1 つなら "holidayProvider"、2 つ以上なら設定に書いた位置（同じ提供元を除いた後も、書いた
+ * 添字のまま）
+ */
+const providerPath = (source: HolidaySource<string>, i: number): string =>
+  source.providers.length === 1
+    ? "holidayProvider"
+    : `holidayProvider[${source.providerIndexes?.[i] ?? i}]`;
+
+/**
  * 祝日の提供元が返すデータを、対応年（長すぎる場合は絞った範囲）のすべての年で検証する。
  * 作成時は年ごとに初めて使うときに検証するので、使っていない年の誤りもここで見つける
  */
 function checkProviderData(c: IssueCollector, source: HolidaySource<string>): boolean {
   let ok = true;
   source.providers.forEach((provider, i) => {
-    const path = source.providers.length === 1 ? "holidayProvider" : `holidayProvider[${i}]`;
+    const path = providerPath(source, i);
     const lookup = createHolidayLookup({
       ...source,
       providers: [provider],
@@ -740,7 +738,7 @@ function analyzeRules<Value, Kind extends string>(
     source.providers.forEach((p, i) => {
       const { from, to } = p.supportedYears;
       if (fromYear >= from && toYear <= to) return;
-      const related = source.providers.length === 1 ? "holidayProvider" : `holidayProvider[${i}]`;
+      const related = providerPath(source, i);
       c.warning(
         "out-of-range",
         rule.path,
@@ -779,7 +777,7 @@ function analyzeRules<Value, Kind extends string>(
           (source.outOfRangePolicy === "throw"
             ? "looking up these dates throws, so this rule is never used"
             : "holidays are not considered for these dates"),
-        source.providers.length === 1 ? "holidayProvider" : `holidayProvider[${i}]`,
+        providerPath(source, i),
       );
     });
   }

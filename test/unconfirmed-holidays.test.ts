@@ -8,6 +8,7 @@ import {
   isBizdaysError,
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
+import { england } from "../src/uk/index.ts";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 
 // jp.confirmedThrough より後の年の春分の日・秋分の日は予測（confirmed: false）
@@ -184,4 +185,90 @@ test("unconfirmedHolidayPolicy: 設定の値の誤りと、判定に祝日を使
     ),
     [],
   );
+});
+
+test("modified の調整は当月の中を先に探し、結果に関係しない月の外の日を評価しない（月がすべて休業日のときだけ月をまたぐ。decisions.md の 17 番・21 番）", () => {
+  const code = (c: string) => (e: unknown) => isBizdaysError(e) && e.code === c;
+  // 英国の 2029 年の元日は予測。2028-12-30（土）の翌営業日は 1 月なので、答えは前営業日の 12 月 29 日
+  const englandStrict = createCalendar({
+    holidayProvider: england,
+    closedWeekdays: [0, 6],
+    unconfirmedHolidayPolicy: "throw",
+  });
+  assert.equal(
+    englandStrict.adjust("2028-12-30", { convention: "modified-following" }),
+    "2028-12-29",
+  );
+  // 日本の対応年の最後の月。翌月（2100 年）は対応年の外
+  const jpYearEnd = createCalendar({
+    holidayProvider: jp,
+    closedWeekdays: [0, 6],
+    closedAnnualDates: [{ from: "12-29", to: "01-03" }],
+  });
+  assert.equal(jpYearEnd.adjust("2099-12-31", { convention: "modified-following" }), "2099-12-28");
+  assert.equal(
+    jpYearEnd.dueDate("2099-12", { dayOfMonth: -1, convention: "modified-following" }),
+    "2099-12-28",
+  );
+  // 対応年の最初の月の modified-preceding（前月は 1954 年で対応年の外）
+  assert.equal(jpYearEnd.adjust("1955-01-02", { convention: "modified-preceding" }), "1955-01-04");
+  // 探索の上限は当月の中でも数える。月の外へ出る前に上限に達したら、前と同じ no-business-day
+  const limited = createCalendar({
+    closedWeekdays: [0, 6],
+    searchDayLimit: 10,
+    closedDates: [{ from: "2026-11-01", to: "2026-11-30" }],
+  });
+  assert.equal(limited.adjust("2026-10-31", { convention: "modified-following" }), "2026-10-30");
+  assert.throws(
+    () =>
+      createCalendar({
+        closedDates: [{ from: "2026-10-05", to: "2026-10-30" }],
+        searchDayLimit: 3,
+      }).adjust("2026-10-05", { convention: "modified-following" }),
+    code("no-business-day"),
+  );
+  // 月がすべて休業日なら、元の向きに月をまたぐ（21 番）
+  const closedMonth = createCalendar({ closedDates: [{ from: "2026-11-01", to: "2026-11-30" }] });
+  assert.equal(
+    closedMonth.adjust("2026-11-15", { convention: "modified-following" }),
+    "2026-12-01",
+  );
+  assert.equal(
+    closedMonth.adjust("2026-11-15", { convention: "modified-preceding" }),
+    "2026-10-31",
+  );
+  // following・preceding は前と同じく、当月に営業日があっても月をまたぐ
+  assert.equal(englandStrict.adjust("2028-12-30", { convention: "preceding" }), "2028-12-29");
+  assert.equal(closedMonth.adjust("2026-11-15", { convention: "following" }), "2026-12-01");
+  assert.equal(closedMonth.adjust("2026-11-15", { convention: "preceding" }), "2026-10-31");
+  // following は月をまたいで探すので、前と同じく探索の上限で no-business-day（modified-following は上で 10-30 を返す）
+  assert.throws(
+    () => limited.adjust("2026-10-31", { convention: "following" }),
+    code("no-business-day"),
+  );
+});
+
+test("同じ提供元のオブジェクトは 1 回だけ数え、診断は書いた位置で報告する（decisions.md の 24 番）", () => {
+  assert.equal(createCalendar({ holidayProvider: [jp, jp] }).providers.length, 1);
+  assert.deepEqual(
+    createCalendar({ holidayProvider: [jp, england, jp], timeZone: "Asia/Tokyo" }).providers,
+    [jp, england],
+  );
+  const bad = {
+    id: "BAD",
+    timeZone: "Asia/Tokyo",
+    supportedYears: { from: 2025, to: 2026 },
+    dataVersion: "1",
+    // 別の年の日付を返す誤ったデータ
+    holidaysInYear: (year: number) => [
+      { date: `${year + 1}-01-01`, name: "x", nameEn: "x", kind: "regular", confirmed: true },
+    ],
+  };
+  const where = (holidayProvider: unknown) =>
+    diagnoseCalendar({ holidayProvider } as never)
+      .filter((d) => d.code === "invalid-provider-data")
+      .map((d) => d.path);
+  assert.deepEqual(where([bad, bad]), ["holidayProvider"]);
+  assert.deepEqual(where([jp, jp, bad]), ["holidayProvider[2]"]);
+  assert.deepEqual(where([jp, bad]), ["holidayProvider[1]"]);
 });

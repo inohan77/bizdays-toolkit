@@ -6,8 +6,17 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.31.4] - 2026-11-10
+
+This version fixes calls that threw on days that do not affect their result, makes duplicate holiday providers count once as the design decisions say, and corrects type descriptions, messages and documents. Results of calls that did not throw do not change.
+
 ### Fixed
 
+- `adjust` with `"modified-following"` or `"modified-preceding"`, and `dueDate`, `closingMonth` and `closingPeriod` that use these conventions, looked at the next (or previous) month before searching the current month, so they threw on a day outside the month that cannot change the result: for example, `adjust("2028-12-30", { convention: "modified-following" })` on an English calendar with `unconfirmedHolidayPolicy: "throw"` threw `unconfirmed-holiday` for 1 January 2029, and on a Japanese calendar closed from 29 December to 3 January the same call for 2099-12-31 threw `out-of-range`; with a small `searchDayLimit`, a call threw `no-business-day` while searching a closed next month although the current month had a business day. They now search the current month first and cross the month only when it has no business day (design decisions 21). Returned dates are unchanged. A call that still throws may now throw a different code (`unconfirmed-holiday`, `out-of-range` or `no-business-day`), because the days are evaluated in a different order
+- A calendar or a schedule given the same holiday provider object more than once (such as `[jp, jp]`) counted it twice, while the design decisions (24) say it is counted once: `providers` listed it twice and the option diagnostics reported the same provider error for each occurrence. Duplicates are now removed; diagnostics keep the position you wrote (`holidayProvider[2]` for the third entry), and when only one provider remains, as with `[jp, jp]`, they use `holidayProvider` as for a single provider. Holidays and business days are unchanged
+- Error messages: `unconfirmed-holiday` said that "the result would depend on a predicted holiday", which is not always true (a search or an nth-business-day rule may look up a predicted holiday that does not change the result); it now says that the evaluation looked up a predicted holiday. The guide lists the days an nth-business-day rule evaluates
+- Type descriptions: `unconfirmedHolidayPolicy` described when it matters with an outdated condition; it now refers to the guide. `ScheduleDayInfo.name` and `holiday` used option names from before 0.30.0. `outOfRangePolicy` and `unconfirmedHolidayPolicy` of `HolidayLookup` now say that a combined calendar shows a summary. `closedRecurringRules` and `recurringRules` listed only some of the rule forms; they now refer to the guide. `renameSubstitute` now says that `names` are kept even when the names are changed, as the design decisions (26) say
+- Documentation: the provider guide and `withSubstituteDays` said only that a substitute day can move into the next year; with `"previous"` it can also move into the previous year, and the provider returns it as part of the year it falls in. The design decisions (2) now explain why the policies of a combined calendar have the closed type of the options
 - Documentation: the type description of `combineCalendars` and the design decisions (18) still described the holidays of a combined calendar as the union of the providers; they now describe the current behaviour (each calendar is asked, and the holiday of the earlier calendar is taken). The design decisions (24) now state that the holidays of several providers given to one calendar are their union, keeping the holiday of the earlier provider on the same date. Results are unchanged
 
 ## [0.31.3] - 2026-11-09
@@ -889,7 +898,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.3...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.4...HEAD
+[0.31.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.3...v0.31.4
 [0.31.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.2...v0.31.3
 [0.31.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.1...v0.31.2
 [0.31.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.0...v0.31.1

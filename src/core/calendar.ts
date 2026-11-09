@@ -115,7 +115,7 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
   /** 臨時営業日（ほかのすべての規則より優先） */
   readonly openDates?: readonly (SpecificDate | DateRange)[];
   /**
-   * 繰り返しの休業日（毎週・隔週などの周期・毎月の第 n 曜日・毎月の日）。
+   * 繰り返しの休業日。書ける規則の形はガイドの「Recurring rules」の表（曜日・周期・月の日・第 n 営業日・祝日・祝日の前後など）。
    * 祝日に当たったときの扱いは規則ごとに holidayOverlapPolicy で指定する（既定: "under-holiday"）。
    * 有効期間（effectiveFrom・effectiveTo）を付けると、期間の外では書かれていないのと同じに扱う
    */
@@ -560,14 +560,18 @@ function buildCalendar<Kind extends string>(
       if (isOpen(date) === open) return date;
     }
     throw open
-      ? rangeError(
-          "no-business-day",
-          `No business day found within ${searchDayLimit} days from ${start}`,
-        )
+      ? noBusinessDay(start)
       : rangeError(
           "no-closed-day",
           `No closed day found within ${searchDayLimit} days from ${start}`,
         );
+  }
+
+  function noBusinessDay(start: DateString) {
+    return rangeError(
+      "no-business-day",
+      `No business day found within ${searchDayLimit} days from ${start}`,
+    );
   }
 
   function countOpen(from: number, toExclusive: number): number {
@@ -615,33 +619,38 @@ function buildCalendar<Kind extends string>(
       );
     }
     if (isOpen(date)) return date;
-    const month = date.slice(0, 7);
     switch (convention as BusinessDayConvention) {
       case "following":
         return search(date, 1);
       case "preceding":
         return search(date, -1);
-      case "modified-following": {
-        const next = search(date, 1);
-        if (next.startsWith(month)) return next;
-        // 同じ月に前営業日がなければ、月が変わっても翌営業日にする
-        const previous = searchWithin(date, -1, month);
-        return previous ?? next;
-      }
-      case "modified-preceding": {
-        const previous = search(date, -1);
-        if (previous.startsWith(month)) return previous;
-        const next = searchWithin(date, 1, month);
-        return next ?? previous;
-      }
+      // 当月の中を先に探し、当月に営業日がまったくないときだけ元の向きに月をまたぐ（結果に関係しない月の外の日を
+      // 評価しない。評価した日で投げる決まりは decisions.md の 17 番、月をまたぐ決まりは 21 番）
+      case "modified-following":
+        return searchInMonth(date, 1, true) ?? searchInMonth(date, -1, false) ?? search(date, 1);
+      case "modified-preceding":
+        return searchInMonth(date, -1, true) ?? searchInMonth(date, 1, false) ?? search(date, -1);
       default:
         throw rangeError("invalid-argument", `Unknown convention: ${String(convention)}`);
     }
   }
 
-  /** 同じ月の中だけで営業日を探す（なければ undefined） */
-  function searchWithin(start: DateString, step: 1 | -1, month: string): DateString | undefined {
-    for (let date = start; date.startsWith(month); date = addDays(date, step)) {
+  /**
+   * 同じ月の中だけで営業日を探す（なければ undefined）。月の端は日の番号で止め、月の外の日は評価しない（1000 年 1 月・9999 年
+   * 12 月でも範囲の外に出ない）。limited なら、search と同じく searchDayLimit 日を調べて見つからないときに no-business-day
+   */
+  function searchInMonth(
+    start: DateString,
+    step: 1 | -1,
+    limited: boolean,
+  ): DateString | undefined {
+    const { year, month } = parseMonth(start.slice(0, 7));
+    const first = toDayNumber(formatDate(year, month, 1));
+    const last = first + lengthOfMonth(year, month) - 1;
+    let n = toDayNumber(start);
+    for (let i = 0; n >= first && n <= last; i++, n += step) {
+      if (limited && i >= searchDayLimit) throw noBusinessDay(start);
+      const date = fromDayNumber(n);
       if (isOpen(date)) return date;
     }
     return undefined;

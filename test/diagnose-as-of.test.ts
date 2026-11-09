@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, isBizdaysError, type CalendarOptions } from "../src/index.ts";
-import { jp } from "../src/jp/index.ts";
+import { SHORT_PROVIDER } from "./support/provider.ts";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 
 const brief = (list: readonly { severity: string; code: string; path: string }[]) =>
   list.map((d) => [d.severity, d.code, d.path]);
 
+// expired は日数の比較だけで決まり、祝日を引かない（decisions.md の 30 番）ので、短い提供元（2025〜2027 年）で確かめる
 const options = {
-  holidayProvider: jp,
+  holidayProvider: SHORT_PROVIDER,
   closedWeekdays: [0, 6],
   closedRecurringRules: [
     { weekday: 1, name: "月曜定休", effectiveTo: "2027-03-31" },
@@ -21,7 +22,7 @@ const options = {
   closedDates: [
     "2025-11-28",
     { from: "2026-07-13", to: "2026-07-16", name: "臨時休業" },
-    "2028-11-27",
+    "2027-11-29",
   ],
   openDates: ["2026-07-15"],
 };
@@ -52,7 +53,7 @@ test("asOf: 基準日より前に終わった規則・日付が info の expired
 
 test("asOf: スケジュールでも同じ。redundant などとは独立に返す", () => {
   const schedule = {
-    holidayProvider: jp,
+    holidayProvider: SHORT_PROVIDER,
     weekdayValues: [0, 1, 1, 1, 1, 1, 0],
     dates: [{ date: "2026-01-02", value: 0 }],
     annualDates: [{ from: "08-13", to: "08-16", value: 0, effectiveTo: "2026-12-31" }],
@@ -70,7 +71,7 @@ test("asOf: 対応年の外の基準日でも例外にならず（祝日を引�
   assert.deepEqual(
     brief(
       diagnoseCalendar(
-        { holidayProvider: jp, closedDates: ["2026-01-02"] },
+        { holidayProvider: SHORT_PROVIDER, closedDates: ["2026-01-02"] },
         { asOf: "2200-01-01" },
       ),
     ),
@@ -104,7 +105,7 @@ test("asOf: 対応年の外の基準日でも例外にならず（祝日を引�
 test('asOf: "after-holiday" の規則は、振替先が終わりの日の後に残るので、終わりから 31 日を過ぎるまで expired にしない', () => {
   // 7 月 20 日（海の日）で終わる月曜定休は、21 日に振り替わる（有効期間は振替元の日で判定する。13 番）
   const shifted = {
-    holidayProvider: jp,
+    holidayProvider: SHORT_PROVIDER,
     closedRecurringRules: [
       {
         weekday: 1 as const,
@@ -133,7 +134,7 @@ test('asOf: "after-holiday" の規則は、振替先が終わりの日の後に�
   ]);
   // スケジュールの規則も同じ
   const schedule = {
-    holidayProvider: jp,
+    holidayProvider: SHORT_PROVIDER,
     weekdayValues: [0, 1, 1, 1, 1, 1, 0],
     recurringRules: [
       {
@@ -153,7 +154,7 @@ test('asOf: "after-holiday" の規則は、振替先が終わりの日の後に�
 test("asOf: 終わりのない設定には、どの基準日でも expired を出さない", () => {
   // オラクルの expired のテストは、終わりが基準日より前の項目を含まない設定の診断を省くので、ここで確かめる
   const endless = {
-    holidayProvider: jp,
+    holidayProvider: SHORT_PROVIDER,
     closedWeekdays: [0, 6],
     closedRecurringRules: [
       { weekday: 1 as const, holidayOverlapPolicy: "after-holiday" as const },

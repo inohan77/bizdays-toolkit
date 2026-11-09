@@ -54,7 +54,9 @@ const newCalendar: CalendarOptions = {
 // からのカレンダー・期日・振替の設定）と、診断の位置・両方を書いたときの扱いを確かめる
 
 test("旧名: 診断は deprecated-option で旧名の位置（利用者が書いた位置）と新しい名前を返す", () => {
-  const list = diagnoseCalendar(oldCalendar).filter((d) => d.code === "deprecated-option");
+  // 診断は決定的（decisions.md の 30 番）なので、1 回だけ計算して使い回す
+  const diagnosed = diagnoseCalendar(oldCalendar);
+  const list = diagnosed.filter((d) => d.code === "deprecated-option");
   assert.ok(list.every((d) => d.severity === "warning"));
   assert.deepEqual(
     list.map((d) => d.path).filter((path) => !/[.[]/.test(path)),
@@ -75,7 +77,7 @@ test("旧名: 診断は deprecated-option で旧名の位置（利用者が書�
     createCalendar(oldCalendar).dayInfoOn("2026-12-31").optionPath,
     "closedAnnualDates[0]",
   );
-  const all = diagnoseCalendar(oldCalendar).map((d) => d.path);
+  const all = diagnosed.map((d) => d.path);
   for (const path of [
     "closedRecurring[0].day",
     "closedRecurring[0].onHolidayRule",
@@ -84,7 +86,7 @@ test("旧名: 診断は deprecated-option で旧名の位置（利用者が書�
     assert.ok(all.includes(path), path);
   }
   assert.match(
-    diagnoseCalendar(oldCalendar).find((d) => d.path === "closedRecurring[0].day")!.message,
+    diagnosed.find((d) => d.path === "closedRecurring[0].day")!.message,
     /"day" was renamed to "dayOfMonth" in 0\.30\.0/,
   );
   const schedule = diagnoseSchedule({

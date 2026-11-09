@@ -575,7 +575,7 @@ export interface HolidaySourceOptions<Kind extends string = string> {
    * "throw" にすると、dayInfoOn・isBusinessDay に限らず、営業日の探索・調整・期日の計算の途中で評価した日や、祝日の翌日・祝前日の
    * 規則が見る隣の日を含め、祝日を引いた日が未確定の祝日なら unconfirmed-holiday の RangeError を投げる。
    * holidaysInYear・holidaysBetween は投げないので、影響する日の列挙に使える。
-   * 判定に祝日を使う設定（holidayPolicy が "ignore" でない、または祝日に従属する規則がある）でだけ意味がある
+   * 判定が祝日に依存する設定でだけ意味がある（条件はガイドの「Unconfirmed holidays」。decisions.md の 17 番）
    */
   readonly unconfirmedHolidayPolicy?: "accept" | "throw";
 }
@@ -592,7 +592,7 @@ export interface ScheduleOptions<
   readonly weekdayValues: readonly [Value, Value, Value, Value, Value, Value, Value];
   /** 祝日の値の決め方（既定: "ignore"） */
   readonly holidayPolicy?: ScheduleHolidayPolicy<Value>;
-  /** 繰り返しの規則（毎週・毎月の第 n 曜日・毎月の日）の値 */
+  /** 繰り返しの規則の値（書ける規則の形はガイドの「Recurring rules」の表） */
   readonly recurringRules?: readonly ScheduleRecurringRule<Value, Kind>[];
   /** 毎年の月日の値 */
   readonly annualDates?: readonly (ScheduleAnnualDate<Value> | ScheduleAnnualRange<Value>)[];
@@ -629,9 +629,9 @@ export interface ScheduleDayInfo<Value, Kind extends string = string> {
   readonly value: Value;
   /** 値を決めた規則 */
   readonly reason: ScheduleDayReason;
-  /** 値を決めた規則の名前（dates・annual・recurring の name、祝日なら祝日名） */
+  /** 値を決めた規則の名前（dates・annualDates・recurringRules の name、祝日なら祝日名） */
   readonly name?: string;
-  /** その日が祝日なら祝日（holiday の規則に関係なく付く） */
+  /** その日が祝日なら祝日（holidayPolicy に関係なく付く） */
   readonly holiday?: Holiday<Kind>;
   /** 祝日から振り替えられた規則で値が決まった場合、振替の元の日付（holidayOverlapPolicy: "after-holiday"） */
   readonly shiftedFrom?: DateString;
@@ -654,9 +654,9 @@ export interface HolidayLookup<Kind extends string = string> {
   readonly timeZone: string;
   /** 祝日の提供元 */
   readonly providers: readonly HolidayProvider<Kind>[];
-  /** 祝日の提供元の対応年を外れた日付の扱い（設定の outOfRangePolicy） */
+  /** 祝日の提供元の対応年を外れた日付の扱い（設定の値。合成したカレンダーでは構成カレンダーの要約で、どれかが "throw" なら "throw"。decisions.md の 17 番） */
   readonly outOfRangePolicy: "throw" | "ignore";
-  /** 未確定の祝日に触れたときの扱い（設定の unconfirmedHolidayPolicy） */
+  /** 未確定の祝日に触れたときの扱い（設定の値。合成したカレンダーでは構成カレンダーの要約で、どれかが "throw" なら "throw"。decisions.md の 17 番） */
   readonly unconfirmedHolidayPolicy: "accept" | "throw";
   /** @deprecated 0.30.0 で outOfRangePolicy に改名した（同じ値）。1.0.0 で削除する */
   readonly outOfRange: "throw" | "ignore";
@@ -1698,6 +1698,11 @@ function validateProvider(c: IssueCollector, path: string, p: unknown): p is Hol
 /** @internal 祝日の提供元とタイムゾーンの設定を検証した結果 */
 export interface HolidaySource<Kind extends string> {
   readonly providers: readonly HolidayProvider<Kind>[];
+  /**
+   * 提供元ごとの、設定に書いた位置（holidayProvider の配列の添字）。同じ提供元の 2 回目以降は providers から除くので、
+   * 診断が書いた位置で報告するために持つ（設定から作ったときだけ。合成の参照にはない）
+   */
+  readonly providerIndexes?: readonly number[];
   readonly timeZone: string;
   readonly outOfRangePolicy: "throw" | "ignore";
   readonly unconfirmedHolidayPolicy: "accept" | "throw";
@@ -1747,9 +1752,14 @@ export function compileHolidaySource<Kind extends string>(
   const raw = options["holidayProvider"];
   const list: unknown[] = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
   const providers: HolidayProvider<Kind>[] = [];
+  const providerIndexes: number[] = [];
   list.forEach((p, i) => {
     const path = Array.isArray(raw) ? `holidayProvider[${i}]` : "holidayProvider";
-    if (validateProvider(c, path, p)) providers.push(p as HolidayProvider<Kind>);
+    // 同じ提供元のオブジェクトは 1 回だけ数える（decisions.md の 24 番）
+    if (validateProvider(c, path, p) && !providers.includes(p as HolidayProvider<Kind>)) {
+      providers.push(p as HolidayProvider<Kind>);
+      providerIndexes.push(i);
+    }
   });
 
   let timeZone = "UTC";
@@ -1785,6 +1795,7 @@ export function compileHolidaySource<Kind extends string>(
   }
   return {
     providers: Object.freeze(providers),
+    providerIndexes: Object.freeze(providerIndexes),
     timeZone,
     outOfRangePolicy: outOfRangePolicy === "ignore" ? "ignore" : "throw",
     unconfirmedHolidayPolicy: unconfirmed === "throw" ? "throw" : "accept",
@@ -1923,7 +1934,7 @@ export function createHolidayLookup<Kind extends string>(
           : ` (${provider.id} is confirmed through ${provider.confirmedThrough})`;
       throw rangeError(
         "unconfirmed-holiday",
-        `${date} ${h.name} is not yet confirmed${through}; the result would depend on a predicted holiday`,
+        `${date} ${h.name} is not yet confirmed${through}; this evaluation looked up a predicted holiday`,
       );
     }
     return h;

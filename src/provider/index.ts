@@ -139,7 +139,8 @@ export interface WithSubstituteDaysOptions<Kind extends string> {
   /** 振替日に付ける種別（Holiday.kind。例: "substitute"、"observed"） */
   readonly kind: Kind;
   /**
-   * 振替日の名称。省略時は元の祝日の name・nameEn（と names）を引き継ぐ（GOV.UK・MOM の流儀）。
+   * 振替日の名称（name・nameEn）。省略時は元の祝日のものを引き継ぐ（GOV.UK・MOM の流儀）。names は、名称を変えたときも
+   * 元の祝日のものを引き継ぐ（decisions.md の 26 番）。
    * 変えるなら元の祝日を受け取って返す関数で（例: 日本の「振替休日」、米国の "(observed)"）
    */
   readonly renameSubstitute?: (holiday: Holiday<Kind>) => {
@@ -275,8 +276,8 @@ function checkOptions<Kind extends string>(options: unknown): CheckedOptions<Kin
  * 振替日は元の祝日の key・names・confirmed を引き継ぎ、kind は options.kind、名称は省略時は元の祝日のもの。
  *
  * 入力は同じ年の祝日で、日付が有効・重複がないこと（誤りは invalid-argument・invalid-date・invalid-weekday の例外）。
- * 振替日は年をまたぐことがある（12 月 31 日が祝日の国で日曜日なら翌年の 1 月 1 日）。提供元の holidaysInYear は
- * その年の日付だけを返す契約なので、そうなる国では翌年の分として扱うこと。
+ * 振替日は前後の年に移ることがある（日曜日の 12 月 31 日の振替は翌年の 1 月 1 日、"previous" で土曜日の 1 月 1 日の振替は
+ * 前年の 12 月 31 日）。提供元の holidaysInYear はその年の日付だけを返す契約なので、振替日はその日が属する年の分として返すこと。
  * 国民の休日（2 つの祝日に挟まれた日）のような国に固有の規則は含まない。
  * 返す祝日はどれも凍結している（入力のまま返す祝日も、契約の項目だけを持つ複製）。
  *
