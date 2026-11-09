@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- `scripts/job-time.ts`: GitHub の API が 5xx を返したときと、通信に失敗したときは、10 秒待って 1 回だけ再試行するようにした（4xx は 429 を含めて再試行しない）（0.31.4 の CI で、oracle の 2 つの分が HTTP 502 で「比べられなかった」になった）。再試行の決まりは `scripts/job-time-parts.ts` の `getWithRetry` にあり、`test/tools/job-time-parts.test.ts` が通信なしで確かめる
+
 ## [0.31.4]
 
 - `test/unconfirmed-holidays.test.ts` に、modified の調整が月の外の日を評価しないことと、同じ提供元を 1 回だけ数えることのテストを足した（提案書 bizdays-toolkit-0.31.4-quality-proposal の A1・A2。修正の前後で、例外を投げなかった呼び出しの結果が変わらないことを差分で確かめた）

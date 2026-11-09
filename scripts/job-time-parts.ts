@@ -75,6 +75,43 @@ export function judge(
   };
 }
 
+/** GitHub の API の一時的な失敗（5xx・通信の失敗）のときに、再試行の前に待つ時間（ミリ秒） */
+export const RETRY_WAIT_MS = 10_000;
+
+/**
+ * 1 回の取得の結果。HTTP の状態と、成功したときの本文（JSON）。通信の失敗（応答がない）は status 0 と、その理由の error
+ */
+export interface FetchResult {
+  readonly status: number;
+  readonly body?: unknown;
+  readonly error?: string;
+}
+
+/**
+ * 取得を行い、一時的な失敗（5xx か、通信の失敗の status 0）なら RETRY_WAIT_MS 待って 1 回だけ再試行する。
+ * 2 回目も失敗するか、4xx（429 を含む。待っても直らない）なら例外にする（呼び出し側が「比べられなかった」の行にする）。
+ * fetchOnce が投げた例外（設定の誤り、本文が JSON でないなど）は、一時的な失敗ではないので再試行せずにそのまま投げる。
+ * 取得と待ちは引数で受ける（test/tools/job-time-parts.test.ts が実際の通信なしで確かめる）
+ */
+export async function getWithRetry(
+  label: string,
+  fetchOnce: () => Promise<FetchResult>,
+  wait: (ms: number) => Promise<void>,
+): Promise<unknown> {
+  const transient = (r: FetchResult): boolean =>
+    r.status === 0 || (r.status >= 500 && r.status <= 599);
+  let result = await fetchOnce();
+  if (transient(result)) {
+    await wait(RETRY_WAIT_MS);
+    result = await fetchOnce();
+  }
+  if (result.status === 0) throw new Error(`GET ${label}: ${result.error ?? "network error"}`);
+  if (result.status < 200 || result.status > 299) {
+    throw new Error(`GET ${label}: HTTP ${result.status}`);
+  }
+  return result.body;
+}
+
 /** 取得に失敗したときの行（失敗にはしない。比べられなかったことを出す） */
 export function failedLines(reason: string): string[] {
   return ["### ジョブの時間", "", `比べられなかった: ${reason}`, ""];
