@@ -322,7 +322,7 @@ const CASES: readonly Case[] = [
       edit("dist/core/month.js", (t) => `${t}\n// injected\n`);
       edit("CHANGELOG.md", withoutUserFacingSections);
     },
-    expect: "has a user-facing section",
+    expect: "has no user-facing section",
   },
   {
     tool: "check-claims",
@@ -335,7 +335,35 @@ const CASES: readonly Case[] = [
       );
       edit("CHANGELOG.md", withoutUserFacingSections);
     },
-    expect: "has a user-facing section",
+    expect: "has no user-facing section",
+  },
+  {
+    tool: "check-claims",
+    name: "バージョンを上げたのに、dist の .js が変わり、CHANGELOG の今のバージョンと [Unreleased] に利用者向けの区分がない（リリースの時の形）",
+    args: TOOLS["check-claims"]!,
+    inject: () => {
+      // 比べる相手は写しの元のバージョンのままなので、今のバージョンの節も数える側を通る
+      edit("package.json", replaceOnce(/"version": "[^"]+"/, '"version": "99.0.0"'));
+      edit("dist/core/month.js", (t) => `${t}\n// injected\n`);
+      edit("CHANGELOG.md", withoutUserFacingSections);
+    },
+    expect: "neither [Unreleased] nor the 99.0.0 section has a user-facing section",
+  },
+  {
+    tool: "check-claims",
+    name: "dist の .d.ts の型の説明だけが変わったのに CHANGELOG の今のバージョンと [Unreleased] に利用者向けの区分がない",
+    args: TOOLS["check-claims"]!,
+    inject: () => {
+      edit(
+        "dist/core/month.d.ts",
+        replaceOnce(
+          "export type MonthString = string;",
+          "/** injected description */\nexport type MonthString = string;",
+        ),
+      );
+      edit("CHANGELOG.md", withoutUserFacingSections);
+    },
+    expect: "has no user-facing section",
   },
   {
     tool: "check-claims",

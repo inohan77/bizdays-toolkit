@@ -6,6 +6,10 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+### Fixed
+
+- Documentation: the type description of `combineCalendars` and the design decisions (18) still described the holidays of a combined calendar as the union of the providers; they now describe the current behaviour (each calendar is asked, and the holiday of the earlier calendar is taken). The design decisions (24) now state that the holidays of several providers given to one calendar are their union, keeping the holiday of the earlier provider on the same date. Results are unchanged
+
 ## [0.31.3] - 2026-11-09
 
 This version fixes results that did not keep what the guide, the type descriptions and the design decisions promise. The results of valid calendars and schedules do not change, except that combined calendars no longer throw on days when none of their calendars throws.

@@ -465,6 +465,12 @@ if (baseDir !== undefined) {
   const baseVersion = (JSON.parse(read(join(baseDir, "package.json"))) as { version: string })
     .version;
   const changed: string[] = [];
+  /**
+   * 型の説明（.d.ts の TSDoc）の文は、利用者への約束で公開物に入る（RELEASING.md の用語）。中身が同じでもコメントの文が変われば
+   * 数える。空白と改行はすべて除いて比べる（文を変えずに折り返し直しただけでは数えない）
+   */
+  const commentTexts = (path: string): string =>
+    JSON.stringify(commentsOf(path).map((c) => c.text.replace(/\s+/g, "")));
   for (const f of new Set([...headFiles, ...baseFiles])) {
     const inHead = headFiles.includes(f);
     const inBase = baseFiles.includes(f);
@@ -472,6 +478,11 @@ if (baseDir !== undefined) {
     else if (!inHead && inBase) changed.push(`removed dist/${f}`);
     else if (published(join("dist", f)) !== published(join(baseDist, f)))
       changed.push(`changed dist/${f}`);
+    else if (
+      f.endsWith(".d.ts") &&
+      commentTexts(join("dist", f)) !== commentTexts(join(baseDist, f))
+    )
+      changed.push(`docs    dist/${f}`);
   }
   changed.sort((a, b) => a.slice(8).localeCompare(b.slice(8)));
   const changelog = read("CHANGELOG.md");
@@ -484,7 +495,11 @@ if (baseDir !== undefined) {
   };
   const userFacing = [
     ...new Set(
-      [sectionOf("Unreleased"), sectionOf(version)]
+      // 今のバージョンが公開済み（比べる相手と同じバージョン）なら、その節は前の公開の記録なので [Unreleased] だけを見る
+      (baseVersion === version
+        ? [sectionOf("Unreleased")]
+        : [sectionOf("Unreleased"), sectionOf(version)]
+      )
         .flatMap((section) => [...section.matchAll(/^### (.+)$/gm)].map((m) => m[1]!.trim()))
         .filter((s) => USER_FACING.includes(s)),
     ),
@@ -493,17 +508,17 @@ if (baseDir !== undefined) {
   const dtsCount = headFiles.length - jsCount;
   report.push(`## 公開物の変化（${baseVersion} → ${version} の dist の .js・.d.ts）`, "");
   report.push(
-    `${changed.length === 0 ? "変わったファイルはない" : `変わったファイル: ${changed.length} 件`}（比べたファイル: .js ${jsCount} 件・.d.ts ${dtsCount} 件。.d.ts はコメントを除いて比べる）`,
+    `${changed.length === 0 ? "変わったファイルはない" : `変わったファイル: ${changed.length} 件`}（比べたファイル: .js ${jsCount} 件・.d.ts ${dtsCount} 件。.d.ts は宣言をコメントを除いて比べ、宣言が同じでも型の説明の文が変われば docs として数える）`,
     "",
   );
   if (changed.length > 0) report.push("```text", ...changed, "```", "");
   report.push(
-    `CHANGELOG の [Unreleased]・[${version}] の節の利用者向けの区分: ${userFacing.length > 0 ? userFacing.join("・") : "なし"}`,
+    `CHANGELOG の ${baseVersion === version ? "[Unreleased]" : `[Unreleased]・[${version}]`} の節の利用者向けの区分: ${userFacing.length > 0 ? userFacing.join("・") : "なし"}`,
     "",
   );
   if (changed.length > 0 && userFacing.length === 0)
     failures.push(
-      `CHANGELOG.md: dist files changed from ${baseVersion}, but neither [Unreleased] nor the ${version} section has a user-facing section (${USER_FACING.join(", ")})`,
+      `CHANGELOG.md: dist files changed from ${baseVersion}, but ${baseVersion === version ? "[Unreleased] has no user-facing section" : `neither [Unreleased] nor the ${version} section has a user-facing section`} (${USER_FACING.join(", ")})`,
     );
 }
 
