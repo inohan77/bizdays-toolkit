@@ -116,7 +116,7 @@ diagnoseCalendar({
 
 ### 他の国・地域
 
-祝日の提供元は `id`・`timeZone`・`supportedYears`・`holidaysInYear(year)` を持つオブジェクトです。多くの国の祝日の元になる `nthWeekdayOfMonth`・`easterSunday` を `bizdays-toolkit/provider` が公開しています。[providers.ja.md](./providers.ja.md) を参照してください。
+祝日の提供元は `id`・`timeZone`・`supportedYears`・`dataVersion`（文字列）・`holidaysInYear(year)` を持つオブジェクトです。多くの国の祝日の元になる `nthWeekdayOfMonth`・`easterSunday` を `bizdays-toolkit/provider` が公開しています。[providers.ja.md](./providers.ja.md) を参照してください。
 
 ## ドキュメント
 

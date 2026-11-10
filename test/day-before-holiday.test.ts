@@ -144,7 +144,6 @@ test("祝前日: 入力の誤り", () => {
       { dayBeforeHoliday: true, skipWeekdays: [0, 1, 2, 3, 4, 5, 6] },
       /closedRecurringRules\[0\]\.skipWeekdays: cannot include every weekday/,
     ],
-    [{ dayBeforeHoliday: true, weekdays: [7] }, /closedRecurringRules\[0\]\.weekdays/],
     [
       { dayBeforeHoliday: true, interval: 2, anchor: "2026-01-07" },
       /closedRecurringRules\[0\]\.interval/,

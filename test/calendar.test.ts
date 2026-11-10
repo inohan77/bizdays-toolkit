@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createCalendar,
+  createSchedule,
   isBizdaysError,
   type Holiday,
   type HolidayProvider,
@@ -134,14 +135,23 @@ test("営業日の移動と数え上げ（土日祝休み）", () => {
   assert.throws(() => office.addBusinessDays("2026-09-01", 1.5), RangeError);
 });
 
-test("営業日が見つからない設定は Error で止まる", () => {
-  const never = createCalendar({ closedWeekdays: [0, 1, 2, 3, 4, 5, 6], searchDayLimit: 30 });
-  assert.throws(() => never.nextBusinessDay("2026-01-01"), /No business day found within 30 days/);
+test("searchDayLimit: 営業日が上限の日数のうちにあれば返し、なければ no-business-day（前後どちらの向きも）", () => {
+  // 営業日は 2026-02-01 だけ（2026-01-01 から 31 日先）、または 2026-01-01 だけ（2026-02-01 から 31 日前）
+  const only = (date: string, searchDayLimit: number) =>
+    createCalendar({ closedWeekdays: [0, 1, 2, 3, 4, 5, 6], openDates: [date], searchDayLimit });
+  const noBusinessDay = (e: unknown) => isBizdaysError(e) && e.code === "no-business-day";
+  assert.equal(only("2026-02-01", 31).nextBusinessDay("2026-01-01"), "2026-02-01");
+  assert.throws(() => only("2026-02-01", 30).nextBusinessDay("2026-01-01"), noBusinessDay);
+  assert.equal(only("2026-01-01", 31).previousBusinessDay("2026-02-01"), "2026-01-01");
+  assert.throws(() => only("2026-01-01", 30).previousBusinessDay("2026-02-01"), noBusinessDay);
 });
 
 test("祝日の提供元の対応年の外", () => {
   const strict = createCalendar({ holidayProvider: jp });
-  assert.throws(() => strict.isBusinessDay("2100-01-04"), /supported for 1955-2099/);
+  assert.throws(
+    () => strict.isBusinessDay("2100-01-04"),
+    (e: unknown) => isBizdaysError(e) && e.code === "out-of-range",
+  );
   const lenient = createCalendar({ holidayProvider: jp, outOfRangePolicy: "ignore" });
   assert.equal(lenient.isHoliday("2100-01-01"), false);
 });
@@ -193,6 +203,44 @@ test("期間の指定が逆なら RangeError", () => {
     () => createCalendar({ closedDates: [{ from: "2026-12-31", to: "2026-12-01" }] }),
     RangeError,
   );
+});
+
+test("毎年の月日: どの年にもない月日は作成時に invalid-annual-date。02-29 はうるう年だけに当たり、うるう年でない年の 2 月 28 日・3 月 1 日に読み替えない（decisions.md の 12 番）", () => {
+  const invalidAnnualDate = (e: unknown) => isBizdaysError(e) && e.code === "invalid-annual-date";
+  for (const date of ["11-31", "04-31", "02-30"]) {
+    assert.throws(() => createCalendar({ closedAnnualDates: [date] }), invalidAnnualDate, date);
+    assert.throws(
+      () => createCalendar({ closedAnnualDates: [{ from: "11-01", to: date }] }),
+      invalidAnnualDate,
+      `to ${date}`,
+    );
+    assert.throws(
+      () =>
+        createSchedule({
+          weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+          annualDates: [{ date, value: 9 }],
+        }),
+      invalidAnnualDate,
+      `schedule ${date}`,
+    );
+  }
+  const leapDay = createCalendar({ closedAnnualDates: ["02-29"] });
+  assert.equal(leapDay.isBusinessDay("2028-02-29"), false);
+  for (const date of ["2027-02-28", "2027-03-01", "2028-02-28", "2028-03-01"])
+    assert.equal(leapDay.isBusinessDay(date), true, date);
+  const schedule = createSchedule({
+    weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+    annualDates: [{ date: "02-29", value: 9 }],
+  });
+  assert.equal(schedule.valueOn("2028-02-29"), 9);
+  for (const date of ["2027-02-28", "2027-03-01"]) assert.equal(schedule.valueOn(date), 1, date);
+  // 端が 02-29 の期間は、うるう年でない年には間の日だけ（02-20〜02-28、03-01〜03-02）
+  const toLeapDay = createCalendar({ closedAnnualDates: [{ from: "02-20", to: "02-29" }] });
+  assert.equal(toLeapDay.isBusinessDay("2027-02-28"), false);
+  assert.equal(toLeapDay.isBusinessDay("2027-03-01"), true);
+  const fromLeapDay = createCalendar({ closedAnnualDates: [{ from: "02-29", to: "03-02" }] });
+  assert.equal(fromLeapDay.isBusinessDay("2027-02-28"), true);
+  assert.equal(fromLeapDay.isBusinessDay("2027-03-01"), false);
 });
 
 test("no-business-day: 探索・第 n 営業日・締め期間のどの経路でも RangeError（同じ code は同じクラス。3 番）", () => {

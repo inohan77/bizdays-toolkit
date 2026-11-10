@@ -91,12 +91,10 @@ test("weekdays: 入力の誤り", () => {
     ],
     [{ dayOfMonth: 1, weekdays: [1] }, /\.weekdays/],
     [{ holiday: true, weekdays: [] }, /closedRecurringRules\[0\]\.weekdays/],
-    [{ holiday: true, weekdays: [7] }, /closedRecurringRules\[0\]\.weekdays/],
     [
       { holiday: true, weekdays: 6 },
       /closedRecurringRules\[0\]\.weekdays: must be a non-empty array/,
     ],
-    [{ dayAfterHoliday: true, weekdays: ["mon"] }, /closedRecurringRules\[0\]\.weekdays/],
   ];
   for (const [entry, message] of cases) {
     assert.throws(

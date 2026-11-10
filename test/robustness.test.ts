@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import ts from "typescript";
 import {
   addDays,
   combineCalendars,
@@ -15,7 +16,11 @@ import {
 } from "../src/index.ts";
 import { holidaysInYear, isHoliday, jp } from "../src/jp/index.ts";
 import { withSubstituteDays } from "../src/provider/index.ts";
-import { migrateCalendarOptions } from "../src/diagnose/index.ts";
+import {
+  diagnoseCalendar,
+  diagnoseSchedule,
+  migrateCalendarOptions,
+} from "../src/diagnose/index.ts";
 import { IssueCollector } from "../src/core/errors.ts";
 import { compileCalendarOptions } from "../src/core/calendar.ts";
 
@@ -67,7 +72,11 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
     () => isHoliday("2026-11-23T25:00"),
     () => createCalendar().businessDayOnOrAfter("2026-10-10T10:00", { cutoff: "25:00" }),
   ],
-  "invalid-input": [() => isHoliday(20261123 as unknown as string)],
+  "invalid-input": [
+    () => isHoliday(20261123 as unknown as string),
+    // ISO 以外の暦の Temporal の形（受け付けない種類の入力の、もう 1 つの経路）
+    () => isHoliday({ year: 2026, month: 11, day: 23, calendarId: "japanese" } as never),
+  ],
   "invalid-time-zone": [() => createCalendar({ timeZone: "Asia/Nowhere" })],
   "invalid-range": [
     () => createCalendar({ closedDates: [{ from: "2026-12-31", to: "2026-12-01" }] }),
@@ -117,6 +126,141 @@ test("例外のクラスは code ごとの表のとおり（invalid-input だけ
   assert.deepEqual(Object.keys(TRIGGERS).sort(), [...codes].sort(), "表の code と KnownErrorCode");
   for (const [code, triggers] of Object.entries(TRIGGERS))
     triggers.forEach((fn, i) => throwsCode(fn, code, classOf(code), `${code} の ${i} 番目`));
+});
+
+test("例外のクラスの静的な検査: src で typeError に渡す code は invalid-input だけで、rangeError と設定の誤りの記録（.error）に invalid-input を渡さない（decisions.md の 3 番。上の表は経路を人が挙げるので、取りこぼしても止まるように）", () => {
+  const dir = new URL("../src/", import.meta.url);
+  const files = (readdirSync(dir, { recursive: true }) as string[])
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => f.replaceAll("\\", "/"));
+  const found: Record<string, Set<string>> = {
+    typeError: new Set(),
+    rangeError: new Set(),
+    error: new Set(),
+  };
+  const notLiteral: string[] = [];
+  for (const file of files) {
+    const text = readFileSync(new URL(file, dir), "utf8");
+    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && node.arguments.length > 0) {
+        const callee = node.expression;
+        const name = ts.isIdentifier(callee)
+          ? callee.text
+          : ts.isPropertyAccessExpression(callee)
+            ? callee.name.text
+            : "";
+        if (name === "typeError" || name === "rangeError" || name === "error") {
+          const first = node.arguments[0]!;
+          const where = `${file}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
+          if (ts.isStringLiteral(first)) found[name]!.add(first.text);
+          // 文字列でない code は、typeError では許さない（rangeError は記録した誤りを投げ直す経路で使う）
+          else if (name === "typeError") notLiteral.push(where);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  assert.deepEqual([...found["typeError"]!], ["invalid-input"], "typeError の code");
+  assert.ok(!found["rangeError"]!.has("invalid-input"), "rangeError に invalid-input");
+  assert.ok(!found["error"]!.has("invalid-input"), "設定の誤りの記録に invalid-input");
+  assert.deepEqual(notLiteral, [], "typeError に文字列でない code");
+  assert.ok(found["rangeError"]!.size > 10, "rangeError の呼び出しを見つけられていない");
+});
+
+test("曜日の番号の誤り: 曜日を受けるすべての項目で、要素の値の誤りは invalid-weekday（作成も診断も。decisions.md の 8 番）。空の配列・書き忘れは invalid-option", () => {
+  // 各項目の値の誤りが報告される設定の中の位置（ガイドの「メッセージに設定の中の位置が入る」）
+  const paths: Record<string, string> = {
+    closedWeekdays: "closedWeekdays[0]",
+    weekday: "closedRecurringRules[0].weekday",
+    weekStart: "closedRecurringRules[0].weekStart",
+    weekdays: "closedRecurringRules[0].weekdays",
+    skipWeekdays: "closedRecurringRules[0].skipWeekdays",
+    sameAs: "holidayPolicy.sameAs",
+  };
+  // 曜日を受ける項目と、その項目に誤った値 v を書いた設定（ほかの項目は正しい）
+  const places: Record<
+    string,
+    (v: unknown) => [kind: "calendar" | "schedule", options: Record<string, unknown>]
+  > = {
+    closedWeekdays: (v) => ["calendar", { closedWeekdays: [v] }],
+    weekday: (v) => ["calendar", { closedRecurringRules: [{ weekday: v }] }],
+    weekStart: (v) => [
+      "calendar",
+      { closedRecurringRules: [{ businessDayOfWeek: 1, weekStart: v }] },
+    ],
+    weekdays: (v) => [
+      "calendar",
+      { holidayProvider: jp, closedRecurringRules: [{ holiday: true, weekdays: [v] }] },
+    ],
+    skipWeekdays: (v) => [
+      "calendar",
+      { holidayProvider: jp, closedRecurringRules: [{ dayAfterHoliday: true, skipWeekdays: [v] }] },
+    ],
+    sameAs: (v) => [
+      "schedule",
+      { weekdayValues: [1, 1, 1, 1, 1, 1, 1], holidayProvider: jp, holidayPolicy: { sameAs: v } },
+    ],
+  };
+  // 表とソースの突き合わせ: isWeekday で曜日を確かめる箇所が読む項目が、表の項目とそろっていること
+  const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
+  const sites = [read("../src/core/calendar.ts"), read("../src/core/schedule.ts")].flatMap(
+    (text) => {
+      const lines = text.split("\n");
+      return lines.flatMap((line, i) => {
+        const near = lines.slice(Math.max(0, i - 4), i + 1).join("\n");
+        // 呼び出し（isWeekday(…)）と、checkSet に渡す引数（isWeekday,）。import の行と定義は除く
+        const call = /\bisWeekday\(/.test(line) && !/export const isWeekday/.test(line);
+        const passed = line.trim() === "isWeekday," && /checkSet\(/.test(near);
+        if (!call && !passed) return [];
+        const hit = Object.keys(places).filter((k) => new RegExp(`\\b${k}\\b`).test(near));
+        return [hit.length === 1 ? hit[0]! : `?${i + 1}: ${line.trim()}`];
+      });
+    },
+  );
+  assert.deepEqual(
+    [...new Set(sites)].sort(),
+    Object.keys(places).sort(),
+    "isWeekday の箇所と表の項目",
+  );
+  const create = (kind: "calendar" | "schedule", o: Record<string, unknown>): void =>
+    void (kind === "calendar" ? createCalendar(o as never) : createSchedule(o as never));
+  const diagnose = (kind: "calendar" | "schedule", o: Record<string, unknown>) =>
+    kind === "calendar" ? diagnoseCalendar(o as never) : diagnoseSchedule(o as never);
+  for (const [place, build] of Object.entries(places)) {
+    for (const v of [7, -1, 1.5, "1"]) {
+      const [kind, options] = build(v);
+      const label = `${place}: ${JSON.stringify(v)}`;
+      assert.throws(
+        () => create(kind, options),
+        (e: unknown) =>
+          e instanceof RangeError &&
+          isBizdaysError(e) &&
+          e.code === "invalid-weekday" &&
+          e.message.startsWith(`${paths[place]}: `),
+        label,
+      );
+      assert.deepEqual(
+        diagnose(kind, options)
+          .filter((d) => d.severity === "error")
+          .map((d) => `${d.code} ${d.path}`),
+        [`invalid-weekday ${paths[place]}`],
+        label,
+      );
+    }
+  }
+  // 値の種類の誤りでないもの（空の配列・必須の項目の書き忘れ）は invalid-option のまま
+  for (const options of [
+    { holidayProvider: jp, closedRecurringRules: [{ holiday: true, weekdays: [] }] },
+    { holidayProvider: jp, closedRecurringRules: [{ dayAfterHoliday: true, skipWeekdays: [] }] },
+    { closedRecurringRules: [{ businessDayOfWeek: 1 }] },
+  ])
+    assert.throws(
+      () => createCalendar(options as never),
+      (e: unknown) => isBizdaysError(e) && e.code === "invalid-option",
+      JSON.stringify(options),
+    );
 });
 
 test("設定の誤りのメッセージには、設定の中の位置が入る", () => {

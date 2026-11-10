@@ -71,14 +71,16 @@ import type { Holiday, HolidayProvider } from "./types.ts";
 export type HolidayPolicy = "closed" | "open" | "ignore";
 
 /**
- * 毎年の月日 "MM-DD"（名前付き・有効期間付きも可）。
+ * 毎年の月日 "MM-DD"（名前付き・有効期間付きも可）。どの年にもない月日（"11-31" など）は invalid-annual-date。
+ * "02-29" はうるう年だけに当たる（ほかの年の 2 月 28 日・3 月 1 日に読み替えない。decisions.md の 12 番）。
  * @public
  */
 export type AnnualDate =
   | string
   | ({ readonly date: string; readonly name?: string } & EffectivePeriod);
 /**
- * 毎年の月日の期間（from > to なら年をまたぐ。例: 12-31 〜 01-03）。
+ * 毎年の月日の期間（from > to なら年をまたぐ。例: 12-31 〜 01-03）。端の月日は AnnualDate と同じ。
+ * うるう年でない年は、端の "02-29" を除いた間の日だけを含む（from: "02-20", to: "02-29" は 2 月 28 日まで）。
  * @public
  */
 export interface AnnualRange extends EffectivePeriod {
@@ -124,7 +126,10 @@ export interface CalendarOptions<Kind extends string = string> extends HolidaySo
   readonly openRecurringRules?: readonly RecurringRule<Kind>[];
   /** 祝日の扱い（既定: "closed"） */
   readonly holidayPolicy?: HolidayPolicy;
-  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら code: "no-business-day" の RangeError */
+  /**
+   * 営業日・休業日を探すときに調べる最大日数（既定: 3660）。超えたら、営業日の探索は code: "no-business-day"、
+   * 休業日の探索（nextClosedDay・previousClosedDay）は code: "no-closed-day" の RangeError
+   */
   readonly searchDayLimit?: number;
   /** @deprecated 0.30.0 で closedAnnualDates に改名した。1.0.0 で削除する */
   readonly closedAnnual?: readonly (AnnualDate | AnnualRange)[];
@@ -210,7 +215,10 @@ export interface CombineCalendarsOptions {
    * "any": いずれかのカレンダーが営業日（例: 複数の店舗のどこかが開いている日）
    */
   readonly open: "all" | "any";
-  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら code: "no-business-day" の RangeError */
+  /**
+   * 営業日・休業日を探すときに調べる最大日数（既定: 3660）。超えたら、営業日の探索は code: "no-business-day"、
+   * 休業日の探索（nextClosedDay・previousClosedDay）は code: "no-closed-day" の RangeError
+   */
   readonly searchDayLimit?: number;
   /** @deprecated 0.30.0 で searchDayLimit に改名した。1.0.0 で削除する */
   readonly maxSearchDays?: number;
@@ -414,20 +422,22 @@ export function compileCalendarOptions<Kind extends string>(
     c.error("invalid-option", "searchDayLimit", "must be a positive integer");
   }
 
+  const OPEN = { value: true } as const;
+  const CLOSED = { value: false } as const;
   const annual = compileAnnualRules<boolean>(
     c,
     "closedAnnualDates",
     o["closedAnnualDates"],
-    () => false,
+    () => CLOSED,
     true,
     false,
   );
-  const open = compileDateRules<boolean>(c, "openDates", o["openDates"], () => true, true, false);
+  const open = compileDateRules<boolean>(c, "openDates", o["openDates"], () => OPEN, true, false);
   const closed = compileDateRules<boolean>(
     c,
     "closedDates",
     o["closedDates"],
-    () => false,
+    () => CLOSED,
     true,
     false,
   );
@@ -435,7 +445,7 @@ export function compileCalendarOptions<Kind extends string>(
     c,
     "openRecurringRules",
     o["openRecurringRules"],
-    () => true,
+    () => OPEN,
     RECURRING_RULE_KEYS,
     "calendar",
     writtenKey(places, written, "openRecurringRules"),
@@ -445,7 +455,7 @@ export function compileCalendarOptions<Kind extends string>(
     c,
     "closedRecurringRules",
     o["closedRecurringRules"],
-    () => false,
+    () => CLOSED,
     RECURRING_RULE_KEYS,
     "calendar",
     writtenKey(places, written, "closedRecurringRules"),
@@ -961,7 +971,10 @@ export function combineCalendars<Kind extends string = string>(
  * @public
  */
 export interface CalendarFromScheduleOptions {
-  /** 営業日を探すときに調べる最大日数（既定: 3660）。超えたら code: "no-business-day" の RangeError */
+  /**
+   * 営業日・休業日を探すときに調べる最大日数（既定: 3660）。超えたら、営業日の探索は code: "no-business-day"、
+   * 休業日の探索（nextClosedDay・previousClosedDay）は code: "no-closed-day" の RangeError
+   */
   readonly searchDayLimit?: number;
   /** @deprecated 0.30.0 で searchDayLimit に改名した。1.0.0 で削除する */
   readonly maxSearchDays?: number;

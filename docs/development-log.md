@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [0.31.5]
+
+- `test/metamorphic.test.ts` に変形 8（スケジュールの値の 1 つを、書いたすべての位置で `undefined` にしても、その値が `undefined` になるだけで理由・位置・診断が同じ）を足した。`test/schedule.test.ts` に、5 つの値の位置の `value: undefined` と、`holidayPolicy` の `sameAs` と `value` の両方指定のテストを足した（提案書 bizdays-toolkit-0.31.5-proposalv2 の A1・A5。変形 7 は「書いていない項目を undefined で書く」関係だけを見て、値の `undefined` を対象から外していた。目録の値の候補に `undefined` を足すと乱数の流れが変わってほかのテストと result-compare の設定がすべて変わるので、目録は変えずに関係のテストにした）
+- `test/robustness.test.ts`: src の `typeError`・`rangeError`・`.error` の第 1 引数を TypeScript の API で集め、`typeError` は `invalid-input` だけ、ほかに `invalid-input` がないことを確かめる静的な検査と、`invalid-input` の 2 つ目の経路（ISO 以外の暦）を足した。曜日を受ける 6 か所すべてで、要素の値の誤り（7・−1・1.5・`"1"`）が作成でも診断でも `invalid-weekday` になり、設定の中の位置が報告されることを確かめるテストを足し、`isWeekday` の箇所と表の項目の突き合わせを添えた。`test/day-before-holiday.test.ts`・`test/skip-weekdays.test.ts`・`test/weekdays-filter.test.ts` の「入力の誤り」から曜日の値の誤りの行を外した（A3・A4。表は経路を人が挙げるので、ISO 以外の暦の `RangeError` と、`weekStart`・`skipWeekdays`・`weekdays` の code を見逃していた。`test/input.test.ts` は ISO 以外の暦を `RangeError` として固定していた）
+- `test/migrate.test.ts`: 旧名と新しい名前の片方が明示的な `undefined` の 4 通り（キーの順番 2 通り × どちらが `undefined` か）・本当の衝突・`changes` の要素の凍結のテストを足した（A6）
+- サイズの上限: ルート `.` を 19,700 → 20,000 にした（測定 19,555）。`./jp` を 22,000 → 22,300 にした（測定 21,805）。瞬間の変換の年の検査と時差の求め方（`wallParts`）、`holidaysInYear` の年の範囲、規則の値の包み（`value: undefined` の取り込み）、曜日の code の分け方、`holidayPolicy` の両方指定の検査による（どれも約束を守るための検査で、文言を短くする以外に小さくできる箇所がない）
+- 診断のテストの時間（提案書 v2 の D1）: `run` に一時的に計測を入れた 1 回の実行（コンテナ上）で、`pnpm test` 約 99 秒のうち、日本の提供元（1955〜2099 年）の診断 113 回が約 34 秒、短い提供元（2025〜2027 年）の診断 370 回が約 14 秒だった（ファイル別: consistency 17 回 8.3 秒、diagnose-unjudgeable 12 回 5.7 秒、counting-basis 9 回 3.7 秒、diagnose 23 回 3.5 秒、ほか）。提供元の置き換えを実際に試したのは `test/counting-basis.test.ts` だけで（4.4 秒 → 0.8 秒、7 件とも合格）、ほかのファイルの効果は表の値が上限。`pnpm check` は時間の上限（3 分）の内なので、置き換えはしていない（「品質の仕組みを足すとき」の 5）
+- `test/input.test.ts` に紀元前の瞬間と、1000-01-01・9999-12-31 の `toInstant` のテストを、`test/argument-errors.test.ts` に提供元のない経路・`"ignore"`・合成での範囲外の年の `holidaysInYear` のテストを、`test/calendar.test.ts` に毎年の月日（どの年にもない月日と `"02-29"`）のテストを足した（提案書 bizdays-toolkit-0.31.5-proposal の 1・1-2・2 と決定 12 番。瞬間のテストは境界の年だけを見ていて、紀元前に 1000 以上の年が見える瞬間を試していなかった。範囲外の年は、整数でない年だけをすべての経路で確かめ、範囲外の整数は提供元付きの既定の方針の経路だけで確かめていた）
+- `test/calendar.test.ts`: 題名の古い「営業日が見つからない設定は Error で止まる」を、`searchDayLimit` が効いていること（31 なら値、30 なら `no-business-day`、前後の両方向）を挙動で確かめるテストに置き換え、「祝日の提供元の対応年の外」をメッセージではなく `code` で確かめる形にした
+- 例外のメッセージを正規表現で確かめるテストの方針: 設定の中の位置（`closedRecurringRules[0].businessDayOfMonth` など。ガイドの約束）は確かめ、位置の後ろの文言は外して `code` で区別する。文言そのものの確かめは `test/argument-errors.test.ts` にまとめる。今あるテストは、触ったファイルから順にこの形に寄せる（メッセージの文言はパッチバージョンでも変わるので、文言を直すたびにテストの直しが要っていた）
 - `scripts/job-time.ts`: GitHub の API が 5xx を返したときと、通信に失敗したときは、10 秒待って 1 回だけ再試行するようにした（4xx は 429 を含めて再試行しない）（0.31.4 の CI で、oracle の 2 つの分が HTTP 502 で「比べられなかった」になった）。再試行の決まりは `scripts/job-time-parts.ts` の `getWithRetry` にあり、`test/tools/job-time-parts.test.ts` が通信なしで確かめる
 
 ## [0.31.4]

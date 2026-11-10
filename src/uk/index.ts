@@ -85,7 +85,8 @@ function provider(
 export const england: HolidayProvider<UkHolidayKind> = provider("GB-ENG", "england-and-wales");
 
 /**
- * Wales の bank holidays の提供元（GOV.UK の England and Wales）。名称にウェールズ語（names.cy）が付く。
+ * Wales の bank holidays の提供元（GOV.UK の England and Wales）。GOV.UK のウェールズ語版に名称がある祝日には、
+ * ウェールズ語の名称（names.cy）が付く（公式の名称がない臨時の祝日には付かない）。
  * @public
  */
 export const wales: HolidayProvider<UkHolidayKind> = provider(

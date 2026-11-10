@@ -1,7 +1,7 @@
 // 日本の提供元とほかの提供元の和集合での、kinds の旧名 "national"（docs/decisions.md の 10 番）。
 // 主の検査は、日本の提供元を包んで種別を付け替えた設定との関係（祝日データに依存しないので、データの反映で壊れない）。
 // 錨は公開済みの 0.22.2 で作ったフィクスチャ（0.22.x の意味を正とする。確定した年だけ）。データのパッチバージョンが錨の範囲の
-// 過去の祝日を変えたとき（法改正・臨時の祝日）は、0.22.2 では作り直せないので、影響する日付を錨から外し、CHANGELOG の「開発」に記録する
+// 過去の祝日を変えたとき（法改正・臨時の祝日）は、0.22.2 では作り直せないので、影響する日付を錨から外し、開発の記録（docs/development-log.md）に記録する
 import assert from "node:assert/strict";
 import { daysOf } from "./support/compare.ts";
 import { readFileSync } from "node:fs";

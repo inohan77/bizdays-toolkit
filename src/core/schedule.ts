@@ -509,7 +509,7 @@ export type ScheduleRecurringRule<Value, Kind extends string = string> = (
   };
 
 /**
- * 毎年の月日 "MM-DD" の値。
+ * 毎年の月日 "MM-DD" の値。月日は AnnualDate と同じ（どの年にもない月日は invalid-annual-date、"02-29" はうるう年だけ）。
  * @public
  */
 export interface ScheduleAnnualDate<Value> extends EffectivePeriod {
@@ -519,7 +519,7 @@ export interface ScheduleAnnualDate<Value> extends EffectivePeriod {
 }
 
 /**
- * 毎年の月日の期間の値（from > to なら年をまたぐ。例: 12-31 〜 01-03）。
+ * 毎年の月日の期間の値（from > to なら年をまたぐ。例: 12-31 〜 01-03）。端の月日と "02-29" の扱いは AnnualRange と同じ。
  * @public
  */
 export interface ScheduleAnnualRange<Value> extends EffectivePeriod {
@@ -819,6 +819,15 @@ function checkMonthDay(c: IssueCollector, path: string, value: unknown): string 
 }
 
 /**
+ * @internal 規則の値を取り出す関数。値があれば { value } で包んで返し、ない（誤り）なら undefined を返す。
+ * スケジュールの value は undefined も値なので、値そのものを undefined と比べて「ない」を表さない
+ */
+export type RuleValueOf<Value> = (
+  entry: Record<string, unknown>,
+  path: string,
+) => { readonly value: Value } | undefined;
+
+/**
  * @internal 個別の日付の規則を検証して取り込む。
  * entry は "YYYY-MM-DD"・{ date }・{ from, to } のいずれか。値は valueOf で決める
  */
@@ -826,7 +835,7 @@ export function compileDateRules<Value>(
   c: IssueCollector,
   path: string,
   entries: unknown,
-  valueOf: (entry: Record<string, unknown>, path: string) => Value | undefined,
+  valueOf: RuleValueOf<Value>,
   allowString: boolean,
   /** 要素の value を既知のキーにするか（スケジュールは true。カレンダーは false で、書くと診断の unknown-option） */
   valueKey: boolean,
@@ -848,7 +857,7 @@ export function compileDateRules<Value>(
       );
       return;
     }
-    const value = valueOf(entry, p);
+    const got = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
     // 2 つの書き方を分ける項目（date と from・to）の明示的な undefined は省略と同じ。ほかの項目の undefined は
     // 読むときに省略と同じになり、知らないキーの検査では残す
@@ -856,8 +865,8 @@ export function compileDateRules<Value>(
     if ("date" in defined) {
       checkUnknownKeys(c, p, defined, ["date", "name", ...(valueKey ? ["value"] : [])]);
       const n = checkDate(c, `${p}.date`, entry["date"]);
-      if (n !== undefined && value !== undefined)
-        rules.push({ path: p, from: n, to: n, value, name });
+      if (n !== undefined && got !== undefined)
+        rules.push({ path: p, from: n, to: n, value: got.value, name });
       return;
     }
     if (!("from" in defined) || !("to" in defined)) {
@@ -876,7 +885,7 @@ export function compileDateRules<Value>(
       );
       return;
     }
-    if (value !== undefined) rules.push({ path: p, from, to, value, name });
+    if (got !== undefined) rules.push({ path: p, from, to, value: got.value, name });
   });
   return rules;
 }
@@ -886,7 +895,7 @@ export function compileAnnualRules<Value>(
   c: IssueCollector,
   path: string,
   entries: unknown,
-  valueOf: (entry: Record<string, unknown>, path: string) => Value | undefined,
+  valueOf: RuleValueOf<Value>,
   allowString: boolean,
   /** 要素の value を既知のキーにするか（スケジュールは true。カレンダーは false で、書くと診断の unknown-option） */
   valueKey: boolean,
@@ -908,7 +917,7 @@ export function compileAnnualRules<Value>(
       );
       return;
     }
-    const value = valueOf(entry, p);
+    const got = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
     const period = checkPeriod(c, p, entry);
     // 2 つの書き方を分ける項目（date と from・to）の明示的な undefined は省略と同じ。ほかの項目の undefined は
@@ -922,8 +931,8 @@ export function compileAnnualRules<Value>(
         ...PERIOD_KEYS,
       ]);
       const md = checkMonthDay(c, `${p}.date`, entry["date"]);
-      if (md !== undefined && value !== undefined && period) {
-        rules.push({ path: p, from: md, to: md, value, name, ...period });
+      if (md !== undefined && got !== undefined && period) {
+        rules.push({ path: p, from: md, to: md, value: got.value, name, ...period });
       }
       return;
     }
@@ -940,8 +949,8 @@ export function compileAnnualRules<Value>(
     ]);
     const from = checkMonthDay(c, `${p}.from`, entry["from"]);
     const to = checkMonthDay(c, `${p}.to`, entry["to"]);
-    if (from !== undefined && to !== undefined && value !== undefined && period) {
-      rules.push({ path: p, from, to, value, name, ...period });
+    if (from !== undefined && to !== undefined && got !== undefined && period) {
+      rules.push({ path: p, from, to, value: got.value, name, ...period });
     }
   });
   return rules;
@@ -1049,10 +1058,16 @@ function checkSet(
   raw: unknown,
   valid: (v: unknown) => boolean,
   expected: string,
+  /** 要素の値の誤りの code（曜日は invalid-weekday。decisions.md の 8 番）。空の配列は invalid-option のまま */
+  elementCode: KnownErrorCode = "invalid-option",
 ): Set<number> | undefined {
   const list = Array.isArray(raw) ? raw : [raw];
   if (list.length === 0 || !list.every(valid)) {
-    c.error("invalid-option", path, `must be ${expected}, or a non-empty array of them`);
+    c.error(
+      list.length === 0 ? "invalid-option" : elementCode,
+      path,
+      `must be ${expected}, or a non-empty array of them`,
+    );
     return undefined;
   }
   return new Set(list as number[]);
@@ -1063,7 +1078,7 @@ export function compileRecurringRules<Value>(
   c: IssueCollector,
   path: string,
   entries: unknown,
-  valueOf: (entry: Record<string, unknown>, path: string) => Value | undefined,
+  valueOf: RuleValueOf<Value>,
   keys: readonly string[],
   context: "calendar" | "schedule",
   writtenPath: string = path,
@@ -1087,7 +1102,7 @@ export function compileRecurringRules<Value>(
     const entry = withoutUndefined(renamedEntry);
     const nationalOfJp =
       jp !== "none" && reportNational(c, `${written}.kinds`, entry["kinds"], jp === "mixed");
-    const value = valueOf(entry, p);
+    const got = valueOf(entry, p);
     const name = checkName(c, p, entry["name"]);
     const hasWeekday = "weekday" in entry;
     const hasDay = "dayOfMonth" in entry;
@@ -1278,11 +1293,19 @@ export function compileRecurringRules<Value>(
         else ok = false;
         if (hasBusinessWeek) {
           if (isWeekday(entry["weekStart"])) weekStart = entry["weekStart"];
-          else {
+          else if (!("weekStart" in entry)) {
+            // 書き忘れは組み合わせの誤り（invalid-option）、書いた値の誤りは曜日の誤り（invalid-weekday。decisions.md の 8 番）
             c.error(
               "invalid-option",
               `${p}.weekStart`,
               'is required with "businessDayOfWeek": an integer from 0 (Sunday) to 6 (Saturday) (the first day of the week)',
+            );
+            ok = false;
+          } else {
+            c.error(
+              "invalid-weekday",
+              `${p}.weekStart`,
+              "must be an integer from 0 (Sunday) to 6 (Saturday) (the first day of the week)",
             );
             ok = false;
           }
@@ -1433,6 +1456,7 @@ export function compileRecurringRules<Value>(
           entry["weekdays"],
           isWeekday,
           "a weekday (0 = Sunday to 6 = Saturday)",
+          "invalid-weekday",
         );
         if (set) weekdays = set;
         else ok = false;
@@ -1487,6 +1511,7 @@ export function compileRecurringRules<Value>(
           entry["skipWeekdays"],
           isWeekday,
           "a weekday (0 = Sunday to 6 = Saturday)",
+          "invalid-weekday",
         );
         if (set === undefined) ok = false;
         else if (set.size === 7) {
@@ -1507,7 +1532,7 @@ export function compileRecurringRules<Value>(
       }
     }
     const period = checkPeriod(c, p, entry);
-    if (ok && period && value !== undefined) {
+    if (ok && period && got !== undefined) {
       rules.push(
         Object.freeze({
           path: p,
@@ -1532,7 +1557,7 @@ export function compileRecurringRules<Value>(
           weekdays,
           months,
           holidayOverlapPolicy: onHoliday as HolidayOverlapPolicy,
-          value,
+          value: got.value,
           name,
           ...period,
         }),
@@ -1650,14 +1675,14 @@ export function createBasis<Value, Kind extends string>(
   return basisFromPredicate((date) => resolve(date, false).day.value === true);
 }
 
-/** 規則の value を取り出す（value が必須の規則用） */
-function requiredValue<Value>(c: IssueCollector) {
-  return (entry: Record<string, unknown>, path: string): Value | undefined => {
+/** 規則の value を取り出す（value が必須の規則用）。value: undefined も値なので、キーの有無で決める（decisions.md の 6 番） */
+function requiredValue<Value>(c: IssueCollector): RuleValueOf<Value> {
+  return (entry, path) => {
     if (!("value" in entry)) {
       c.error("invalid-option", path, 'must have "value"');
       return undefined;
     }
-    return entry["value"] as Value;
+    return { value: entry["value"] as Value };
   };
 }
 
@@ -1945,6 +1970,9 @@ export function createHolidayLookup<Kind extends string>(
   function holidaysInYear(year: number): readonly Holiday<Kind>[] {
     if (!Number.isInteger(year))
       throw rangeError("invalid-argument", `Invalid year: ${describeValue(year)}`);
+    // 提供元の有無と outOfRangePolicy によらず、暦日として存在しない年は out-of-range（decisions.md の 1 番）
+    if (year < 1000 || year > 9999)
+      throw rangeError("out-of-range", `Year out of range (1000-9999): ${year}`);
     return Object.freeze(
       [...holidayMap(year).values()].sort((a, b) =>
         a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
@@ -2081,18 +2109,25 @@ export function compileScheduleOptions<Value, Kind extends string>(
     writtenKey(["source", "schedule"], written, "holidayPolicy"),
     o["holidayPolicy"],
   );
+  // sameAs の明示的な undefined は省略と同じ（decisions.md の 6 番）。value は undefined も値なので、キーの有無で見る
+  const hasSameAs = isObject(holidayRaw) && holidayRaw["sameAs"] !== undefined;
+  const hasValue = isObject(holidayRaw) && "value" in holidayRaw;
   if (holidayRaw === undefined || holidayRaw === "ignore") {
     holiday = "ignore";
-  } else if (isObject(holidayRaw) && "sameAs" in holidayRaw) {
-    if (isWeekday(holidayRaw["sameAs"])) holiday = Object.freeze({ sameAs: holidayRaw["sameAs"] });
+  } else if (hasSameAs && hasValue) {
+    // 両方を書いた設定は、どちらを採っても意図を読み違えうるので例外にする（decisions.md の 8 番）
+    c.error("invalid-option", "holidayPolicy", 'cannot have both "sameAs" and "value"');
+  } else if (hasSameAs) {
+    const sameAs = (holidayRaw as Record<string, unknown>)["sameAs"];
+    if (isWeekday(sameAs)) holiday = Object.freeze({ sameAs });
     else
       c.error(
         "invalid-weekday",
         "holidayPolicy.sameAs",
         "must be an integer from 0 (Sunday) to 6 (Saturday)",
       );
-  } else if (isObject(holidayRaw) && "value" in holidayRaw) {
-    holiday = Object.freeze({ value: holidayRaw["value"] as Value });
+  } else if (hasValue) {
+    holiday = Object.freeze({ value: (holidayRaw as Record<string, unknown>)["value"] as Value });
   } else {
     c.error(
       "invalid-option",
@@ -2382,7 +2417,7 @@ export function buildSchedule<Value, Kind extends string>(
     readonly [INTERNAL_VALUES]: readonly Value[];
   } = {
     // 内部の判定（createCalendarFromSchedule が使う）。Symbol の項目なので列挙されず、JSON にも出ない。
-    // オブジェクトリテラルに含めるのは、あとから defineProperty や WeakMap で付けると作成が数 µs 遅くなるため
+    // オブジェクトリテラルに含めるのは、あとから defineProperty や WeakMap で付けると作成が遅くなるため（decisions.md の 4 番）
     [INTERNAL_INFO]: info,
     [INTERNAL_VALUES]: values,
     timeZone: lookup.timeZone,

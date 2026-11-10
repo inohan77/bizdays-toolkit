@@ -158,3 +158,66 @@ test("返す値は変更できない", () => {
   assert.ok(Object.isFrozen(storeHours.dayInfoOn("2026-10-14")));
   assert.ok(Object.isFrozen(storeHours.civilOf("2026-10-14")));
 });
+
+test("value: undefined は値: 曜日・祝日・個別の日付・毎年の月日・繰り返しの規則のどれでも undefined を返し、value のキーがない規則は invalid-option（decisions.md の 6 番）", () => {
+  const schedule = createSchedule({
+    weekdayValues: ["w", "w", "w", "w", "w", "w", undefined],
+    holidayProvider: jp,
+    holidayPolicy: { value: undefined },
+    dates: [{ date: "2026-10-01", value: undefined, name: "D" }],
+    annualDates: [{ date: "10-02", value: undefined, name: "A" }],
+    recurringRules: [{ dayOfMonth: 5, value: undefined, name: "R" }],
+  });
+  const cases: [string, string, string | undefined][] = [
+    ["2026-10-01", "date", "dates[0]"],
+    ["2026-10-02", "annual", "annualDates[0]"],
+    ["2026-10-05", "recurring", "recurringRules[0]"],
+    ["2026-10-12", "holiday", undefined], // スポーツの日（月曜日）
+    ["2026-10-03", "weekday", undefined], // 土曜日
+  ];
+  for (const [date, reason, optionPath] of cases) {
+    const info = schedule.dayInfoOn(date);
+    assert.ok("value" in info, date);
+    assert.equal(info.value, undefined, date);
+    assert.equal(info.reason, reason, date);
+    assert.equal(info.optionPath, optionPath, date);
+  }
+  assert.equal(schedule.valueOn("2026-10-06"), "w");
+  // value のキーがない規則は、今までどおり invalid-option（明示的な undefined と区別する）
+  const without: [string, unknown][] = [
+    ["dates", [{ date: "2026-10-01" }]],
+    ["annualDates", [{ date: "10-02" }]],
+    ["recurringRules", [{ dayOfMonth: 5 }]],
+  ];
+  for (const [key, list] of without) {
+    assert.throws(
+      () => createSchedule({ weekdayValues: [1, 1, 1, 1, 1, 1, 1], [key]: list } as never),
+      (e: unknown) =>
+        e instanceof RangeError &&
+        (e as { code?: unknown }).code === "invalid-option" &&
+        e.message.startsWith(`${key}[0]`),
+      key,
+    );
+  }
+});
+
+test("holidayPolicy の sameAs と value を両方書いた設定は invalid-option（どちらを採っても意図を読み違えうる。decisions.md の 8 番）。明示的な undefined の sameAs は省略と同じで、value は undefined も値", () => {
+  const base = { weekdayValues: [1, 2, 3, 4, 5, 6, 7], holidayProvider: jp };
+  const make = (holidayPolicy: unknown) => createSchedule({ ...base, holidayPolicy } as never);
+  const code = (holidayPolicy: unknown): unknown => {
+    try {
+      make(holidayPolicy);
+      return "ok";
+    } catch (e) {
+      return (e as { code?: unknown }).code;
+    }
+  };
+  // 2026-11-23（勤労感謝の日、月曜日）
+  assert.equal(code({ sameAs: 0, value: 99 }), "invalid-option");
+  assert.equal(code({ sameAs: 0, value: undefined }), "invalid-option");
+  assert.equal(make({ sameAs: undefined, value: 9 }).valueOn("2026-11-23"), 9);
+  assert.equal(make({ value: undefined }).valueOn("2026-11-23"), undefined);
+  assert.equal(make({ sameAs: 0 }).valueOn("2026-11-23"), 1);
+  assert.equal(code({ sameAs: undefined }), "invalid-option"); // {} と同じ
+  assert.equal(code({ sameAs: 7 }), "invalid-weekday");
+});

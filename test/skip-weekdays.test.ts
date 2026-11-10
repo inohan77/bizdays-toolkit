@@ -197,7 +197,6 @@ test("skipWeekdays: 入力の誤り", () => {
     ],
     [{ holiday: true, skipWeekdays: [6] }, /closedRecurringRules\[0\]\.skipWeekdays/],
     [{ businessDayOfMonth: 1, skipWeekdays: [6] }, /closedRecurringRules\[0\]\.skipWeekdays/],
-    [{ dayAfterHoliday: true, skipWeekdays: [7] }, /closedRecurringRules\[0\]\.skipWeekdays/],
     [
       { weekday: 1, holidayOverlapPolicy: "after-holiday", skipWeekdays: [1] },
       /closedRecurringRules\[0\]\.skipWeekdays: cannot include the rule's own weekday 1/,
@@ -209,10 +208,6 @@ test("skipWeekdays: 入力の誤り", () => {
     [
       { weekday: 1, holidayOverlapPolicy: "after-holiday", skipWeekdays: 6 },
       /closedRecurringRules\[0\]\.skipWeekdays: must be a non-empty array/,
-    ],
-    [
-      { weekday: 1, holidayOverlapPolicy: "after-holiday", skipWeekdays: [7] },
-      /closedRecurringRules\[0\]\.skipWeekdays/,
     ],
   ];
   for (const [entry, message] of cases) {

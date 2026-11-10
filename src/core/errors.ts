@@ -33,7 +33,10 @@ export type KnownErrorCode =
   | "invalid-option"
   /** 祝日の提供元どうしのタイムゾーンが異なり、timeZone の指定が必要 */
   | "time-zone-conflict"
-  /** 対応している年の範囲の外（提供元の対応年、または日付の計算が 1000〜9999 年の外に出た）。bizdays-toolkit/provider の関数の年の引数の誤りは invalid-argument */
+  /**
+   * 対応している年の範囲の外（提供元の対応年、日付の計算や瞬間の変換が 1000〜9999 年の外に出た、祝日の一覧に渡した年が
+   * 1000〜9999 の外）。bizdays-toolkit/provider の関数の年の引数の誤りは invalid-argument
+   */
   | "out-of-range"
   /** 判定が未確定の祝日（confirmed: false）に触れた（unconfirmedHolidayPolicy: "throw"） */
   | "unconfirmed-holiday"

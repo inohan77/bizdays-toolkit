@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCalendar, isBizdaysError, toDateString } from "../src/index.ts";
+import { createCalendar, isBizdaysError, toDateString, toInstant } from "../src/index.ts";
 import { isHoliday, jp, toJapanDate } from "../src/jp/index.ts";
 
 test("瞬間は祝日の提供元のタイムゾーン（日本時間）で暦日にする", () => {
@@ -29,9 +29,10 @@ test("Temporal 互換のオブジェクト（依存なしのダックタイピ�
     "2026-11-23",
     "Instant / ZonedDateTime",
   );
+  // 受け付けない種類の入力（ISO 以外の暦）は、ほかの invalid-input と同じ TypeError（decisions.md の 3 番）
   assert.throws(
     () => toJapanDate({ year: 2026, month: 11, day: 23, calendarId: "japanese" }),
-    RangeError,
+    (e: unknown) => e instanceof TypeError && isBizdaysError(e) && e.code === "invalid-input",
   );
 });
 
@@ -114,4 +115,54 @@ test("Temporal の形の年月日の年の誤りは、文字列の暦日と同�
   assert.throws(() => toDateString("0999-01-01", "UTC"), code("invalid-date"));
   assert.throws(() => toDateString({ year: 2026, month: 13, day: 1 }, "UTC"), code("invalid-date"));
   assert.throws(() => toDateString(new Date(Date.UTC(10000, 0, 1)), "UTC"), code("out-of-range"));
+});
+
+test("紀元前の瞬間は、年の数が 1000〜9999 に見えても out-of-range（西暦の日付にしない。decisions.md の 1 番）", () => {
+  const outOfRange = (e: unknown) => isBizdaysError(e) && e.code === "out-of-range";
+  for (const year of [-1500, -999, -8998]) {
+    // 紀元前 1501 年・1000 年・8999 年の 1 月 15 日（Intl は紀元を付けずに 1501・1000・8999 と表す）
+    const d = new Date(0);
+    d.setUTCFullYear(year, 0, 15);
+    const ms = d.getTime();
+    assert.throws(() => toDateString(d, "UTC"), outOfRange, `toDateString ${year}`);
+    assert.throws(
+      () => toDateString({ epochMilliseconds: ms }, "Asia/Tokyo"),
+      outOfRange,
+      `Instant ${year}`,
+    );
+    assert.throws(() => createCalendar().today(d), outOfRange, `today ${year}`);
+    assert.throws(
+      () => createCalendar({ holidayProvider: jp, outOfRangePolicy: "ignore" }).dateOf(d),
+      outOfRange,
+      `dateOf ${year}`,
+    );
+  }
+  // 境界: UTC の 999 年の末は、東のゾーンで 1000 年 1 月 1 日になる（通す）。9999 年の末の瞬間も変換できる
+  const lastOf999 = new Date(Date.UTC(2000, 11, 31, 15));
+  lastOf999.setUTCFullYear(999);
+  assert.equal(toDateString(lastOf999, "Asia/Tokyo"), "1000-01-01");
+  assert.throws(() => toDateString(lastOf999, "UTC"), outOfRange);
+  const lastOf9999 = new Date(Date.UTC(9999, 11, 31, 23, 59));
+  assert.equal(toDateString(lastOf9999, "UTC"), "9999-12-31");
+  assert.throws(() => toDateString(lastOf9999, "Asia/Tokyo"), outOfRange); // 東のゾーンでは 10000 年
+});
+
+test("toInstant・instantOf は 1000-01-01 と 9999-12-31 も瞬間にする（時差を求める前後 1 日が範囲の外に出ても投げない。decisions.md の 1 番）", () => {
+  const iso = (date: string, time: string, zone: string) =>
+    toInstant(date, time, zone).toISOString();
+  assert.equal(iso("1000-01-01", "10:00", "UTC"), "1000-01-01T10:00:00.000Z");
+  assert.equal(iso("9999-12-31", "10:00", "Asia/Tokyo"), "9999-12-31T01:00:00.000Z");
+  assert.equal(iso("9999-12-31", "23:59", "UTC"), "9999-12-31T23:59:00.000Z");
+  // 1 日後が 10000 年に入るゾーンでは、9999-12-30 も前後 1 日の時差を求める
+  assert.equal(iso("9999-12-30", "23:00", "Pacific/Kiritimati"), "9999-12-30T09:00:00.000Z");
+  // 1000-01-01 と 1000-01-02 の同じ時刻は、ちょうど 1 日違う（東京の 1888 年より前は地方平均時。分の精度で 00:42）
+  for (const zone of ["UTC", "Asia/Tokyo", "America/Los_Angeles"]) {
+    const a = toInstant("1000-01-01", "00:00", zone).getTime();
+    const b = toInstant("1000-01-02", "00:00", zone).getTime();
+    assert.equal(b - a, 86_400_000, zone);
+  }
+  assert.equal(iso("1000-01-01", "00:00", "Asia/Tokyo"), "0999-12-31T14:42:00.000Z");
+  const tokyo = createCalendar({ holidayProvider: jp, outOfRangePolicy: "ignore" });
+  assert.equal(tokyo.instantOf("9999-12-31", "08:59").toISOString(), "9999-12-30T23:59:00.000Z");
+  assert.equal(tokyo.instantOf("1000-01-01", "10:00").toISOString(), "1000-01-01T00:42:00.000Z");
 });

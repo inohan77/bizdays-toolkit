@@ -1279,7 +1279,6 @@ function analyzeRules<Value, Kind extends string>(
   }
 }
 
-/** 診断を実行する。祝日の提供元の誤り（年ごとに初めて使うときに分かる）も error として返す */
 /**
  * 診断のオプション（第 2 引数）。
  * @public
@@ -1389,6 +1388,7 @@ function checkUnconfirmedOption<Value, Kind extends string>(
   );
 }
 
+/** 診断を実行する。祝日の提供元の誤り（年ごとに初めて使うときに分かる）も error として返す */
 function run<Value, Kind extends string>(
   c: IssueCollector,
   compiled: CompiledSchedule<Value, Kind> | undefined,

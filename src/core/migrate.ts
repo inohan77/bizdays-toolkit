@@ -72,20 +72,30 @@ function renameObject(
   path: string,
   changes: OptionChange[],
 ): Record<string, unknown> {
+  // 明示的な undefined は省略と同じ（decisions.md の 6 番）。作成時の読み替え（renameKeys）と同じく、
+  // 旧名と新しい名前のどちらかが undefined なら衝突にせず、値のあるほうを新しい名前で残す
   const out: Record<string, unknown> = {};
   for (const [key, v] of Object.entries(value)) {
     const r = RENAMED_KEYS.find((x) => places.includes(x.place) && x.from === key);
     if (r === undefined) {
+      // 旧名もある新しい名前の undefined は書かない（キーの順番によらず、旧名の値を上書きしない）
+      const renamedFrom = RENAMED_KEYS.some(
+        (x) => places.includes(x.place) && x.to === key && Object.hasOwn(value, x.from),
+      );
+      if (!(renamedFrom && v === undefined)) out[key] = v;
+      continue;
+    }
+    const hasTo = Object.hasOwn(value, r.to);
+    if (v !== undefined && hasTo && value[r.to] !== undefined) {
+      changes.push(
+        Object.freeze({ path: join(path, key), from: r.from, to: r.to, conflicting: true }),
+      );
       out[key] = v;
       continue;
     }
-    if (Object.hasOwn(value, r.to)) {
-      changes.push({ path: join(path, key), from: r.from, to: r.to, conflicting: true });
-      out[key] = v;
-      continue;
-    }
-    changes.push({ path: join(path, key), from: r.from, to: r.to });
-    out[r.to] = v;
+    changes.push(Object.freeze({ path: join(path, key), from: r.from, to: r.to }));
+    // 旧名が undefined で新しい名前に値があれば、旧名を消すだけ
+    if (v !== undefined || !hasTo) out[r.to] = v;
   }
   return out;
 }
@@ -101,7 +111,7 @@ function renameValues(
   const one = (v: unknown, at: string): unknown => {
     const r = rules.find((x) => x.from === v);
     if (!r) return v;
-    changes.push({ path: at, from: r.from, to: r.to });
+    changes.push(Object.freeze({ path: at, from: r.from, to: r.to }));
     return r.to;
   };
   return Array.isArray(value) ? value.map((v, i) => one(v, `${path}[${i}]`)) : one(value, path);

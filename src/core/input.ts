@@ -80,7 +80,8 @@ export interface CivilDateTime {
   readonly minutes: number | null;
 }
 
-// 日付と時刻の区切りは "T" だけ（型 DateTimeInput と同じ）。空白で区切った文字列は invalid-time
+// 日付と時刻の区切りは "T"（型 DateTimeInput は大文字だけ。実行時は小文字の t・z も受ける。decisions.md の 6 番）。
+// 空白で区切った文字列は invalid-time
 const DATETIME_RE =
   /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?$/i;
 
@@ -115,9 +116,14 @@ export function validateTimeZone(timeZone: string): string {
   }
 }
 
-/** @internal 瞬間（エポックミリ秒）を、タイムゾーンでの暦日と時刻に変換する */
-export function instantToCivil(epochMilliseconds: number, timeZone: string): CivilDateTime {
-  if (!Number.isFinite(epochMilliseconds)) throw rangeError("invalid-time", "Invalid instant");
+/**
+ * 瞬間（エポックミリ秒）の、タイムゾーンでの年・月・日・時・分。年は紀元を付けずに読む（Intl は紀元前の年を紀元なしの
+ * 正の数で返す）ので、紀元前に当たらない瞬間だけに使う
+ */
+function wallParts(
+  epochMilliseconds: number,
+  timeZone: string,
+): { year: number; month: number; day: number; hour: number; minute: number } {
   const parts = formatterFor(timeZone).formatToParts(new Date(epochMilliseconds));
   const get = (type: Intl.DateTimeFormatPartTypes): number => {
     const p = parts.find((x) => x.type === type);
@@ -125,9 +131,24 @@ export function instantToCivil(epochMilliseconds: number, timeZone: string): Civ
     return Number(p.value);
   };
   return {
-    date: formatDate(get("year"), get("month"), get("day")),
-    minutes: get("hour") * 60 + get("minute"),
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
   };
+}
+
+/** @internal 瞬間（エポックミリ秒）を、タイムゾーンでの暦日と時刻に変換する（1000〜9999 年の外は out-of-range） */
+export function instantToCivil(epochMilliseconds: number, timeZone: string): CivilDateTime {
+  if (!Number.isFinite(epochMilliseconds)) throw rangeError("invalid-time", "Invalid instant");
+  // Intl は紀元前の年を紀元なしの正の数で返すので、整形の前に UTC の年で範囲を確かめる（decisions.md の 1 番）。時差は
+  // 1 日を超えないので、UTC の年が 999 より前ならタイムゾーンでも 1000 年より前。999 年は東のゾーンで 1000 年になりうるので通す
+  if (new Date(epochMilliseconds).getUTCFullYear() < 999) {
+    throw rangeError("out-of-range", "Instant out of range (1000-9999)");
+  }
+  const { year, month, day, hour, minute } = wallParts(epochMilliseconds, timeZone);
+  return { date: formatDate(year, month, day), minutes: hour * 60 + minute };
 }
 
 function wallTime(hour: number, minute: number): number {
@@ -211,7 +232,8 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
     if (isInstantLike(input)) return instantToCivil(input.epochMilliseconds, timeZone);
     if (isDateLike(input)) {
       if (input.calendarId !== undefined && input.calendarId !== "iso8601") {
-        throw rangeError(
+        // invalid-input はほかの経路と同じ TypeError（decisions.md の 3 番）
+        throw typeError(
           "invalid-input",
           `Unsupported calendar: ${input.calendarId} (only iso8601)`,
         );
@@ -265,16 +287,16 @@ export function toDateTimeParts(input: DateInput, timeZone: string): CivilDateTi
  * @internal 暦日と時刻（0 時からの経過分）から、タイムゾーンでの瞬間（エポックミリ秒）を求める。
  * 夏時間の扱いは Temporal の disambiguation: "compatible" と同じ。存在しない時刻（飛び）は切り替え前のオフセットで解釈して
  * 飛んだ分だけ後ろの瞬間に、2 回ある時刻（重複）は先のほう（切り替え前のオフセット）にする。
- * Intl 以外に依存しないよう、前後 1 日のオフセットを候補にして、暦日に戻して一致するものを選ぶ
+ * Intl 以外に依存しないよう、前後 1 日のオフセットを候補にして、暦日に戻して一致するものを選ぶ。
+ * 前後 1 日の時差は暦日の文字列にせずに求める（1000-01-01 の前日・9999-12-31 の翌日は 1000〜9999 年の外だが、時差は求まる）
  */
 export function civilToInstant(date: DateString, minutes: number, timeZone: string): number {
   const { year, month, day } = parseDate(date);
   const wall = Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
+  // 前後 1 日は紀元前に戻らない（999 年の末より前にならない）ので、wallParts の年をそのまま使える
   const offsetAt = (ms: number): number => {
-    const civil = instantToCivil(ms, timeZone);
-    const c = parseDate(civil.date);
-    const m = civil.minutes ?? 0; // 瞬間からの変換では時刻が必ずある
-    return Date.UTC(c.year, c.month - 1, c.day, Math.floor(m / 60), m % 60) - ms;
+    const w = wallParts(ms, timeZone);
+    return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute) - ms;
   };
   const before = offsetAt(wall - 86_400_000);
   const after = offsetAt(wall + 86_400_000);

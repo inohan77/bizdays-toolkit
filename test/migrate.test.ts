@@ -68,6 +68,72 @@ test("migrateCalendarOptions: 旧名と新しい名前の両方があるキー�
   assert.throws(() => migrateCalendarOptions(null as never), /options must be a plain object/);
 });
 
+test("移行: 旧名と新しい名前のどちらかが明示的な undefined なら衝突にせず、値のあるほうを新しい名前で残す（キーの順番によらない）。changes の要素も凍結する（decisions.md の 4 番・6 番）", () => {
+  const show = (v: unknown): string =>
+    JSON.stringify(v, (_k, x: unknown) => (x === undefined ? "<undefined>" : x));
+  const cases: [string, Record<string, unknown>, Record<string, unknown>][] = [
+    [
+      "旧名に値・後ろに新しい名前の undefined",
+      { closedAnnual: ["12-31"], closedAnnualDates: undefined },
+      { closedAnnualDates: ["12-31"] },
+    ],
+    [
+      "新しい名前の undefined・後ろに旧名に値",
+      { closedAnnualDates: undefined, closedAnnual: ["12-31"] },
+      { closedAnnualDates: ["12-31"] },
+    ],
+    [
+      "旧名の undefined・後ろに新しい名前に値",
+      { closedAnnual: undefined, closedAnnualDates: ["12-31"] },
+      { closedAnnualDates: ["12-31"] },
+    ],
+    [
+      "新しい名前に値・後ろに旧名の undefined",
+      { closedAnnualDates: ["12-31"], closedAnnual: undefined },
+      { closedAnnualDates: ["12-31"] },
+    ],
+  ];
+  for (const [label, options, expected] of cases) {
+    const { options: out, changes } = migrateCalendarOptions(options as never);
+    assert.equal(show(out), show(expected), label);
+    assert.deepEqual(
+      changes.map((c) => ({ ...c })),
+      [{ path: "closedAnnual", from: "closedAnnual", to: "closedAnnualDates" }],
+      label,
+    );
+    // 作成と同じ読み方: 書き換えた設定の結果は元の設定と同じで、旧名の診断も残らない
+    assert.equal(
+      createCalendar(out).isBusinessDay("2026-12-31"),
+      createCalendar(options as never).isBusinessDay("2026-12-31"),
+      label,
+    );
+    assert.deepEqual(
+      diagnoseCalendar(out).map((d) => d.code),
+      [],
+      label,
+    );
+  }
+  // 両方に値があれば、今までどおり衝突（書き換えない）
+  const conflict = migrateCalendarOptions({
+    closedAnnual: ["12-31"],
+    closedAnnualDates: ["12-30"],
+  } as never);
+  assert.deepEqual(
+    conflict.changes.map((c) => ({ ...c })),
+    [{ path: "closedAnnual", from: "closedAnnual", to: "closedAnnualDates", conflicting: true }],
+  );
+  assert.deepEqual(Object.keys(conflict.options), ["closedAnnual", "closedAnnualDates"]);
+  // changes の配列と要素は凍結する（options は保存し直すためのもので凍結しない）
+  for (const result of [
+    migrateCalendarOptions({ closedAnnual: [], maxSearchDays: 10 } as never),
+    migrateScheduleOptions({ weekdayValues: [1, 1, 1, 1, 1, 1, 1], holiday: "weekday" } as never),
+  ]) {
+    assert.ok(result.changes.length > 0);
+    assert.ok(Object.isFrozen(result.changes));
+    for (const change of result.changes) assert.ok(Object.isFrozen(change), change.path);
+  }
+});
+
 test('migrateScheduleOptions: holiday の "weekday" は holidayPolicy の "ignore"、値は同じ参照', () => {
   const value = { open: "10:00" };
   const { options, changes } = migrateScheduleOptions<unknown>({

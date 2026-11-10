@@ -844,6 +844,69 @@ test("変形 7: 書いていない項目を明示的な undefined で書いて�
   report("変形 7（明示的な undefined）");
 });
 
+/** スケジュールの値の位置（曜日・祝日・個別の日付・毎年の月日・繰り返しの規則）で、値 target を undefined にした設定 */
+function withUndefinedValue(options: Obj, target: string): Obj {
+  const swap = (v: unknown): unknown => (v === target ? undefined : v);
+  const o: Obj = { ...options };
+  o["weekdayValues"] = (options["weekdayValues"] as unknown[]).map(swap);
+  const policy = options["holidayPolicy"];
+  if (typeof policy === "object" && policy !== null && "value" in policy)
+    o["holidayPolicy"] = { value: swap((policy as Obj)["value"]) };
+  for (const list of ["dates", "annualDates", "recurringRules"])
+    if (Array.isArray(options[list]))
+      o[list] = (options[list] as Obj[]).map((e) => ({ ...e, value: swap(e["value"]) }));
+  return o;
+}
+
+/** スケジュールに現れる文字列の値（曜日・祝日・規則の value） */
+function valuesIn(options: Obj): Set<string> {
+  const out = new Set<string>();
+  const add = (v: unknown): void => void (typeof v === "string" && out.add(v));
+  for (const v of options["weekdayValues"] as unknown[]) add(v);
+  const policy = options["holidayPolicy"];
+  if (typeof policy === "object" && policy !== null) add((policy as Obj)["value"]);
+  for (const list of ["dates", "annualDates", "recurringRules"])
+    if (Array.isArray(options[list])) for (const e of options[list] as Obj[]) add(e["value"]);
+  return out;
+}
+
+test("変形 8: スケジュールの値の 1 つを、書いたすべての位置で undefined にしても、その値が undefined になるだけで、理由・位置・診断は同じ（value: undefined も値。decisions.md の 6 番）", () => {
+  eachOptions(20261111, ["schedule"], (kind, o, context) => {
+    const original = make(kind, o);
+    if (typeof original === "string") return;
+    for (const target of valuesIn(o)) {
+      const changed = make(kind, withUndefinedValue(o, target));
+      assert.ok(
+        typeof changed !== "string",
+        `${context} ${target}: 作成できなかった（${changed}）`,
+      );
+      for (const day of SHORT_DAYS) {
+        const info = (made: Made): unknown => {
+          try {
+            return made.dayInfoOn(day);
+          } catch (e) {
+            if (!isBizdaysError(e)) throw e;
+            return `error ${e.code}`;
+          }
+        };
+        const before = info(original);
+        const expected =
+          typeof before === "object" && before !== null && (before as Obj)["value"] === target
+            ? { ...(before as Obj), value: undefined }
+            : before;
+        assert.deepStrictEqual(info(changed as Made), expected, `${context} ${target} ${day}`);
+      }
+      assert.deepEqual(
+        diagnosticsOf(kind, withUndefinedValue(o, target)),
+        baselineOf(kind, o).diagnostics,
+        `${context} ${target}: 診断が変わった`,
+      );
+      count("変形 8（値を undefined に）");
+    }
+  });
+  report("変形 8（値を undefined に）", "設定と値の組");
+});
+
 // ------------------------------------------------------------
 // 6. 同じ設定から作ったカレンダーの合成と元のカレンダー
 // ------------------------------------------------------------

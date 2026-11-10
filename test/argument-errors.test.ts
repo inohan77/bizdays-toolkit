@@ -329,6 +329,40 @@ test("誤った引数: holidaysInYear の整数でない年は、どの経路で
   }
 });
 
+test('holidaysInYear の 1000〜9999 の外の整数の年は、提供元のないカレンダー・スケジュール、"ignore" のカレンダー、それらの合成でも out-of-range（空の一覧にしない。decisions.md の 1 番）', () => {
+  const none = root.createCalendar({ closedWeekdays: [0, 6], timeZone: "Asia/Tokyo" });
+  const ignore = root.createCalendar({ holidayProvider: jp, outOfRangePolicy: "ignore" });
+  const schedule = root.createSchedule({ weekdayValues: [1, 1, 1, 1, 1, 1, 1] });
+  const ignoreSchedule = root.createSchedule({
+    weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+    holidayProvider: jp,
+    outOfRangePolicy: "ignore",
+  });
+  const fromSchedule = root.createCalendarFromSchedule(schedule, (v) => v === 1);
+  const combined = root.combineCalendars([none, ignore], { open: "all" });
+  const paths: [string, (year: number) => unknown][] = [
+    ["提供元のないカレンダー", (y) => none.holidaysInYear(y)],
+    ['"ignore" のカレンダー', (y) => ignore.holidaysInYear(y)],
+    ["提供元のないスケジュール", (y) => schedule.holidaysInYear(y)],
+    ['"ignore" のスケジュール', (y) => ignoreSchedule.holidaysInYear(y)],
+    ["スケジュールから作ったカレンダー", (y) => fromSchedule.holidaysInYear(y)],
+    ["合成したカレンダー", (y) => combined.holidaysInYear(y)],
+  ];
+  for (const [label, f] of paths) {
+    for (const year of [-1, 0, 999, 10000, 20026, 99999]) {
+      assert.throws(
+        () => f(year),
+        (e: unknown) => root.isBizdaysError(e) && e.code === "out-of-range",
+        `${label}(${year})`,
+      );
+    }
+    // 範囲の中の年は今までどおり（提供元のない経路は空、"ignore" は対応年の外を祝日なし）
+    assert.deepEqual(f(1000), [], `${label}(1000)`);
+    assert.deepEqual(f(9999), [], `${label}(9999)`);
+  }
+  assert.equal(ignore.holidaysInYear(2026).length, jp.holidaysInYear(2026).length);
+});
+
 test("誤った引数: today は Date だけを受ける（Date.now() の数を渡す誤りを黙って通さない）", () => {
   const all = targets().filter(([, n]) => n === "today");
   assert.deepEqual(

@@ -67,12 +67,12 @@ wales.holidaysInYear(2026)[0]?.names; // { cy: "Dydd Calan" }
 const ukWide = createCalendar({ holidayProvider: [england, scotland, northernIreland] });
 ```
 
-| 提供元            | ID       | GOV.UK の区分     | 備考                                       |
-| ----------------- | -------- | ----------------- | ------------------------------------------ |
-| `england`         | `GB-ENG` | England and Wales |                                            |
-| `wales`           | `GB-WLS` | England and Wales | ウェールズ語の名称（`names.cy`）が付く     |
-| `scotland`        | `GB-SCT` | Scotland          | 2nd January・St Andrew’s Day など          |
-| `northernIreland` | `GB-NIR` | Northern Ireland  | St Patrick’s Day・Battle of the Boyne など |
+| 提供元            | ID       | GOV.UK の区分     | 備考                                          |
+| ----------------- | -------- | ----------------- | --------------------------------------------- |
+| `england`         | `GB-ENG` | England and Wales |                                               |
+| `wales`           | `GB-WLS` | England and Wales | GOV.UK にあるウェールズ語の名称（`names.cy`） |
+| `scotland`        | `GB-SCT` | Scotland          | 2nd January・St Andrew’s Day など             |
+| `northernIreland` | `GB-NIR` | Northern Ireland  | St Patrick’s Day・Battle of the Boyne など    |
 
 - `kind` は `regular`（毎年の祝日。布告で日付が移動した年を含む）・`substitute`（土曜日・日曜日に当たった祝日の振替）・`special`（記念式典・国葬などの布告による臨時の祝日）のいずれかです。振替の `name` は元の祝日の名称です（GOV.UK と同じ）
 - England と Wales は GOV.UK では 1 つの区分で、日付は現在同じですが、別の提供元にしています。将来分かれても、コードを変えずに済みます
@@ -582,7 +582,7 @@ office.closingPeriod("2026-10", 20, { convention: "preceding" }); // { from: "20
 
 前月の締め日から当月の締め日までに営業日が 1 日もない月（改装などの長期休業）は、固有の期間を持ちません。その日は次の月に属し、`closingMonth` はその月を返さず、その月の `closingPeriod` は `no-business-day` を投げます。`"following"` では締め日が長期休業を越えて後の月に動くことがあり、そのときは期間が空になるのではなく長くなります。
 
-`dueDate` の `dayOfMonth` も、その月にない日（2 月 30 日など）は末日に読み替えます。繰り返しの規則（`{ dayOfMonth: 31 }`）はその月にない日に当てはまらないので、扱いが異なります。期日は「その月のどこか」に必ず決まる必要があるためです。
+`dueDate` の `dayOfMonth` も、その月にない日（2 月 30 日など）は末日に読み替えます。繰り返しの規則（`{ dayOfMonth: 31 }`）と毎年の月日はその月にない日に当てはまらないので、扱いが異なります。期日は「その月のどこか」に必ず決まる必要があるためです。どの年にもない毎年の月日（`"11-31"` など）は、カレンダー・スケジュールを作る時点で `invalid-annual-date` になります。`"02-29"` はうるう年だけに当たり、ほかの年の 2 月 28 日・3 月 1 日には読み替えません。その年には、端が `"02-29"` の期間は間の日だけを含みます（`{ from: "02-20", to: "02-29" }` は 2 月 28 日まで）。
 
 ## 日ごとの値（営業時間など）
 
@@ -710,11 +710,11 @@ uk.instantOf("2026-10-25", "01:30").toISOString(); // "2026-10-25T00:30:00.000Z"
 
 ## 対応年の外
 
-祝日の提供元の対応年（日本は 1955〜2099 年、英国は 1974〜2099 年、フランスは 2000〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。日付そのものは 1000〜9999 年に限られ、その外に出る計算（`addDays("9999-12-31", 1)` や、その年を越える探索）は、`outOfRangePolicy: "ignore"` でも `out-of-range` になります。祝日がない日として扱いたい場合は `outOfRangePolicy: "ignore"` を指定してください。隣の日を見る規則（`dayAfterHoliday`・`dayBeforeHoliday`・`skipWeekdays`、`"after-holiday"` の規則がさかのぼる日）も、その日が対応年の外なら投げます。週の第 n 営業日の規則（`businessDayOfWeek`）も、その週が対応年の外にかかれば投げます。結果が分からない年の祝日に依存するためです（シンガポールでは、対応年の最後の 12 月 31 日に元日の前日の規則を当てた場合や、対応年の最後の年の 12 月の最後の週と 2020 年の最初の週に `businessDayOfWeek` の規則を当てた場合など）。スケジュールの第 n 営業日の規則は、数える基準のカレンダー（`calendar`）の対応年の外の月では、基準のカレンダーが投げるので投げます（基準のカレンダーの `outOfRangePolicy` に従います）。`"ignore"` では外は祝日なしです。設定の診断は、走査の端で例外にならないよう、外を祝日なしとして扱います。ただし、スケジュールの第 n 営業日の規則の基準のカレンダーが投げる日（月の規則はその月の日、週の第 n 営業日の規則は、投げる月にかかる週の 7 日）は、判定できない日として、その日を有効期間に含む規則どうしの診断（`redundant` など）を出しません。安全側の扱いで、確かな診断も出さないことがあります（たとえば、窓の両端の週が対応年の外の月にまたぐ週の第 n 営業日の規則は、有効期間を窓の端の週の手前までにしないと、診断を出しません）
+祝日の提供元の対応年（日本は 1955〜2099 年、英国は 1974〜2099 年、フランスは 2000〜2099 年、シンガポールは 2020〜2027 年）を外れた日付を判定すると `RangeError` になります。日付そのものは 1000〜9999 年に限られ、その外に出る計算（`addDays("9999-12-31", 1)` や、その年を越える探索）は、`outOfRangePolicy: "ignore"` でも `out-of-range` になります。その外の瞬間（`Date`・Temporal の `Instant`）と、`holidaysInYear` に渡したその外の年も、提供元の有無によらず `out-of-range` です。祝日がない日として扱いたい場合は `outOfRangePolicy: "ignore"` を指定してください。隣の日を見る規則（`dayAfterHoliday`・`dayBeforeHoliday`・`skipWeekdays`、`"after-holiday"` の規則がさかのぼる日）も、その日が対応年の外なら投げます。週の第 n 営業日の規則（`businessDayOfWeek`）も、その週が対応年の外にかかれば投げます。結果が分からない年の祝日に依存するためです（シンガポールでは、対応年の最後の 12 月 31 日に元日の前日の規則を当てた場合や、対応年の最後の年の 12 月の最後の週と 2020 年の最初の週に `businessDayOfWeek` の規則を当てた場合など）。スケジュールの第 n 営業日の規則は、数える基準のカレンダー（`calendar`）の対応年の外の月では、基準のカレンダーが投げるので投げます（基準のカレンダーの `outOfRangePolicy` に従います）。`"ignore"` では外は祝日なしです。設定の診断は、走査の端で例外にならないよう、外を祝日なしとして扱います。ただし、スケジュールの第 n 営業日の規則の基準のカレンダーが投げる日（月の規則はその月の日、週の第 n 営業日の規則は、投げる月にかかる週の 7 日）は、判定できない日として、その日を有効期間に含む規則どうしの診断（`redundant` など）を出しません。安全側の扱いで、確かな診断も出さないことがあります（たとえば、窓の両端の週が対応年の外の月にまたぐ週の第 n 営業日の規則は、有効期間を窓の端の週の手前までにしないと、診断を出しません）
 
 ## 未確定の祝日
 
-提供元の `confirmedThrough` より後の年には、予測の祝日（`confirmed: false`）が含まれることがあります。日本の春分の日・秋分の日（翌年分が毎年 2 月の官報で公表される）と、GOV.UK が公表している最後の年より後の英国の bank holidays です。既定では予測をそのまま使います。`unconfirmedHolidayPolicy: "throw"`（`outOfRangePolicy` と同じ場所。カレンダー・スケジュール共通）にすると、未確定の祝日を引いた判定は `code: "unconfirmed-holiday"` の `RangeError` になり、5 年の返済予定の期日や契約書に書く日付のように、予測に依存した結果が黙って出ることがなくなります。「引いた判定」には、求めた日だけでなく、探索が途中で通る日（`addBusinessDays`・`adjust`・`dueDate`・`closingMonth` など）や、`dayAfterHoliday`・`dayBeforeHoliday` の規則が見る日（隣の日。`skipWeekdays` があれば、そこから飛ばす曜日を越えて最も近い祝日まで）、第 n 営業日の規則がある設定ではその月のすべての日（`businessDayOfWeek` では、週の日が属する月）も含みます。そのため例外は「評価の途中で予測の祝日を引いた」ことだけを表し、結果そのものが予測に依存するとは限りません。`holidaysInYear`・`holidaysBetween` は未確定の祝日では投げない（対応年の外の `out-of-range` と提供元のデータの誤りの `invalid-provider-data` は投げる）ので、例外を受けたあとに影響する日を列挙する逃げ道になります。
+提供元の `confirmedThrough` より後の年には、予測の祝日（`confirmed: false`）が含まれることがあります。日本の春分の日・秋分の日（翌年分が毎年 2 月の官報で公表される）と、GOV.UK が公表している最後の年より後の英国の bank holidays です。既定では予測をそのまま使います。`unconfirmedHolidayPolicy: "throw"`（`outOfRangePolicy` と同じ場所。カレンダー・スケジュール共通）にすると、未確定の祝日を引いた判定は `code: "unconfirmed-holiday"` の `RangeError` になり、5 年の返済予定の期日や契約書に書く日付のように、予測に依存した結果が黙って出ることがなくなります。「引いた判定」には、求めた日だけでなく、探索が途中で通る日（`addBusinessDays`・`adjust`・`dueDate`・`closingMonth` など）や、`dayAfterHoliday`・`dayBeforeHoliday` の規則が見る日（隣の日。`skipWeekdays` があれば、そこから飛ばす曜日を越えて最も近い祝日まで）、第 n 営業日の規則がある設定では、数え方が祝日に依存するときにその月のすべての日（`businessDayOfWeek` では、週の日が属する月）も含みます。数え方は、数える基準のカレンダーに従います。カレンダーは繰り返しの規則を除いた自分の設定で数えるので、`holidayPolicy` が `"ignore"` でないときだけ数えるために祝日を引きます（祝日に従属する規則があっても、数え方は祝日を引きません）。スケジュールの第 n 営業日の規則は `calendar` に渡したカレンダーで数えるので、スケジュールではなくそのカレンダー自身の `holidayPolicy`・`unconfirmedHolidayPolicy` に従って投げます。そのため例外は「評価の途中で予測の祝日を引いた」ことだけを表し、結果そのものが予測に依存するとは限りません。`holidaysInYear`・`holidaysBetween` は未確定の祝日では投げない（対応年の外の `out-of-range` と提供元のデータの誤りの `invalid-provider-data` は投げる）ので、例外を受けたあとに影響する日を列挙する逃げ道になります。
 
 ```ts
 import { createCalendar, isBizdaysError } from "bizdays-toolkit";

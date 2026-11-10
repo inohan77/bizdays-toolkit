@@ -116,7 +116,7 @@ diagnoseCalendar({
 
 ### Other countries and regions
 
-A holiday provider is an object with `id`, `timeZone`, `supportedYears` and `holidaysInYear(year)`. `bizdays-toolkit/provider` exposes `nthWeekdayOfMonth` and `easterSunday`, which most countries' holidays are built from. See [providers.md](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/providers.md).
+A holiday provider is an object with `id`, `timeZone`, `supportedYears`, `dataVersion` (a string) and `holidaysInYear(year)`. `bizdays-toolkit/provider` exposes `nthWeekdayOfMonth` and `easterSunday`, which most countries' holidays are built from. See [providers.md](https://github.com/inohan77/bizdays-toolkit/blob/main/docs/providers.md).
 
 ## Documentation
 
