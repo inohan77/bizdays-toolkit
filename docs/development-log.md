@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- `docs/decisions.md` の 6 番に、明示的な `undefined` を省略と同じに扱う規則の例外（スケジュールの `value: undefined` は値 `undefined`、値の有無はキーで判定する）を書いた。`src/core/schedule.ts` の 2 か所のコメントがこの例外の根拠として 6 番を指していたが、6 番に書いてなかった（0.31.5 の取り込みの、決定の参照の確かめで見つけた。例外はガイドにだけ書いてあった）
+
 ## [0.31.5]
 
 - `test/metamorphic.test.ts` に変形 8（スケジュールの値の 1 つを、書いたすべての位置で `undefined` にしても、その値が `undefined` になるだけで理由・位置・診断が同じ）を足した。`test/schedule.test.ts` に、5 つの値の位置の `value: undefined` と、`holidayPolicy` の `sameAs` と `value` の両方指定のテストを足した（提案書 bizdays-toolkit-0.31.5-proposalv2 の A1・A5。変形 7 は「書いていない項目を undefined で書く」関係だけを見て、値の `undefined` を対象から外していた。目録の値の候補に `undefined` を足すと乱数の流れが変わってほかのテストと result-compare の設定がすべて変わるので、目録は変えずに関係のテストにした）
