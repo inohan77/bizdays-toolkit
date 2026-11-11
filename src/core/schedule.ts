@@ -1847,7 +1847,8 @@ function loadProviderYear<Kind extends string>(
   if (!Array.isArray(list))
     throw providerDataError(provider, year, "holidaysInYear must return an array");
   const seen = new Set<string>();
-  return list.map((h: unknown, i) => {
+  // 穴のある配列の穴も 1 件として確かめる（map は穴を飛ばす）
+  return Array.from(list as unknown[], (h: unknown, i) => {
     if (!isObject(h)) throw providerDataError(provider, year, `item ${i} is not an object`);
     const { date, name, nameEn, kind, confirmed } = h;
     if (!isValidDate(date) || parseDate(date).year !== year) {

@@ -38,7 +38,7 @@ const throwsCode = (f: () => unknown, code: string, context: string): void => {
   );
 };
 
-const KINDS: readonly InvalidData[] = ["format", "duplicate", "type"];
+const KINDS: readonly InvalidData[] = ["format", "duplicate", "type", "hole"];
 
 const strictCalendar = () =>
   createCalendar({

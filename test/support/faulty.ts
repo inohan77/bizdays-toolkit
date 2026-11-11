@@ -24,8 +24,8 @@ export function throwingInYear(year: number): Provider {
   });
 }
 
-/** 不正なデータの種類: 日付の書式の誤り・同じ日の重複・オブジェクトでない項目 */
-export type InvalidData = "format" | "duplicate" | "type";
+/** 不正なデータの種類: 日付の書式の誤り・同じ日の重複・オブジェクトでない項目・穴のある配列（穴は undefined の項目と同じ） */
+export type InvalidData = "format" | "duplicate" | "type" | "hole";
 
 /** year の年だけ、不正なデータ（種類は kind）を返す */
 export function invalidDataInYear(year: number, kind: InvalidData): Provider {
@@ -38,6 +38,20 @@ export function invalidDataInYear(year: number, kind: InvalidData): Provider {
         { date: `${y}/07/01`, name: "x", nameEn: "x", kind: "regular", key: "x", confirmed: true },
       ];
     if (kind === "duplicate") return [...list, list[0]!];
+    if (kind === "hole") {
+      // 正しい項目の手前に穴を 1 つ空ける（map・forEach は穴を飛ばすので、検証が穴を見落とさないか。穴の後ろの項目は
+      // 正しいので、穴を飛ばすと誤りに気付かない）
+      const holed: Holiday<string>[] = [...list];
+      holed[holed.length + 1] = {
+        date: `${y}-12-30`,
+        name: "x",
+        nameEn: "x",
+        kind: "regular",
+        key: "x",
+        confirmed: true,
+      };
+      return holed;
+    }
     return [...list, 42 as unknown as Holiday<string>];
   });
 }

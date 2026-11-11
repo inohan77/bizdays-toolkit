@@ -114,6 +114,12 @@ export function closingDayIn({ year, month }: YearMonth, closingDayOfMonth: numb
 }
 
 /**
+ * @internal 月と暦日の両方を受ける引数で、文字列を暦日（日時）として読むか。ハイフンで区切った部分が 3 つ以上なら暦日、
+ * それ以外は月として読む（形の崩れた文字列の code を、関数とメソッドでそろえる。decisions.md の 8 番）
+ */
+export const readsAsDate = (input: string): boolean => input.split("-").length >= 3;
+
+/**
  * 締め日で区切ったときの、その月分の期間（両端を含む暦日）。closingMonth の逆算。
  *
  * 前月の締め日の翌日から、その月の締め日まで。月の代わりに暦日を渡すと、その日が属する期間（closingMonth で求めた月の期間）。
@@ -131,9 +137,10 @@ export function closingPeriod(
   closingDayOfMonth: number,
 ): { readonly from: DateString; readonly to: DateString } {
   checkClosingDay(closingDayOfMonth);
+  // 文字列でない値は月の誤り（invalid-month）として読む（引数の型は文字列だけ）
   const month =
-    typeof input === "string" && input.split("-").length === 3
-      ? parseMonth(closingMonth(input, closingDayOfMonth))
+    typeof input === "string" && readsAsDate(input)
+      ? parseMonth(closingMonth(input as DateString, closingDayOfMonth))
       : parseMonth(input);
   const previous = shiftMonth(month, -1);
   const to = dayOfMonth(month, closingDayIn(month, closingDayOfMonth));

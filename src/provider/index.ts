@@ -164,7 +164,8 @@ function checkHolidays<Kind extends string>(holidays: unknown): readonly Holiday
   }
   let year: number | undefined;
   const seen = new Set<string>();
-  holidays.forEach((h: unknown, i) => {
+  // 穴のある配列の穴も 1 件として確かめる（forEach は穴を飛ばす）
+  Array.from(holidays as unknown[]).forEach((h: unknown, i) => {
     if (typeof h !== "object" || h === null) {
       throw rangeError("invalid-argument", `holidays[${i}] is not an object`);
     }

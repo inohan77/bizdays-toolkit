@@ -142,6 +142,10 @@ function wallParts(
 /** @internal 瞬間（エポックミリ秒）を、タイムゾーンでの暦日と時刻に変換する（1000〜9999 年の外は out-of-range） */
 export function instantToCivil(epochMilliseconds: number, timeZone: string): CivilDateTime {
   if (!Number.isFinite(epochMilliseconds)) throw rangeError("invalid-time", "Invalid instant");
+  // Date が表せる範囲（±8.64e15 ミリ秒）の外は、年を読めないので整形の前に止める
+  if (Math.abs(epochMilliseconds) > 8.64e15) {
+    throw rangeError("out-of-range", "Instant out of range (1000-9999)");
+  }
   // Intl は紀元前の年を紀元なしの正の数で返すので、整形の前に UTC の年で範囲を確かめる（decisions.md の 1 番）。時差は
   // 1 日を超えないので、UTC の年が 999 より前ならタイムゾーンでも 1000 年より前。999 年は東のゾーンで 1000 年になりうるので通す
   if (new Date(epochMilliseconds).getUTCFullYear() < 999) {
@@ -235,7 +239,7 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
         // invalid-input はほかの経路と同じ TypeError（decisions.md の 3 番）
         throw typeError(
           "invalid-input",
-          `Unsupported calendar: ${input.calendarId} (only iso8601)`,
+          `Unsupported calendar: ${describeValue(input.calendarId)} (only iso8601)`,
         );
       }
       // 渡された年の誤りは、文字列の暦日と同じ invalid-date（範囲の外に出た計算の out-of-range ではない。decisions.md の 1 番）

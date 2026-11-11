@@ -36,6 +36,7 @@ import {
   formatMonth,
   isDayOfMonthValue,
   parseMonth,
+  readsAsDate,
   shiftMonth,
   type MonthString,
 } from "./month.ts";
@@ -776,11 +777,12 @@ function buildCalendar<Kind extends string>(
     closingPeriod(input, closingDayOfMonth, rawOptions) {
       checkClosingDay(closingDayOfMonth);
       const options = adjustOptions(rawOptions, "closingPeriod options");
-      // "YYYY-MM" だけを月として扱い、それ以外（暦日・日時の文字列・Date・Temporal の値）は dateOf で暦日にする
-      const isMonth = typeof input === "string" && /^\d{4}-\d{2}$/.test(input);
-      const month = isMonth
-        ? parseMonth(input)
-        : closingMonthOf(dateOf(input), closingDayOfMonth, options);
+      // ルートの closingPeriod と同じ読み分け（ハイフンで区切った部分が 3 つ以上の文字列と、文字列でない値は暦日。
+      // それ以外の文字列は月）。暦日は dateOf で暦日にする
+      const month =
+        typeof input !== "string" || readsAsDate(input)
+          ? closingMonthOf(dateOf(input), closingDayOfMonth, options)
+          : parseMonth(input as string);
       const to = closingDate(month, closingDayOfMonth, options);
       const from = addDays(closingDate(shiftMonth(month, -1), closingDayOfMonth, options), 1);
       if (from > to) {

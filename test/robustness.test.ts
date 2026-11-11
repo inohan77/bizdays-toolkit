@@ -76,6 +76,8 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
     () => isHoliday(20261123 as unknown as string),
     // ISO 以外の暦の Temporal の形（受け付けない種類の入力の、もう 1 つの経路）
     () => isHoliday({ year: 2026, month: 11, day: 23, calendarId: "japanese" } as never),
+    // 文字列でない calendarId（メッセージを組み立てるところで落ちていた）
+    () => isHoliday({ year: 2026, month: 11, day: 23, calendarId: Symbol("x") } as never),
   ],
   "invalid-time-zone": [() => createCalendar({ timeZone: "Asia/Nowhere" })],
   "invalid-range": [
@@ -98,7 +100,12 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
         { open: "all" },
       ),
   ],
-  "out-of-range": [() => holidaysInYear(2100)],
+  "out-of-range": [
+    () => holidaysInYear(2100),
+    // Date が表せる範囲（±8.64e15 ミリ秒）を超える瞬間（年を読めずに Intl の整形で落ちていた）
+    () => isHoliday({ epochMilliseconds: 1e20 } as never),
+    () => isHoliday({ epochMilliseconds: -1e20 } as never),
+  ],
   "unconfirmed-holiday": [
     () =>
       createCalendar({ holidayProvider: jp, unconfirmedHolidayPolicy: "throw" }).isBusinessDay(

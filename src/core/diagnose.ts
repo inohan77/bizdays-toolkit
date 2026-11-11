@@ -183,11 +183,23 @@ function closestOf(key: string, known: readonly string[]): string | undefined {
  */
 const PATTERN_FROM = toDayNumber("2001-01-01");
 const PATTERN_DAYS = toDayNumber("2028-12-31") - PATTERN_FROM + 1;
+/** 暦日として扱える範囲（1000〜9999 年）の両端の日数。有効期間から広げた走査は、この範囲に切り詰める */
+const MIN_DAY = toDayNumber("1000-01-01");
+const MAX_DAY = toDayNumber("9999-12-31");
 
 /** 祝日の提供元があるときに調べる年の上限（長すぎる対応年は 1900〜2099 年に絞る）。周期・有効期間で広げる長さの上限でもある */
 const MAX_WINDOW_YEARS = 200;
 /** 個別の日付の期間で、取り除いた結果と比べる最大日数 */
 const MAX_DATE_RULE_DAYS = 366 * MAX_WINDOW_YEARS;
+
+/**
+ * 暦日の範囲の端（両端から MAX_HOLIDAY_RUN 日以内）で、日付の計算が範囲の外に出た例外か。規則が見る隣の日（振替元・
+ * 祝日の前後・週の第 n 営業日）は MAX_HOLIDAY_RUN 日より遠くへは行かないので、端の日でだけ起きる。端の日では、提供元が
+ * 投げた out-of-range も区別できずに受ける。端の日でなければ、そのまま投げて提供元の誤りとして報告する
+ */
+const atCalendarEdge = (n: number, error: unknown): boolean =>
+  (n < MIN_DAY + MAX_HOLIDAY_RUN || n > MAX_DAY - MAX_HOLIDAY_RUN) &&
+  (error as { code?: unknown } | null)?.code === "out-of-range";
 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 const lcm = (a: number, b: number): number => (a / gcd(a, b)) * b;
@@ -263,7 +275,7 @@ function scanWindow(
       if (rule.effectiveFrom === null && rule.effectiveTo === null) continue;
       const from = rule.effectiveFrom ?? rule.effectiveTo! - cycle + 1;
       const to = Math.min(rule.effectiveTo ?? from + cycle - 1, from + 366 * MAX_WINDOW_YEARS - 1);
-      ranges.push({ from, to });
+      ranges.push({ from: Math.max(from, MIN_DAY), to: Math.min(to, MAX_DAY) });
     }
   }
   ranges.sort((a, b) => a.from - b.from);
@@ -322,9 +334,10 @@ function patternBits(rule: RecurringRuleCompiled<unknown>): Uint8Array {
  * 有効期間があればその期間（期限のない側は、当てはまり方がそろう周期の長さ）を、なければ周期の長さを 1 日ずつ調べる
  */
 function matchesAnyDay(rule: RecurringRuleCompiled<unknown>, cycle: number): boolean {
-  const from =
+  const start =
     rule.effectiveFrom ?? (rule.effectiveTo === null ? PATTERN_FROM : rule.effectiveTo - cycle + 1);
-  const to = Math.min(rule.effectiveTo ?? Infinity, from + cycle - 1);
+  const from = Math.max(start, MIN_DAY);
+  const to = Math.min(rule.effectiveTo ?? Infinity, start + cycle - 1, MAX_DAY);
   for (let n = from; n <= to; n++) if (matchPattern(rule, fromDayNumber(n))) return true;
   return false;
 }
@@ -422,14 +435,29 @@ function canCover(
 
 /** 値が同じか。配列と普通のオブジェクトは中身で比べ、それ以外は Object.is で比べる */
 function sameValue(a: unknown, b: unknown): boolean {
+  try {
+    return sameValueIn(a, b, new Map());
+  } catch (error) {
+    // 入れ子が深すぎて比べきれない値は、同じでないとみなす（取り除ける側に倒さない）
+    if (error instanceof RangeError) return false;
+    throw error;
+  }
+}
+
+/** seen は比べている途中の組（a → b の集合）。循環する値で同じ組に戻ったら、その枝は同じとみなす */
+function sameValueIn(a: unknown, b: unknown, seen: Map<object, Set<object>>): boolean {
   if (Object.is(a, b)) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  const pairs = seen.get(a);
+  if (pairs?.has(b)) return true;
+  if (pairs) pairs.add(b);
+  else seen.set(a, new Set([b]));
   if (Array.isArray(a) || Array.isArray(b)) {
     return (
       Array.isArray(a) &&
       Array.isArray(b) &&
       a.length === b.length &&
-      a.every((v, i) => sameValue(v, b[i]))
+      a.every((v, i) => sameValueIn(v, b[i], seen))
     );
   }
   const plain = (o: object): boolean => {
@@ -444,7 +472,7 @@ function sameValue(a: unknown, b: unknown): boolean {
     ka.every(
       (k) =>
         Object.hasOwn(b, k) &&
-        sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+        sameValueIn((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], seen),
     )
   );
 }
@@ -608,9 +636,16 @@ export function unjudgeableDays<Value, Kind extends string>(
       // 週の規則: weekStart で区切った週ごとに、その 7 日が属する月で基準が投げるか
       const start = from - ((weekdayOf(fromDayNumber(from)) - r.weekStart + 7) % 7);
       for (let w = start; w <= to; w += 7) {
-        const week = [0, 1, 2, 3, 4, 5, 6].map((i) => w + i);
+        const all = [0, 1, 2, 3, 4, 5, 6].map((i) => w + i);
+        const week = all.filter((n) => n >= MIN_DAY && n <= MAX_DAY);
+        // 暦日の範囲（1000〜9999 年）の端の週は、範囲の外の日を数えられないので、判定でも out-of-range になる。範囲の中の
+        // 日を判定できない日にする（範囲の外の日の月は数えない。docs/decisions.md の 17 番）
         const weekMonths = [...new Set(week.map(monthOf))];
         if (!weekMonths.some(inMonths)) continue;
+        if (week.length < 7) {
+          for (const n of week) days.add(n);
+          continue;
+        }
         // 投げる月はすべて記録する（見張りの入力。some で途中で止めない）
         if (weekMonths.map(throws).some(Boolean)) for (const n of week) days.add(n);
       }
@@ -816,13 +851,17 @@ function analyzeRules<Value, Kind extends string>(
   const holidayRuleMatches = (rule: RecurringRuleCompiled<unknown>): boolean => {
     if (source.providers.length === 0 || !window) return false;
     let found = false;
-    eachDay(
-      window,
-      (n) =>
-        (found =
-          inPeriod(rule, n) &&
-          matchPattern(rule, fromDayNumber(n), holidayOfSafe, undefined, lookup.fromJp)),
-    );
+    eachDay(window, (n) => {
+      if (!inPeriod(rule, n)) return false;
+      try {
+        found = matchPattern(rule, fromDayNumber(n), holidayOfSafe, undefined, lookup.fromJp);
+      } catch (error) {
+        // 隣の日が暦日の範囲（1000〜9999 年）の外に出る端の日は、当てはまらないとみなす（外は祝日なし）
+        if (!atCalendarEdge(n, error)) throw error;
+        found = false;
+      }
+      return found;
+    });
     return found;
   };
   /** 第 n 営業日の規則が、調べる期間と有効期間の中で 1 日でも当てはまるか（基準は祝日次第で年ごとに違うので、全日を調べる。対応年の外は当てはまらないとみなす） */
@@ -1010,7 +1049,16 @@ function analyzeRules<Value, Kind extends string>(
   if (isCalendar && window && !dates.some((r) => r.value === true)) {
     const resolve = createResolver(without(compiled, null, true), lookup);
     let found = false;
-    eachDay(window, (n) => (found = resolve(fromDayNumber(n)).day.value === true));
+    eachDay(window, (n) => {
+      try {
+        found = resolve(fromDayNumber(n)).day.value === true;
+      } catch (error) {
+        // 規則が見る隣の日が暦日の範囲（1000〜9999 年）の外に出る端の日は、判定も例外になるので営業日に数えない
+        if (!atCalendarEdge(n, error)) throw error;
+        found = false;
+      }
+      return found;
+    });
     if (!found) {
       c.warning(
         "no-business-day",

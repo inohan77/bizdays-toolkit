@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   addDays,
   closingMonth,
+  closingPeriod,
   createCalendar,
   isBizdaysError,
   monthOf,
@@ -53,10 +54,10 @@ test("営業日を考慮した締め日: 締め日が休業日なら convention 
       String(input),
     );
   }
+  // ハイフンが 1 つの崩れた文字列は、月の誤り（ルートの closingPeriod と同じ読み分け。decisions.md の 8 番）
   assert.throws(
     () => office.closingPeriod("2026-9", 20, { convention: "preceding" }),
-    (e: unknown) => isBizdaysError(e) && e.code === "invalid-date",
-    "YYYY-MM でない文字列は日付として扱われる",
+    (e: unknown) => isBizdaysError(e) && e.code === "invalid-month",
   );
   // 暦日を渡すとその日が属する期間
   assert.deepEqual(office.closingPeriod("2026-09-19", 20, { convention: "preceding" }), {
@@ -200,4 +201,54 @@ test("営業日を考慮した締め日: 空でない期間を順に並べると
       }
     }
   }
+});
+
+test("closingPeriod の月と暦日の読み分け: 形の崩れた文字列の code は、ルートの関数とメソッドで同じ（ハイフンで区切った部分が 3 つ以上なら暦日、それ以外は月。decisions.md の 8 番）", () => {
+  const calendar = createCalendar();
+  const codeOf = (f: () => unknown): unknown => {
+    try {
+      return JSON.stringify(f());
+    } catch (e) {
+      assert.ok(isBizdaysError(e), String(e));
+      return e.code;
+    }
+  };
+  // 月の形の崩れ（ハイフンが 2 つ未満）・暦日の形の崩れ（3 つ以上）・正しい月と暦日
+  const cases: [string, string][] = [
+    ["2026-1", "invalid-month"],
+    ["2026-001", "invalid-month"],
+    ["202611", "invalid-month"],
+    ["2026/11", "invalid-month"],
+    ["2026/11/05", "invalid-month"],
+    ["26-11", "invalid-month"],
+    ["2026", "invalid-month"],
+    ["", "invalid-month"],
+    ["2026-13", "invalid-month"],
+    ["2026-11-31", "invalid-date"],
+    ["2026-1-5", "invalid-date"],
+    ["2026-11-05-01", "invalid-date"],
+    ["2026-11", '{"from":"2026-10-21","to":"2026-11-20"}'],
+    ["2026-11-05", '{"from":"2026-10-21","to":"2026-11-20"}'],
+  ];
+  for (const [input, expected] of cases) {
+    assert.equal(
+      codeOf(() => closingPeriod(input as never, 20)),
+      expected,
+      `関数 ${input}`,
+    );
+    assert.equal(
+      codeOf(() => calendar.closingPeriod(input as never, 20, { convention: "following" })),
+      expected,
+      `メソッド ${input}`,
+    );
+  }
+  // 日時の文字列は、メソッドでは暦日として読む（ルートの関数は暦日の文字列だけを受ける）
+  assert.equal(
+    codeOf(() => calendar.closingPeriod("2026-11-05T10:00-05:00", 20, { convention: "following" })),
+    '{"from":"2026-10-21","to":"2026-11-20"}',
+  );
+  assert.equal(
+    codeOf(() => closingPeriod("2026-11-05T10:00-05:00" as never, 20)),
+    "invalid-date",
+  );
 });
