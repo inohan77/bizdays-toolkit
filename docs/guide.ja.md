@@ -113,7 +113,7 @@ company.isBusinessDay("2026-05-25"); // true
 
 - 全国の 11 日は固定日 8 日（1/1・5/1・5/8・7/14・8/15・11/1・11/11・12/25）と復活祭から決まる 3 日（Lundi de Pâques、Ascension = +39 日、Lundi de Pentecôte = +50 日）です。振替はなく、週末に当たった祝日はそのまま週末です。`kind` は常に `regular`
 - `name` は data.gouv.fr の表記（フランス語。`1er mai`・`Lundi de Pentecôte`）、`nameEn` は英訳、`key` は安定した識別子（`labour-day`・`pentecost-monday` など。[祝日の識別子](#祝日の識別子)）
-- 2 つの祝日が同じ日に当たる年（2008 年の 5 月 1 日と 2059 年の 5 月 8 日が Ascension）は、data.gouv.fr の JSON と同じく復活祭から決まる祝日の名称・`key` で 1 件を返します。`keys: ["labour-day"]` は 2008 年の 5 月 1 日には当てはまりません
+- 2 つの祝日が同じ日に当たる年（2008 年の 5 月 1 日と、2059・2070・2081・2092 年の 5 月 8 日が Ascension）は、data.gouv.fr の JSON と同じく復活祭から決まる祝日の名称・`key` で 1 件を返します。`keys: ["labour-day"]` は 2008 年の 5 月 1 日には当てはまりません
 - Lundi de Pentecôte は多くの企業が出勤日にしています（連帯の日）が、法律上は祝日のままなので、提供元は祝日として返します。出勤日にするなら上のように祝日の規則 `keys: ["pentecost-monday"]` で書きます。祝日を休みにするかどうかは利用者が決める、というこのライブラリ全体の分担です
 - 対応年は 2000〜2099 年です。祝日は法令で定まり年ごとの告示はないので、すべての年が `confirmed: true` で、提供元は `confirmedThrough` を持ちません。労働法典の改正はパッチバージョンで反映します。日付は data.gouv.fr の「Jours fériés en France」（DINUM。2 つのゾーンの JSON エクスポート。過去 20 年分・未来 5 年分が対象で、現在は 2006〜2031 年）と照合しています。差分は毎日監視しています
 - `FR-AM` は Alsace-Moselle（Bas-Rhin・Haut-Rhin・Moselle の 3 県）に対するこのライブラリの ID です（ISO 3166-2 に 1 つのコードがないため）。祝日もタイムゾーンも違う海外県・海外領土は同梱していません

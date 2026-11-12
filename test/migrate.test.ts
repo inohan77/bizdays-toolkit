@@ -192,3 +192,26 @@ test("移行: 別の実行環境で作った設定も、入れ子の規則まで
       assert.equal(after["value"], before["value"], `${name}: スケジュールの値は複製しない`);
   }
 });
+
+const nationalAfter = (options: Record<string, unknown>): unknown =>
+  (
+    migrateCalendarOptions({
+      ...options,
+      closedRecurringRules: [{ holiday: true, kinds: ["national"] }],
+    } as never).options as { readonly closedRecurringRules: readonly { readonly kinds: unknown }[] }
+  ).closedRecurringRules[0]!.kinds;
+
+test('移行の kinds の "national" の書き換えは、作成と同じく、holidayProvider の null を旧名の holidays に読み替えない（decisions.md の 6 番）', () => {
+  assert.deepEqual(nationalAfter({ holidayProvider: jp }), ["regular"]);
+  assert.deepEqual(nationalAfter({ holidays: jp }), ["regular"]);
+  // null は「日本の提供元だけ」と読まない（作成の時点で例外になる誤った設定）
+  assert.deepEqual(nationalAfter({ holidayProvider: null, holidays: jp }), ["national"]);
+});
+
+test('移行の kinds の "national" の書き換えは、作成と同じく、holidayProvider の配列の穴を飛ばさない（decisions.md の 6 番）', () => {
+  assert.deepEqual(nationalAfter({ holidayProvider: [jp, jp] }), ["regular"]);
+  const holed: unknown[] = [jp];
+  holed.length = 2;
+  holed.push(jp);
+  assert.deepEqual(nationalAfter({ holidayProvider: holed }), ["national"]);
+});

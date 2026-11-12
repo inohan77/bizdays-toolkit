@@ -394,3 +394,53 @@ test("withSubstituteDays: directions は普通のオブジェクトだけを受�
     code("invalid-argument"),
   );
 });
+
+test('長く続く祝日（40 日・年をまたぐ 42 日）: 祝日の前後の規則は連続の前日と明けた日に当たり、"after-holiday" は本来の日が明けた日の 31 日前までなら振り替わる（decisions.md の 24 番）', () => {
+  // 2026-03-01〜04-09（40 日）と、2026-12-01〜2027-01-11（42 日）を祝日として返す提供元
+  const runs: [string, number][] = [
+    ["2026-03-01", 40],
+    ["2026-12-01", 42],
+  ];
+  const dates = runs.flatMap(([from, n]) => Array.from({ length: n }, (_, i) => addDays(from, i)));
+  const long = {
+    id: "LONG",
+    timeZone: "UTC",
+    supportedYears: { from: 2025, to: 2028 },
+    dataVersion: "x",
+    holidaysInYear: (y: number) =>
+      dates
+        .filter((d) => d.startsWith(`${y}-`))
+        .map((date) => ({
+          date,
+          name: "休",
+          nameEn: "Break",
+          kind: "regular",
+          key: "break",
+          confirmed: true,
+        })),
+  };
+  const make = (rule: Record<string, unknown>) =>
+    createCalendar({
+      holidayProvider: long,
+      holidayPolicy: "open",
+      closedRecurringRules: [rule],
+    } as never);
+  const closed = (rule: Record<string, unknown>, date: string) => !make(rule).isBusinessDay(date);
+  // 祝日の前後の規則は、連続の長さによらず当てはまる
+  assert.equal(closed({ dayAfterHoliday: true }, "2026-04-10"), true);
+  assert.equal(closed({ dayBeforeHoliday: true }, "2026-02-28"), true);
+  assert.equal(closed({ dayAfterHoliday: true, skipWeekdays: [0, 6] }, "2026-04-10"), true);
+  assert.equal(closed({ dayAfterHoliday: true }, "2027-01-12"), true);
+  assert.equal(closed({ dayBeforeHoliday: true }, "2026-11-30"), true);
+  // 振替: 本来の日（3 月 12 日）が明けた日の 29 日前なら振り替わる
+  assert.equal(
+    closed({ dayOfMonth: 12, months: [3], holidayOverlapPolicy: "after-holiday" }, "2026-04-10"),
+    true,
+  );
+  // 振替: 本来の日（3 月 5 日）が明けた日の 36 日前なら振り替わらず、休業日が 1 日も出ない
+  const far = make({ dayOfMonth: 5, months: [3], holidayOverlapPolicy: "after-holiday" });
+  assert.deepEqual(
+    far.daysBetween("2026-03-01", "2026-04-12").filter((d) => !d.open && d.reason !== "holiday"),
+    [],
+  );
+});

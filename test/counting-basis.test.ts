@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { diagnoseCalendar } from "../src/diagnose/index.ts";
-import { jp } from "../src/jp/index.ts";
+import { JP_NARROW as jp } from "./support/provider.ts";
 
 const countingBasis = (options: Parameters<typeof diagnoseCalendar>[0]) =>
   diagnoseCalendar(options).filter((d) => d.code === "counting-basis");

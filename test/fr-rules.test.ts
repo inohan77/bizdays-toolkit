@@ -12,7 +12,7 @@ test("フランス: 本土は 11 日、Alsace-Moselle は 13 日。振替はな�
   for (let y = 2000; y <= 2099; y++) {
     const m = metropole.holidaysInYear(y);
     const a = alsaceMoselle.holidaysInYear(y);
-    // 復活祭が 3 月 23 日なら Ascension が 5 月 1 日（2008 年）、3 月 30 日なら 5 月 8 日（2059 年）に重なる
+    // 復活祭が 3 月 23 日なら Ascension が 5 月 1 日に、3 月 30 日なら 5 月 8 日に重なる
     const coincide = /-03-(23|30)$/.test(easterSunday(y)) ? 1 : 0;
     assert.equal(m.length, 11 - coincide, `metropole ${y}`);
     assert.equal(a.length, 13 - coincide, `alsace-moselle ${y}`);
@@ -110,4 +110,27 @@ test("フランス: 対応年の外は out-of-range", () => {
   }
   assert.ok(Object.isFrozen(metropole.holidaysInYear(2026)));
   assert.ok(Object.isFrozen(metropole.holidaysInYear(2026)[0]));
+});
+
+test("フランス: 対応年（2000〜2099 年）で 2 つの祝日が同じ日に当たるのは、2008 年の 5 月 1 日と、2059・2070・2081・2092 年の 5 月 8 日だけ（ガイドの記述）", () => {
+  // 復活祭から決まる祝日（Alsace-Moselle の Vendredi saint を含む）と固定日の祝日が重なる日を、規則から数える
+  const fixed = ["01-01", "05-01", "05-08", "07-14", "08-15", "11-01", "11-11", "12-25", "12-26"];
+  const found: string[] = [];
+  for (let y = 2000; y <= 2099; y++) {
+    const easter = Date.parse(`${easterSunday(y)}T00:00:00Z`);
+    for (const offset of [-2, 1, 39, 50]) {
+      const date = new Date(easter + offset * 86_400_000).toISOString().slice(0, 10);
+      if (fixed.includes(date.slice(5))) found.push(date);
+    }
+  }
+  assert.deepEqual(found, ["2008-05-01", "2059-05-08", "2070-05-08", "2081-05-08", "2092-05-08"]);
+  // 提供元は、その日を 1 件（Ascension）で返す
+  for (const date of found) {
+    const same = metropole.holidaysInYear(Number(date.slice(0, 4))).filter((h) => h.date === date);
+    assert.deepEqual(
+      same.map((h) => h.key),
+      ["ascension"],
+      date,
+    );
+  }
 });

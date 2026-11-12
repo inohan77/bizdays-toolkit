@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [0.31.8]
+
+- テストの時間（提案書 bizdays-toolkit-0.31.8-proposal の T-1）: `test/support/provider.ts` に、日本の提供元の対応年を 2020〜2030 年に絞った写し `JP_NARROW`（id は "JP" のまま）を足し、ファイル全体をこの写しに替えても全件が合格した 4 ファイル（`counting-basis`・`business-day-of-month`・`day-before-holiday`・`weekdays-filter`）を替えた（手元の単独の時間で合わせて約 3.7 秒の短縮。`counting-basis` は 3.1 → 0.8 秒）。`diagnose`・`holiday-rule`・`national-union`・`day-after-holiday`・`skip-weekdays` は 2020〜2030 年の外の日を判定するテストがあり、ファイル全体では替えられなかった。`consistency`・`metamorphic` は CI の全件の実行（CONSISTENCY_API_FULL・METAMORPHIC_FULL）で日本の全範囲を使うので替えていない。診断の呼び出しだけを写しに替える細かい置き換えは、時間の上限の内なので行っていない
+- test:tz（T-2）: `test/unconfirmed-holidays.test.ts` を、ほかの 3 ファイルと同じ理由（テストの側で Date から暦日の文字列を作るだけ）で TZ_EXCLUDED に移した。`test/robustness.test.ts` の例外のクラスの静的な検査（src を TypeScript のコンパイラーの API で読む）を `test/tools/error-classes.test.ts` に移した。`test/day-before-holiday.test.ts` は、T-1 で短くなったので残した
+- `scripts/check-readme-examples.ts`（T-3）: 例の設定の診断の結果を、name・nameEn を除いた設定ごとに一時ディレクトリへ写し、同じ設定の 2 回目（英語版と日本語版の同じ例）は写した結果を使うようにした（1 回ずつの測定で、手元は 24 → 18 秒、取り込みの環境は 25.7 → 22.9 秒）。同梱の提供元は物として見分けて鍵に入れ、ほかの関数（中身が同じでも閉じ込めた値が違いうる）とカレンダーを含む設定は写さない。明示的な `undefined` は、書かないこととは別の値として鍵に入れる（取り込みの確認の質問。今の例では 76 回のうち 39 回を写し、10 回は写さない設定）。日本語版だけの書き間違いは設定が違うので診断にかかることを、例に知らないキーを入れて確かめた
+- `test/provider.test.ts` に長く続く祝日（40 日・年をまたぐ 42 日）の前後の規則と振替のテストを、`test/fr-rules.test.ts` に対応年のフランスの祝日の重なる年がガイドの 5 つだけであることのテストを、`test/null-and-holes.test.ts` に Temporal の形の時の値の誤りのテストを足した（D-1・D-2・F-1。文書の誤りと時の扱いを止めるテストがなかった）
+- `src/core/migrate.ts` の `onlyJp`: 作成と同じく、`holidayProvider: null` を旧名の `holidays` に読み替えず、配列の穴を `undefined` の要素として読むようにし、`test/migrate.test.ts` に null と穴の 2 件を足した（0.31.7 の取り込みの指摘。移行の結果は、誤った設定でも作成の時点で同じ code で止まるので、結果は変わらない）
+- 提案書の M-1（届かない振替を例外で止める）と M-2（オフセット形式の timeZone）は、今は通る呼び出しを止める変更なので、0.32.0 の候補として残した。M-2 の「0.31.8 で先にできること」（実行環境ごとの結果をログに出す）は、`test/compat/smoke.mjs` の結果を各実行環境の実行から取り出す経路がなく、足す変更が大きいので見送った
+
 ## [0.31.7]
 
 - 開発用のツールを更新: oxfmt 0.77.0 → 0.78.0、oxlint 1.92.0 → 1.93.0（どちらも公開から 48 時間以上たったもの。整形の変更と lint の指摘はなく、規則の数（105）も同じ。ビルドした `dist` は変わらない）

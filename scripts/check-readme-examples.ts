@@ -18,7 +18,7 @@ import "./strict-warnings.ts";
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(".");
@@ -251,14 +251,50 @@ function audit(name: string, issues: readonly { severity: string; code: string; 
     }
   }
 }
+// 同じ設定（name・nameEn を除く）の診断は 1 回だけ行う。英語版と日本語版の例は、名前のほかは同じ設定を書くので、
+// 2 回目は結果を写す（日本語版だけの書き間違いは設定が違うので、診断にかかる。提案書 bizdays-toolkit-0.31.8-proposal の T-3）。
+// 鍵で区別できない値を含む設定は写さない: 同梱の提供元のほかの関数（中身が同じでも、閉じ込めた値が違いうる）と、
+// カレンダー。明示的な undefined は、書かないこととは別の値として鍵に入れる（decisions.md の 6 番）
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { jp } from "bizdays-toolkit/jp";
+import { england, northernIreland, scotland, wales } from "bizdays-toolkit/uk";
+import { alsaceMoselle, metropole } from "bizdays-toolkit/fr";
+import { sg } from "bizdays-toolkit/sg";
+const BUNDLED = new Map<unknown, string>(
+  [jp, england, wales, scotland, northernIreland, metropole, alsaceMoselle, sg].map((p) => [p, p.id]),
+);
+function cacheKey(kind: string, options: unknown): string | undefined {
+  let safe = true;
+  const text = JSON.stringify(options, (key, value: unknown) => {
+    if (key === "name" || key === "nameEn") return undefined;
+    if (value === undefined) return "\\u0000undefined";
+    const bundled = BUNDLED.get(value);
+    if (bundled !== undefined) return "\\u0000provider:" + bundled;
+    if (typeof value === "function") safe = false;
+    if (typeof value === "object" && value !== null && typeof (value as { isBusinessDay?: unknown }).isBusinessDay === "function") safe = false;
+    return value;
+  });
+  return safe && text !== undefined ? createHash("sha256").update(kind + text).digest("hex") : undefined;
+}
+function diagnoseOnce<T>(kind: string, options: unknown, run: () => T): T {
+  const dir = process.env.README_DIAGNOSE_CACHE;
+  const key = dir ? cacheKey(kind, options) : undefined;
+  const file = key ? join(dir!, key + ".json") : undefined;
+  if (file && existsSync(file)) return JSON.parse(readFileSync(file, "utf8")) as T;
+  const result = run();
+  if (file) writeFileSync(file, JSON.stringify(result));
+  return result;
+}
 export function createCalendar(...args: unknown[]): unknown {
   console.log(JSON.stringify({ audited: "createCalendar" }));
-  audit("createCalendar", diagnoseCalendar((args[0] ?? {}) as never));
+  audit("createCalendar", diagnoseOnce("calendar", args[0], () => diagnoseCalendar((args[0] ?? {}) as never)));
   return (lib.createCalendar as (...a: unknown[]) => unknown)(...args);
 }
 export function createSchedule(...args: unknown[]): unknown {
   console.log(JSON.stringify({ audited: "createSchedule" }));
-  audit("createSchedule", diagnoseSchedule(args[0] as never));
+  audit("createSchedule", diagnoseOnce("schedule", args[0], () => diagnoseSchedule(args[0] as never)));
   return (lib.createSchedule as (...a: unknown[]) => unknown)(...args);
 }
 `;
@@ -348,6 +384,8 @@ const deprecatedResultKeys = [
 
 const dir = mkdtempSync(join(ROOT, ".readme-examples-"));
 const failures: string[] = [];
+/** 診断の結果を写す場所（同じ設定の 2 回目の診断を省く。包むモジュールの diagnoseOnce） */
+const cacheDir = join(dir, "diagnose-cache");
 let blocks = 0;
 let compared = 0;
 /** 包むモジュールが診断にかけた設定の数（関数ごと）。付け替えが外れると 0 件になるので、0 件なら失敗にする */
@@ -355,6 +393,7 @@ const audited: Record<string, number> = { createCalendar: 0, createSchedule: 0 }
 try {
   writeFileSync(join(dir, "__check.ts"), CHECKER);
   writeFileSync(join(dir, "__wrap.ts"), WRAPPER);
+  mkdirSync(cacheDir);
   for (const file of DOC_FILES) {
     const text = runnablePart(file, readFileSync(file, "utf8"));
     for (const m of text.matchAll(/^```ts\n([\s\S]*?)^```/gm)) {
@@ -393,6 +432,7 @@ try {
             ...process.env,
             README_EXPECTED: JSON.stringify(prepared.checks.map((c) => c.expected)),
             README_DEPRECATED_KEYS: JSON.stringify(deprecatedResultKeys),
+            README_DIAGNOSE_CACHE: cacheDir,
             README_ALLOWED_DIAGNOSTICS: JSON.stringify(
               (notes.get("allow-diagnostics") ?? "").split(",").filter(Boolean),
             ),

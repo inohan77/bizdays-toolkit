@@ -31,7 +31,10 @@ export type KnownErrorCode =
   | "invalid-argument"
   /** 設定の誤り。設定は営業日カレンダー・スケジュールを作る関数が検証するオブジェクトで、オブジェクトでないことも含む（decisions.md の 8 番） */
   | "invalid-option"
-  /** 祝日の提供元どうしのタイムゾーンが異なり、timeZone の指定が必要 */
+  /**
+   * 同じタイムゾーンでなければならないものが食い違う（1 つの設定の祝日の提供元どうしで、timeZone の指定がない。
+   * 合成するカレンダーどうし。スケジュールと、第 n 営業日の規則の数える基準のカレンダー）
+   */
   | "time-zone-conflict"
   /**
    * 対応している年の範囲の外（提供元の対応年、日付の計算や瞬間の変換が 1000〜9999 年の外に出た、祝日の一覧に渡した年が
@@ -44,7 +47,10 @@ export type KnownErrorCode =
   | "invalid-provider"
   /** 祝日の提供元が返したデータの誤り */
   | "invalid-provider-data"
-  /** 指定した日数の範囲に営業日がない */
+  /**
+   * 営業日が見つからない（探索が searchDayLimit 日を超えた、月の営業日が第 n 営業日の n に足りない、カレンダーの締めの月に
+   * 固有の期間がない）
+   */
   | "no-business-day"
   /** searchDayLimit の日数のうちに休業日が見つからない（nextClosedDay・previousClosedDay） */
   | "no-closed-day";

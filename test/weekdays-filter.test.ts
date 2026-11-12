@@ -6,7 +6,7 @@ import {
   isBizdaysError,
   type RecurringRule,
 } from "../src/index.ts";
-import { jp } from "../src/jp/index.ts";
+import { JP_NARROW as jp } from "./support/provider.ts";
 import { diagnoseCalendar } from "../src/diagnose/index.ts";
 
 const brief = (options: object) =>

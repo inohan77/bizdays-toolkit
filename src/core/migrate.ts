@@ -58,8 +58,10 @@ const join = (path: string, key: string): string => (path ? `${path}.${key}` : k
  * ほかの提供元と合わせて使う設定では、新しい名前の "regular" がほかの提供元の祝日にも当たるので書き換えない（docs/decisions.md の 10 番）
  */
 function onlyJp(options: Record<string, unknown>): boolean {
-  const raw = options["holidayProvider"] ?? options["holidays"];
-  const list: unknown[] = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
+  // 作成と同じく、null は省略と同じにせず、配列の穴は undefined の要素として読む（decisions.md の 6 番）
+  const raw =
+    options["holidayProvider"] === undefined ? options["holidays"] : options["holidayProvider"];
+  const list: unknown[] = raw === undefined ? [] : Array.isArray(raw) ? Array.from(raw) : [raw];
   return (
     list.length > 0 &&
     list.every((p) => typeof p === "object" && p !== null && (p as { id?: unknown }).id === "JP")

@@ -252,8 +252,9 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
         );
       }
       const date = formatDate(input.year, input.month, input.day);
-      if (typeof input.hour === "number") {
-        // null は省略ではなく値の誤り（decisions.md の 6 番）
+      // 時を書いた形は時刻付き。null・文字列などの時は、分と同じく invalid-time（null は省略ではなく値の誤り。
+      // decisions.md の 6 番）。時を書かずに分だけを書いた形は、暦日として読む（型が許す形で、本物の PlainDate には両方ない）
+      if (input.hour !== undefined) {
         return {
           date,
           minutes: wallTime(input.hour, input.minute === undefined ? 0 : input.minute),

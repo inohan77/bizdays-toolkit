@@ -6,6 +6,17 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.31.8] - 2026-11-13
+
+This version fixes one input that was silently accepted and corrects type descriptions and documents. Results of calls that were written correctly do not change.
+
+### Fixed
+
+- A Temporal-like date-time whose `hour` was `null`, a string or another value that is not a number (such as `{ year: 2026, month: 12, day: 28, hour: "15", minute: 30 }`) was read as a date without a time, so `civilOf` returned `time: null` and a check such as `open <= time` was silently false. It now throws `invalid-time`, as `minute: null` does since 0.31.7 (design decisions 6). A Temporal-like value with `minute` but without `hour` is still read as a date. If you build the value from a form or a database, convert `hour` to a number first
+- Type descriptions: `KnownErrorCode` now says that `no-business-day` also covers an nth business day that the month does not have and a calendar's closing month without its own period, and that `time-zone-conflict` also covers calendars combined with `combineCalendars` and the basis calendar of a schedule's nth-business-day rule (where the fix is to make them with the same time zone, not to set `timeZone`). `HolidayProvider` now describes long runs of holidays as below
+- Documentation: the provider guide, the description of `HolidayProvider` and the design decisions (24) said that within a run of holidays longer than 31 days, rules for the day before or after a holiday do not match and `"after-holiday"` rules are not moved. In fact rules for the day before or after a holiday match the day before and the day after a run of any length, and an `"after-holiday"` rule is not moved only when its own day is more than 31 days before the first day after the run. The documents now say so; results are unchanged
+- Documentation: the guide listed 2008 and 2059 as the years when two French holidays fall on the same day; Ascension Day also falls on May 8 in 2070, 2081 and 2092. The English README said that years after a provider's supported range are an error; years before it are too. The provider guide said that the four exceptional keys keep a word the rule would drop; `new-year` drops the possessive "s" as well. The design decisions (1, 3, 9) now list every case of `out-of-range`, describe `invalid-input` as a value in none of the accepted forms, and describe the functions that fix an argument of another by what they are rather than by name. Results are unchanged
+
 ## [0.31.7] - 2026-11-12
 
 This version makes three kinds of options that were silently accepted throw, as the design decisions (6, 8) promise, gives a code to the remaining exceptions without one, and corrects documents. Options that were written correctly give the same results as before. Options that write both a single date and a range in one entry, write `null` in one of seven options, or have a hole in an array now throw; each item below says how to rewrite them.
@@ -948,7 +959,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.7...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.8...HEAD
+[0.31.8]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.7...v0.31.8
 [0.31.7]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.6...v0.31.7
 [0.31.6]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.5...v0.31.6
 [0.31.5]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.4...v0.31.5

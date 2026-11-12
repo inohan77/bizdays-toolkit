@@ -243,3 +243,19 @@ test("holidayPolicy のオブジェクトの中の知らないキーは、診断
   );
   assert.equal(createSchedule(options as never).valueOn("2026-11-23"), null);
 });
+
+test("Temporal の形の時刻: 時に null・文字列・小数・配列を書くと invalid-time（分と同じ）。時を書かずに分だけを書いた形は暦日として読む（decisions.md の 6 番）", () => {
+  const calendar = createCalendar({ timeZone: "Asia/Tokyo" });
+  const at = (hour: unknown) => ({ year: 2026, month: 12, day: 28, hour, minute: 30 });
+  for (const hour of [null, "15", 15.5, [Symbol("s")], true])
+    assert.equal(
+      codeOf(() => calendar.civilOf(at(hour) as never)),
+      "invalid-time",
+      String(typeof hour),
+    );
+  assert.deepEqual(calendar.civilOf(at(15) as never), { date: "2026-12-28", time: "15:30" });
+  assert.deepEqual(calendar.civilOf({ year: 2026, month: 12, day: 28, minute: 30 } as never), {
+    date: "2026-12-28",
+    time: null,
+  });
+});

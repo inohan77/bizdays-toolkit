@@ -4,7 +4,7 @@
  * - 固定日の祝日（1/1・5/1・5/8・7/14・8/15・11/1・11/11・12/25。Alsace-Moselle は 12/26 も）と、
  *   復活祭から決まる祝日（Lundi de Pâques = +1 日、Ascension = +39 日、Lundi de Pentecôte = +50 日。
  *   Alsace-Moselle は Vendredi saint = −2 日も）を規則で計算する。振替はない
- * - 2 つの祝日が同じ日に当たる年（復活祭が 3 月 23 日なら 5 月 1 日 = Ascension（2008 年）、3 月 30 日なら 5 月 8 日 = Ascension（2059 年））は、
+ * - 2 つの祝日が同じ日に当たる年（復活祭が 3 月 23 日なら 5 月 1 日 = Ascension、3 月 30 日なら 5 月 8 日 = Ascension）は、
  *   復活祭から決まる祝日の名称・識別子で 1 件にする
  *   （data.gouv.fr の JSON と同じ扱い。提供元は 1 日に 1 件を返す契約のため）
  * - 名称は data.gouv.fr の表記（フランス語）。nameEn はライブラリの英訳
