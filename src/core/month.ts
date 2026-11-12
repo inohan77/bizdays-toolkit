@@ -70,10 +70,9 @@ export function monthOf(input: DateString | MonthString, offset = 0): MonthStrin
   if (!Number.isInteger(offset)) {
     throw rangeError("invalid-argument", `offset must be an integer: ${describeValue(offset)}`);
   }
+  // closingPeriod と同じ読み分け（ハイフンで区切った部分が 3 つ以上なら暦日。decisions.md の 8 番）
   const base: YearMonth =
-    typeof input === "string" && input.split("-").length === 3
-      ? parseDate(input)
-      : parseMonth(input);
+    typeof input === "string" && readsAsDate(input) ? parseDate(input) : parseMonth(input);
   return formatMonth(shiftMonth(base, offset));
 }
 

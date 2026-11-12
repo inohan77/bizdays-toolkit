@@ -6,6 +6,25 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.31.7] - 2026-11-12
+
+This version makes three kinds of options that were silently accepted throw, as the design decisions (6, 8) promise, gives a code to the remaining exceptions without one, and corrects documents. Options that were written correctly give the same results as before. Options that write both a single date and a range in one entry, write `null` in one of seven options, or have a hole in an array now throw; each item below says how to rewrite them.
+
+### Fixed
+
+- An entry of `closedDates`, `openDates` and `closedAnnualDates` (and of a schedule's `dates` and `annualDates`) with both a single date (`date`) and a range (`from`/`to`), such as `{ date: "12-31", from: "12-29", to: "01-03" }`, was accepted and used only `date` (the diagnostics reported `from` and `to` as unknown options). It now throws `invalid-option` ("cannot have both"), and the diagnostics return it as an `error`, as the design decisions (8) say for conflicting options. Keep the form you mean and remove the other; an explicit `undefined` is still the same as leaving the key out
+- `null` in seven options was silently replaced with the default, while `null` in every other option threw: `holidayPolicy` and `searchDayLimit` of `createCalendar`, `searchDayLimit` of `combineCalendars` and `createCalendarFromSchedule`, `outOfRangePolicy`, `unconfirmedHolidayPolicy`, and `holidayOverlapPolicy` of a recurring rule. They now throw `invalid-option` like other values the types do not accept, and the diagnostics return it as an `error`; the minute of a Temporal-like date-time (`minute: null`) now throws `invalid-time` instead of reading as 0. The design decisions (6) now say that `null` is not the same as leaving an option out (only `undefined` is; a schedule's `value: null` is still a value). If you wrote `null`, remove the key or write `undefined`
+- A hole in an array (`[a, , b]`) was skipped in the options (`closedDates`, `openDates`, `closedAnnualDates`, the rules, `closedWeekdays`, `months`, `nth`, `weekdays`, `skipWeekdays` and the like, and a list of holiday providers), so a date or a rule left out of the array was silently lost, and `combineCalendars` with a hole threw `time-zone-conflict` instead of `invalid-argument`. A hole is now checked like an explicit `undefined` element and throws the same code; the design decisions (6) now say so. A hole in a schedule's `weekdayValues` is still the value `undefined`. If you build arrays by index, fill every element
+- `monthOf` read only a string with exactly three hyphen-separated parts as a date, so a date-time string with an offset (such as `"2026-11-05T10:00-05:00"`) or `"2026-1-1-1"` threw `invalid-month`, while `closingPeriod` threw `invalid-date` for the same string (0.31.6). `monthOf` now reads strings the same way (three or more parts are a date); the design decisions (8) now list it. Valid months and dates give the same results
+- The minute of a Temporal-like date-time that cannot be turned into a string (such as an array with a symbol) threw a `TypeError` without a `code` while building the message. It now throws `invalid-time`
+- `diagnoseSchedule` did not report unknown keys inside the object of `holidayPolicy` (such as `{ value: null, sameAS: 0 }`, a typo of `sameAs`), although the design decisions (8) say that typos are found as `unknown-option`. It now reports them; the results are unchanged. The design decisions (31) now say that adding such a check where it was missing is a fix, not a new kind of diagnostic
+- Type descriptions: `Diagnostic.relatedPath` now also describes `redundant` (the rule that decides instead) and `counting-basis` (the weekday rule that the count leaves out). `toInstant` and `instantOf` now say that the offset from UTC is used to the minute (in a period whose offset is not a whole number of minutes, such as local mean time or Liberia until 1972, the result can be up to 59 seconds off). The first sentence of `createCalendarFromSchedule` now ends with a full stop
+- Documentation: the guide says the same about `toInstant`, and the guide and the design decisions (31) now say that the 28 years scanned by the diagnostics cover every combination of weekday and date only when they do not cross a year such as 2100 (which holds within 1901–2099); a rule with an open-ended effective period starting after 2072 can be reported as `never-matches` when it matches only in a later leap year. Results are unchanged
+
+### Changed
+
+- The npm keywords now also include `public-holidays`, `timezone` and `typescript`
+
 ## [0.31.6] - 2026-11-12
 
 This version fixes option diagnostics that returned an `error` for options that can be created, exceptions without a `code`, and the code for malformed strings in `closingPeriod`, and corrects documents. Results of calls that already succeeded do not change; some calls that threw an exception without a `code` now throw one with a `code`, and a calendar's `closingPeriod` now reports a malformed month string as `invalid-month`.
@@ -929,7 +948,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.6...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.7...HEAD
+[0.31.7]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.6...v0.31.7
 [0.31.6]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.5...v0.31.6
 [0.31.5]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.4...v0.31.5
 [0.31.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.3...v0.31.4

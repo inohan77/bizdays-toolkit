@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, createSchedule, isBizdaysError, toDateString } from "../src/index.ts";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
-import { jp } from "../src/jp/index.ts";
 import { withSubstituteDays } from "../src/provider/index.ts";
 
 const codeOf = (f: () => unknown): unknown => {
@@ -48,10 +47,18 @@ const edgeProvider = (from: number, to: number) => ({
     { date: `${y}-01-01`, name: "a", nameEn: "a", kind: "regular", key: "a", confirmed: true },
   ],
 });
+/**
+ * 対応年が範囲の端にない提供元（2020〜2030 年、毎年 1 月 1 日が祝日）。日本の提供元（1955〜2099 年）と同じ経路を通り、
+ * 対応年の全日の走査が短い
+ */
+const middleProvider = {
+  ...edgeProvider(2020, 2030),
+  id: "MIDDLE",
+};
 const EDGE_BASES: readonly Record<string, unknown>[] = [
   {},
-  { holidayProvider: jp },
-  { holidayProvider: jp, outOfRangePolicy: "ignore" },
+  { holidayProvider: middleProvider },
+  { holidayProvider: middleProvider, outOfRangePolicy: "ignore" },
   { holidayProvider: edgeProvider(1000, 1002) },
   { holidayProvider: edgeProvider(9997, 9999) },
 ];
@@ -64,7 +71,7 @@ test("範囲の端: 有効期間が 1000 年・9999 年の端にある設定で�
     for (const period of EDGE_PERIODS)
       for (const base of EDGE_BASES) {
         // 対応年が範囲の端にある提供元は、走査の窓そのものが端に来るので、有効期間のない規則だけで調べる。ほかの提供元は、
-        // 有効期間を端に置いた規則で調べる（日本の提供元の全対応年の走査は端に関係がなく遅い）
+        // 有効期間を端に置いた規則で調べる
         const edge = String(
           (base["holidayProvider"] as { id?: string } | undefined)?.id,
         ).startsWith("EDGE");

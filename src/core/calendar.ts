@@ -402,7 +402,7 @@ export function compileCalendarOptions<Kind extends string>(
     if (!Array.isArray(rawWeekdays)) {
       c.error("invalid-option", "closedWeekdays", "must be an array");
     } else {
-      rawWeekdays.forEach((w: unknown, i) => {
+      Array.from(rawWeekdays as unknown[]).forEach((w: unknown, i) => {
         if (isWeekday(w)) closedWeekdays.add(w);
         else
           c.error(
@@ -414,11 +414,12 @@ export function compileCalendarOptions<Kind extends string>(
     }
   }
 
-  const holidayPolicy = o["holidayPolicy"] ?? "closed";
+  // null は省略ではなく値の誤り（decisions.md の 6 番）。省略と同じに扱うのは undefined だけ
+  const holidayPolicy = o["holidayPolicy"] === undefined ? "closed" : o["holidayPolicy"];
   if (holidayPolicy !== "closed" && holidayPolicy !== "open" && holidayPolicy !== "ignore") {
     c.error("invalid-option", "holidayPolicy", 'must be "closed", "open" or "ignore"');
   }
-  const searchDayLimit = o["searchDayLimit"] ?? 3660;
+  const searchDayLimit = o["searchDayLimit"] === undefined ? 3660 : o["searchDayLimit"];
   if (!Number.isInteger(searchDayLimit) || (searchDayLimit as number) < 1) {
     c.error("invalid-option", "searchDayLimit", "must be a positive integer");
   }
@@ -868,7 +869,8 @@ export function combineCalendars<Kind extends string = string>(
   if (!Array.isArray(calendars) || calendars.length < 2) {
     throw rangeError("invalid-argument", "calendars must be an array of two or more calendars");
   }
-  calendars.forEach((c, i) => {
+  // 穴は undefined の要素として検証する（forEach は穴を飛ばす。decisions.md の 6 番）
+  Array.from(calendars).forEach((c, i) => {
     if (!isCalendarLike(c))
       throw rangeError("invalid-argument", `calendars[${i}] is not a calendar`);
     if (calendars.indexOf(c) !== i) {
@@ -889,7 +891,7 @@ export function combineCalendars<Kind extends string = string>(
   if (mode !== "all" && mode !== "any") {
     throw rangeError("invalid-option", 'open must be "all" or "any"');
   }
-  const searchDayLimit = (o["searchDayLimit"] ?? 3660) as number;
+  const searchDayLimit = (o["searchDayLimit"] === undefined ? 3660 : o["searchDayLimit"]) as number;
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {
     throw rangeError("invalid-option", "searchDayLimit must be a positive integer");
   }
@@ -983,7 +985,7 @@ export interface CalendarFromScheduleOptions {
 }
 
 /**
- * スケジュール（createSchedule）から営業日カレンダーを作る。isOpen が true を返す値の日を営業日とする
+ * スケジュール（createSchedule）から営業日カレンダーを作る。isOpen が true を返す値の日を営業日とする。
  * isOpen は boolean を返す関数にする（boolean でない値を返すと code: "invalid-argument" の RangeError。作成時に曜日の値と
  * holidayPolicy: { value } の値で呼んで確かめ、ほかの値の日は判定したときに確かめる）。
  * 営業時間表のような日ごとの値が設定の正本で、営業日の計算（加減算・調整・期日など）も同じ設定から行いたいときに使う
@@ -1020,7 +1022,7 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
     false,
     "invalid-option",
   );
-  const searchDayLimit = (o["searchDayLimit"] ?? 3660) as number;
+  const searchDayLimit = (o["searchDayLimit"] === undefined ? 3660 : o["searchDayLimit"]) as number;
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {
     throw rangeError("invalid-option", "searchDayLimit must be a positive integer");
   }

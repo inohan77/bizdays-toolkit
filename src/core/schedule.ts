@@ -670,7 +670,7 @@ export interface HolidayLookup<Kind extends string = string> {
   civilOf(input: DateInput): CivilDateTimeParts;
   /**
    * 暦日 "YYYY-MM-DD" と時刻（"HH:mm" または "HH:mm:ss"）から、タイムゾーンでのその瞬間を Date で返す（civilOf の逆向き）。
-   * 夏時間で存在しない時刻は飛んだ分だけ後ろに、2 回ある時刻は先のほう（toInstant と同じ）
+   * 夏時間で存在しない時刻は飛んだ分だけ後ろに、2 回ある時刻は先のほう。時差は分の精度で扱う（toInstant と同じ）
    */
   instantOf(date: DateString, time: string): Date;
   /** 今日の日付（タイムゾーン） */
@@ -846,7 +846,8 @@ export function compileDateRules<Value>(
     return [];
   }
   const rules: DateRule<Value>[] = [];
-  entries.forEach((raw: unknown, i) => {
+  // 穴は undefined の要素として検証する（forEach は穴を飛ばす。decisions.md の 6 番）
+  Array.from(entries as unknown[]).forEach((raw: unknown, i) => {
     const p = `${path}[${i}]`;
     const entry: unknown = allowString && typeof raw === "string" ? { date: raw } : raw;
     if (!isObject(entry)) {
@@ -862,6 +863,11 @@ export function compileDateRules<Value>(
     // 2 つの書き方を分ける項目（date と from・to）の明示的な undefined は省略と同じ。ほかの項目の undefined は
     // 読むときに省略と同じになり、知らないキーの検査では残す
     const defined = withoutUndefined(entry, DATE_SHAPE_KEYS);
+    // 単日（date）と期間（from・to）の併記は、どちらを採っても意図を読み違えうるので例外にする（decisions.md の 8 番）
+    if ("date" in defined && ("from" in defined || "to" in defined)) {
+      c.error("invalid-option", p, 'cannot have both "date" and "from"/"to"');
+      return;
+    }
     if ("date" in defined) {
       checkUnknownKeys(c, p, defined, ["date", "name", ...(valueKey ? ["value"] : [])]);
       const n = checkDate(c, `${p}.date`, entry["date"]);
@@ -906,7 +912,8 @@ export function compileAnnualRules<Value>(
     return [];
   }
   const rules: AnnualRule<Value>[] = [];
-  entries.forEach((raw: unknown, i) => {
+  // 穴は undefined の要素として検証する（forEach は穴を飛ばす。decisions.md の 6 番）
+  Array.from(entries as unknown[]).forEach((raw: unknown, i) => {
     const p = `${path}[${i}]`;
     const entry: unknown = allowString && typeof raw === "string" ? { date: raw } : raw;
     if (!isObject(entry)) {
@@ -923,6 +930,11 @@ export function compileAnnualRules<Value>(
     // 2 つの書き方を分ける項目（date と from・to）の明示的な undefined は省略と同じ。ほかの項目の undefined は
     // 読むときに省略と同じになり、知らないキーの検査では残す
     const defined = withoutUndefined(entry, DATE_SHAPE_KEYS);
+    // 単日（date）と期間（from・to）の併記は、どちらを採っても意図を読み違えうるので例外にする（decisions.md の 8 番）
+    if ("date" in defined && ("from" in defined || "to" in defined)) {
+      c.error("invalid-option", p, 'cannot have both "date" and "from"/"to"');
+      return;
+    }
     if ("date" in defined) {
       checkUnknownKeys(c, p, defined, [
         "date",
@@ -1062,7 +1074,7 @@ function checkSet(
   elementCode: KnownErrorCode = "invalid-option",
 ): Set<number> | undefined {
   const list = Array.isArray(raw) ? raw : [raw];
-  if (list.length === 0 || !list.every(valid)) {
+  if (list.length === 0 || !Array.from(list).every(valid)) {
     c.error(
       list.length === 0 ? "invalid-option" : elementCode,
       path,
@@ -1090,7 +1102,8 @@ export function compileRecurringRules<Value>(
     return [];
   }
   const rules: RecurringRuleCompiled<Value>[] = [];
-  entries.forEach((rawEntry: unknown, i) => {
+  // 穴は undefined の要素として検証する（forEach は穴を飛ばす。decisions.md の 6 番）
+  Array.from(entries as unknown[]).forEach((rawEntry: unknown, i) => {
     const p = `${path}[${i}]`;
     if (!isObject(rawEntry)) {
       c.error("invalid-option", p, "must be an object");
@@ -1235,7 +1248,11 @@ export function compileRecurringRules<Value>(
           ok = false;
         } else if (cycle !== null) {
           const n = cycle;
-          if (!raw.every((v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= n)) {
+          if (
+            !Array.from(raw as unknown[]).every(
+              (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= n,
+            )
+          ) {
             c.error(
               "invalid-option",
               `${p}.positions`,
@@ -1475,7 +1492,11 @@ export function compileRecurringRules<Value>(
     }
     // 祝日の規則は「祝日の上」の段階で判定する（当てはまる日は祝日なので、祝日の下・振替は意味を持たない）
     const onHoliday =
-      entry["holidayOverlapPolicy"] ?? (hasHoliday ? "over-holiday" : "under-holiday");
+      entry["holidayOverlapPolicy"] === undefined
+        ? hasHoliday
+          ? "over-holiday"
+          : "under-holiday"
+        : entry["holidayOverlapPolicy"];
     if (!ON_HOLIDAY_RULES.includes(onHoliday as HolidayOverlapPolicy)) {
       c.error(
         "invalid-option",
@@ -1778,7 +1799,7 @@ export function compileHolidaySource<Kind extends string>(
   const list: unknown[] = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
   const providers: HolidayProvider<Kind>[] = [];
   const providerIndexes: number[] = [];
-  list.forEach((p, i) => {
+  Array.from(list).forEach((p, i) => {
     const path = Array.isArray(raw) ? `holidayProvider[${i}]` : "holidayProvider";
     // 同じ提供元のオブジェクトは 1 回だけ数える（decisions.md の 24 番）
     if (validateProvider(c, path, p) && !providers.includes(p as HolidayProvider<Kind>)) {
@@ -1810,11 +1831,16 @@ export function compileHolidaySource<Kind extends string>(
     timeZone = zones[0] ?? "UTC";
   }
 
-  const outOfRangePolicy = options["outOfRangePolicy"] ?? "throw";
+  // null は省略ではなく値の誤り（decisions.md の 6 番）
+  const outOfRangePolicy =
+    options["outOfRangePolicy"] === undefined ? "throw" : options["outOfRangePolicy"];
   if (outOfRangePolicy !== "throw" && outOfRangePolicy !== "ignore") {
     c.error("invalid-option", "outOfRangePolicy", 'must be "throw" or "ignore"');
   }
-  const unconfirmed = options["unconfirmedHolidayPolicy"] ?? "accept";
+  const unconfirmed =
+    options["unconfirmedHolidayPolicy"] === undefined
+      ? "accept"
+      : options["unconfirmedHolidayPolicy"];
   if (unconfirmed !== "accept" && unconfirmed !== "throw") {
     c.error("invalid-option", "unconfirmedHolidayPolicy", 'must be "accept" or "throw"');
   }
@@ -2110,6 +2136,8 @@ export function compileScheduleOptions<Value, Kind extends string>(
     writtenKey(["source", "schedule"], written, "holidayPolicy"),
     o["holidayPolicy"],
   );
+  // オブジェクトの中の知らないキー（sameAs の打ち間違いなど）は、ほかの設定と同じく診断で知らせる（decisions.md の 8 番）
+  if (isObject(holidayRaw)) checkUnknownKeys(c, "holidayPolicy", holidayRaw, ["sameAs", "value"]);
   // sameAs の明示的な undefined は省略と同じ（decisions.md の 6 番）。value は undefined も値なので、キーの有無で見る
   const hasSameAs = isObject(holidayRaw) && holidayRaw["sameAs"] !== undefined;
   const hasValue = isObject(holidayRaw) && "value" in holidayRaw;

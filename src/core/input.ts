@@ -164,8 +164,10 @@ function wallTime(hour: number, minute: number): number {
     minute < 0 ||
     minute > 59
   ) {
-    // 入力どおり 2 桁で表す（"24:00" を "24:0" と表示しない）
-    const two = (v: number): string => String(v).padStart(2, "0");
+    // 入力どおり 2 桁で表す（"24:00" を "24:0" と表示しない）。数でない値（Temporal の形の minute など）は
+    // describeValue で表す（文字列にできない値でメッセージの組み立てが落ちないように。decisions.md の 3 番）
+    const two = (v: unknown): string =>
+      typeof v === "number" ? String(v).padStart(2, "0") : describeValue(v);
     throw rangeError("invalid-time", `Invalid time: ${two(hour)}:${two(minute)}`);
   }
   return hour * 60 + minute;
@@ -251,7 +253,11 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
       }
       const date = formatDate(input.year, input.month, input.day);
       if (typeof input.hour === "number") {
-        return { date, minutes: wallTime(input.hour, input.minute ?? 0) };
+        // null は省略ではなく値の誤り（decisions.md の 6 番）
+        return {
+          date,
+          minutes: wallTime(input.hour, input.minute === undefined ? 0 : input.minute),
+        };
       }
       return { date, minutes: null };
     }
@@ -330,7 +336,8 @@ export function parseTimeOfDaySeconds(value: unknown): number {
 /**
  * 暦日と時刻（"HH:mm" または "HH:mm:ss"）から、タイムゾーンでのその瞬間を Date で返す（civilOf・toDateTimeParts の逆向き）。
  * 夏時間の切り替えで存在しない時刻は、飛んだ分だけ後ろの瞬間（英国の 3 月の 01:30 は 02:30 BST）、2 回ある時刻は先のほう
- * （Temporal の disambiguation: "compatible" と同じ）。
+ * （Temporal の disambiguation: "compatible" と同じ）。時差は分の精度で扱う（時差が分の倍数でない時期、たとえば標準時の
+ * 制定より前の地方平均時やリベリアの 1972 年までは、結果が最大 59 秒ずれ、秒を付けた時刻は civilOf で同じ分に戻らないことがある）。
  * @public
  */
 export function toInstant(date: DateString, time: string, timeZone: string): Date {

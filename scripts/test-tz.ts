@@ -46,6 +46,8 @@ export const TZ_FILES: readonly string[] = [
 
 /** 印に当たるが再実行しないテストと、その理由 */
 export const TZ_EXCLUDED: Readonly<Record<string, string>> = {
+  "test/null-and-holes.test.ts":
+    "Temporal の形の時刻は、分の値の誤りの code を確かめるだけで、暦日・瞬間の変換の結果を見ない",
   "test/diagnose.test.ts": "new Date(0) はスケジュールの値として渡すだけ（日付の入力ではない）",
   "test/diagnose-unjudgeable.test.ts":
     "テストの側で UTC の日数から暦日を作るだけで、ライブラリには暦日を渡す",

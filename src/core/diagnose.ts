@@ -113,7 +113,10 @@ export interface Diagnostic {
   /** 設定の中の位置（例: "closedRecurringRules[1]"・"closedDates[0].date"）。設定全体なら "" */
   readonly path: string;
   readonly message: string;
-  /** 関係する別の位置（shadowed では覆っている先の規則、out-of-range では祝日の提供元） */
+  /**
+   * 関係する別の位置。shadowed では覆っている先の規則、redundant では取り除いたときに代わりに決める規則（1 つに定まる
+   * ときだけ）、counting-basis では数え方に入らない曜日の規則、out-of-range では祝日の提供元
+   */
   readonly relatedPath?: string;
 }
 
@@ -178,7 +181,8 @@ function closestOf(key: string, known: readonly string[]): string | undefined {
 // ------------------------------------------------------------
 
 /**
- * 繰り返しの規則の当てはまり方は、年の種類（1 月 1 日の曜日 × うるう年か）の 14 通りで決まり、28 年でそろう。
+ * 繰り返しの規則の当てはまり方は、年の種類（1 月 1 日の曜日 × うるう年か）の 14 通りで決まり、28 年でそろう（100 で
+ * 割り切れて 400 で割り切れない年（2100 年など）をまたがない 28 年。1901〜2099 年の中なら成り立つ）。
  * 周期（interval・cycle）のある規則は、28 年（10,227 日）が周期の倍数とは限らないので、別に周期を求める（patternCycle）
  */
 const PATTERN_FROM = toDayNumber("2001-01-01");

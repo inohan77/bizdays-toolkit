@@ -114,8 +114,6 @@ const SAMPLES: Readonly<Record<string, () => unknown[]>> = {
   lastBusinessDayOfMonth: () => ["2026-11"],
   dueDate: () => ["2026-11", { dayOfMonth: 25, convention: "following" }],
   valueOn: () => [D],
-  valuesBetween: () => [D, "2026-11-30"],
-  scheduleDayOn: () => [D],
 };
 
 /** 対象の関数・メソッド: [表示名, 見本の名前, 関数] */
@@ -148,6 +146,13 @@ const describeError = (e: unknown): string =>
 test("誤った引数: どの関数・メソッドも、このライブラリの例外（code 付き・クラスは code で決まる）だけを投げる", () => {
   const all = targets();
   const missing = [...new Set(all.map(([, name]) => name).filter((n) => !(n in SAMPLES)))];
+  // 見本の表の名前は、すべて実際の関数・メソッドに使われる（実在しない名前の見本が残らない）
+  const used = new Set(all.map(([, name]) => name));
+  assert.deepEqual(
+    Object.keys(SAMPLES).filter((n) => !used.has(n)),
+    [],
+    "対象の関数・メソッドにない見本",
+  );
   const problems: string[] = [];
   let calls = 0;
   for (const [label, name, f] of all) {
