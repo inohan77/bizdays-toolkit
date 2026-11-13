@@ -205,6 +205,36 @@ const atCalendarEdge = (n: number, error: unknown): boolean =>
   (n < MIN_DAY + MAX_HOLIDAY_RUN || n > MAX_DAY - MAX_HOLIDAY_RUN) &&
   (error as { code?: unknown } | null)?.code === "out-of-range";
 
+/**
+ * 期限のない側を調べる日数。from から days 日の範囲が、100 で割り切れて 400 で割り切れない年（2100 年など）にかかるなら、
+ * 28 年の 2 倍まで広げる（その年をまたぐ 28 年には、年の種類が欠ける。decisions.md の 31 番）
+ */
+function openEndedDays(from: number, days: number): number {
+  const lo = Math.max(from, MIN_DAY);
+  const hi = Math.min(from + days - 1, MAX_DAY);
+  if (lo > hi) return days;
+  const last = yearOf(hi);
+  for (let y = Math.ceil(yearOf(lo) / 100) * 100; y <= last; y += 100)
+    if (y % 400 !== 0) return Math.max(days, 2 * PATTERN_DAYS);
+  return days;
+}
+
+/**
+ * 有効期間のある規則を調べる範囲（暦日の範囲に切り詰める前）。期限のない側は、期限のある側から当てはまり方がそろう長さ
+ * （openEndedDays）だけ広げる。両方に期限があれば、有効期間の全体
+ */
+function periodSpan(rule: CompiledPeriod, cycle: number): Range {
+  const { effectiveFrom, effectiveTo } = rule;
+  if (effectiveFrom === null) {
+    const to = effectiveTo!;
+    return { from: to - openEndedDays(to - cycle + 1, cycle) + 1, to };
+  }
+  return {
+    from: effectiveFrom,
+    to: effectiveTo ?? effectiveFrom + openEndedDays(effectiveFrom, cycle) - 1,
+  };
+}
+
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 const lcm = (a: number, b: number): number => (a / gcd(a, b)) * b;
 
@@ -277,9 +307,9 @@ function scanWindow(
   if (extend) {
     for (const rule of rules) {
       if (rule.effectiveFrom === null && rule.effectiveTo === null) continue;
-      const from = rule.effectiveFrom ?? rule.effectiveTo! - cycle + 1;
-      const to = Math.min(rule.effectiveTo ?? from + cycle - 1, from + 366 * MAX_WINDOW_YEARS - 1);
-      ranges.push({ from: Math.max(from, MIN_DAY), to: Math.min(to, MAX_DAY) });
+      const span = periodSpan(rule, cycle);
+      const to = Math.min(span.to, span.from + 366 * MAX_WINDOW_YEARS - 1);
+      ranges.push({ from: Math.max(span.from, MIN_DAY), to: Math.min(to, MAX_DAY) });
     }
   }
   ranges.sort((a, b) => a.from - b.from);
@@ -338,11 +368,17 @@ function patternBits(rule: RecurringRuleCompiled<unknown>): Uint8Array {
  * 有効期間があればその期間（期限のない側は、当てはまり方がそろう周期の長さ）を、なければ周期の長さを 1 日ずつ調べる
  */
 function matchesAnyDay(rule: RecurringRuleCompiled<unknown>, cycle: number): boolean {
-  const start =
-    rule.effectiveFrom ?? (rule.effectiveTo === null ? PATTERN_FROM : rule.effectiveTo - cycle + 1);
-  const from = Math.max(start, MIN_DAY);
-  const to = Math.min(rule.effectiveTo ?? Infinity, start + cycle - 1, MAX_DAY);
-  for (let n = from; n <= to; n++) if (matchPattern(rule, fromDayNumber(n))) return true;
+  const span =
+    rule.effectiveFrom === null && rule.effectiveTo === null
+      ? { from: PATTERN_FROM, to: PATTERN_FROM + cycle - 1 }
+      : periodSpan(rule, cycle);
+  // 両方に期限のある長い有効期間は、始めから当てはまり方がそろう長さまでで足りる
+  const to =
+    rule.effectiveFrom !== null && rule.effectiveTo !== null
+      ? Math.min(span.to, span.from + openEndedDays(span.from, cycle) - 1)
+      : span.to;
+  for (let n = Math.max(span.from, MIN_DAY); n <= Math.min(to, MAX_DAY); n++)
+    if (matchPattern(rule, fromDayNumber(n))) return true;
   return false;
 }
 

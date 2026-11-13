@@ -73,16 +73,24 @@ try {
   }
   if (body === undefined)
     throw new Error(exited ? "workerd exited before responding" : "workerd did not respond");
-  const { results, temporal } = JSON.parse(body) as {
+  const {
+    results,
+    temporal,
+    timeZones = [],
+  } = JSON.parse(body) as {
     results: { name: string; ok: boolean; error?: string }[];
     temporal: string;
+    timeZones?: string[];
   };
   for (const r of results)
     console.log(`${r.ok ? "OK  " : "FAIL"} ${r.name}${r.error ? `: ${r.error}` : ""}`);
   console.log(
     `Temporal: ${temporal === "native" ? "checked with the native Temporal" : `skipped (${skipWhen("temporal-unavailable-runtime", true)})`}`,
   );
-  code = results.every((r) => r.ok) && results.length > 0 ? 0 : 1;
+  // タイムゾーンの名前の扱いの記録（中身は合否にしない）。1 行も出なければ、黙って飛ばさずに失敗にする
+  for (const line of timeZones) console.log(`TimeZone: ${line}`);
+  if (timeZones.length === 0) console.log("FAIL no time zone report");
+  code = results.every((r) => r.ok) && results.length > 0 && timeZones.length > 0 ? 0 : 1;
 } finally {
   child.kill();
   rmSync(dir, { recursive: true, force: true });

@@ -11,11 +11,17 @@ import * as fr from "bizdays-toolkit/fr";
 import * as uk from "bizdays-toolkit/uk";
 import { smoke } from "./smoke.mjs";
 
-const { results, temporal } = smoke({ root, jp, uk, sg, fr, diagnose, provider });
+const { results, temporal, timeZones } = smoke({ root, jp, uk, sg, fr, diagnose, provider });
 // 本物の Temporal で確かめたかどうかを、黙って飛ばさずに必ず表示する
 console.log(
   `Temporal: ${temporal === "native" ? "checked with the native Temporal" : "skipped (no Temporal in this runtime)"}`,
 );
+
+// タイムゾーンの名前の扱いの記録（中身は合否にしない）。1 行も出なければ、黙って飛ばさずに失敗にする
+for (const line of timeZones) console.log(`TimeZone: ${line}`);
+test("タイムゾーンの名前の扱いを記録した", () => {
+  if (timeZones.length === 0) throw new Error("no time zone report");
+});
 
 for (const r of results) {
   test(r.name, () => {

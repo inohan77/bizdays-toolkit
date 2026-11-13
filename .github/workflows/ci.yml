@@ -147,7 +147,7 @@ jobs:
         run: '"${RUNNER_TEMP}/bun/bun-linux-x64/bun" run test/compat/runtime.mjs'
 
   deno:
-    # 公開する dist を Deno で確かめる（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。Deno の本物の Temporal でも確かめるため --unstable-temporal を付ける
+    # 公開する dist を Deno で確かめる（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。--unstable-temporal は、Temporal が既定で有効でないバージョンでも本物の Temporal で確かめるために付ける（既定で有効なバージョンでは何も変えない）
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

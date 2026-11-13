@@ -4,9 +4,11 @@
  * どの実行環境でも動くよう、標準の JavaScript だけで書く（node:test・node:assert などは使わない）。
  * 読み込み方は環境ごとに違うので、呼び出し側が各サブパスのモジュールを渡す。
  * 本物の Temporal がある環境では、Temporal のオブジェクトを入力にした確認も行う。
+ * 合否とは別に、タイムゾーンの名前の扱いの記録（timeZones）を返す。呼び出し側は 1 行ずつ「TimeZone: 」を付けてログに出し、
+ * 1 行もなければ失敗にする（黙って飛ばさない）。
  *
  * @param {{ root: any, jp: any, uk: any, sg: any, fr: any, diagnose: any, provider: any }} modules
- * @returns {{ results: { name: string, ok: boolean, error?: string }[], temporal: "native" | "absent" }}
+ * @returns {{ results: { name: string, ok: boolean, error?: string }[], temporal: "native" | "absent", timeZones: string[] }}
  */
 export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
   const results = [];
@@ -172,5 +174,74 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     });
   }
 
-  return { results, temporal: T === undefined ? "absent" : "native" };
+  return {
+    results,
+    temporal: T === undefined ? "absent" : "native",
+    timeZones: timeZoneReport(root, jp),
+  };
+}
+
+/**
+ * タイムゾーンの名前の扱いの記録（合否にしない。実行環境ごとの違いを CI のログで比べるため。decisions.md の 18 番）。
+ * 1 行に 1 つの事実を書く: 別名を正規化するか（name）、別名どうしの合成が作れるか（combine）、Temporal の比較の結果
+ * （temporal equals）、オフセット形式を受け付けるか（offset）。例外は「throws <code>」と書く
+ * @returns {string[]}
+ */
+function timeZoneReport(root, jp) {
+  const lines = [];
+  const attempt = (fn) => {
+    try {
+      return JSON.stringify(fn());
+    } catch (e) {
+      return `throws ${root.isBizdaysError(e) ? e.code : String(e)}`;
+    }
+  };
+  const of = (timeZone) => root.createCalendar({ timeZone });
+  for (const name of ["Asia/Kolkata", "Asia/Calcutta", "Etc/UTC", "Japan", "CST6CDT"])
+    lines.push(`name ${name} -> ${attempt(() => of(name).timeZone)}`);
+  const combine = (a, b) =>
+    attempt(() => root.combineCalendars([a(), b()], { open: "all" }).timeZone);
+  lines.push(
+    `combine UTC + Etc/UTC -> ${combine(
+      () => of("UTC"),
+      () => of("Etc/UTC"),
+    )}`,
+  );
+  lines.push(
+    `combine jp + Japan -> ${combine(
+      () => root.createCalendar({ holidayProvider: jp.jp }),
+      () => of("Japan"),
+    )}`,
+  );
+  lines.push(
+    `combine +09:00 + +0900 -> ${combine(
+      () => of("+09:00"),
+      () => of("+0900"),
+    )}`,
+  );
+  const T = globalThis.Temporal;
+  if (T === undefined) lines.push("temporal equals -> no Temporal");
+  else {
+    for (const [a, b] of [
+      ["UTC", "Etc/UTC"],
+      ["Asia/Kolkata", "Asia/Calcutta"],
+      ["Japan", "Asia/Tokyo"],
+      ["Europe/Paris", "Europe/Berlin"],
+      ["CST6CDT", "America/Chicago"],
+      ["+09:00", "+0900"],
+      ["+09:00", "Asia/Tokyo"],
+    ])
+      lines.push(
+        `temporal equals ${a} / ${b} -> ${attempt(() => {
+          const at = T.Instant.fromEpochMilliseconds(0);
+          return at.toZonedDateTimeISO(a).equals(at.toZonedDateTimeISO(b));
+        })}`,
+      );
+  }
+  const instant = new Date("2026-11-22T15:30:00Z");
+  for (const offset of ["+09:00", "+0900", "+09", "-05:00", "+05:30", "UTC+9"])
+    lines.push(
+      `offset ${offset} -> ${attempt(() => of(offset).timeZone)} / ${attempt(() => of(offset).dateOf(instant))}`,
+    );
+  return lines;
 }

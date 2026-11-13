@@ -650,7 +650,11 @@ export interface ScheduleDayInfo<Value, Kind extends string = string> {
  * @public
  */
 export interface HolidayLookup<Kind extends string = string> {
-  /** 日時の入力を暦日に変換するタイムゾーン */
+  /**
+   * 日時の入力を暦日に変換するタイムゾーン。実行環境の Intl が返す名前で、設定に書いた綴りと違うことがあり、実行環境によっても
+   * 違う（"Asia/Kolkata" と書くと、Node.js では "Asia/Calcutta"、Bun では "Asia/Kolkata"）。同じタイムゾーンかは、この名前が
+   * 同じかで比べる（違えば time-zone-conflict）
+   */
   readonly timeZone: string;
   /** 祝日の提供元 */
   readonly providers: readonly HolidayProvider<Kind>[];
@@ -2192,8 +2196,10 @@ export function compileScheduleOptions<Value, Kind extends string>(
     jpUsage(source),
   );
   // 第 n 営業日の規則の基準のカレンダーは、スケジュールと同じタイムゾーンであること（合成と同じ理由。瞬間の暦日が食い違うため）
+  // タイムゾーンが決まらなかった設定（timeZone の誤り・提供元どうしの食い違い）では比べない（仮の値との食い違いを報告しない）
+  const zoneKnown = !c.issues.some((i) => i.severity === "error" && i.path === "timeZone");
   for (const rule of recurring) {
-    if (rule.businessDays === null) continue;
+    if (rule.businessDays === null || !zoneKnown) continue;
     const entry = (o["recurringRules"] as Record<string, unknown>[])[
       Number(/\[(\d+)\]$/.exec(rule.path)![1])
     ]!;

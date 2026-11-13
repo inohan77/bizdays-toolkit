@@ -101,6 +101,7 @@ class TransientError extends Error {}
 interface Outcome {
   results: { name: string; ok: boolean; error?: string }[];
   temporal: string;
+  timeZones?: string[];
 }
 
 /** ページの読み込み・スクリプトの実行の時間制限（WebDriver の timeouts）と、各 HTTP 呼び出しの時間制限 */
@@ -194,7 +195,15 @@ try {
   console.log(
     `Temporal: ${outcome.temporal === "native" ? "checked with the native Temporal" : `skipped (${skipWhen("temporal-unavailable-browser", true)})`}`,
   );
-  code = outcome.results.length > 0 && outcome.results.every((r) => r.ok) ? 0 : 1;
+  // タイムゾーンの名前の扱いの記録（中身は合否にしない）。1 行も出なければ、黙って飛ばさずに失敗にする
+  // （ページの読み込みに失敗したときは、結果に timeZones がない）
+  const timeZones = outcome.timeZones ?? [];
+  for (const line of timeZones) console.log(`TimeZone: ${line}`);
+  if (timeZones.length === 0) console.log("FAIL no time zone report");
+  code =
+    outcome.results.length > 0 && timeZones.length > 0 && outcome.results.every((r) => r.ok)
+      ? 0
+      : 1;
 } finally {
   server.close();
 }

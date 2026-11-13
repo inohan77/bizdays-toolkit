@@ -23,8 +23,19 @@ const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MS_PER_DAY = 86_400_000;
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
 
-/** 年月日に分解する。形式または暦として不正なら RangeError */
-export function parseDate(value: string): { year: number; month: number; day: number } {
+// 直前に解析した 1 件（1 日の判定の中で、同じ暦日の文字列を何度も解析するため。判定の結果ではなく解析の結果だけを覚える。
+// decisions.md の 16 番）。初めから正しい 1 件を入れておく（空の状態を作ると、文字列でない値がそれと一致してしまう）
+let lastValue = "2000-01-01";
+let lastParts: { readonly year: number; readonly month: number; readonly day: number } =
+  Object.freeze({ year: 2000, month: 1, day: 1 });
+
+/** 年月日に分解する。形式または暦として不正なら RangeError。返すオブジェクトは変更できない */
+export function parseDate(value: string): {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+} {
+  if (value === lastValue) return lastParts;
   // 文字列でない値は正規表現に渡さない（Symbol は文字列にできず TypeError になる）
   const m = typeof value === "string" ? DATE_RE.exec(value) : null;
   if (!m) {
@@ -39,7 +50,8 @@ export function parseDate(value: string): { year: number; month: number; day: nu
   if (year < 1000 || month < 1 || month > 12 || day < 1 || day > lengthOfMonth(year, month)) {
     throw rangeError("invalid-date", `Invalid date: ${describeValue(value)}`);
   }
-  return { year, month, day };
+  lastValue = value;
+  return (lastParts = Object.freeze({ year, month, day }));
 }
 
 /**

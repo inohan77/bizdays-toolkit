@@ -13,13 +13,16 @@ import * as fr from "../../dist/fr/index.js";
 import * as uk from "../../dist/uk/index.js";
 import { smoke } from "./smoke.mjs";
 
-const { results, temporal } = smoke({ root, jp, uk, sg, fr, diagnose, provider });
+const { results, temporal, timeZones } = smoke({ root, jp, uk, sg, fr, diagnose, provider });
 for (const r of results)
   console.log(`${r.ok ? "OK  " : "FAIL"} ${r.name}${r.error ? `: ${r.error}` : ""}`);
 // 本物の Temporal で確かめたかどうかを、黙って飛ばさずに必ず表示する
 console.log(
   `Temporal: ${temporal === "native" ? "checked with the native Temporal" : "skipped (no Temporal in this runtime)"}`,
 );
-const code = results.length > 0 && results.every((r) => r.ok) ? 0 : 1;
+// タイムゾーンの名前の扱いの記録（中身は合否にしない）。1 行も出なければ、黙って飛ばさずに失敗にする
+for (const line of timeZones) console.log(`TimeZone: ${line}`);
+if (timeZones.length === 0) console.log("FAIL no time zone report");
+const code = results.length > 0 && timeZones.length > 0 && results.every((r) => r.ok) ? 0 : 1;
 if (globalThis.Deno !== undefined) globalThis.Deno.exit(code);
 else globalThis.process.exit(code);

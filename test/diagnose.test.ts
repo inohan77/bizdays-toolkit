@@ -813,3 +813,202 @@ test("unknown-option: カレンダーの個別の日付・毎年の月日に書�
     );
   }
 });
+
+// ------------------------------------------------------------
+// 期限が片側だけの有効期間と、100 で割り切れて 400 で割り切れない年（1900 年・2100 年など）
+// ------------------------------------------------------------
+
+/** うるう年か（ライブラリを使わない素朴な定義） */
+const leapYear = (y: number): boolean => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+/** 曜日（0 = 日曜日。ライブラリも Date も使わない素朴な定義。坂本智彦の方法） */
+const weekdayByArithmetic = (y: number, m: number, d: number): number => {
+  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+  const yy = m < 3 ? y - 1 : y;
+  return (
+    (yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) + t[m - 1]! + d) % 7
+  );
+};
+const iso = (y: number, m: number, d: number): string =>
+  `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+/** 2 月だけに当てはまる規則の形（当てはまる年が、年の種類で決まるもの） */
+type FebruaryShape =
+  | { readonly weekday: 0 | 1 | 2 | 3 | 4 | 5 | 6; readonly nth: 5 }
+  | { readonly dayOfMonth: 29 | 30 };
+/** 期限が片側だけの有効期間 */
+type OneSided = { readonly effectiveFrom: string } | { readonly effectiveTo: string };
+
+/**
+ * 素朴な定義: 2 月の規則の形が、期限が片側だけの有効期間の中で当てはまる日（期限に近い順）。ライブラリを使わずに、
+ * 期限から 400 年ぶんの 2 月の日を 1 日ずつ調べる（暦は 400 年 = 146,097 日 = 20,871 週で一巡するので、400 年で
+ * 当てはまらなければ、その先でも当てはまらない）。暦日の範囲（1000〜9999 年）の外は調べない
+ */
+function februaryMatches(shape: FebruaryShape, period: OneSided): string[] {
+  const forward = "effectiveFrom" in period;
+  const edge = forward ? period.effectiveFrom : period.effectiveTo;
+  const edgeYear = Number(edge.slice(0, 4));
+  const years: number[] = [];
+  for (let k = 0; k <= 400; k++) {
+    const y = forward ? edgeYear + k : edgeYear - k;
+    if (y >= 1000 && y <= 9999) years.push(y);
+  }
+  const found: string[] = [];
+  for (const y of years) {
+    for (let d = 1; d <= (leapYear(y) ? 29 : 28); d++) {
+      const date = iso(y, 2, d);
+      if (forward ? date < edge : date > edge) continue;
+      const hit =
+        "weekday" in shape
+          ? weekdayByArithmetic(y, 2, d) === shape.weekday && Math.ceil(d / 7) === shape.nth
+          : d === shape.dayOfMonth;
+      if (hit) found.push(date);
+    }
+  }
+  return found;
+}
+
+const FEBRUARY_SHAPES: readonly FebruaryShape[] = [
+  ...([0, 1, 2, 3, 4, 5, 6] as const).map((weekday) => ({ weekday, nth: 5 }) as const),
+  { dayOfMonth: 29 },
+  { dayOfMonth: 30 },
+];
+/**
+ * 期限の日。期限から 28 年の範囲が 1900 年・2100 年にかかるもの（前の 4 つ）と、かからないもの（対照）、暦日の範囲の端
+ * （1000 年も 100 で割り切れて 400 で割り切れない年）
+ */
+const ONE_SIDED: readonly OneSided[] = [
+  { effectiveFrom: "2073-01-01" },
+  { effectiveFrom: "2096-03-01" },
+  { effectiveTo: "1927-12-31" },
+  { effectiveTo: "1903-02-28" },
+  { effectiveFrom: "2101-01-01" },
+  { effectiveTo: "1899-12-31" },
+  { effectiveTo: "1020-12-31" },
+  { effectiveFrom: "9975-01-01" },
+];
+
+interface OneSidedCase {
+  readonly label: string;
+  readonly rule: RecurringRule;
+  /** 素朴な定義で当てはまる日（期限に近い順） */
+  readonly matches: readonly string[];
+  /** 当てはまる日のうち期限に最も近い日が、期限の年から 28 年を超えて離れている（28 年だけを調べると見落とす） */
+  readonly late: boolean;
+  readonly codes: readonly string[];
+}
+let oneSidedCases: readonly OneSidedCase[] | undefined;
+/** 規則の形 × 期限のすべての組み合わせを 1 回だけ診断する（下の 2 つのテストが同じ結果を別の観点で確かめる） */
+function oneSided(): readonly OneSidedCase[] {
+  oneSidedCases ??= FEBRUARY_SHAPES.flatMap((shape) =>
+    ONE_SIDED.map((period): OneSidedCase => {
+      const rule = { ...shape, months: [2], ...period } as RecurringRule;
+      const matches = februaryMatches(shape, period);
+      const edge = "effectiveFrom" in period ? period.effectiveFrom : period.effectiveTo;
+      const yearsApart = Math.abs(Number(matches[0]?.slice(0, 4)) - Number(edge.slice(0, 4)));
+      const late = matches.length > 0 && yearsApart > 28;
+      return {
+        label: JSON.stringify(rule),
+        rule,
+        matches,
+        late,
+        codes: diagnoseCalendar({ closedWeekdays: [], closedRecurringRules: [rule] }).map(
+          (d) => d.code,
+        ),
+      };
+    }),
+  );
+  return oneSidedCases;
+}
+
+test("素朴な定義の曜日は、暦の知られた日と合う", () => {
+  assert.equal(weekdayByArithmetic(2026, 11, 13), 5);
+  assert.equal(weekdayByArithmetic(1970, 1, 1), 4);
+  assert.equal(weekdayByArithmetic(2000, 2, 29), 2);
+  assert.equal(weekdayByArithmetic(2112, 2, 29), 1);
+  assert.equal(weekdayByArithmetic(1000, 1, 1), 3);
+  assert.equal(weekdayByArithmetic(9999, 12, 31), 5);
+});
+
+test("never-matches: 期限が片側だけの有効期間が 1900 年・2100 年にかかっても、400 年を調べた素朴な定義と一致する", () => {
+  const cases = oneSided();
+  for (const c of cases) {
+    assert.equal(c.codes.includes("never-matches"), c.matches.length === 0, c.label);
+    // 素朴な定義の当てはまる日は、ライブラリの判定でも休業日（素朴な定義の側の誤りを見張る）
+    if (c.matches.length > 0) {
+      const calendar = createCalendar({ closedWeekdays: [], closedRecurringRules: [c.rule] });
+      assert.equal(calendar.isBusinessDay(c.matches[0]!), false, c.label);
+    }
+  }
+  // 28 年の中では当てはまらず、その先で当てはまる規則（28 年だけを調べると never-matches になる形）を含むこと
+  const late = cases.filter((c) => c.late).length;
+  const never = cases.filter((c) => c.matches.length === 0).length;
+  console.log(
+    `# 片側だけの有効期間: ${cases.length} 件（28 年の先で当てはまる ${late}、当てはまらない ${never}）`,
+  );
+  assert.ok(late > 0 && never > 0);
+});
+
+test("redundant: 期限が片側だけの有効期間が 1900 年・2100 年にかかっても、後で当てはまる規則を redundant にしない", () => {
+  const cases = oneSided().filter((c) => c.matches.length > 0);
+  assert.ok(cases.some((c) => c.late));
+  // 定休日のない設定なので、当てはまる日のある閉じる規則は、取り除くとその日が変わる
+  for (const c of cases) assert.equal(c.codes.includes("redundant"), false, c.label);
+});
+
+test("never-matches: 第 n 営業日の規則でも、2100 年にかかる期限のない有効期間の先で当てはまる月を見落とさない", () => {
+  // 月曜日だけが営業日の設定で、2 月の第 5 営業日があるのは 2 月 29 日が月曜日の年だけ（2073 年以降で最初は 2112 年）
+  assert.deepEqual(
+    februaryMatches({ weekday: 1, nth: 5 }, { effectiveFrom: "2073-01-01" }).slice(0, 1),
+    ["2112-02-29"],
+  );
+  const options: CalendarOptions = {
+    closedWeekdays: [0, 2, 3, 4, 5, 6],
+    closedRecurringRules: [{ businessDayOfMonth: 5, months: [2], effectiveFrom: "2073-01-01" }],
+  };
+  assert.deepEqual(brief(diagnoseCalendar(options)), []);
+  assert.equal(createCalendar(options).isBusinessDay("2112-02-29"), false);
+  assert.equal(createCalendar(options).isBusinessDay("2112-02-22"), true);
+});
+
+test("diagnoseSchedule: タイムゾーンが決まらない設定では、基準のカレンダーとの time-zone-conflict を重ねて出さない", () => {
+  const tokyo = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
+  const rules = [{ businessDayOfMonth: 1, calendar: tokyo, value: 2 }];
+  const weekdayValues = [1, 1, 1, 1, 1, 1, 1] as const;
+  // timeZone の値の誤り: 仮の値（"UTC"）との食い違いを出さない
+  assert.deepEqual(
+    brief(diagnoseSchedule({ timeZone: "Bad/Zone", weekdayValues, recurringRules: rules })),
+    [{ severity: "error", code: "invalid-time-zone", path: "timeZone" }],
+  );
+  // 提供元どうしの食い違い: 仮の値（先の提供元のタイムゾーン）との食い違いを出さない
+  const london: HolidayProvider = { ...SHORT_PROVIDER, id: "X-LON", timeZone: "Europe/London" };
+  assert.deepEqual(
+    brief(
+      diagnoseSchedule({
+        holidayProvider: [london, SHORT_PROVIDER],
+        holidayPolicy: "ignore",
+        weekdayValues,
+        recurringRules: rules,
+      }),
+    ),
+    [{ severity: "error", code: "time-zone-conflict", path: "timeZone" }],
+  );
+  // 作成は、どちらも最初の誤りで止まる（診断の 1 件目と同じ code）
+  assert.throws(
+    () => createSchedule({ timeZone: "Bad/Zone", weekdayValues, recurringRules: rules }),
+    { code: "invalid-time-zone" },
+  );
+});
+
+test("diagnoseSchedule: タイムゾーンが決まっていて基準のカレンダーだけが違うときは、time-zone-conflict を出す", () => {
+  const tokyo = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
+  const rules = [{ businessDayOfMonth: 1, calendar: tokyo, value: 2 }];
+  const weekdayValues = [1, 1, 1, 1, 1, 1, 1] as const;
+  assert.deepEqual(
+    brief(diagnoseSchedule({ timeZone: "UTC", weekdayValues, recurringRules: rules })),
+    [{ severity: "error", code: "time-zone-conflict", path: "recurringRules[0].calendar" }],
+  );
+  assert.deepEqual(
+    brief(diagnoseSchedule({ timeZone: "Asia/Tokyo", weekdayValues, recurringRules: rules })),
+    [],
+  );
+});
