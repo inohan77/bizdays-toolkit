@@ -144,10 +144,10 @@ jobs:
           unzip -q "${RUNNER_TEMP}/bun.zip" -d "${RUNNER_TEMP}/bun"
           "${RUNNER_TEMP}/bun/bun-linux-x64/bun" --version
       - name: Check dist on Bun
-        run: '"${RUNNER_TEMP}/bun/bun-linux-x64/bun" run test/compat/runtime.mjs'
+        run: '"${RUNNER_TEMP}/bun/bun-linux-x64/bun" run test/compat/runtime.mjs --require-temporal'
 
   deno:
-    # 公開する dist を Deno で確かめる（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。--unstable-temporal は、Temporal が既定で有効でないバージョンでも本物の Temporal で確かめるために付ける（既定で有効なバージョンでは何も変えない）
+    # 公開する dist を Deno で確かめる（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。--require-temporal で、本物の Temporal がなければ失敗にする（Temporal を使う確認が黙って飛ぶのを防ぐ。Deno は 2.9.6 からフラグなしで Temporal があるので、--unstable-temporal は付けない）
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -169,7 +169,7 @@ jobs:
           unzip -q "${RUNNER_TEMP}/deno.zip" -d "${RUNNER_TEMP}/deno"
           "${RUNNER_TEMP}/deno/deno" --version
       - name: Check dist on Deno
-        run: '"${RUNNER_TEMP}/deno/deno" run --unstable-temporal test/compat/runtime.mjs'
+        run: '"${RUNNER_TEMP}/deno/deno" run test/compat/runtime.mjs --require-temporal'
 
   consumer-types:
     # 公開する型定義を、利用者が使う TypeScript の複数のバージョンで型チェックする（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。

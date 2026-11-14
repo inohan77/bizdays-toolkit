@@ -114,6 +114,11 @@ const benchControl = () => {
   writeFileSync(join(work, "bench-base.json"), JSON.stringify({ isBusinessDay: 100 }));
   writeFileSync(join(work, "bench-head.json"), JSON.stringify({ isBusinessDay: 110 }));
 };
+/** 比率が上限を超える計測（3 倍）を入れ、開発の記録の [Unreleased] に 1 行を足す */
+const benchExceededWith = (line: string) => () => {
+  writeFileSync(join(work, "bench-head.json"), JSON.stringify({ isBusinessDay: 300 }));
+  edit("docs/development-log.md", replaceOnce("## [Unreleased]\n", `## [Unreleased]\n\n${line}\n`));
+};
 const compareArgs = (script: string): string[] => [
   `scripts/${script}`,
   "--base",
@@ -394,6 +399,29 @@ const CASES: readonly Case[] = [
     inject: () =>
       writeFileSync(join(work, "bench-head.json"), JSON.stringify({ isBusinessDay: 300 })),
     expect: "3.00x ❌",
+  },
+  {
+    tool: "bench-compare",
+    name: "上限を超えた計測があり、開発の記録に「性能の退行」の言葉だけがある（許可の行の形でない）",
+    args: TOOLS["bench-compare"]!,
+    inject: benchExceededWith(
+      "- 性能の退行: 前のバージョンと比べて速くなった（`isBusinessDay` は 0.25 倍）",
+    ),
+    expect: "isBusinessDay 3.00x (no allowance line)",
+  },
+  {
+    tool: "bench-compare",
+    name: "上限を超えた計測の比率が、許可の行の倍率を超える",
+    args: TOOLS["bench-compare"]!,
+    inject: benchExceededWith("- 性能の退行: isBusinessDay は 2.5x まで受け入れる（自己検査）"),
+    expect: "isBusinessDay 3.00x (allowed up to 2.5x)",
+  },
+  {
+    tool: "bench-compare",
+    name: "上限を超えた計測と、許可の行の計測の名前が違う",
+    args: TOOLS["bench-compare"]!,
+    inject: benchExceededWith("- 性能の退行: valueOn は 5x まで受け入れる（自己検査）"),
+    expect: "isBusinessDay 3.00x (no allowance line)",
   },
   {
     tool: "result-compare",
