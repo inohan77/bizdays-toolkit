@@ -4,7 +4,7 @@
  *
  *   - 性能の退行: <計測の名前> は <数>x まで受け入れる（<理由>）
  *
- * 「性能の退行」という言葉があるだけの行は、許可にならない（0.31.9 で、速くなったことを書いた行の見出しにこの言葉を使い、上限を
+ * 「性能の退行」という言葉があるだけの行と、理由（括弧の中）のない行は、許可にならない（0.31.9 で、速くなったことを書いた行の見出しにこの言葉を使い、上限を
  * 超えても合格になる状態で公開の直前まで進んだ。tool-selftest が見つけた）。どの計測を何倍まで受け入れるかを書かせるのは、
  * 受け入れたつもりより大きい退行を止めるためでもある（RELEASING.md の「品質の確認」の表の「性能の退行」の行）
  */
@@ -21,7 +21,8 @@ export function allowedRatio(sections: readonly string[], name: string): number 
   for (const section of sections) {
     for (const line of section.split("\n")) {
       if (!line.startsWith(head)) continue;
-      const m = /^(\d+(?:\.\d+)?)x まで受け入れる/.exec(line.slice(head.length));
+      // 理由（全角の括弧の中に 1 文字以上）まで書いた行だけを許可にする（理由のない許可を残さない）
+      const m = /^(\d+(?:\.\d+)?)x まで受け入れる（.+）/.exec(line.slice(head.length));
       if (m) return Number(m[1]);
     }
   }

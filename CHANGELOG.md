@@ -6,6 +6,12 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-11-14
+
+### Fixed
+
+- The option diagnostics reported an item as `redundant` (removing it does not change any result) although removing it made a day throw. This happened only with a holiday provider that returns holidays on more than 31 consecutive days and a `holidayOverlapPolicy: "after-holiday"` rule whose day cannot be moved past that run (the case that throws `holiday-run-too-long` since 0.32.0): when another item decided the first day after the run before the rule was reached (a date in `closedDates` or `openDates`, an annual date, or an earlier recurring rule), the calendar evaluated that day without an exception, the diagnostics reported that item as `redundant`, and removing it as suggested made the day throw `holiday-run-too-long`. The diagnostics now treat a day on which the evaluation throws `holiday-run-too-long` as a day that cannot be judged (an item is not reported as `redundant` when removing it changes whether a day can be judged), so such an item is no longer reported. A wrong diagnostic disappears; no result of a calendar or schedule changes, and the `warning` with code `holiday-run-too-long` is reported as before. The opposite direction remains and is documented (design decisions 31): the `"after-holiday"` rule that loses its day can itself be reported as `redundant`, and removing it makes the exception disappear
+
 ## [0.32.0] - 2026-11-14
 
 This minor version stops one silent loss of closed days, makes aliases of a time zone the same time zone on runtimes with Temporal, and makes one mistaken call a type error. Some code needs a check; see Migration.
@@ -1001,7 +1007,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.1...HEAD
+[0.32.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.9...v0.32.0
 [0.31.9]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.8...v0.31.9
 [0.31.8]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.7...v0.31.8

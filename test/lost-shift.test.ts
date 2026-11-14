@@ -387,7 +387,7 @@ test("届かない振替: スケジュールでも、判定は holiday-run-too-l
   assert.deepEqual(diagnoseSchedule(onlyAugust), []);
 });
 
-test("届かない振替: 規則を取り除いて比べる診断の走査は、届かない振替で投げない（invalid-provider-data にしない）", () => {
+test("届かない振替: 届かない振替のある設定の診断は、規則どうしを調べる走査の例外を error（invalid-provider-data）にしない", () => {
   // shadowed・redundant・counting-basis・第 n 営業日の規則の走査を通る設定に、届かない振替の規則を混ぜる
   const o: CalendarOptions = {
     holidayProvider: runOf(40),
@@ -415,8 +415,8 @@ test("届かない振替: 規則を取り除いて比べる診断の走査は、
     codes.includes(CODE) && codes.includes("shadowed") && codes.includes("redundant"),
     JSON.stringify(brief(list)),
   );
-  // 営業日が 1 日もないかを調べる走査は、全日を判定するので、明けた日を必ず通る（走査が投げると、規則どうしの診断の結果が
-  // 捨てられ、error の invalid-provider-data になる）
+  // 営業日が 1 日もないかを調べる走査は、全日を判定するので、明けた日を必ず通る。届かない振替の例外を受けて、その日を営業日に
+  // 数えない（受けないと、規則どうしの診断の結果が捨てられ、error の invalid-provider-data になる）
   const allClosed: CalendarOptions = {
     holidayProvider: runOf(40),
     holidayPolicy: "closed",
@@ -549,4 +549,157 @@ test("届かない振替: 暦日の範囲の端（9999-12-31）の祝日の後�
     diagnoseCalendar(o).filter((d) => d.severity === "error"),
     [],
   );
+});
+
+// ------------------------------------------------------------
+// 診断が出した項目を取り除いても、判定できる日の結果が変わらない（届かない振替のある設定でも。decisions.md の 31 番）
+// ------------------------------------------------------------
+
+/** 取り除いても結果が変わらない・使われない、と診断が知らせる code */
+const REMOVABLE = new Set(["redundant", "shadowed", "never-matches"]);
+type Options = Record<string, unknown>;
+/** 診断が取り除けると出した項目（設定の配列の要素）を、まとめて取り除いた設定 */
+function withoutReported(o: Options, list: readonly { code: string; path: string }[]): Options {
+  const drop = new Map<string, Set<number>>();
+  for (const d of list) {
+    const m = /^(\w+)\[(\d+)\]$/.exec(d.path);
+    if (!REMOVABLE.has(d.code) || !m) continue;
+    const set = drop.get(m[1]!) ?? new Set<number>();
+    set.add(Number(m[2]));
+    drop.set(m[1]!, set);
+  }
+  const out: Options = { ...o };
+  for (const [key, indexes] of drop)
+    out[key] = (o[key] as readonly unknown[]).filter((_, i) => !indexes.has(i));
+  return out;
+}
+/** 期間の全日の判定（例外は "E:" と code） */
+function judgements(o: Options, from: string, to: string): Map<string, string> {
+  const calendar = createCalendar(o as CalendarOptions);
+  const out = new Map<string, string>();
+  for (let date = from; date <= to; date = addDays(date, 1)) {
+    try {
+      out.set(date, String(calendar.isBusinessDay(date)));
+    } catch (e) {
+      out.set(date, `E:${isBizdaysError(e) ? e.code : String(e)}`);
+    }
+  }
+  return out;
+}
+/** 取り除いた後に、元の設定で判定できた日の結果が変わった日（「日付: 前 → 後」）。元の設定で例外だった日は比べない */
+function changedAfterRemoval(
+  o: Options,
+  from: string,
+  to: string,
+  before = judgements(o, from, to),
+): string[] {
+  const after = judgements(withoutReported(o, diagnoseCalendar(o as CalendarOptions)), from, to);
+  const changed: string[] = [];
+  for (const [date, value] of before)
+    if (!value.startsWith("E:") && after.get(date) !== value)
+      changed.push(`${date}: ${value} → ${after.get(date)}`);
+  return changed;
+}
+
+test("届かない振替: 取り除くと明けた日の判定が例外になる項目を、redundant にしない（決まった設定）", () => {
+  // 2026-07-01 から 40 日の祝日。7 月 1 日・5 日の規則は、明けた 8 月 10 日（月曜日）に届かない
+  const lost = { dayOfMonth: [1, 5], months: [7], ...AFTER };
+  const base = { holidayProvider: runOf(40), holidayPolicy: "open", closedWeekdays: [1] };
+  // 明けた日を先に決めている項目（取り除くと、届かない振替の段まで進んで例外になる）
+  const deciding: readonly (readonly [string, Options])[] = [
+    ["臨時休業日", { closedDates: ["2026-08-10"], closedRecurringRules: [lost] }],
+    ["臨時営業日", { openDates: ["2026-08-10"], closedRecurringRules: [lost] }],
+    ["毎年の休業日", { closedAnnualDates: ["08-10"], closedRecurringRules: [lost] }],
+    ["先に書いた毎週の規則", { closedRecurringRules: [{ weekday: 1 }, lost] }],
+  ];
+  for (const [label, extra] of deciding) {
+    const o = { ...base, ...extra };
+    // 元の設定は、明けた日を判定できる
+    assert.equal(
+      codeOf(() => createCalendar(o as CalendarOptions).isBusinessDay("2026-08-10")),
+      undefined,
+      label,
+    );
+    assert.deepEqual(changedAfterRemoval(o, "2026-06-01", "2026-09-30"), [], label);
+  }
+  // 臨時休業日を取り除くと例外になる設定の診断（0.32.0 は、この臨時休業日を redundant と出した）
+  assert.deepEqual(brief(diagnoseCalendar({ ...base, ...deciding[0]![1] } as CalendarOptions)), []);
+  // 対照: 届かない振替と関わらない日の臨時休業日（月曜定休の月曜日）は、今までどおり redundant
+  const control = { ...base, closedDates: ["2026-08-17"], closedRecurringRules: [lost] };
+  assert.deepEqual(brief(diagnoseCalendar(control as CalendarOptions)), [
+    ["warning", CODE, "closedRecurringRules[0]"],
+    ["info", "redundant", "closedDates[0]"],
+  ]);
+  assert.deepEqual(changedAfterRemoval(control, "2026-06-01", "2026-09-30"), []);
+});
+
+test("届かない振替: 乱数で作った設定でも、診断が出した項目をまとめて取り除いて、判定できた日の結果が変わらない（種は固定）", () => {
+  const next = random(20261115);
+  const int = (min: number, max: number): number => min + Math.floor(next() * (max - min + 1));
+  const years = { from: 2025, to: 2027 };
+  let removed = 0;
+  let withLost = 0;
+  let decidedAtLanding = 0;
+  for (let trial = 0; trial < 120; trial++) {
+    // 祝日の塊を 1〜2 つ（最初の塊は 32〜40 日）。規則の日は最初の塊の始まりの近くで、届かない振替が起きやすい形にする
+    const first = addDays("2026-03-01", int(0, 14));
+    const dates: string[] = [];
+    let day = first;
+    for (let b = 0, blocks = int(1, 2); b < blocks; b++) {
+      const length = b === 0 ? int(32, 40) : int(1, 20);
+      for (let i = 0; i < length; i++) dates.push(addDays(day, i));
+      day = addDays(day, length + int(1, 8));
+    }
+    const end = dates[dates.length - 1]!;
+    // 連続が明けた日の近く（1〜8 日後）の日。個別の日付・毎年の月日は、この日を決める項目として足す
+    const near = (): string => addDays(end, int(1, 8));
+    const candidates = [0, 1, 2, 3, 4, 5, 6].filter(() => next() < 0.2).slice(0, 2);
+    const lost = {
+      dayOfMonth: Number(addDays(first, int(0, 4)).slice(8)),
+      months: [Number(first.slice(5, 7))],
+      ...(candidates.length > 0 ? { skipWeekdays: candidates } : {}),
+      ...AFTER,
+    };
+    const weekly = { weekday: int(0, 6) };
+    const o: Options = {
+      holidayProvider: holidaysOn(dates, years),
+      holidayPolicy: next() < 0.5 ? "open" : "closed",
+      closedWeekdays: [0, 1, 2, 3, 4, 5, 6].filter(() => next() < 0.25),
+      closedRecurringRules: [
+        ...(next() < 0.5 ? [lost] : next() < 0.5 ? [weekly, lost] : [lost, weekly]),
+        // 4 割は、第 n 営業日の規則を足す（どの規則がその日を決めたかを調べる走査が、明けた日の月の全日を判定する。
+        // この走査が届かない振替を受けないと、診断が error を返す）
+        ...(next() < 0.4 ? [{ businessDayOfMonth: [1, 2, -1][int(0, 2)]! }] : []),
+      ],
+      ...(next() < 0.5 ? { closedDates: [near(), ...(next() < 0.3 ? [near()] : [])] } : {}),
+      ...(next() < 0.3 ? { openDates: [near()] } : {}),
+      ...(next() < 0.3 ? { closedAnnualDates: [near().slice(5)] } : {}),
+    };
+    // 同じ日を臨時営業日と臨時休業日の両方に書いた設定も、そのまま通す（先の臨時営業日が決める）
+    const list = diagnoseCalendar(o as CalendarOptions);
+    const context = `試行 ${trial}: ${JSON.stringify({ ...o, holidayProvider: [dates[0], dates.length] })}`;
+    assert.deepEqual(
+      list.filter((d) => d.severity === "error"),
+      [],
+      context,
+    );
+    // 規則の日は 3 月、祝日は遅くても 6 月上旬までなので、2 月から 6 月を比べる
+    const [from, to] = ["2026-02-15", "2026-06-30"];
+    const before = judgements(o, from, to);
+    assert.deepEqual(changedAfterRemoval(o, from, to, before), [], context);
+    if (list.some((d) => REMOVABLE.has(d.code))) removed++;
+    if ([...before.values()].includes(`E:${CODE}`)) withLost++;
+    // 元の設定では判定でき、個別の日付・毎年の月日を除くと届かない振替で例外になる設定（0.32.0 が見逃した形）
+    const bare = judgements(
+      { ...o, closedDates: [], openDates: [], closedAnnualDates: [] },
+      from,
+      to,
+    );
+    if ([...bare].some(([date, v]) => v === `E:${CODE}` && !before.get(date)!.startsWith("E:")))
+      decidedAtLanding++;
+  }
+  console.log(
+    `# 届かない振替（取り除いて比べる）: 120 件（取り除ける項目が出た ${removed}、判定が投げる日がある ${withLost}、明けた日を個別の日付・毎年の月日が決めている ${decidedAtLanding}）`,
+  );
+  assert.ok(removed > 0 && withLost > 0 && decidedAtLanding > 0);
 });
