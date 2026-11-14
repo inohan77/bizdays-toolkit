@@ -1,6 +1,6 @@
 // 対応年の短い自作の提供元（テスト拡充案の T1・T2）。全日を比べるテストを速く回すため、対応年を 2025〜2027 年に絞る。
 // 元日・5 月の連休（日曜日に当たれば 5 月 6 日が振替）・7 月の第 3 月曜日・12 月 25 日を祝日にする。
-import type { Holiday, HolidayProvider } from "../../src/index.ts";
+import { addDays, type Holiday, type HolidayProvider } from "../../src/index.ts";
 import { jp, type JpHolidayKind } from "../../src/jp/index.ts";
 import { daysOf } from "./compare.ts";
 
@@ -50,3 +50,34 @@ export const JP_NARROW: HolidayProvider<JpHolidayKind> = Object.freeze({
   supportedYears: Object.freeze({ from: 2020, to: 2030 }),
   holidaysInYear: (year: number) => jp.holidaysInYear(year),
 });
+
+/** 指定した日を祝日として返す提供元（長く続く祝日の確かめに使う。対応年は、指定しなければ 2020〜2030 年） */
+export const holidaysOn = (
+  dates: readonly string[],
+  supportedYears: { readonly from: number; readonly to: number } = { from: 2020, to: 2030 },
+  id = "XX",
+): HolidayProvider<string> => ({
+  id,
+  timeZone: "UTC",
+  supportedYears,
+  dataVersion: "test",
+  holidaysInYear: (year) =>
+    dates
+      .filter((date) => Number(date.slice(0, 4)) === year)
+      .map((date) => ({
+        date,
+        name: "shutdown",
+        nameEn: "shutdown",
+        kind: "regular",
+        confirmed: true,
+      })),
+});
+
+/** start から days 日続く祝日を返す提供元（31 日を超えると、"after-holiday" の規則の日が届かないことがある。decisions.md の 24 番） */
+export const holidayRun = (
+  days: number,
+  start = "2026-07-01",
+  id = "XX",
+  supportedYears: { readonly from: number; readonly to: number } = { from: 2020, to: 2030 },
+): HolidayProvider<string> =>
+  holidaysOn(daysOf(start, addDays(start, days - 1)), supportedYears, id);

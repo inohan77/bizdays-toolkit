@@ -13,6 +13,7 @@ import {
   type Holiday,
   type HolidayProvider,
 } from "../src/index.ts";
+import { holidayRun } from "./support/provider.ts";
 import { holidaysInYear, isHoliday, jp } from "../src/jp/index.ts";
 import { withSubstituteDays } from "../src/provider/index.ts";
 import {
@@ -119,22 +120,7 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
     // 2026-07-01 から 40 日続く祝日。7 月 1 日の規則の日は、明けた 8 月 10 日に振り替えられない（test/lost-shift.test.ts）
     () =>
       createCalendar({
-        holidayProvider: {
-          id: "XX",
-          timeZone: "UTC",
-          supportedYears: { from: 2020, to: 2030 },
-          dataVersion: "test",
-          holidaysInYear: (year) =>
-            year === 2026
-              ? Array.from({ length: 40 }, (_, i) => ({
-                  date: addDays("2026-07-01", i),
-                  name: "shutdown",
-                  nameEn: "shutdown",
-                  kind: "regular",
-                  confirmed: true,
-                }))
-              : [],
-        },
+        holidayProvider: holidayRun(40),
         holidayPolicy: "open",
         closedRecurringRules: [
           { dayOfMonth: 1, months: [7], holidayOverlapPolicy: "after-holiday" },
