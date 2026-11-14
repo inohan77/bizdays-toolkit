@@ -45,6 +45,8 @@ export const TZ_FILES: readonly string[] = [
 
 /** 印に当たるが再実行しないテストと、その理由 */
 export const TZ_EXCLUDED: Readonly<Record<string, string>> = {
+  "test/time-zone-identity.test.ts":
+    "Temporal は、タイムゾーンの名前の比較を差し替えるための代わりの実装を書くだけで、瞬間を暦日に変換しない（結果は TZ に依存しない）",
   "test/unconfirmed-holidays.test.ts":
     "テストの側で Date から暦日の文字列を作るだけで、ライブラリには暦日を渡す",
   "test/null-and-holes.test.ts":

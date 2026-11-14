@@ -27,7 +27,7 @@ import {
 } from "./errors.ts";
 import { isOptionsObject } from "./options.ts";
 import { renameKeys, writtenKey } from "./renamed.ts";
-import { parseTimeOfDaySeconds, toCivil, type DateInput } from "./input.ts";
+import { distinctTimeZones, parseTimeOfDaySeconds, toCivil, type DateInput } from "./input.ts";
 import {
   checkClosingDay,
   closingDayIn,
@@ -895,7 +895,7 @@ export function combineCalendars<Kind extends string = string>(
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {
     throw rangeError("invalid-option", "searchDayLimit must be a positive integer");
   }
-  const zones = [...new Set(calendars.map((c) => c.timeZone))];
+  const zones = distinctTimeZones(calendars.map((c) => c.timeZone));
   if (zones.length > 1) {
     throw rangeError(
       "time-zone-conflict",

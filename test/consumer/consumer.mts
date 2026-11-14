@@ -141,3 +141,14 @@ const issues: readonly Diagnostic[] = diagnoseCalendar({ holidayProvider: jp });
 createCalendar({ closedWeekdays: ["sunday"] });
 
 export { days, values, providers, holiday, issues };
+
+// 祝日の提供元・作成済みのカレンダー・スケジュールをそのまま設定として渡す誤りは、型エラーになる（0.32.0 から。設定の型の
+// holidaysInYear が ?: never で、3 つともこの項目を持つ。型エラーにならなければ、下の @ts-expect-error が未使用のエラーになる）
+const passedAsOptions = createCalendar({ holidayProvider: jp });
+const scheduleAsOptions = createSchedule({ weekdayValues: [1, 1, 1, 1, 1, 1, 1] });
+// @ts-expect-error 提供元は holidayProvider に渡す
+createCalendar(jp);
+// @ts-expect-error カレンダーは設定ではない
+createCalendar(passedAsOptions);
+// @ts-expect-error スケジュールは設定ではない
+createCalendar(scheduleAsOptions);

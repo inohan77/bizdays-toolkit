@@ -395,7 +395,7 @@ test("withSubstituteDays: directions は普通のオブジェクトだけを受�
   );
 });
 
-test('長く続く祝日（40 日・年をまたぐ 42 日）: 祝日の前後の規則は連続の前日と明けた日に当たり、"after-holiday" は本来の日が明けた日の 31 日前までなら振り替わる（decisions.md の 24 番）', () => {
+test('長く続く祝日（40 日・年をまたぐ 42 日）: 祝日の前後の規則は連続の前日と明けた日に当たり、"after-holiday" は本来の日が明けた日の 31 日前までなら振り替わり、それより前なら明けた日の判定が holiday-run-too-long（decisions.md の 24 番）', () => {
   // 2026-03-01〜04-09（40 日）と、2026-12-01〜2027-01-11（42 日）を祝日として返す提供元
   const runs: [string, number][] = [
     ["2026-03-01", 40],
@@ -437,10 +437,18 @@ test('長く続く祝日（40 日・年をまたぐ 42 日）: 祝日の前後�
     closed({ dayOfMonth: 12, months: [3], holidayOverlapPolicy: "after-holiday" }, "2026-04-10"),
     true,
   );
-  // 振替: 本来の日（3 月 5 日）が明けた日の 36 日前なら振り替わらず、休業日が 1 日も出ない
+  // 振替: 本来の日（3 月 5 日）が明けた日の 36 日前なら届かない。休業日を黙って取りこぼさず、明けた日の判定で止める
+  // （0.31.9 までは振り替わらず、休業日が 1 日も出なかった）。連続の中の日と、明けた日の翌日からは判定できる
   const far = make({ dayOfMonth: 5, months: [3], holidayOverlapPolicy: "after-holiday" });
+  assert.throws(() => far.isBusinessDay("2026-04-10"), { code: "holiday-run-too-long" });
+  assert.throws(() => far.daysBetween("2026-03-01", "2026-04-12"), {
+    code: "holiday-run-too-long",
+  });
   assert.deepEqual(
-    far.daysBetween("2026-03-01", "2026-04-12").filter((d) => !d.open && d.reason !== "holiday"),
+    [
+      ...far.daysBetween("2026-03-01", "2026-04-09"),
+      ...far.daysBetween("2026-04-11", "2026-04-12"),
+    ].filter((d) => !d.open && d.reason !== "holiday"),
     [],
   );
 });

@@ -117,6 +117,41 @@ export function validateTimeZone(timeZone: string): string {
 }
 
 /**
+ * @internal 2 つのタイムゾーン名（validateTimeZone が返した名前）が同じタイムゾーンか（decisions.md の 18 番）。名前が同じなら同じ。
+ * 名前が違えば、Temporal のある実行環境では Temporal の比較で決める（別名を Intl が正規化しない実行環境でも、Temporal のある
+ * 実行環境どうしで結果がそろう）。Temporal がなければ名前で決める。Temporal が投げたときは同じとしない（黙って同じにすると、
+ * 暦日がずれても気付けない）
+ */
+export function sameTimeZone(a: string, b: string): boolean {
+  if (a === b) return true;
+  const T = (
+    globalThis as {
+      Temporal?: {
+        Instant: {
+          fromEpochMilliseconds(ms: number): {
+            toZonedDateTimeISO(zone: string): { equals(other: unknown): boolean };
+          };
+        };
+      };
+    }
+  ).Temporal;
+  if (T === undefined) return false;
+  try {
+    const at = T.Instant.fromEpochMilliseconds(0);
+    return at.toZonedDateTimeISO(a).equals(at.toZonedDateTimeISO(b)) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** @internal 同じタイムゾーン（sameTimeZone）を 1 つにまとめた一覧（先に現れた名前を残す） */
+export function distinctTimeZones(zones: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const z of zones) if (!out.some((o) => sameTimeZone(o, z))) out.push(z);
+  return out;
+}
+
+/**
  * 瞬間（エポックミリ秒）の、タイムゾーンでの年・月・日・時・分。年は紀元を付けずに読む（Intl は紀元前の年を紀元なしの
  * 正の数で返す）ので、紀元前に当たらない瞬間だけに使う
  */

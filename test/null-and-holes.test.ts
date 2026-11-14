@@ -35,7 +35,8 @@ function apiKeys(name: string): string[] {
   const api = readFileSync(new URL("../etc/api.md", import.meta.url), "utf8");
   const body = new RegExp(`export interface ${name}\\b[^{]*\\{([\\s\\S]*?)\\n\\}`).exec(api)?.[1];
   assert.ok(body, name);
-  return [...body.matchAll(/readonly (\w+)\??:/g)].map((m) => m[1]!);
+  // 形を分けるための ?: never の項目は、書けない項目なので除く（実行時は知らないキー。decisions.md の 8 番・9 番）
+  return [...body.matchAll(/readonly (\w+)\??:(?! never;)/g)].map((m) => m[1]!);
 }
 
 test("null は省略ではなく値の誤り: 設定・規則・メソッドのオプションのどのキーに null を書いても、作成は code 付きの例外、診断は同じ code の error（decisions.md の 6 番）", () => {

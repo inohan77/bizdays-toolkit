@@ -49,6 +49,12 @@ export type KnownErrorCode =
   /** 祝日の提供元が返したデータの誤り */
   | "invalid-provider-data"
   /**
+   * 祝日の連続が長すぎて、"after-holiday" の規則の日を連続が明けた日に振り替えられない（連続が 31 日を超えて届かない、
+   * または 367 日を超えて続き振替元を確かめられない）。その日の判定と、その日を通る探索・その日を含む期間の計算が投げる。
+   * 長い休業は祝日ではなく closedDates・closedAnnualDates で書く
+   */
+  | "holiday-run-too-long"
+  /**
    * 営業日が見つからない（探索が searchDayLimit 日を超えた、月の営業日が第 n 営業日の n に足りない、カレンダーの締めの月に
    * 固有の期間がない）
    */

@@ -6,6 +6,33 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-14
+
+This minor version stops one silent loss of closed days, makes aliases of a time zone the same time zone on runtimes with Temporal, and makes one mistaken call a type error. Some code needs a check; see Migration.
+
+### Changed
+
+- A day of a `holidayOverlapPolicy: "after-holiday"` rule that cannot be moved past a long run of holidays now throws instead of being silently lost. When a holiday provider returns holidays on more than 31 consecutive days and the rule's own day is more than 31 days before the first day after the run, the rule was not moved and the closed day did not appear at all (documented since 0.31.8). Evaluating that first day now throws a `RangeError` with the new code `holiday-run-too-long`, as do searches that pass the day (`addBusinessDays`, `nextBusinessDay` and the like) and calculations over a range that contains it (`diffBusinessDays`, `daysBetween`, `businessDatesBetween`, `nthBusinessDayOfMonth` and the like). Days inside the run and other days are evaluated as before, a rule whose day is within 31 days is moved as before, and weekly rules and rules for the day before or after a holiday are not affected. The same code is thrown when a run goes on for more than 367 days, because the day to move cannot be determined. Because the search for that day now goes further back than 31 days, the first day after a run of 31 or more days that starts on the first day of the provider's supported years throws `out-of-range` with `outOfRangePolicy: "throw"` (the default), even when no day is lost: the days before the run are not known. Shorter runs there already did. The bundled providers are not affected (their longest run is 8 days). Write a long closure with `closedDates` or `closedAnnualDates`, not as holidays (design decisions 24)
+- Whether two time zones are the same (calendars combined with `combineCalendars`, the holiday providers of one set of options, and a schedule and the counting calendar of its nth-business-day rule) is now decided with the runtime's `Temporal` when their names differ and the runtime has one. Aliases of one time zone, such as `"UTC"` and `"Etc/UTC"` or `"Asia/Kolkata"` and `"Asia/Calcutta"`, are therefore the same time zone on every runtime with Temporal: Bun no longer throws `time-zone-conflict` for them, and on Node.js 26, Chrome and Edge a few more pairs are accepted (such as `"CST6CDT"` and `"America/Chicago"`). Runtimes without Temporal compare the names `Intl` reports, as before; on Safari without Temporal, aliases remain a `time-zone-conflict`. The name `timeZone` returns is unchanged. Only exceptions disappear; no result of a calendar or schedule changes (design decisions 18)
+- TypeScript: passing a holiday provider, a calendar or a schedule itself as the options of `createCalendar` (`createCalendar(jp)`) is now a type error. It compiled until 0.31.9 and made a calendar without holidays. The options types have `holidaysInYear?: never` for this; at run time such a key is still an unknown option that the diagnostics report (design decisions 8). Pass the provider as `createCalendar({ holidayProvider: jp })`
+
+### Added
+
+- The error code `holiday-run-too-long` (`KnownErrorCode`), and the same code as a `warning` of the option diagnostics: `diagnoseCalendar` and `diagnoseSchedule` report each `"after-holiday"` rule that loses a day this way, at the rule, with `relatedPath` pointing to the holiday provider when there is only one. The options can still be created, as with `out-of-range` and `no-business-day`
+
+### Fixed
+
+- Documentation: the guide and the design decisions (18) now describe offsets from UTC as time zones. `"+09:00"`, `"+0900"` and `"+09"` are accepted and returned as `"+09:00"` on every runtime tested (Node.js, Chrome, Firefox, Edge, Safari, Cloudflare Workers, Bun and Deno); other forms such as `"UTC+9"` are an `invalid-time-zone`, and an offset and a named time zone are different time zones. The README now notes the Safari limitation above. The design decisions (18) now say that duplicate providers and duplicate calendars are deliberately treated differently. Results are unchanged
+
+### Migration
+
+Check your code if one of these applies; otherwise no work is needed. The same steps are in [docs/migration.md](./docs/migration.md) (in Japanese).
+
+- **You use your own holiday provider that returns holidays on more than 31 consecutive days, together with `"after-holiday"` rules.** Run `diagnoseCalendar` or `diagnoseSchedule` on your options and look for a `warning` with code `holiday-run-too-long`. If there is one, the first day after the run now throws, and so does every search that passes it and every calculation over a range that contains it: one lost day stops a count over the whole year. Write the long closure with `closedDates` or `closedAnnualDates` instead of returning it as holidays
+- **You branch on `time-zone-conflict`.** Aliases of one time zone no longer throw on runtimes with Temporal. Remove code that relies on the exception
+- **You pass a holiday provider, a calendar or a schedule directly to `createCalendar` in TypeScript.** Pass the provider as `{ holidayProvider: provider }`; a calendar or schedule was never read as options
+- **You branch on error codes.** Make sure the new `holiday-run-too-long` falls into your default branch
+
 ## [0.31.9] - 2026-11-14
 
 This version removes two wrong diagnostics, makes evaluation and the option diagnostics faster, and documents how time zone names are compared. Results of calendars and schedules do not change.
@@ -974,7 +1001,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.9...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.0...HEAD
+[0.32.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.9...v0.32.0
 [0.31.9]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.8...v0.31.9
 [0.31.8]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.7...v0.31.8
 [0.31.7]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.6...v0.31.7

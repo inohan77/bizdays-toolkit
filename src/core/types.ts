@@ -43,9 +43,9 @@ export interface Holiday<Kind extends string = string> {
  * holidaysInYear が返すデータは、年ごとに初めて使うときに検証され、誤りがあれば
  * code: "invalid-provider-data" の例外になる。返した祝日は、契約の項目（date・name・nameEn・names・
  * kind・confirmed・key）だけを持つ変更できないオブジェクトに複製される。
- * 祝日が長く続くとき、"after-holiday" の規則は、本来の日が振り替わる先の日より 31 日を超えて前にあると振り替わらない
- * （振替元をさかのぼるのは 31 日まで。祝日の前後の規則は連続の長さによらず当てはまる。長い休業は closedDates・
- * closedAnnualDates で書く。decisions.md の 24 番）。
+ * 祝日が長く続くとき、"after-holiday" の規則の本来の日が、振り替わる先の日より 31 日を超えて前にあると振り替えられず、
+ * 連続が明けた日の判定が code: "holiday-run-too-long" の例外になる（振替元をさかのぼるのは 31 日まで。祝日の前後の規則は
+ * 連続の長さによらず当てはまる。長い休業は closedDates・closedAnnualDates で書く。decisions.md の 24 番）。
  *
  * 項目を足すときのバージョンは RELEASING.md の区分の表による。1.0.0 以降、マイナーバージョンで足す項目は省略可能なものに限る
  * （必須にすると、自作の提供元が型エラーになるため）。

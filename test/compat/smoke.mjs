@@ -174,6 +174,46 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     });
   }
 
+  // タイムゾーン: どの実行環境でも同じ結果になるものは、記録ではなく合否にする（decisions.md の 18 番。0.31.9 の CI の記録で
+  // 確かめた）。別名を 1 つの名前に直すか・Temporal の比較の結果は実行環境で違うので、記録のまま（timeZoneReport）
+  check("タイムゾーン: オフセット形式", () => {
+    const instant = new Date("2026-11-22T15:30:00Z");
+    for (const [written, timeZone, date] of [
+      ["+09:00", "+09:00", "2026-11-23"],
+      ["+0900", "+09:00", "2026-11-23"],
+      ["+09", "+09:00", "2026-11-23"],
+      ["-05:00", "-05:00", "2026-11-22"],
+      ["+05:30", "+05:30", "2026-11-22"],
+    ]) {
+      const calendar = root.createCalendar({ timeZone: written });
+      equal([calendar.timeZone, calendar.dateOf(instant)], [timeZone, date], written);
+    }
+    let code;
+    try {
+      root.createCalendar({ timeZone: "UTC+9" });
+    } catch (e) {
+      code = root.isBizdaysError(e) ? e.code : String(e);
+    }
+    equal(code, "invalid-time-zone", "UTC+9");
+    const combined = root.combineCalendars(
+      [root.createCalendar({ timeZone: "+09:00" }), root.createCalendar({ timeZone: "+0900" })],
+      { open: "all" },
+    );
+    equal(combined.timeZone, "+09:00", "combine +09:00 and +0900");
+  });
+  // 別名どうしは、Temporal のある実行環境では Temporal の比較で同じタイムゾーンとする（0.32.0 から。Intl が別名を直さない
+  // 実行環境でも作れる）。Temporal のない実行環境では、Intl が返す名前で決まるので、記録だけにする
+  if (T !== undefined) {
+    check("タイムゾーン: 別名どうしの合成（本物の Temporal）", () => {
+      const of = (timeZone) => root.createCalendar({ timeZone });
+      root.combineCalendars([of("UTC"), of("Etc/UTC")], { open: "all" });
+      root.combineCalendars([root.createCalendar({ holidayProvider: jp.jp }), of("Japan")], {
+        open: "all",
+      });
+      root.combineCalendars([of("Asia/Kolkata"), of("Asia/Calcutta")], { open: "all" });
+    });
+  }
+
   return {
     results,
     temporal: T === undefined ? "absent" : "native",

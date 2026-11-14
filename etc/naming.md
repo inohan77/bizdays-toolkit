@@ -166,6 +166,7 @@ package.json の `exports` の各エントリーが公開する、次の名前�
 | `length`       | `lengths`     | 名詞           |                                                                                               | 長さ（数）                                                                |
 | `like`         |               | 前置詞         |                                                                                               | 「…と同じ形の」                                                           |
 | `limit`        | `limits`      | 名詞           | 項目: `number`                                                                                | 上限の数                                                                  |
+| `long`         |               | 形容詞         |                                                                                               | 長い（`holiday-run-too-long`: 祝日の連続が長すぎる）                      |
 | `lookup`       | `lookups`     | 名詞           |                                                                                               | 祝日を引く機能                                                            |
 | `match`        | `matches`     | 動詞           |                                                                                               | 規則が日に当てはまる                                                      |
 | `message`      | `messages`    | 名詞           |                                                                                               | 人が読む説明の文                                                          |
@@ -209,6 +210,7 @@ package.json の `exports` の各エントリーが公開する、次の名前�
 | `related`      |               | 過去分詞       |                                                                                               | 関係する                                                                  |
 | `rename`       |               | 動詞           |                                                                                               | 名称を付け替える                                                          |
 | `rule`         | `rules`       | 名詞           | 項目: `RecurringRule`・`ScheduleRecurringRule`。型の名前: `RecurringPattern`・`RecurringRule` | 繰り返しの規則。ほかの「規則」には使わない                                |
+| `run`          | `runs`        | 名詞           |                                                                                               | 祝日の連続（祝日と、規則が飛ばす曜日が続く日の並び）                      |
 | `same as`      |               | 前置詞         |                                                                                               | …と同じ（`sameAs`: 同じ値にする曜日）                                     |
 | `schedule`     | `schedules`   | 名詞           |                                                                                               | 日ごとの値（スケジュール）                                                |
 | `scotland`     |               | 固有名詞       |                                                                                               | Scotland                                                                  |
@@ -233,6 +235,7 @@ package.json の `exports` の各エントリーが公開する、次の名前�
 | `time`         | `times`       | 名詞           |                                                                                               | 時刻                                                                      |
 | `to`           |               | 前置詞         |                                                                                               | 終点・行き先（区間の終わり。変換・書き換えの先。N2 の `to…`）             |
 | `today`        |               | 名詞（不可算） |                                                                                               | 今日の日付                                                                |
+| `too`          |               | 副詞           |                                                                                               | 度を越して                                                                |
 | `uk`           |               | 略号           |                                                                                               | 英国（サブパスの名前）                                                    |
 | `unconfirmed`  |               | 形容詞         |                                                                                               | 未確定の                                                                  |
 | `under`        |               | 前置詞         |                                                                                               | 下に（祝日の下）                                                          |

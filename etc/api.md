@@ -570,6 +570,7 @@ export interface HolidaySourceOptions<Kind extends string = string> {
     readonly timeZone?: string;
     readonly outOfRangePolicy?: "throw" | "ignore";
     readonly unconfirmedHolidayPolicy?: "accept" | "throw";
+    readonly holidaysInYear?: never;
 }
 ```
 
@@ -602,7 +603,7 @@ export type KnownDayReason = "open-date" | "closed-date" | "open-annual" | "clos
 ### KnownErrorCode (@public)
 
 ```ts
-export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-annual-date" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "unconfirmed-holiday" | "invalid-provider" | "invalid-provider-data" | "no-business-day" | "no-closed-day";
+export type KnownErrorCode = "invalid-date" | "invalid-month" | "invalid-annual-date" | "invalid-time" | "invalid-input" | "invalid-time-zone" | "invalid-range" | "invalid-weekday" | "invalid-argument" | "invalid-option" | "time-zone-conflict" | "out-of-range" | "unconfirmed-holiday" | "invalid-provider" | "invalid-provider-data" | "holiday-run-too-long" | "no-business-day" | "no-closed-day";
 ```
 
 ### KnownScheduleDayReason (@public)

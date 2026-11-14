@@ -115,6 +115,32 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
   "invalid-provider-data": [
     () => createCalendar({ holidayProvider: badDataProvider }).isBusinessDay("2026-01-01"),
   ],
+  "holiday-run-too-long": [
+    // 2026-07-01 から 40 日続く祝日。7 月 1 日の規則の日は、明けた 8 月 10 日に振り替えられない（test/lost-shift.test.ts）
+    () =>
+      createCalendar({
+        holidayProvider: {
+          id: "XX",
+          timeZone: "UTC",
+          supportedYears: { from: 2020, to: 2030 },
+          dataVersion: "test",
+          holidaysInYear: (year) =>
+            year === 2026
+              ? Array.from({ length: 40 }, (_, i) => ({
+                  date: addDays("2026-07-01", i),
+                  name: "shutdown",
+                  nameEn: "shutdown",
+                  kind: "regular",
+                  confirmed: true,
+                }))
+              : [],
+        },
+        holidayPolicy: "open",
+        closedRecurringRules: [
+          { dayOfMonth: 1, months: [7], holidayOverlapPolicy: "after-holiday" },
+        ],
+      }).isBusinessDay("2026-08-10"),
+  ],
   "no-business-day": [
     () =>
       createCalendar({ closedWeekdays: [0, 1, 2, 3, 4, 5, 6], searchDayLimit: 10 }).nextBusinessDay(

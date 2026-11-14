@@ -29,6 +29,28 @@
 
 診断コード `deprecated-option` も 1.0.0 で削除します。1.0.0 では旧名は `invalid-option` になり、診断は `error` として返します。`deprecated-option` を期待値に書いたテストや、このコードで分岐するコードは、1.0.0 より前に設定の旧名を書き換えてから外してください。
 
+## 0.32.0
+
+英語の手順は CHANGELOG の 0.32.0 の Migration にあります（同じ内容）。作業が要るのは、次のどれかに当たる場合だけです。
+
+- **31 日を超えて続く祝日を返す自作の提供元と、`holidayOverlapPolicy: "after-holiday"` の規則を使っている**: 規則の本来の日が、連続が明けた日より 31 日を超えて前にあると、0.31.9 までは黙って振り替わらず、休業日が 1 日も現れませんでした。0.32.0 からは、連続が明けた日の判定が `code: "holiday-run-too-long"` の `RangeError` になります。止まるのは、その日の判定だけではありません。その日を通る探索（`addBusinessDays`・`nextBusinessDay` など）と、その日を含む期間の計算（`diffBusinessDays`・`daysBetween`・`businessDatesBetween`・`nthBusinessDayOfMonth` など）も止まるので、1 日の取りこぼしで、その日を含む 1 年分の集計も止まります。公開の前に、設定を診断（`diagnoseCalendar`・`diagnoseSchedule`）にかけ、`holiday-run-too-long` の `warning` が出ないことを確かめてください。出たら、長い休業（学校の長期休暇・工場の一斉休業など）を、祝日ではなく `closedDates`・`closedAnnualDates` で書きます。同梱の提供元は当たりません（祝日の連続は最長 8 日）。対応年の最初の日から 31 日以上続く祝日を返す提供元では、`outOfRangePolicy: "throw"`（既定）のとき、取りこぼしがなくても、連続が明けた日の判定が `out-of-range` になります（振替元を 31 日より前までさかのぼるようになり、連続より前の日が分からないため。31 日より短い連続は、0.31.9 でも同じ）
+
+```ts
+import { diagnoseCalendar } from "bizdays-toolkit/diagnose";
+import { jp } from "bizdays-toolkit/jp";
+
+const options = {
+  holidayProvider: jp,
+  closedRecurringRules: [{ dayOfMonth: 1, holidayOverlapPolicy: "after-holiday" }],
+} as const;
+diagnoseCalendar(options).map((d) => d.code); // []（"holiday-run-too-long" がないこと）
+```
+
+- **`time-zone-conflict` で分岐している**: 同じタイムゾーンの別名どうし（`"UTC"` と `"Etc/UTC"` など）は、Temporal のある実行環境では同じタイムゾーンとして通るようになりました（Bun では例外が出なくなり、Node.js 26・Chrome・Edge でも `"CST6CDT"` と `"America/Chicago"` のような組が通るようになります）。例外を前提にした分岐があれば見直します。Temporal のない実行環境の結果は変わりません
+- **`createCalendar` に、祝日の提供元・作成済みのカレンダー・スケジュールをそのまま渡している**（TypeScript）: 型エラーになります。0.31.9 までは型が通り、祝日のないカレンダーが作られていました。提供元は `createCalendar({ holidayProvider: jp })` のように `holidayProvider` に渡します
+- **`code` で分岐しているコード**: 新しい `holiday-run-too-long` を「その他」の分岐で受けられるか確かめます（作業は要らないことが多い）
+- 作業の要らない変更: `timeZone` に書く UTC からの時差（`"+09:00"` など）の扱いを文書に書きました（挙動は変わりません）
+
 ## 0.31.0
 
 英語の手順は CHANGELOG の 0.31.0 の Migration にあります（同じ内容）。

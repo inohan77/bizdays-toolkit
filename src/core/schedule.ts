@@ -28,8 +28,10 @@ import { isOptionsObject } from "./options.ts";
 import { checkNames } from "./names.ts";
 import { RENAMED_VALUES, renameKeys, renameValue, writtenKey } from "./renamed.ts";
 import {
+  distinctTimeZones,
   instantToCivil,
   isDate,
+  sameTimeZone,
   toCivil,
   toDateTimeParts,
   toInstant,
@@ -552,6 +554,8 @@ export interface ScheduleDateRange<Value> {
 
 /**
  * 祝日の提供元とタイムゾーンの設定（スケジュールと営業日カレンダーで共通）。
+ * 祝日の提供元・作成済みのカレンダー・スケジュールをそのまま設定として渡す誤り（createCalendar(jp) など。提供元は
+ * holidayProvider に渡す）を型で止めるため、その 3 つがどれも持つ項目 holidaysInYear は書けない。
  * @public
  */
 export interface HolidaySourceOptions<Kind extends string = string> {
@@ -578,6 +582,9 @@ export interface HolidaySourceOptions<Kind extends string = string> {
    * 判定が祝日に依存する設定でだけ意味がある（条件はガイドの「Unconfirmed holidays」。decisions.md の 17 番）
    */
   readonly unconfirmedHolidayPolicy?: "accept" | "throw";
+  // 提供元・カレンダー・スケジュールをそのまま渡す誤りを型で止める（3 つとも holidaysInYear を持つ。実行時は知らない
+  // キーのまま。decisions.md の 8 番）
+  readonly holidaysInYear?: never;
 }
 
 /**
@@ -1696,7 +1703,7 @@ export function createBasis<Value, Kind extends string>(
 ): BasisOfMonth | undefined {
   if (!compiled.recurring.some((r) => r.businessDays !== null && r.basis === null))
     return undefined;
-  const resolve = createResolver({ ...compiled, recurring: [] }, lookup);
+  const resolve = createResolver({ ...compiled, recurring: [] }, lookup, ignoreLostShift);
   return basisFromPredicate((date) => resolve(date, false).day.value === true);
 }
 
@@ -1824,7 +1831,7 @@ export function compileHolidaySource<Kind extends string>(
       );
     }
   } else {
-    const zones = [...new Set(providers.map((p) => validateTimeZone(p.timeZone)))];
+    const zones = distinctTimeZones(providers.map((p) => validateTimeZone(p.timeZone)));
     if (zones.length > 1) {
       c.error(
         "time-zone-conflict",
@@ -2204,7 +2211,7 @@ export function compileScheduleOptions<Value, Kind extends string>(
       Number(/\[(\d+)\]$/.exec(rule.path)![1])
     ]!;
     const tz = (entry["calendar"] as Calendar).timeZone;
-    if (tz !== source.timeZone) {
+    if (!sameTimeZone(tz, source.timeZone)) {
       c.error(
         "time-zone-conflict",
         `${rule.path}.calendar`,
@@ -2220,6 +2227,35 @@ export function compileScheduleOptions<Value, Kind extends string>(
  * 診断の expired も、"after-holiday" の規則の振替が届きうる最も遠い日として使う
  */
 export const MAX_HOLIDAY_RUN = 31;
+/** 届かなかった振替元を検出するためにさかのぼる日数の上限（1 年と 1 日。これより長く続く連続は、確かめられないものとして扱う） */
+const MAX_HOLIDAY_RUN_SCAN = 367;
+const MIN_DAY_NUMBER = toDayNumber("1000-01-01");
+
+/**
+ * @internal "after-holiday" の規則の日が、祝日の連続が明けた日 date に振り替えられないときの扱い（decisions.md の 24 番）。
+ * origin は届かなかった振替元。連続が MAX_HOLIDAY_RUN_SCAN 日を超えて続き、振替元を確かめられなかったときは undefined。
+ * 戻ると、判定は「振り替わらない」として続く
+ */
+export type LostShiftHandler<Value> = (
+  rule: RecurringRuleCompiled<Value>,
+  date: DateString,
+  origin: DateString | undefined,
+) => void;
+
+/** @internal 届かない振替の説明（例外と診断の文に使う） */
+export const lostShiftMessage = (date: DateString, origin: DateString | undefined): string =>
+  (origin === undefined
+    ? `no day can be moved to ${date}: the run of holidays before it is longer than ${MAX_HOLIDAY_RUN_SCAN} days, so the day to move cannot be determined`
+    : `the day ${origin} cannot be moved to ${date}: the run of holidays between them is longer than ${MAX_HOLIDAY_RUN} days`) +
+  " (write a long closure with closedDates or closedAnnualDates, not as holidays)";
+
+/** @internal 利用者の判定: 休業日を黙って取りこぼさないように止める */
+export const throwLostShift: LostShiftHandler<unknown> = (rule, date, origin) => {
+  throw rangeError("holiday-run-too-long", `${rule.path}: ${lostShiftMessage(date, origin)}`);
+};
+
+/** @internal 診断の走査: 投げずに「振り替わらない」として評価する（知らせるのは専用の確認。decisions.md の 17 番） */
+export const ignoreLostShift: LostShiftHandler<unknown> = () => {};
 
 /** @internal 毎年の月日の規則の形がその月日 "MM-DD" に当てはまるか（有効期間は考えない） */
 export function matchMonthDay(rule: AnnualRule<unknown>, monthDay: string): boolean {
@@ -2288,6 +2324,8 @@ export function resultIgnoresHolidays(compiled: {
 export function createResolver<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
   lookup: HolidayLookupInternal<Kind>,
+  /** 届かない振替の扱い。省略できない（診断の走査が投げる側のままだと、提供元の誤りとして報告してしまう） */
+  onLostShift: LostShiftHandler<Value>,
 ): (date: DateString, withHoliday?: boolean) => Resolution<Value, Kind> {
   const { weekly, holiday: holidayRule, annual, dates, recurring } = compiled;
   const hasShift = recurring.some((r) => r.holidayOverlapPolicy === "after-holiday");
@@ -2321,6 +2359,22 @@ export function createResolver<Value, Kind extends string>(
       // 飛ばす日は祝日と、skipWeekdays の曜日。それ以外の日に達したら、振替元はない
       if (!isHolidayOfNeighbour(prev) && !rule.skipWeekdays?.has(weekdayOf(prev))) return undefined;
       if (matchRecurring(rule, prev, holidayOfNeighbour, undefined, lookup.fromJp)) return prev;
+    }
+    // 上限まで祝日（と飛ばす曜日）が続いた。振替は届かないが、黙って取りこぼさないよう、連続の先頭までを検出のためだけに
+    // さかのぼり、届かなかった振替元が実際にあるときに知らせる（decisions.md の 24 番）。暦日の範囲の端で止まる
+    const first = toDayNumber(date) - MAX_HOLIDAY_RUN_SCAN;
+    for (let n = toDayNumber(date) - MAX_HOLIDAY_RUN - 1; n >= MIN_DAY_NUMBER; n--) {
+      // ここまで連続が終わらなければ、取りこぼしがないと確かめられない
+      if (n < first) {
+        onLostShift(rule, date, undefined);
+        return undefined;
+      }
+      const prev = fromDayNumber(n);
+      if (!isHolidayOfNeighbour(prev) && !rule.skipWeekdays?.has(weekdayOf(prev))) return undefined;
+      if (matchRecurring(rule, prev, holidayOfNeighbour, undefined, lookup.fromJp)) {
+        onLostShift(rule, date, prev);
+        return undefined;
+      }
     }
     return undefined;
   }
@@ -2439,7 +2493,7 @@ export function buildSchedule<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
 ): Schedule<Value, Kind> {
   const lookup = createHolidayLookup(compiled.source);
-  const resolve = createResolver(compiled, lookup);
+  const resolve = createResolver(compiled, lookup, throwLostShift);
   const info = (date: DateString): ScheduleDayInfo<Value, Kind> => resolve(date).day;
 
   const values = Object.freeze(
