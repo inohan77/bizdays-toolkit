@@ -444,6 +444,54 @@ const CASES: readonly Case[] = [
     inject: () => edit("dist/jp/rules.js", replaceOnce('"元日"', '"元日（壊した名前）"')),
     expect: "「### Data」がない",
   },
+  {
+    tool: "check-claims",
+    name: "設定の項目が、決定の番号の一覧にない",
+    args: TOOLS["check-claims"]!,
+    inject: () =>
+      edit("etc/option-decisions.json", (t) =>
+        t.replace('  "CalendarOptions.closedDates": 11,\n', ""),
+      ),
+    expect: "CalendarOptions.closedDates is not listed",
+  },
+  {
+    tool: "check-claims",
+    name: "設定の項目の指す決定に、項目の名前がない",
+    args: TOOLS["check-claims"]!,
+    inject: () =>
+      edit("etc/option-decisions.json", (t) =>
+        t.replace('"CalendarOptions.closedDates": 11,', '"CalendarOptions.closedDates": 21,'),
+      ),
+    expect: "CalendarOptions.closedDates points to decision 21, but that decision does not mention",
+  },
+  {
+    tool: "check-claims",
+    name: "決定の番号の一覧に、公開の型にない項目がある",
+    args: TOOLS["check-claims"]!,
+    inject: () =>
+      edit("etc/option-decisions.json", (t) =>
+        t.replace("{\n", '{\n  "CalendarOptions.noSuchOption": 11,\n'),
+      ),
+    expect: "CalendarOptions.noSuchOption is listed, but it is not an option",
+  },
+  {
+    tool: "check-claims",
+    name: "公開の名前が、決定の文書にも理由を書かない一覧にもない",
+    args: TOOLS["check-claims"]!,
+    inject: () =>
+      edit("etc/undocumented-names.json", (t) => t.replace(/  "isLeapYear": "[^"]*",\n/, "")),
+    expect: "isLeapYear is public but no decision mentions it",
+  },
+  {
+    tool: "check-claims",
+    name: "理由を書かない一覧に、決定の文書に現れる名前がある",
+    args: TOOLS["check-claims"]!,
+    inject: () =>
+      edit("etc/undocumented-names.json", (t) =>
+        t.replace("{\n", '{\n  "addBusinessDays": "x",\n'),
+      ),
+    expect: "addBusinessDays is listed, but a decision mentions it now",
+  },
 ];
 
 const git = (args: readonly string[], cwd = repo): string =>

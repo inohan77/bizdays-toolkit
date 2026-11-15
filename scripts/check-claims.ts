@@ -40,6 +40,7 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { skipWhen } from "../test/support/skip.ts";
 import { RENAMED_KEYS, type RenamedPlace } from "../src/core/renamed.ts";
+import { decisionCoverage } from "./decision-coverage.ts";
 import {
   DECISION_REFERENCE,
   changelogSections,
@@ -522,6 +523,18 @@ if (baseDir !== undefined) {
     );
 }
 
+// ---------------------------------------------------------------------------
+// g. 決定の文書が、公開の設定の項目と名前を決めていること（scripts/decision-coverage.ts）
+// ---------------------------------------------------------------------------
+const coverage = decisionCoverage({
+  api: read("etc/api.md"),
+  errorsSource: read("src/core/errors.ts"),
+  decisions: read("docs/decisions.md"),
+  optionDecisions: JSON.parse(read("etc/option-decisions.json")) as Record<string, unknown>,
+  undocumented: JSON.parse(read("etc/undocumented-names.json")) as Record<string, unknown>,
+});
+failures.push(...coverage.failures);
+
 if (report.length > 0) console.log(report.join("\n"));
 if (failures.length > 0) {
   console.error(failures.join("\n"));
@@ -529,4 +542,7 @@ if (failures.length > 0) {
 }
 console.log(
   `OK   claims: no earlier minor series in ${seriesChecked} files; ${searchNeeded.size} renamed keys outside the diagnostics are in the migration guide's search guidance; work for 1.0.0 points to its section in ${oneZeroChecked} files; no \u7248 in ${hanChecked} files`,
+);
+console.log(
+  `OK   decisions: ${coverage.optionKeys} option keys point to a decision that mentions them; ${coverage.names} public names are mentioned (${coverage.mentioned}) or listed with a reason (${coverage.names - coverage.mentioned})`,
 );
