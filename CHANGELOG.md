@@ -6,6 +6,13 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.2] - 2026-11-15
+
+### Fixed
+
+- The option diagnostics reported an item as `redundant` (removing it does not change any result) although removing it made a day at the edge of the holiday provider's supported years throw `out-of-range`. A rule that looks at a neighbouring day (an `"after-holiday"` rule looking back for the day it was moved from, a rule for the day before or after a holiday, an nth-business-day-of-the-week rule) throws `out-of-range` when that day is outside the supported years. When another item decided the edge day first (an earlier recurring rule, a date in `closedDates` or `openDates`), the day was evaluated without an exception, the diagnostics reported that item as `redundant`, and removing it as suggested made the day throw. The diagnostics evaluated days outside the supported years as days without holidays and so did not see the exception. They now evaluate such a day as the calendar does and treat it as a day that cannot be judged, so the item is no longer reported. This applies with `outOfRangePolicy: "throw"` (the default); with `"ignore"` nothing throws and nothing changes. No result of a calendar or schedule changes
+- As a consequence, an item that decides a day at the edge of the supported years is no longer reported as `redundant` even when it is redundant on every other day. For example, with the `jp` provider and an `"after-holiday"` rule for Mondays, a weekly Sunday rule that duplicates `closedWeekdays` is no longer reported, because removing it would make 1955-01-02 (the first Sunday of the supported years) throw; the same rule for Saturdays is still reported. With the `sg` provider and a rule for the day before a holiday, a weekly Friday rule that duplicates `closedWeekdays` is no longer reported, because of 2027-12-31
+
 ## [0.32.1] - 2026-11-14
 
 ### Fixed
@@ -1007,7 +1014,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.1...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.2...HEAD
+[0.32.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.1...v0.32.2
 [0.32.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.9...v0.32.0
 [0.31.9]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.8...v0.31.9

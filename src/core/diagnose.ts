@@ -212,6 +212,27 @@ const atCalendarEdge = (n: number, error: unknown): boolean =>
   (error as { code?: unknown } | null)?.code === "out-of-range";
 
 /**
+ * 規則が見る日が、祝日の提供元の対応年の外に出うる日数（走査の範囲の端から数える）。届かない振替の検出が、いちばん遠くまで
+ * さかのぼる（schedule.ts の MAX_HOLIDAY_RUN_SCAN と同じ 367 日。祝日が対応年の最初の日から続くと、明けた日の判定は、
+ * 連続の先頭を越えて対応年の外を見る）。祝日の前後の規則・振替元・週の第 n 営業日は、これより近い
+ */
+const PROVIDER_EDGE_DAYS = 367;
+/**
+ * 端の日で、判定が外の日を見て out-of-range になった例外か。暦日の範囲の端（atCalendarEdge）と、祝日の提供元の対応年の端。
+ * 対応年の外で例外にする設定（outOfRangePolicy: "throw"）では、走査の範囲は対応年で、範囲の中の日の判定が、対応年の外の
+ * 隣の日・振替元を見ると、利用者の判定と同じに out-of-range になる（decisions.md の 17 番）。その日は、判定も例外になる
+ * 日として扱う。端から PROVIDER_EDGE_DAYS 日以内でなければ、そのまま投げて提供元の誤りとして報告する（端の日では、
+ * 提供元が投げた out-of-range も区別できずに受ける）
+ */
+const atEdge = (n: number, error: unknown, window: Window | undefined): boolean => {
+  if (atCalendarEdge(n, error)) return true;
+  if ((error as { code?: unknown } | null)?.code !== "out-of-range" || !window) return false;
+  const first = window.ranges[0]!.from;
+  const last = window.ranges[window.ranges.length - 1]!.to;
+  return n < first + PROVIDER_EDGE_DAYS || n > last - PROVIDER_EDGE_DAYS;
+};
+
+/**
  * 期限のない側を調べる日数。from から days 日の範囲が、100 で割り切れて 400 で割り切れない年（2100 年など）にかかるなら、
  * 28 年の 2 倍まで広げる（その年をまたぐ 28 年には、年の種類が欠ける。decisions.md の 31 番）
  */
@@ -793,8 +814,8 @@ function checkLostShifts<Value, Kind extends string>(
         try {
           resolve(fromDayNumber(n), false);
         } catch (error) {
-          // 暦日の範囲の端の日は、隣の日を見る規則が範囲の外に出て例外になる（判定も例外になるので、ここでは調べない）
-          if (!atCalendarEdge(n, error)) throw error;
+          // 暦日の範囲・対応年の端の日は、隣の日を見る規則が外に出て例外になる（判定も例外になるので、ここでは調べない）
+          if (!atEdge(n, error, window)) throw error;
         }
       }
     }
@@ -855,10 +876,11 @@ function analyzeRules<Value, Kind extends string>(
 ): void {
   const { source, dates, annual, recurring } = compiled;
   if (!checkProviderData(c, source as HolidaySource<string>)) return;
-  // 規則どうしの診断は、対応年の外を祝日なしとして扱う（走査の範囲の端で、隣の日を見る規則が例外にならないため）
+  // 祝日の引き方は、未確定の祝日を常に受け入れる（判定が同じ設定は診断も同じ）。対応年の外の扱いは、利用者の設定のままにする
+  // （outOfRangePolicy: "throw" なら、対応年の外の隣の日・振替元を見た判定は、利用者の判定と同じに out-of-range になり、
+  // その日は判定できない日になる。走査の範囲は対応年なので、範囲の中の日の祝日は引ける。decisions.md の 17 番）
   const lookup = createHolidayLookup({
     ...source,
-    outOfRangePolicy: "ignore",
     unconfirmedHolidayPolicy: "accept",
   });
   const basis = createBasis(compiled, lookup);
@@ -1156,9 +1178,9 @@ function analyzeRules<Value, Kind extends string>(
       try {
         found = resolve(fromDayNumber(n)).day.value === true;
       } catch (error) {
-        // 規則が見る隣の日が暦日の範囲（1000〜9999 年）の外に出る端の日と、届かない振替の日（decisions.md の 24 番）は、
+        // 規則が見る日が暦日の範囲（1000〜9999 年）・対応年の外に出る端の日と、届かない振替の日（decisions.md の 17 番・24 番）は、
         // 判定も例外になるので営業日に数えない
-        if (!atCalendarEdge(n, error) && !isLostShift(error)) throw error;
+        if (!atEdge(n, error, window) && !isLostShift(error)) throw error;
         found = false;
       }
       return found;
