@@ -86,6 +86,12 @@ const DATETIME_RE =
   /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?$/i;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
+// 綴りから、実行環境の Intl が返す名前への対応（キーは ASCII の英大文字だけを小文字にした綴り。Intl が返した名前かを見分けるため、
+// 名前から名前への対応も入れる）。外から来た綴りで際限なく増えないように、1,000 件に達したら全消去する（実在の名前の数（別名を
+// 含めて 600 前後）では、ほとんど消えない。消えても、次に引くときに Intl で求め直すだけで、結果は変わらない。decisions.md の 16 番）
+const zoneNames = new Map<string, string>();
+// 時差の形の名前（Intl が返す "+09:00" の形）。書式は作らずに UTC の書式で読む（wallParts）
+const OFFSET_ZONE_RE = /^([+-])(\d\d):(\d\d)$/;
 
 function formatterFor(timeZone: string): Intl.DateTimeFormat {
   let f = formatters.get(timeZone);
@@ -104,13 +110,27 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
+// 綴りから、実行環境の Intl が返す名前を求める（覚えていれば作らない）。使えない綴りは、Intl の例外をそのまま投げる。
+// 書式は Intl が返す名前ごとに 1 つだけ作る（formatterFor に渡るのは、Intl が返した名前だけ）
+function zoneNameOf(timeZone: string): string {
+  // ケルビン記号（U+212A）などが k にならないように、文字列全体には toLowerCase を掛けない
+  const key = timeZone.replace(/[A-Z]+/g, (s) => s.toLowerCase());
+  let name = zoneNames.get(key);
+  if (name === undefined) {
+    name = new Intl.DateTimeFormat("en-US", { timeZone }).resolvedOptions().timeZone;
+    if (zoneNames.size >= 1000) zoneNames.clear();
+    zoneNames.set(key, name).set(name, name);
+  }
+  return name;
+}
+
 /** @internal IANA タイムゾーン名として使えるか確かめ、正規化した名前を返す（不正なら RangeError） */
 export function validateTimeZone(timeZone: string): string {
   if (typeof timeZone !== "string" || timeZone === "") {
     throw rangeError("invalid-time-zone", `Invalid time zone: ${describeValue(timeZone)}`);
   }
   try {
-    return formatterFor(timeZone).resolvedOptions().timeZone;
+    return zoneNameOf(timeZone);
   } catch {
     throw rangeError("invalid-time-zone", `Invalid time zone: ${describeValue(timeZone)}`);
   }
@@ -159,7 +179,19 @@ function wallParts(
   epochMilliseconds: number,
   timeZone: string,
 ): { year: number; month: number; day: number; hour: number; minute: number } {
-  const parts = formatterFor(timeZone).formatToParts(new Date(epochMilliseconds));
+  // 時差の形（"+09:00"）は、UTC の書式に時差を足した瞬間を渡して読む（時差ごとに書式を作らない。時差は固定なので結果は同じ）
+  // 検証を通っていない綴り（createCalendar で作っていないカレンダーの形のオブジェクトを合成したとき）も、Intl が返す名前に
+  // 直してから読む（綴りごとに書式を作らない。結果と、使えない綴りで Intl が投げる例外は同じ）
+  const zone = zoneNames.get(timeZone) === timeZone ? timeZone : zoneNameOf(timeZone);
+  const offset = OFFSET_ZONE_RE.exec(zone);
+  const parts = formatterFor(offset ? "UTC" : zone).formatToParts(
+    new Date(
+      epochMilliseconds +
+        (offset
+          ? (offset[1] === "-" ? -60_000 : 60_000) * (Number(offset[2]) * 60 + Number(offset[3]))
+          : 0),
+    ),
+  );
   const get = (type: Intl.DateTimeFormatPartTypes): number => {
     const p = parts.find((x) => x.type === type);
     if (!p) throw rangeError("invalid-time-zone", `Cannot resolve ${type} in ${timeZone}`);
@@ -182,8 +214,11 @@ export function instantToCivil(epochMilliseconds: number, timeZone: string): Civ
     throw rangeError("out-of-range", "Instant out of range (1000-9999)");
   }
   // Intl は紀元前の年を紀元なしの正の数で返すので、整形の前に UTC の年で範囲を確かめる（decisions.md の 1 番）。時差は
-  // 1 日を超えないので、UTC の年が 999 より前ならタイムゾーンでも 1000 年より前。999 年は東のゾーンで 1000 年になりうるので通す
-  if (new Date(epochMilliseconds).getUTCFullYear() < 999) {
+  // 1 日を超えないので、UTC の年が 999 より前ならタイムゾーンでも 1000 年より前。999 年は東のゾーンで 1000 年になりうるので通す。
+  // 上側も同じ: UTC の年が 10000 より後ならタイムゾーンでも 9999 年より後。10000 年は西のゾーンで 9999 年になりうるので通す
+  // （時差の形のゾーンは時差を足した瞬間を整形するので、Date の上限の近くで足した値が Date の範囲を超えないように、先に止める）
+  const utcYear = new Date(epochMilliseconds).getUTCFullYear();
+  if (utcYear < 999 || utcYear > 10000) {
     throw rangeError("out-of-range", "Instant out of range (1000-9999)");
   }
   const { year, month, day, hour, minute } = wallParts(epochMilliseconds, timeZone);

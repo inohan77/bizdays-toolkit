@@ -201,6 +201,26 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     );
     equal(combined.timeZone, "+09:00", "combine +09:00 and +0900");
   });
+  // タイムゾーンの書式の記憶（0.32.3 から。decisions.md の 16 番）は、大文字・小文字だけが違う綴りを 1 つのキーにまとめるので、
+  // 実行環境の Intl が、そうした綴りに同じ名前を返すことを前提にする（崩れると、先に渡した綴りで返す名前が変わる）。ライブラリの
+  // 記憶を通さずに Intl を直接確かめ、ライブラリが返す名前もそれと同じであることを確かめる
+  check("タイムゾーン: 大文字・小文字だけが違う綴りに同じ名前", () => {
+    const intlName = (timeZone) =>
+      new Intl.DateTimeFormat("en-US", { timeZone }).resolvedOptions().timeZone;
+    for (const spellings of [
+      ["Asia/Tokyo", "asia/tokyo", "ASIA/TOKYO", "aSIA/tOKYO"],
+      ["America/New_York", "america/new_york", "AMERICA/NEW_YORK"],
+      ["Europe/London", "europe/london", "EUROPE/LONDON"],
+      ["UTC", "utc", "Utc"],
+    ]) {
+      const expected = intlName(spellings[0]);
+      equal(
+        spellings.map((s) => [intlName(s), root.createCalendar({ timeZone: s }).timeZone]),
+        spellings.map(() => [expected, expected]),
+        spellings[0],
+      );
+    }
+  });
   // 別名どうしは、Temporal のある実行環境では Temporal の比較で同じタイムゾーンとする（0.32.0 から。Intl が別名を直さない
   // 実行環境でも作れる）。Temporal のない実行環境では、Intl が返す名前で決まるので、記録だけにする
   if (T !== undefined) {

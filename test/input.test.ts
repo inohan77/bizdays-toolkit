@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCalendar, isBizdaysError, toDateString, toInstant } from "../src/index.ts";
+import {
+  combineCalendars,
+  createCalendar,
+  isBizdaysError,
+  toDateString,
+  toDateTimeParts,
+  toInstant,
+} from "../src/index.ts";
 import { isHoliday, jp, toJapanDate } from "../src/jp/index.ts";
 
 test("瞬間は祝日の提供元のタイムゾーン（日本時間）で暦日にする", () => {
@@ -165,4 +172,251 @@ test("toInstant・instantOf は 1000-01-01 と 9999-12-31 も瞬間にする（�
   const tokyo = createCalendar({ holidayProvider: jp, outOfRangePolicy: "ignore" });
   assert.equal(tokyo.instantOf("9999-12-31", "08:59").toISOString(), "9999-12-30T23:59:00.000Z");
   assert.equal(tokyo.instantOf("1000-01-01", "10:00").toISOString(), "1000-01-01T00:42:00.000Z");
+});
+
+// タイムゾーンの書式の記憶（decisions.md の 16 番）。Intl.DateTimeFormat を、作った回数と渡した設定を数える関数に差し替えて
+// 確かめる（内部の記憶を公開しない）。記憶はファイルの中で共有されるので、どの確かめも、前のテストが作った書式に左右されない形にする
+function countFormatters<T>(run: () => T): { result: T; made: Intl.DateTimeFormatOptions[] } {
+  const Original = Intl.DateTimeFormat;
+  const made: Intl.DateTimeFormatOptions[] = [];
+  const Counting = function (
+    locales?: string | string[],
+    options?: Intl.DateTimeFormatOptions,
+  ): Intl.DateTimeFormat {
+    made.push({ ...options });
+    return new Original(locales, options);
+  } as unknown as typeof Intl.DateTimeFormat;
+  Object.defineProperty(Intl, "DateTimeFormat", {
+    value: Counting,
+    configurable: true,
+    writable: true,
+  });
+  try {
+    return { result: run(), made };
+  } finally {
+    Object.defineProperty(Intl, "DateTimeFormat", {
+      value: Original,
+      configurable: true,
+      writable: true,
+    });
+  }
+}
+
+/** 綴りの ASCII の英字の大文字・小文字を、n のビットで決める（n ごとに違う綴り） */
+function spelling(name: string, n: number): string {
+  let bit = 0;
+  return name.replace(/[A-Za-z]/g, (c) => ((n >> bit++) & 1 ? c.toUpperCase() : c.toLowerCase()));
+}
+
+const offsetName = (minutes: number): string => {
+  const a = Math.abs(minutes);
+  return `${minutes < 0 ? "-" : "+"}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
+};
+
+const at = new Date("2026-03-31T15:30:00Z");
+
+test("同じタイムゾーンの綴り 5,000 個（大文字・小文字の違い）で暦日にしても、Intl の書式は 2 個までしか作らない", () => {
+  const name = "America/Argentina/Buenos_Aires"; // 英字 26 文字で、5,000 個の違う綴りを作れる
+  const { result, made } = countFormatters(() => {
+    const dates = new Set<string>();
+    for (let n = 0; n < 5000; n++) dates.add(toDateString(at, spelling(name, n)));
+    return dates;
+  });
+  assert.deepEqual([...result], ["2026-03-31"]);
+  // 名前を引くための 1 個と、名前ごとの書式の 1 個（綴りごとに作ると 5,000 個）
+  assert.ok(made.length <= 2, `made ${made.length} formatters`);
+});
+
+test("時差 100 通りで暦日にしても、年・月・日・時・分の書式は UTC の 1 個だけ（時差ごとに作らない）", () => {
+  const { made } = countFormatters(() => {
+    for (let m = 61; m <= 160; m++) toDateString(at, offsetName(m));
+  });
+  const wall = made.filter((o) => o.year !== undefined);
+  assert.ok(wall.length <= 1, `made ${wall.length} formatters for wall time`);
+  for (const o of wall) assert.equal(o.timeZone, "UTC");
+});
+
+test("綴りから名前への対応は 1,000 件で全消去する（外から来た綴りで際限なく増えない）", () => {
+  const first = spelling("Europe/Paris", 0b1010_1010);
+  toDateString("2026-01-01", first); // 覚える（暦日の文字列なので、名前を引くだけで書式は作らない）
+  const again = countFormatters(() => toDateString("2026-01-01", first));
+  assert.equal(again.made.length, 0, "覚えた綴りは、もう一度引かない");
+  // 別の有効な綴りを 1,000 個（時差の形。ほかのテストで使わない負の時差）
+  for (let m = 1; m <= 1000; m++) toDateString("2026-01-01", offsetName(-m));
+  const afterClear = countFormatters(() => toDateString("2026-01-01", first));
+  assert.equal(afterClear.made.length, 1, "消えた後は、もう一度引く");
+});
+
+test("綴りを変えても結果は同じ（大文字・小文字、別名、時差の 3 つの形）。ケルビン記号を含む綴りは invalid-time-zone", () => {
+  const same = (spellings: string[]) => {
+    const zones = new Set(spellings.map((z) => createCalendar({ timeZone: z }).timeZone));
+    const dates = new Set(spellings.map((z) => toDateString(at, z)));
+    return { zones: [...zones], dates: [...dates] };
+  };
+  assert.deepEqual(same(["Asia/Tokyo", "asia/tokyo", "ASIA/TOKYO", "aSiA/tOkYo"]), {
+    zones: ["Asia/Tokyo"],
+    dates: ["2026-04-01"],
+  });
+  assert.deepEqual(same(["+09:00", "+0900", "+09"]), { zones: ["+09:00"], dates: ["2026-04-01"] });
+  assert.deepEqual(same(["-00:00", "+00:00", "+0000"]), {
+    zones: ["+00:00"],
+    dates: ["2026-03-31"],
+  });
+  // 別名は、実行環境によって返す名前が違うことがある（decisions.md の 18 番）ので、暦日だけを比べる
+  assert.deepEqual(same(["Asia/Kolkata", "Asia/Calcutta", "asia/calcutta"]).dates, ["2026-03-31"]);
+  // U+212A（ケルビン記号）は toLowerCase で "k" になるが、今も実行環境は拒む。正しい綴りを先に覚えた後でも拒む
+  toDateString(at, "Asia/Kolkata");
+  assert.throws(
+    () => toDateString(at, "Asia/Kolkata"),
+    (e: unknown) => e instanceof RangeError && isBizdaysError(e) && e.code === "invalid-time-zone",
+  );
+  assert.throws(
+    () => createCalendar({ timeZone: "ASIA/KOLKATA" }),
+    (e: unknown) => e instanceof RangeError && isBizdaysError(e) && e.code === "invalid-time-zone",
+  );
+});
+
+// createCalendar で作っていない、カレンダーの形のオブジェクト（合成は timeZone を検証しない。decisions.md の 16 番）。
+// 判定は写したカレンダーのもので、瞬間を暦日に直すのは合成の側（渡した timeZone をそのまま使う）
+const calendarLike = (timeZone: string) => ({
+  ...createCalendar({ closedWeekdays: [0, 6] }),
+  timeZone,
+});
+const combinedOf = (timeZone: string) =>
+  combineCalendars([calendarLike(timeZone), calendarLike(timeZone)], { open: "all" });
+
+test("合成の経路でも書式が増えない（検証を通っていない綴りも、名前に直してから読む）", () => {
+  const name = "America/Argentina/Buenos_Aires";
+  const { made } = countFormatters(() => {
+    for (let n = 0; n < 2000; n++) {
+      const combined = combinedOf(spelling(name, n + 7000));
+      combined.isBusinessDay(at);
+      combined.today(at);
+    }
+  });
+  assert.ok(made.length <= 2, `made ${made.length} formatters`);
+  const offset = countFormatters(() => {
+    const combined = combinedOf("+0900");
+    combined.isBusinessDay(at);
+    combined.today(at);
+  });
+  const wall = offset.made.filter((o) => o.year !== undefined);
+  assert.ok(wall.length <= 1, `made ${wall.length} formatters for wall time`);
+  for (const o of wall) assert.equal(o.timeZone, "UTC");
+});
+
+test("合成の経路の結果と例外は 0.32.2 と同じ（返す timeZone は書いた綴りのまま。使えない綴りは code のない RangeError）", () => {
+  for (const [written, zone] of [
+    ["asia/tokyo", "Asia/Tokyo"],
+    ["+0900", "+09:00"],
+    ["AMERICA/NEW_YORK", "America/New_York"],
+  ] as const) {
+    const combined = combinedOf(written);
+    assert.equal(combined.timeZone, written);
+    const real = createCalendar({ timeZone: zone });
+    assert.equal(combined.today(at), real.today(at), written);
+    assert.equal(combined.dateOf(at), real.dateOf(at), written);
+  }
+  // 使えない綴り: 合成は作れ、暦日の文字列の判定は通り、Date の判定は Intl の例外のまま（N4 で扱いを決めるまで、今の挙動を固定する）
+  let intlMessage = "";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: "Nowhere/X" });
+  } catch (e) {
+    intlMessage = (e as Error).message;
+  }
+  assert.notEqual(intlMessage, "");
+  const broken = combinedOf("Nowhere/X");
+  assert.equal(broken.isBusinessDay("2026-11-17"), true);
+  assert.throws(
+    () => broken.isBusinessDay(at),
+    (e: unknown) =>
+      e instanceof RangeError && !isBizdaysError(e) && (e as Error).message === intlMessage,
+  );
+  // 1000〜9999 年の外の瞬間は、タイムゾーンを読む前に out-of-range（下側は 0.32.2 から。上側は 0.32.3 から、上側の年の確認を
+  // 整形の前に置いたので同じになった。0.32.2 では、UTC の年が 10000 より後の瞬間は Intl の例外だった）
+  for (const ms of [8.64e15, -8.64e15, Date.UTC(10001, 0, 1)]) {
+    assert.throws(
+      () => broken.isBusinessDay(new Date(ms)),
+      (e: unknown) => e instanceof RangeError && isBizdaysError(e) && e.code === "out-of-range",
+      String(ms),
+    );
+  }
+});
+
+test("時差の形のタイムゾーンの暦日と時刻（日付の変わり目、負の時差、30 分・45 分、1000 年と 9999 年の端、Date の上限・下限）", () => {
+  const parts = (iso: string, zone: string) => {
+    const p = toDateTimeParts(new Date(iso), zone);
+    return `${p.date} ${p.time}`;
+  };
+  // 日付の変わり目の前後
+  assert.equal(parts("2026-03-31T14:59:00Z", "+09:00"), "2026-03-31 23:59");
+  assert.equal(parts("2026-03-31T15:00:00Z", "+09:00"), "2026-04-01 00:00");
+  assert.equal(parts("2026-04-01T04:59:00Z", "-05:00"), "2026-03-31 23:59");
+  assert.equal(parts("2026-04-01T05:00:00Z", "-05:00"), "2026-04-01 00:00");
+  assert.equal(parts("2026-04-01T00:00:00Z", "+00:00"), "2026-04-01 00:00");
+  assert.equal(parts("2026-03-31T23:59:00Z", "+00:00"), "2026-03-31 23:59");
+  // 30 分・45 分の時差
+  assert.equal(parts("2026-03-31T18:29:00Z", "+05:30"), "2026-03-31 23:59");
+  assert.equal(parts("2026-03-31T18:30:00Z", "+05:30"), "2026-04-01 00:00");
+  assert.equal(parts("2026-03-31T18:15:00Z", "+05:45"), "2026-04-01 00:00");
+  assert.equal(parts("2026-04-01T09:30:00Z", "-09:30"), "2026-04-01 00:00");
+  assert.equal(parts("2026-04-01T09:29:00Z", "-09:30"), "2026-03-31 23:59");
+  // 名前のゾーン（別の経路で整形する）と、時差の形が同じ結果になる（その年に時差の変わらないゾーン）
+  const sample = [0, 1, 59, 60, 3_599_000, 43_200_000, 86_399_000].map(
+    (d) => Date.UTC(2026, 5, 30) + d,
+  );
+  for (const [named, offset] of [
+    ["Etc/GMT-14", "+14:00"],
+    ["Etc/GMT-9", "+09:00"],
+    ["Etc/GMT+12", "-12:00"],
+    ["Asia/Kolkata", "+05:30"],
+    ["Asia/Kathmandu", "+05:45"],
+    ["Pacific/Marquesas", "-09:30"],
+  ] as const) {
+    for (const ms of sample) {
+      assert.deepEqual(
+        toDateTimeParts(new Date(ms), offset),
+        toDateTimeParts(new Date(ms), named),
+        `${offset} ${ms}`,
+      );
+    }
+  }
+  // 1000 年と 9999 年の端（範囲の外になる側も）
+  const outOfRange = (e: unknown) =>
+    e instanceof RangeError && isBizdaysError(e) && e.code === "out-of-range";
+  assert.equal(parts("9999-12-31T09:59:00Z", "+14:00"), "9999-12-31 23:59");
+  assert.throws(() => parts("9999-12-31T10:00:00Z", "+14:00"), outOfRange);
+  assert.equal(parts("1000-01-01T12:00:00Z", "-12:00"), "1000-01-01 00:00");
+  assert.throws(() => parts("1000-01-01T11:59:00Z", "-12:00"), outOfRange);
+  const lastOf999 = new Date(Date.UTC(2000, 11, 31, 15));
+  lastOf999.setUTCFullYear(999);
+  assert.equal(toDateString(lastOf999, "+09:00"), "1000-01-01");
+  assert.throws(() => toDateString(lastOf999, "+08:59"), outOfRange);
+  const firstOf10000 = new Date(Date.UTC(2000, 0, 1, 11));
+  firstOf10000.setUTCFullYear(10000);
+  assert.equal(toDateString(firstOf10000, "-12:00"), "9999-12-31");
+  assert.throws(() => toDateString(firstOf10000, "-10:59"), outOfRange);
+  // Date の上限・下限（±8.64e15 ミリ秒）と、その内側 15 時間までの瞬間は、どのゾーンでも out-of-range（code のない例外にしない）
+  const zones = [
+    "+14:00",
+    "+09:00",
+    "-12:00",
+    "UTC",
+    "Asia/Tokyo",
+    "Pacific/Kiritimati",
+    "Etc/GMT+12",
+  ];
+  for (const edge of [8.64e15, -8.64e15]) {
+    for (let h = 0; h <= 15; h++) {
+      const ms = edge - Math.sign(edge) * h * 3_600_000;
+      for (const zone of zones) {
+        assert.throws(() => toDateTimeParts(new Date(ms), zone), outOfRange, `${zone} ${ms}`);
+        assert.throws(
+          () => createCalendar({ timeZone: zone }).isBusinessDay(new Date(ms)),
+          outOfRange,
+          `${zone} ${ms}`,
+        );
+      }
+    }
+  }
 });

@@ -6,6 +6,12 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.3] - 2026-11-17
+
+### Fixed
+
+- The cache of time zone formatters no longer grows with every spelling of a time zone (`"Asia/Tokyo"`, `"asia/tokyo"`, `"+09:00"`, `"+0900"`, ...). A server that passed time zone strings from requests to `createCalendar`, `createSchedule` or `toDateString` could run out of memory: each new spelling kept a formatter of the runtime's `Intl`, outside the JavaScript heap. A formatter is now kept for each name that `Intl` reports, the spellings are remembered up to 1,000 and then forgotten, and offsets from UTC are read without a formatter of their own (design decisions 16). Results are unchanged. For an instant after the year 10000 in UTC, the message of the `out-of-range` exception is now `Instant out of range (1000-9999)` in every time zone, as before the year 999; the code is unchanged
+
 ## [0.32.2] - 2026-11-15
 
 ### Fixed
@@ -1014,7 +1020,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.2...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.3...HEAD
+[0.32.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.2...v0.32.3
 [0.32.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.1...v0.32.2
 [0.32.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/inohan77/bizdays-toolkit/compare/v0.31.9...v0.32.0
