@@ -52,7 +52,10 @@ test("toDateString は任意のタイムゾーンで暦日にする", () => {
 test("不正な入力", () => {
   assert.throws(() => toJapanDate("2026/11/23"), RangeError);
   assert.throws(() => toJapanDate("2026-11-23T25:00"), RangeError);
-  assert.throws(() => toJapanDate(new Date(Number.NaN)), RangeError);
+  assert.throws(
+    () => toJapanDate(new Date(Number.NaN)),
+    (e: unknown) => e instanceof RangeError && isBizdaysError(e) && e.code === "invalid-time",
+  );
   assert.throws(() => toJapanDate(20261123 as unknown as string), TypeError);
   assert.throws(() => createCalendar({ timeZone: "Asia/Nowhere" }), RangeError);
 });
@@ -267,11 +270,11 @@ test("綴りを変えても結果は同じ（大文字・小文字、別名、�
   // U+212A（ケルビン記号）は toLowerCase で "k" になるが、今も実行環境は拒む。正しい綴りを先に覚えた後でも拒む
   toDateString(at, "Asia/Kolkata");
   assert.throws(
-    () => toDateString(at, "Asia/Kolkata"),
+    () => toDateString(at, "Asia/\u212Aolkata"),
     (e: unknown) => e instanceof RangeError && isBizdaysError(e) && e.code === "invalid-time-zone",
   );
   assert.throws(
-    () => createCalendar({ timeZone: "ASIA/KOLKATA" }),
+    () => createCalendar({ timeZone: "ASIA/\u212AOLKATA" }),
     (e: unknown) => e instanceof RangeError && isBizdaysError(e) && e.code === "invalid-time-zone",
   );
 });
@@ -418,5 +421,28 @@ test("時差の形のタイムゾーンの暦日と時刻（日付の変わり�
         );
       }
     }
+  }
+});
+
+test("無効な Date（new Date(NaN)）は、どの入口でも code が invalid-time の RangeError（文言は Invalid instant）", () => {
+  const invalid = new Date(Number.NaN);
+  const calendar = createCalendar({ closedWeekdays: [0, 6] });
+  for (const [name, call] of [
+    ["toDateString", () => toDateString(invalid, "UTC")],
+    ["toDateTimeParts", () => toDateTimeParts(invalid, "UTC")],
+    ["toJapanDate", () => toJapanDate(invalid)],
+    ["isBusinessDay", () => calendar.isBusinessDay(invalid)],
+    ["dayInfoOn", () => calendar.dayInfoOn(invalid)],
+    ["nextBusinessDay", () => calendar.nextBusinessDay(invalid)],
+  ] as const) {
+    assert.throws(
+      call,
+      (e: unknown) =>
+        e instanceof RangeError &&
+        isBizdaysError(e) &&
+        e.code === "invalid-time" &&
+        e.message === "Invalid instant",
+      name,
+    );
   }
 });

@@ -6,6 +6,18 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.4] - 2026-11-18
+
+### Fixed
+
+- `combineCalendars` now copies the array of calendars it is given. Changing that array after combining (adding, removing or reordering calendars) changed the results of the combined calendar, and could make `dayInfoOn` throw a `TypeError` without a `code` (design decisions 4: options are taken in when created)
+- The documentation now says how the option diagnostics treat days outside the holiday provider's supported years: with `outOfRangePolicy: "throw"`, a day whose evaluation throws `out-of-range` is a day the diagnostics cannot judge, as it has been since 0.32.2 (the guide said that the diagnostics treat days outside as having no holidays, which holds only with `"ignore"` and for a few checks)
+- The documentation now says that diagnostics check at most 200 supported years of a holiday provider (for a provider with more, the supported years within 1900–2099, or the first 200 if none fall there), not every supported year (guide and providers.md)
+- The type descriptions now say that two time zones with different names are compared with Temporal on runtimes that have it (`HolidayLookup.timeZone` and the `time-zone-conflict` code), as they have been since 0.32.0
+- The type descriptions, the README and the guide now say that a schedule's `holidayPolicy` defaults to `"ignore"`: with a holiday provider but no `holidayPolicy`, holidays do not change a schedule's values, unlike a business-day calendar
+- The type description of `timeZone` in the options now says that it takes precedence over the holiday provider's time zone
+- providers.md now says that a calendar holds the holiday provider by reference, so a provider must not be changed (including its `supportedYears`) after a calendar is created with it
+
 ## [0.32.3] - 2026-11-17
 
 ### Fixed
@@ -1020,7 +1032,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.3...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.4...HEAD
+[0.32.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.3...v0.32.4
 [0.32.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.2...v0.32.3
 [0.32.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.1...v0.32.2
 [0.32.1]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.0...v0.32.1

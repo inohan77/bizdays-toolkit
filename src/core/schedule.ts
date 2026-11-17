@@ -569,7 +569,8 @@ export interface HolidaySourceOptions<Kind extends string = string> {
   readonly unconfirmedHolidays?: "accept" | "throw";
   /**
    * 日時の入力（Date・オフセット付き文字列など）を暦日に変換するタイムゾーン。
-   * 省略時は祝日の提供元のタイムゾーン、提供元もなければ "UTC"
+   * 省略時は祝日の提供元のタイムゾーン、提供元もなければ "UTC"。書けば、提供元のタイムゾーンより優先する
+   * （提供元の祝日は暦日で引くので、変換のタイムゾーンを変えても祝日の日付は変わらない）
    */
   readonly timeZone?: string;
   /** 祝日の提供元の対応年を外れた日付の扱い（既定: "throw"） */
@@ -597,7 +598,10 @@ export interface ScheduleOptions<
 > extends HolidaySourceOptions<Kind> {
   /** 曜日ごとの値（[日, 月, 火, 水, 木, 金, 土]） */
   readonly weekdayValues: readonly [Value, Value, Value, Value, Value, Value, Value];
-  /** 祝日の値の決め方（既定: "ignore"） */
+  /**
+   * 祝日の値の決め方（既定: "ignore"）。省くと、祝日の提供元を渡しても祝日は値に影響しない（祝日も曜日の値になる）。
+   * 営業日カレンダーの既定（祝日は休業）と違うので、祝日に別の値を当てるときは書く
+   */
   readonly holidayPolicy?: ScheduleHolidayPolicy<Value>;
   /** 繰り返しの規則の値（書ける規則の形はガイドの「Recurring rules」の表） */
   readonly recurringRules?: readonly ScheduleRecurringRule<Value, Kind>[];
@@ -660,7 +664,8 @@ export interface HolidayLookup<Kind extends string = string> {
   /**
    * 日時の入力を暦日に変換するタイムゾーン。実行環境の Intl が返す名前で、設定に書いた綴りと違うことがあり、実行環境によっても
    * 違う（"Asia/Kolkata" と書くと、Node.js では "Asia/Calcutta"、Bun では "Asia/Kolkata"）。同じタイムゾーンかは、この名前が
-   * 同じかで比べる（違えば time-zone-conflict）
+   * 同じなら同じとし、違えば、実行環境に Temporal があれば Temporal の比較で決め、なければ別とする（別なら time-zone-conflict。
+   * decisions.md の 18 番）
    */
   readonly timeZone: string;
   /** 祝日の提供元 */
@@ -1599,7 +1604,10 @@ export function compileRecurringRules<Value>(
   return rules;
 }
 
-/** @internal その日の祝日を返す関数（祝日・祝日の翌日・祝前日の規則の判定に使う。提供元の対応年の外は祝日でないとみなすこと） */
+/**
+ * @internal その日の祝日を返す関数（祝日・祝日の翌日・祝前日の規則の判定に使う）。提供元の対応年の外の日の扱いは
+ * 渡す側が決める（判定は outOfRangePolicy に従い、"throw" なら out-of-range を投げる関数を渡す。decisions.md の 17 番）
+ */
 export type HolidayOf = (date: DateString) => Holiday<string> | undefined;
 
 /** @internal その日の祝日（HolidayOf が返したもの）が、ID が "JP" の提供元のものか */

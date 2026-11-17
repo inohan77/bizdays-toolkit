@@ -370,3 +370,35 @@ test("合成: 方針の違うカレンダーを合成しても、合成が投げ
   // 構成カレンダーが投げる日も試していること（空振りしない）
   assert.ok(combinedThrew > 0, "構成カレンダーが投げる日がない");
 });
+
+test("合成は渡した配列を写す: 合成の後に配列を書き換えても（追加・並べ替え・空にする）、結果は変わらない（decisions.md の 4 番）", () => {
+  const shop = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
+  const sundays = createCalendar({
+    timeZone: "Asia/Tokyo",
+    closedWeekdays: [0],
+    closedDates: ["2026-11-24"],
+  });
+  const never = createCalendar({ timeZone: "Asia/Tokyo", closedWeekdays: [0, 1, 2, 3, 4, 5, 6] });
+  const days = ["2026-11-21", "2026-11-22", "2026-11-23", "2026-11-24", "2026-11-25"];
+  for (const open of ["all", "any"] as const) {
+    const list = [shop, sundays];
+    const combined = combineCalendars(list, { open });
+    const snapshot = () => ({
+      open: days.map((d) => combined.isBusinessDay(d)),
+      info: days.map((d) => {
+        const r = combined.dayInfoOn(d);
+        return [r.open, r.reason, r.decidedBy, r.holiday?.name];
+      }),
+      holidayOn: days.map((d) => combined.holidayOn(d)?.name),
+      year: combined.holidaysInYear(2026).length,
+      between: combined.holidaysBetween("2026-11-01", "2026-11-30").map((h) => h.date),
+    });
+    const before = snapshot();
+    list.push(never);
+    assert.deepEqual(snapshot(), before, `${open}: push`);
+    list.reverse();
+    assert.deepEqual(snapshot(), before, `${open}: reverse`);
+    list.length = 0;
+    assert.deepEqual(snapshot(), before, `${open}: length = 0`);
+  }
+});

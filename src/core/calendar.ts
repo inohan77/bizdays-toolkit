@@ -869,14 +869,16 @@ export function combineCalendars<Kind extends string = string>(
   if (!Array.isArray(calendars) || calendars.length < 2) {
     throw rangeError("invalid-argument", "calendars must be an array of two or more calendars");
   }
+  // 渡された配列を写して凍結し、以降はこの写しだけを使う（作成の後に配列を書き換えても、合成は変わらない。decisions.md の 4 番）。
   // 穴は undefined の要素として検証する（forEach は穴を飛ばす。decisions.md の 6 番）
-  Array.from(calendars).forEach((c, i) => {
+  const list = Object.freeze(Array.from(calendars));
+  list.forEach((c, i) => {
     if (!isCalendarLike(c))
       throw rangeError("invalid-argument", `calendars[${i}] is not a calendar`);
-    if (calendars.indexOf(c) !== i) {
+    if (list.indexOf(c) !== i) {
       throw rangeError(
         "invalid-argument",
-        `calendars[${i}] is the same calendar as calendars[${calendars.indexOf(c)}]`,
+        `calendars[${i}] is the same calendar as calendars[${list.indexOf(c)}]`,
       );
     }
   });
@@ -895,7 +897,7 @@ export function combineCalendars<Kind extends string = string>(
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {
     throw rangeError("invalid-option", "searchDayLimit must be a positive integer");
   }
-  const zones = distinctTimeZones(calendars.map((c) => c.timeZone));
+  const zones = distinctTimeZones(list.map((c) => c.timeZone));
   if (zones.length > 1) {
     throw rangeError(
       "time-zone-conflict",
@@ -903,16 +905,15 @@ export function combineCalendars<Kind extends string = string>(
     );
   }
   const providers: HolidayProvider<Kind>[] = [];
-  for (const c of calendars)
-    for (const p of c.providers) if (!providers.includes(p)) providers.push(p);
+  for (const c of list) for (const p of c.providers) if (!providers.includes(p)) providers.push(p);
   // 合成の参照は、タイムゾーンの変換と提供元・方針の値（要約。どれかが "throw" なら "throw"）のためだけに使う。祝日は和集合から
   // 引かず、構成カレンダーの結果から求める（和集合に方針を一律に当てると、あるカレンダーの方針が別のカレンダーにしか
   // 属さない提供元にまで当たり、どの構成カレンダーも投げない日に投げる。decisions.md の 17 番）
   const base = createHolidayLookup<Kind>({
     providers: Object.freeze(providers),
     timeZone: zones[0]!,
-    outOfRangePolicy: calendars.every((c) => c.outOfRangePolicy === "ignore") ? "ignore" : "throw",
-    unconfirmedHolidayPolicy: calendars.some((c) => c.unconfirmedHolidayPolicy === "throw")
+    outOfRangePolicy: list.every((c) => c.outOfRangePolicy === "ignore") ? "ignore" : "throw",
+    unconfirmedHolidayPolicy: list.some((c) => c.unconfirmedHolidayPolicy === "throw")
       ? "throw"
       : "accept",
   });
@@ -926,24 +927,24 @@ export function combineCalendars<Kind extends string = string>(
   };
   /** 構成カレンダーの祝日（すべてのカレンダーを呼び、先のカレンダーの祝日を採る） */
   const holidayOn = (input: DateInput): Holiday<Kind> | undefined =>
-    calendars.map((c) => c.holidayOn(input)).find((h) => h !== undefined);
+    list.map((c) => c.holidayOn(input)).find((h) => h !== undefined);
   const lookup: HolidayLookup<Kind> = {
     ...base,
     isHoliday: (input) => holidayOn(input) !== undefined,
     holidayOn,
     getHoliday: holidayOn,
-    holidaysInYear: (year) => merge(calendars.map((c) => c.holidaysInYear(year))),
-    holidaysBetween: (from, to) => merge(calendars.map((c) => c.holidaysBetween(from, to))),
+    holidaysInYear: (year) => merge(list.map((c) => c.holidaysInYear(year))),
+    holidaysBetween: (from, to) => merge(list.map((c) => c.holidaysBetween(from, to))),
   };
 
   // すべてのカレンダーを判定する（結果が決まった時点で止めると、後のカレンダーが投げる日に投げない。17 番）
   const isOpen = (date: DateString): boolean => {
-    const results = calendars.map((c) => c.isBusinessDay(date));
+    const results = list.map((c) => c.isBusinessDay(date));
     return mode === "all" ? results.every(Boolean) : results.some(Boolean);
   };
 
   function info(date: DateString): DayInfo<Kind> {
-    const results = calendars.map((c) => c.dayInfoOn(date));
+    const results = list.map((c) => c.dayInfoOn(date));
     const open = mode === "all" ? results.every((r) => r.open) : results.some((r) => r.open);
     // 合成結果と同じ判定をした最初のカレンダー（"all" で休業なら最初に休みのもの、営業ならすべて営業なので 0 番）
     const decidedBy = results.findIndex((r) => r.open === open);

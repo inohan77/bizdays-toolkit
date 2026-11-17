@@ -626,7 +626,7 @@ function guardBases<Value, Kind extends string>(
             return basis(year, month);
           } catch (error) {
             if (!UNJUDGEABLE.has(String((error as { code?: unknown }).code))) throw error;
-            // 投げた月だけを記録する（週の規則が隣の月を見る扱いは unsureOf が決める）。記録は見張りに使う
+            // 投げた月だけを記録する（週の規則が隣の月を見る扱いは unjudgeableDays が決める）。記録は見張りに使う
             unknownMonths.add(year * 12 + month - 1);
             return [];
           }
