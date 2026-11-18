@@ -963,7 +963,12 @@ function analyzeRules<Value, Kind extends string>(
   // 代表の 28 年間で基準のカレンダーを評価してしまう）。第 n 営業日の規則の印を使う診断を足すときは、ここと
   // unjudgeableDays（代表の 28 年間を U に含めていない）を見直す（docs/decisions.md の 31 番）
   const noBits = new Uint8Array(PATTERN_DAYS);
-  const recurringBits = recurring.map((r) => (r.businessDays !== null ? noBits : patternBits(r)));
+  // 代表の 28 年間の当てはまりは、shadowed の比較に届いたときに初めて求める（規則が 1 つの設定・祝日の規則・周期の規則では
+  // 求めない。どの規則も 10,227 日を判定するので、先にすべて求めると診断の時間の大きな部分になる）
+  const recurringBits: Uint8Array[] = [];
+  const bitsOf = (j: number): Uint8Array =>
+    (recurringBits[j] ??=
+      recurring[j]!.businessDays !== null ? noBits : patternBits(recurring[j]!));
   /** 祝日・祝日の翌日・祝前日の規則の判定に使う（提供元の対応年の外は祝日でないとみなす） */
   const holidayOfSafe = (date: DateString): Holiday<string> | undefined => {
     try {
@@ -1038,7 +1043,6 @@ function analyzeRules<Value, Kind extends string>(
         a.skipWeekdays.size === b.skipWeekdays.size &&
         [...a.skipWeekdays].every((w) => b.skipWeekdays!.has(w));
   recurring.forEach((rule, j) => {
-    const bits = recurringBits[j]!;
     const holidayBased = isHolidayBasedRule(rule);
     const businessDayBased = rule.businessDays !== null;
     const matches = holidayBased
@@ -1129,7 +1133,7 @@ function analyzeRules<Value, Kind extends string>(
                   r.businessDays === null &&
                   r.cycle === null &&
                   intervalCovers(r, rule) &&
-                  isSubset(bits, recurringBits[i]!)),
+                  isSubset(bitsOf(j), bitsOf(i))),
     );
     if (k < 0) return;
     unused.add(rule);

@@ -6,6 +6,12 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.5] - 2026-11-18
+
+### Changed
+
+- Calculations that step through days are faster: turning a day number back into a date no longer parses the date string it has just built (the year is still checked against 1000–9999), and the option diagnostics work out the days a recurring rule matches only when two rules are compared. Searching, adding and counting business days, ranges of days and the option diagnostics are faster. Results, exceptions and diagnostics are unchanged
+
 ## [0.32.4] - 2026-11-18
 
 ### Fixed
@@ -1032,7 +1038,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.4...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.5...HEAD
+[0.32.5]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.4...v0.32.5
 [0.32.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.3...v0.32.4
 [0.32.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.2...v0.32.3
 [0.32.2]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.1...v0.32.2

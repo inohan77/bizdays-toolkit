@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import { addDays, diffDays, isValidDate, weekdayOf } from "../src/index.ts";
 // 第 n 曜日と解析は公開しない内部の関数なので、モジュールから直接読み込んで確かめる
-import { nthWeekdayOfMonth, parseDate } from "../src/core/date.ts";
+import { fromDayNumber, nthWeekdayOfMonth, parseDate, toDayNumber } from "../src/core/date.ts";
 
 test("日付の加減算と差", () => {
   assert.equal(addDays("2026-12-31", 1), "2027-01-01");
@@ -62,4 +62,35 @@ test("parseDate: プロセスで最初の呼び出しが文字列でない値で
     encoding: "utf8",
   });
   assert.deepEqual(out.trim().split(/\r?\n/), ["invalid-date", "invalid-date", "invalid-date"]);
+});
+
+test("日数から作った暦日: 続けて解析すると、その日の年月日になる（解析し直さずに入れる記憶の値。月末・うるう日・年の端を含む）", () => {
+  // 日数から暦日を作るときは文字列を解析し直さず、作った年月日を解析の直前 1 件の記憶に入れる（decisions.md の 16 番）。
+  // 入れる値が古いと、続けて同じ文字列を解析した年月日が別の日になる
+  const days = [
+    ...Array.from({ length: 800 }, (_, i) => toDayNumber("1999-12-01") + i),
+    toDayNumber("1000-01-01"),
+    toDayNumber("9999-12-31"),
+    toDayNumber("2024-02-29"),
+    toDayNumber("2100-02-28"),
+  ];
+  for (const n of days) {
+    const date = fromDayNumber(n);
+    const utc = new Date(n * 86_400_000);
+    assert.deepEqual(
+      parseDate(date),
+      { year: utc.getUTCFullYear(), month: utc.getUTCMonth() + 1, day: utc.getUTCDate() },
+      date,
+    );
+    assert.equal(toDayNumber(date), n, date);
+    assert.ok(Object.isFrozen(parseDate(date)), date);
+  }
+  // 範囲の外は、作る前に out-of-range（記憶は変えない。直前に解析した日は、そのまま正しく読める）
+  const last = fromDayNumber(toDayNumber("2026-11-18"));
+  for (const n of [toDayNumber("1000-01-01") - 1, toDayNumber("9999-12-31") + 1, Number.NaN])
+    assert.throws(
+      () => fromDayNumber(n),
+      (e: unknown) => e instanceof RangeError && (e as { code?: string }).code === "out-of-range",
+    );
+  assert.deepEqual(parseDate(last), { year: 2026, month: 11, day: 18 });
 });

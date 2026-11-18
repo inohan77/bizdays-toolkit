@@ -28,6 +28,7 @@ const jsonFile = argValue("--json");
 
 type Root = typeof import("../src/index.ts");
 type Jp = typeof import("../src/jp/index.ts");
+type Diagnose = typeof import("../src/diagnose/index.ts");
 const root: Root = packageDir
   ? await import(pathToFileURL(resolve(packageDir, "dist/index.js")).href)
   : await import("../src/index.ts");
@@ -35,6 +36,9 @@ const jpModule: Jp = packageDir
   ? await import(pathToFileURL(resolve(packageDir, "dist/jp/index.js")).href)
   : await import("../src/jp/index.ts");
 const { jp } = jpModule;
+const diagnoseModule: Diagnose = packageDir
+  ? await import(pathToFileURL(resolve(packageDir, "dist/diagnose/index.js")).href)
+  : await import("../src/diagnose/index.ts");
 
 // 前のバージョンの dist が 0.30.0 より前（新しい名前を知らない）なら、設定の新しい名前を旧名に戻して渡す。
 // CI の bench は同じ場面を前のバージョンと比べるため（新しい名前のままだと、前のバージョンは知らないキーとして黙って無視する）
@@ -131,6 +135,24 @@ const cases: Case[] = [
   {
     name: "createCalendar（店舗の設定）",
     run: () => createCalendar({ holidayProvider: jp, closedWeekdays: [0] }),
+  },
+  {
+    // 診断の走査（1 日ごとの日付の変換）と、規則どうしの比較（代表の 28 年間の当てはまり）の退行を拾う。提供元のない設定で、
+    // 1 回を 20 ミリ秒ほどに収める（温める 50 回と測る回を合わせて 1〜3 秒ほどで、CI の bench の時間を大きく延ばさない）
+    name: "diagnoseCalendar（提供元なし・規則 2 つ）",
+    run: () =>
+      diagnoseModule.diagnoseCalendar(
+        (legacy ? toLegacy : (o: Record<string, unknown>) => o)(
+          {
+            closedWeekdays: [0, 6],
+            closedRecurringRules: [
+              { weekday: 3, nth: [2] },
+              { weekday: 5, nth: [4] },
+            ],
+          },
+          ["source", "calendar"],
+        ) as never,
+      ),
   },
 ];
 

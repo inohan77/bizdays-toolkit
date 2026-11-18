@@ -348,8 +348,7 @@ jobs:
       - uses: ./.github/actions/setup-toolchain
         with:
           node-version: "26.13.0"
-      - name: Test the test tools (test/tools)
-        run: pnpm test:tools
+      # pnpm test:tools は、check ジョブの pnpm check が同じバージョン（Node.js 26.13.0）で動かすので、ここでは動かさない
       - name: Check that the check scripts fail on injected errors
         run: |
           node scripts/tool-selftest.ts | tee -a "${GITHUB_STEP_SUMMARY}"

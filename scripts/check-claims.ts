@@ -19,7 +19,7 @@ import "./strict-warnings.ts";
  *    そのバージョンで足した・変えた参照だけ。--since <タグ> で、そのタグから変わった行（git diff -U0。コミットしていない変更も含む）の
  *    参照と、CHANGELOG の今のバージョンの節の参照に印を付け、別の表にも並べる
  * d. 公開物の変化: 公開済みのバージョンと比べて変わった dist の .js と .d.ts（型も利用者に見える公開物）を一覧にし、変わったのに
- *    CHANGELOG の今のバージョンか [Unreleased] に利用者向けの区分（Added・Changed・Fixed・Deprecated・Removed・Data）がなければ失敗する。.d.ts は
+ *    CHANGELOG の今のバージョンか [Unreleased] に利用者向けの区分（Added・Changed・Fixed・Deprecated・Removed・Data・Security）がなければ失敗する。.d.ts は
  *    コメント（JSDoc）を除いて比べる（説明の直しだけでは失敗にしない。.js はビルドでコメントを除いている）
  * e. 1.0.0 で行う作業と約束の置き場: 保守する人の作業は RELEASING.md の「1.0.0 で行う作業」、利用者への約束は移行ガイドの
  *    「1.0.0 で削除する予定の API」だけに書く。1 つの文（「。」で区切る）に「1.0.0」と、その後に外す・消す・削除・置き換え・
@@ -437,7 +437,7 @@ let hanChecked = 0;
  * 「Migration」（0.30.x 以前の「移行」）は変更の区分（Changed・Removed など）に添えて書くもので、それだけでは何が変わったかを言わない。「開発」は利用者に
  * 見えない変更（テスト・道具・文書の運用）、「既知の不具合」は公開物の変化ではないので、どれも数えない
  */
-const USER_FACING = ["Added", "Changed", "Fixed", "Deprecated", "Removed", "Data"];
+const USER_FACING = ["Added", "Changed", "Fixed", "Deprecated", "Removed", "Data", "Security"];
 const baseDir = argValue("--base");
 /** 比べる中身（.d.ts はコメントを除いて印刷し直したもの） */
 function published(path: string): string {

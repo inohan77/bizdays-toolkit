@@ -15,9 +15,11 @@ import "./strict-warnings.ts";
  * - 診断の結果を filter・find で絞った例は失敗にする（絞ると、例の設定の誤りが隠れる）。絞る理由のある例は、直前の空でない行の注記
  *   `<!-- example: allow-filtered-diagnostics -->` で明示する
  * - 移行ガイド（docs/migration.md）は、最新のバージョンの節までを実行する（それより前の節は旧名で書かれていて、1.0.0 で動かなくなる）
+ * - 例は、コアの数（4 まで）だけ並べて実行する。結果は例の順に読むので、失敗の並びは並べないときと同じ
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { availableParallelism } from "node:os";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -256,7 +258,7 @@ function audit(name: string, issues: readonly { severity: string; code: string; 
 // 鍵で区別できない値を含む設定は写さない: 同梱の提供元のほかの関数（中身が同じでも、閉じ込めた値が違いうる）と、
 // カレンダー。明示的な undefined は、書かないこととは別の値として鍵に入れる（decisions.md の 6 番）
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { jp } from "bizdays-toolkit/jp";
 import { england, northernIreland, scotland, wales } from "bizdays-toolkit/uk";
@@ -284,7 +286,11 @@ function diagnoseOnce<T>(kind: string, options: unknown, run: () => T): T {
   const file = key ? join(dir!, key + ".json") : undefined;
   if (file && existsSync(file)) return JSON.parse(readFileSync(file, "utf8")) as T;
   const result = run();
-  if (file) writeFileSync(file, JSON.stringify(result));
+  // 例は並べて実行するので、書きかけのファイルをほかの例が読まないように、別の名前に書いてから置き換える
+  if (file) {
+    writeFileSync(file + "." + process.pid, JSON.stringify(result));
+    renameSync(file + "." + process.pid, file);
+  }
   return result;
 }
 export function createCalendar(...args: unknown[]): unknown {
@@ -387,6 +393,16 @@ const failures: string[] = [];
 /** 診断の結果を写す場所（同じ設定の 2 回目の診断を省く。包むモジュールの diagnoseOnce） */
 const cacheDir = join(dir, "diagnose-cache");
 let blocks = 0;
+/** 実行する例（準備の段階で集め、あとで並べて実行する） */
+const jobs: {
+  file: string;
+  startLine: number;
+  checks: Check[];
+  path: string;
+  env: NodeJS.ProcessEnv;
+  /** この例より前に積んだ、準備の段階の失敗 */
+  earlier: string[];
+}[] = [];
 let compared = 0;
 /** 包むモジュールが診断にかけた設定の数（関数ごと）。付け替えが外れると 0 件になるので、0 件なら失敗にする */
 const audited: Record<string, number> = { createCalendar: 0, createSchedule: 0 };
@@ -423,55 +439,91 @@ try {
         continue;
       }
       writeFileSync(path, redirected);
-      const result = spawnSync(
-        process.execPath,
-        ["--import", "./scripts/strict-warnings.ts", path],
-        {
-          encoding: "utf8",
-          env: {
-            ...process.env,
-            README_EXPECTED: JSON.stringify(prepared.checks.map((c) => c.expected)),
-            README_DEPRECATED_KEYS: JSON.stringify(deprecatedResultKeys),
-            README_DIAGNOSE_CACHE: cacheDir,
-            README_ALLOWED_DIAGNOSTICS: JSON.stringify(
-              (notes.get("allow-diagnostics") ?? "").split(",").filter(Boolean),
-            ),
-          },
+      jobs.push({
+        file,
+        startLine,
+        checks: prepared.checks,
+        path,
+        env: {
+          ...process.env,
+          README_EXPECTED: JSON.stringify(prepared.checks.map((c) => c.expected)),
+          README_DEPRECATED_KEYS: JSON.stringify(deprecatedResultKeys),
+          README_DIAGNOSE_CACHE: cacheDir,
+          README_ALLOWED_DIAGNOSTICS: JSON.stringify(
+            (notes.get("allow-diagnostics") ?? "").split(",").filter(Boolean),
+          ),
         },
-      );
-      const before = failures.length;
-      for (const line of (result.stdout ?? "").split("\n").filter(Boolean)) {
-        try {
-          const parsed = JSON.parse(line) as {
-            index: number;
-            actual: unknown;
-            diagnostic?: string;
-            audited?: string;
-          };
-          if (typeof parsed.audited === "string") {
-            audited[parsed.audited] = (audited[parsed.audited] ?? 0) + 1;
-            continue;
-          }
-          if (typeof parsed.diagnostic === "string") {
-            failures.push(`${file}:${startLine}: ${parsed.diagnostic}`);
-            continue;
-          }
-          const { index, actual } = parsed;
-          const c = prepared.checks[index]!;
-          failures.push(
-            `${file}:${startLine + c.line - 1}: ${c.code}\n  expected ${c.expected}\n  actual   ${JSON.stringify(actual)}`,
-          );
-        } catch {
-          // 例の出力（console.log など）は無視する
-        }
-      }
-      if (result.status !== 0 && failures.length === before) {
-        failures.push(`${file}:${startLine}: the example failed to run\n${result.stderr}`);
-      } else if (result.status !== 0 && !result.stdout) {
-        failures.push(`${file}:${startLine}: the example failed to run\n${result.stderr}`);
-      }
+        // それまでに積んだ準備の段階の失敗は、この例の結果の前に並べる（失敗の並びを、並べないときと同じにする）
+        earlier: failures.splice(0),
+      });
     }
   }
+  // 例を並べて実行し、結果は例の順に読む（失敗の並びを、並べないときと同じにする）
+  const results: { status: number | null; stdout: string; stderr: string }[] = [];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < jobs.length) {
+      const i = next++;
+      const job = jobs[i]!;
+      results[i] = await new Promise((done) => {
+        const child = spawn(
+          process.execPath,
+          ["--import", "./scripts/strict-warnings.ts", job.path],
+          {
+            env: job.env,
+          },
+        );
+        let stdout = "";
+        let stderr = "";
+        child.stdout.setEncoding("utf8").on("data", (s: string) => (stdout += s));
+        child.stderr.setEncoding("utf8").on("data", (s: string) => (stderr += s));
+        // 起動に失敗したら、その例の失敗にする（spawnSync のときと同じ。close が続いても、結果は最初の 1 回だけ）
+        child.on("error", (e) => done({ status: null, stdout, stderr: String(e) }));
+        child.on("close", (status) => done({ status, stdout, stderr }));
+      });
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(4, availableParallelism(), jobs.length) }, worker),
+  );
+  /** 例の結果の失敗（例の出力の 1 行ごとの JSON を読む） */
+  const failuresOf = (job: (typeof jobs)[number], result: (typeof results)[number]): string[] => {
+    const { file, startLine, checks } = job;
+    const found: string[] = [];
+    for (const line of result.stdout.split("\n").filter(Boolean)) {
+      try {
+        const parsed = JSON.parse(line) as {
+          index: number;
+          actual: unknown;
+          diagnostic?: string;
+          audited?: string;
+        };
+        if (typeof parsed.audited === "string") {
+          audited[parsed.audited] = (audited[parsed.audited] ?? 0) + 1;
+          continue;
+        }
+        if (typeof parsed.diagnostic === "string") {
+          found.push(`${file}:${startLine}: ${parsed.diagnostic}`);
+          continue;
+        }
+        const { index, actual } = parsed;
+        const c = checks[index]!;
+        found.push(
+          `${file}:${startLine + c.line - 1}: ${c.code}\n  expected ${c.expected}\n  actual   ${JSON.stringify(actual)}`,
+        );
+      } catch {
+        // 例の出力（console.log など）は無視する
+      }
+    }
+    if (result.status !== 0 && (found.length === 0 || !result.stdout)) {
+      found.push(`${file}:${startLine}: the example failed to run\n${result.stderr}`);
+    }
+    return found;
+  };
+  // 最後の例より後に積んだ準備の段階の失敗は、最後に並べる
+  const later = failures.splice(0);
+  jobs.forEach((job, i) => failures.push(...job.earlier, ...failuresOf(job, results[i]!)));
+  failures.push(...later);
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

@@ -68,13 +68,17 @@ export function isValidDate(input: unknown): input is DateString {
   }
 }
 
-/** 年月日から "YYYY-MM-DD" を作る（範囲外なら RangeError） */
-export function formatDate(year: number, month: number, day: number): DateString {
+/**
+ * 年月日から "YYYY-MM-DD" を作る（範囲外なら RangeError）。exists なら、実在する年月日として解析し直さず、parseDate の
+ * 直前 1 件の記憶に入れる（続けて同じ文字列を解析するため。decisions.md の 16 番）
+ */
+export function formatDate(year: number, month: number, day: number, exists?: boolean): DateString {
   if (!Number.isInteger(year) || year < 1000 || year > 9999) {
     throw rangeError("out-of-range", `Year out of range (1000-9999): ${year}`);
   }
   const s = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  parseDate(s);
+  if (!exists) parseDate(s);
+  else [lastValue, lastParts] = [s, Object.freeze({ year, month, day })];
   return s;
 }
 
@@ -98,10 +102,13 @@ export function toDayNumber(date: DateString): number {
   return Date.UTC(year, month - 1, day) / MS_PER_DAY;
 }
 
-/** 1970-01-01 からの日数を "YYYY-MM-DD" に戻す */
+/**
+ * 1970-01-01 からの日数を "YYYY-MM-DD" に戻す。日数から作る年月日は必ず実在するので、文字列を解析し直して検証しない
+ * （年の範囲だけを確かめる。探索・期間の数え上げ・診断の走査が 1 日ごとに呼ぶ）
+ */
 export function fromDayNumber(dayNumber: number): DateString {
   const d = new Date(dayNumber * MS_PER_DAY);
-  return formatDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  return formatDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), true);
 }
 
 /**

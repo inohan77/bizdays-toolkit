@@ -81,7 +81,7 @@ const withoutUserFacingSections = (text: string): string => {
     text.slice(0, start) +
     text
       .slice(start, end)
-      .replace(/^### (Added|Changed|Fixed|Deprecated|Removed|Data)$/gm, "### Notes") +
+      .replace(/^### (Added|Changed|Fixed|Deprecated|Removed|Data|Security)$/gm, "### Notes") +
     text.slice(end)
   );
 };
