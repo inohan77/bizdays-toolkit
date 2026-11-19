@@ -27,7 +27,7 @@ import {
   weekdayOf,
   type DateString,
 } from "./date.ts";
-import { compileCalendarOptions, type Calendar, type CalendarOptions } from "./calendar.ts";
+import { compileCalendarOptions, type CalendarOptions } from "./calendar.ts";
 import {
   internalError,
   InternalError,
@@ -50,6 +50,7 @@ import {
   jpUsage,
   matchMonthDay,
   matchPattern,
+  PARTS,
   type AnnualRule,
   type CompiledPeriod,
   type CompiledSchedule,
@@ -287,7 +288,25 @@ interface Range {
 interface Window {
   readonly ranges: readonly Range[];
   readonly label: string;
+  /**
+   * 第 n 営業日の規則の基準のカレンダーの中が分からないか、中の境目・周期を調べきれない。毎年の月日・繰り返しの規則の
+   * redundant と、基準を持つ規則の never-matches を出さない（unsureOf。decisions.md の 31 番）
+   */
+  readonly blind: boolean;
 }
+
+/** 基準のカレンダーの中で、結果が年によって変わる入力（decisions.md の 31 番） */
+interface BasisInside {
+  /** 境目の日（その日から別の区間になる）: 有効期間の両端、個別の日付の両端、提供元の対応年の両端 */
+  readonly edges: number[];
+  /** 全体を調べる期間: 提供元の対応年（祝日が年ごとに変わる。200 年を超えれば clipYears で絞る） */
+  readonly spans: Range[];
+  /** 繰り返しの規則（周期のある規則の、当てはまり方がそろう長さを求める） */
+  readonly rules: RecurringRuleCompiled<unknown>[];
+}
+
+/** 走査の範囲の上限（基準のカレンダーの中を足した後の日数の合計。超えたら blind） */
+const MAX_SCAN_DAYS = 366 * MAX_WINDOW_YEARS * 3;
 
 /** 長すぎる年の範囲を 1900〜2099 年（重ならなければ先頭の 200 年）に絞る */
 function clipYears(from: number, to: number): [number, number] {
@@ -301,15 +320,54 @@ const dayOfYear = (year: number, last: boolean): number =>
   toDayNumber(`${String(year).padStart(4, "0")}-${last ? "12-31" : "01-01"}`);
 
 /**
- * 毎年の月日・繰り返しの規則を調べる期間。祝日が年ごとに変わるので、提供元の対応年を使う。
+ * 基準のカレンダーの中身（作成関数が登録した規則か、合成の構成カレンダー。schedule.ts の PARTS）を inside に集める。
+ * 入れ子（合成の中、スケジュールから作ったカレンダーの規則の基準）もたどる。中身の分からないカレンダーがあれば false
+ */
+function collectBasis(calendar: object, inside: BasisInside): boolean {
+  const parts = PARTS.get(calendar);
+  if (parts === undefined) return false;
+  if (Array.isArray(parts)) return parts.every((c: object) => collectBasis(c, inside));
+  const { source, annual, recurring, dates } = parts as CompiledSchedule<unknown, string>;
+  // 提供元の対応年: 全体を調べ、両端も境目にする（"ignore" なら外は祝日なしの別の区間、"throw" なら外は基準が投げる区間。
+  // 投げる区間を走査に入れると、そこにかかる規則は判定できない日にかかるので、取り除けると言わない。unsureOf）
+  for (const { supportedYears } of source.providers) {
+    const [from, to] = clipYears(supportedYears.from, supportedYears.to);
+    inside.spans.push({ from: dayOfYear(from, false), to: dayOfYear(to, true) });
+    inside.edges.push(
+      dayOfYear(supportedYears.from, false),
+      dayOfYear(supportedYears.to, true) + 1,
+    );
+  }
+  for (const r of [...annual, ...recurring]) {
+    if (r.effectiveFrom !== null) inside.edges.push(r.effectiveFrom);
+    if (r.effectiveTo !== null) inside.edges.push(r.effectiveTo + 1);
+  }
+  for (const r of dates) inside.edges.push(r.from, r.to + 1);
+  inside.rules.push(...recurring);
+  return recurring.every((r) => r.calendar === null || collectBasis(r.calendar, inside));
+}
+
+/** 範囲が、100 で割り切れて 400 で割り切れない年（2100 年など）にかかるか（その年をまたぐと、当てはまり方がそろわない） */
+const crossesShortCentury = ({ from, to }: Range): boolean => {
+  const last = yearOf(Math.min(to, MAX_DAY));
+  for (let y = Math.ceil(yearOf(Math.max(from, MIN_DAY)) / 100) * 100; y <= last; y += 100)
+    if (y % 400 !== 0) return true;
+  return false;
+};
+
+/**
+ * 毎年の月日・繰り返しの規則を調べる期間（decisions.md の 31 番）。祝日が年ごとに変わるので、提供元の対応年を使う。
  * 提供元がなければ、繰り返しの規則がそろう周期（2001 年から 28 年、周期のある規則があれば長く）。
- * 規則の有効期間が基準の範囲の外にあれば、その期間（期限のない側は周期の長さ）も加える
- * （対応年の外で例外になる設定では加えない）
+ * 対応年の外で例外になる設定（"throw"）では、ここまで。そうでなければ（提供元がないか "ignore"）、結果が年によって変わる
+ * 入力の境目の外側も、当てはまり方がそろう長さ（1 周期）ずつ加える: "ignore" の提供元の対応年の前後、規則の有効期間
+ * （期限のない側は周期の長さ）とその前後、第 n 営業日の規則の基準のカレンダーの中（inside。境目の前後と提供元の対応年）。
+ * 最後に暦日の範囲（1000〜9999 年）に収める
  */
 function scanWindow(
   source: HolidaySource<string>,
   rules: readonly (CompiledPeriod & { readonly path: string })[],
   cycle: number,
+  inside?: BasisInside,
 ): Window | undefined {
   const ranges: Range[] = [];
   /** day の前（before）か後の 1 周期。当てはまり方がそろう長さ（openEndedDays）だけ */
@@ -351,15 +409,11 @@ function scanWindow(
       if (rule.effectiveTo !== null) ranges.push(side(rule.effectiveTo + 1, false));
       if (rule.effectiveFrom !== null) ranges.push(side(rule.effectiveFrom - 1, true));
     }
-    // 第 n 営業日を数える基準のカレンダーが対応年の外で祝日なしとするなら、その対応年の前後（基準に祝日のない日）も 1 周期ずつ
-    for (const rule of rules) {
-      const basis = (rule as { readonly calendar?: Calendar | null }).calendar;
-      if (!basis || basis.outOfRangePolicy !== "ignore" || basis.providers.length === 0) continue;
-      const years = basis.providers.map((p) => p.supportedYears);
-      ranges.push(
-        side(dayOfYear(Math.min(...years.map((r) => r.from)), false) - 1, true),
-        side(dayOfYear(Math.max(...years.map((r) => r.to)), true) + 1, false),
-      );
+    // 第 n 営業日を数える基準のカレンダーの中: 境目（有効期間・個別の日付・提供元の対応年の両端）の前後を 1 周期ずつと、
+    // 祝日のある年（提供元の対応年）の全体
+    if (inside) {
+      for (const e of inside.edges) ranges.push(side(e - 1, true), side(e, false));
+      ranges.push(...inside.spans);
     }
   }
   for (let i = 0; i < ranges.length; i++)
@@ -376,7 +430,7 @@ function scanWindow(
   }
   const yearOf = (n: number): number => parseDate(fromDayNumber(n)).year;
   const label = merged.map((r) => `${yearOf(r.from)}-${yearOf(r.to)}`).join(", ");
-  return { ranges: merged, label };
+  return { ranges: merged, label, blind: false };
 }
 
 /**
@@ -386,13 +440,31 @@ function scanWindow(
  */
 export function rulesScanWindow(
   compiled: Pick<CompiledSchedule<unknown, string>, "source" | "annual" | "recurring">,
-  cycle: number = patternCycle(compiled.recurring),
 ): Window | undefined {
-  return scanWindow(
-    compiled.source as HolidaySource<string>,
-    [...compiled.annual, ...compiled.recurring],
-    cycle,
+  const source = compiled.source as HolidaySource<string>;
+  const rules = [...compiled.annual, ...compiled.recurring];
+  const inside: BasisInside = { edges: [], spans: [], rules: [] };
+  const known = compiled.recurring.every(
+    (r) => r.calendar === null || collectBasis(r.calendar, inside),
   );
+  // 基準の中の周期も、そろう長さに入れる
+  const own = patternCycle(compiled.recurring);
+  const cycle = patternCycle([...compiled.recurring, ...inside.rules]);
+  const window = known ? scanWindow(source, rules, cycle, inside) : scanWindow(source, rules, own);
+  if (!window) return window;
+  const max = 366 * MAX_WINDOW_YEARS;
+  const days = window.ranges.reduce((sum, r) => sum + r.to - r.from + 1, 0);
+  // 調べきれないとき（blind）: 中身の分からない基準がある、中の周期を合わせると上限に届く、走査が上限を超える、中に周期の
+  // 規則があって走査が 2100 年などにかかる（そこをまたぐと、周期の当てはまり方がそろわない）。上限に届いた周期の範囲は
+  // 200 年あり、必ず 2100 年などにかかるので、2 つ目は 4 つ目にも当たる（読み手のために分けて書く）
+  const blind =
+    !known ||
+    (cycle >= max && own < max) ||
+    days > MAX_SCAN_DAYS ||
+    (inside.rules.some((r) => r.interval !== null || r.cycle !== null) &&
+      window.ranges.some(crossesShortCentury));
+  if (!blind) return window;
+  return { ...(known ? scanWindow(source, rules, own)! : window), blind };
 }
 
 /** 期間の日ごとに fn を呼ぶ（true を返したら止める） */
@@ -761,8 +833,9 @@ export function unjudgeableDays<Value, Kind extends string>(
 export function unsureOf<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
   unknown: Unjudgeable,
+  blind = false,
 ): (code: string, path: string) => boolean {
-  if (unknown.days.size === 0) return () => false;
+  if (unknown.days.size === 0 && !blind) return () => false;
   const sorted = [...unknown.days].sort((a, b) => a - b);
   const overlaps = (start: number | null, end: number | null): boolean => {
     const a = start ?? -Infinity;
@@ -797,6 +870,8 @@ export function unsureOf<Value, Kind extends string>(
     )
       return false;
     if (isDate(item)) return overlaps(item.from, item.to);
+    // 基準のカレンダーの中を調べきれなければ、毎年の月日・繰り返しの規則の診断は分からない（個別の日付は、その期間を直接判定する）
+    if (blind) return true;
     return overlaps(item.effectiveFrom, item.effectiveTo);
   };
 }
@@ -886,10 +961,11 @@ function analyze<Value, Kind extends string>(
 ): void {
   // 判定できない日を、規則を評価する前に、基準を直接求めて決める（基準は繰り返しの規則に依存しないので、規則の並びや
   // 取り除きの順に左右されない）。分からない規則は never-matches・redundant を出さず、逐次除去でも取り除かない（31 番）
-  const unknown = unjudgeableDays(original, rulesScanWindow(original));
+  const window = rulesScanWindow(original);
+  const unknown = unjudgeableDays(original, window);
   const recorded = new Set<number>();
   const compiled = guardBases(original, recorded);
-  const unsure = unsureOf(original, unknown);
+  const unsure = unsureOf(original, unknown, window?.blind);
   const from = c.issues.length;
   analyzeRules(c, compiled, isCalendar, unsure);
   dropUnsure(c, from, unsure, recorded, unknown);
@@ -912,7 +988,7 @@ function analyzeRules<Value, Kind extends string>(
   });
   const basis = createBasis(compiled, lookup);
   const cycle = patternCycle(recurring);
-  const window = rulesScanWindow(compiled, cycle);
+  const window = rulesScanWindow(compiled);
   /** 使われないことが分かった規則（redundant を重ねて出さない） */
   const unused = new Set<DecidingRule<Value>>();
 

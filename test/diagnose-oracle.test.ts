@@ -803,7 +803,12 @@ const unsureFor = (o: Obj): ((code: string, path: string) => boolean) => {
   if (compiled === undefined) return () => false;
   const window = unsureCore.diagnose["rulesScanWindow"]!(compiled);
   const unknown = unsureCore.diagnose["unjudgeableDays"]!(compiled, window);
-  return unsureCore.diagnose["unsureOf"]!(compiled, unknown) as (c: string, p: string) => boolean;
+  // 基準のカレンダーの中を調べきれない設定（blind）も、実装が出さないと決めた規則として除く
+  const blind = (window as { blind?: boolean } | undefined)?.blind;
+  return unsureCore.diagnose["unsureOf"]!(compiled, unknown, blind) as (
+    c: string,
+    p: string,
+  ) => boolean;
 };
 /** 診断が規則どうしを調べる期間の全日のうち、元の設定の valueOn で投げる日（素朴な定義の入力） */
 const scheduleCompile = (await coreOf(undefined, "schedule"))["compileScheduleOptions"]!;
@@ -904,25 +909,20 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
     }
     // 完全性: 取り除いた後に、取り除いても判定できる日の結果が変わらない項目が残らない。分からない規則は除外して数える
     const remainingPaths = paths.filter((p) => !removed.includes(p));
-    /** 元の設定の、診断が規則どうしを調べる期間の値（取り除けた項目ごとに求め直さない） */
+    /** 出た項目を取り除いた後の設定（rest）の、診断が規則どうしを調べる期間の値（取り除けた項目ごとに求め直さない） */
     let windowBase: string[] | undefined;
     remaining.forEach((item, q) => {
-      const smaller = scheduleValues(
-        buildSchedule(
-          remaining.filter((_, k) => k !== q),
-          policy,
-          weekdays,
-        ),
-      );
-      if (!sameOnJudgeable(base, smaller)) return;
-      // 対応年で取り除けた項目を、診断が規則どうしを調べる期間でも確かめ直す（営業日カレンダーのオラクルと同じ。31 番）
       const smallerSchedule = buildSchedule(
         remaining.filter((_, k) => k !== q),
         policy,
         weekdays,
       );
-      windowBase ??= scheduleWindowValues(o, o);
-      if (!sameOnJudgeable(windowBase, scheduleWindowValues(smallerSchedule, o))) return;
+      if (!sameOnJudgeable(base, scheduleValues(smallerSchedule))) return;
+      // 対応年で取り除けた項目を、診断が規則どうしを調べる期間でも確かめ直す。営業日カレンダーのオラクル（removableInScanWindow）
+      // と同じく、出た項目を取り除いた後の設定（rest）を基準に、その走査の範囲で比べる（元の設定を基準にすると、出た項目が
+      // 対応年の外で値を変えたとき、その差で完全性の確かめから黙って外れる。31 番）
+      windowBase ??= scheduleWindowValues(rest, rest);
+      if (!sameOnJudgeable(windowBase, scheduleWindowValues(smallerSchedule, rest))) return;
       if (unsure("redundant", remainingPaths[q]!)) {
         // 実装が分からないとして出さない項目。素朴な定義でも分からない（月の単位の限界）か、素朴な定義では判定できる
         // （実装の求めすぎ。判定できない月の狭め方が減らす対象）かに分けて数える

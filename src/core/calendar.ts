@@ -48,6 +48,7 @@ import {
   compileRecurringRules,
   createHolidayLookup,
   infoOfSchedule,
+  PARTS,
   valuesOfSchedule,
   isWeekday,
   mapDays,
@@ -813,6 +814,9 @@ function buildCalendar<Kind extends string>(
     businessDaysBetween: (from, to) => calendar.diffBusinessDays(from, to),
     listBusinessDays: (from, to) => calendar.businessDatesBetween(from, to),
   };
+  // 中身は、作った元（スケジュール・合成の参照）から引き継ぐ。元に中身がなければ登録しない（診断は中身が分からないとする）
+  const parts = PARTS.get(lookup);
+  if (parts) PARTS.set(calendar, parts);
   return Object.freeze(calendar);
 }
 
@@ -968,6 +972,7 @@ export function combineCalendars<Kind extends string = string>(
     return Object.freeze(result);
   }
 
+  PARTS.set(lookup, list);
   return buildCalendar(lookup, isOpen, info, searchDayLimit);
 }
 

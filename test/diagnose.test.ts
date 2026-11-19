@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  combineCalendars,
   createCalendar,
+  createCalendarFromSchedule,
   createSchedule,
   type CalendarOptions,
   type HolidayProvider,
@@ -1259,4 +1261,240 @@ test('境目の外側（端の形）: 対応年が 200 年を超える提供元�
     createCalendar(without(options, "closedAnnualDates", 0)).isBusinessDay("2201-01-01"),
     true,
   );
+});
+
+// ---- 0.32.6: 第 n 営業日の規則の基準のカレンダーの中（decisions.md の 31 番） ----
+
+/** 対応年 from〜to。1 月 1 日は毎年、1 月 2〜3 日は last 年まで祝日 */
+const janProvider = (from: number, to: number, last: number): HolidayProvider => ({
+  id: `jan-${from}-${to}-${last}`,
+  timeZone: "UTC",
+  supportedYears: { from, to },
+  dataVersion: "1",
+  holidaysInYear: (year) =>
+    [1, 2, 3]
+      .filter((d) => d === 1 || year <= last)
+      .map((d) => ({
+        date: `${year}-01-0${d}`,
+        name: `H${d}`,
+        nameEn: `H${d}`,
+        kind: "regular",
+        confirmed: true,
+      })),
+});
+/** 対応年 from〜to。special 年だけ、1 月 1〜3 日が祝日（ほかの年と、対応年の外の年には祝日がない） */
+const oneYearProvider = (from: number, to: number, special: number): HolidayProvider => ({
+  id: `one-year-${from}-${to}-${special}`,
+  timeZone: "UTC",
+  supportedYears: { from, to },
+  dataVersion: "1",
+  holidaysInYear: (year) =>
+    [1, 2, 3]
+      .filter(() => year === special)
+      .map((d) => ({
+        date: `${year}-01-0${d}`,
+        name: `H${d}`,
+        nameEn: `H${d}`,
+        kind: "regular",
+        confirmed: true,
+      })),
+});
+const UTC_OPEN = { timeZone: "UTC", closedWeekdays: [] as number[] };
+/** 2030 年までは 1 月 1〜3 日が休業（中の規則に有効期間がある） */
+const basisC = () =>
+  createCalendar({
+    ...UTC_OPEN,
+    closedAnnualDates: [{ from: "01-01", to: "01-03", effectiveTo: "2030-12-31" }],
+  } as CalendarOptions);
+/** 提供元のないスケジュール。毎年の月日 1 行と、基準のカレンダーで数える第 n 営業日の規則 1 つ */
+const onBasis = (
+  basis: object,
+  annual: string,
+  rule: Record<string, unknown> = { businessDayOfMonth: 1, months: [1] },
+): ScheduleOptions<number> =>
+  ({
+    timeZone: "UTC",
+    weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+    annualDates: [{ date: annual, value: 0 }],
+    recurringRules: [{ ...rule, calendar: basis, value: 0 }],
+  }) as unknown as ScheduleOptions<number>;
+const valueAt = (o: ScheduleOptions<number>, day: string): string => {
+  try {
+    return String(createSchedule(o).valueOn(day));
+  } catch (e) {
+    return `throws ${(e as { code?: string }).code}`;
+  }
+};
+
+test("基準のカレンダーの中: 中の有効期間・個別の日付・周期・提供元・合成・スケジュールから作ったもの・入れ子・作成関数で作っていないものの形で、取り除くと結果が変わる毎年の月日を redundant と出さない（0.32.5 までは出た）", () => {
+  const fromSchedule = (annual: Record<string, unknown>, basis?: object) =>
+    createCalendarFromSchedule(
+      createSchedule({
+        timeZone: "UTC",
+        weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+        annualDates: [annual],
+        ...(basis
+          ? { recurringRules: [{ businessDayOfMonth: 1, months: [1], calendar: basis, value: 0 }] }
+          : {}),
+      } as unknown as ScheduleOptions<number>),
+      (v) => v === 1,
+    );
+  const sep = (n: number) => ({ businessDayOfMonth: n, months: [9] });
+  // [形の名前, 設定, 取り除くと値が変わる日]
+  const cases: [string, ScheduleOptions<number>, string][] = [
+    ["中の有効期間", onBasis(basisC(), "01-04"), "2031-01-04"],
+    [
+      "スケジュールから作ったもの",
+      onBasis(
+        fromSchedule({ from: "01-01", to: "01-03", value: 0, effectiveTo: "2030-12-31" }),
+        "01-04",
+      ),
+      "2031-01-04",
+    ],
+    [
+      "合成",
+      onBasis(
+        combineCalendars([basisC(), createCalendar(UTC_OPEN as CalendarOptions)], { open: "all" }),
+        "01-04",
+      ),
+      "2031-01-04",
+    ],
+    [
+      "個別の日付（走査の範囲を覆う）",
+      onBasis(
+        createCalendar({
+          ...UTC_OPEN,
+          closedDates: Array.from({ length: 30 }, (_, i) => ({
+            from: `${2001 + i}-01-01`,
+            to: `${2001 + i}-01-03`,
+          })),
+        } as CalendarOptions),
+        "01-04",
+      ),
+      "1990-01-04",
+    ],
+    [
+      "周期（cycle 324 日）",
+      onBasis(
+        createCalendar({
+          ...UTC_OPEN,
+          closedRecurringRules: [{ cycle: 324, anchor: "2012-06-16", positions: [25] }],
+        } as CalendarOptions),
+        "09-02",
+        sep(2),
+      ),
+      "1940-09-02",
+    ],
+    [
+      "周期（cycle 126 日。走査が 2100 年をまたぐ）",
+      onBasis(
+        createCalendar({
+          ...UTC_OPEN,
+          closedRecurringRules: [{ cycle: 126, anchor: "2024-06-14", positions: [63] }],
+        } as CalendarOptions),
+        "09-01",
+        sep(1),
+      ),
+      "1966-09-01",
+    ],
+    [
+      "周期（6 週ごと）",
+      onBasis(
+        createCalendar({
+          ...UTC_OPEN,
+          closedRecurringRules: [{ weekday: 5, interval: 6, anchor: "2026-09-18" }],
+        } as CalendarOptions),
+        "01-01",
+      ),
+      "1943-01-01",
+    ],
+    [
+      '"throw" の提供元の祝日が年で変わる',
+      onBasis(
+        createCalendar({
+          ...UTC_OPEN,
+          holidayProvider: janProvider(1990, 2060, 2030),
+        } as CalendarOptions),
+        "01-04",
+      ),
+      "2031-01-04",
+    ],
+    [
+      '"ignore" の提供元の祝日が、対応年の中の 1 年だけ違う（境目から離れている）',
+      onBasis(
+        createCalendar({
+          ...UTC_OPEN,
+          holidayProvider: oneYearProvider(1990, 2060, 2030),
+          outOfRangePolicy: "ignore",
+        } as CalendarOptions),
+        "01-01",
+      ),
+      "2030-01-01",
+    ],
+    [
+      "入れ子（スケジュールから作ったものの規則の基準）",
+      onBasis(fromSchedule({ date: "12-31", value: 1 }, basisC()), "01-01"),
+      "2031-01-01",
+    ],
+    ["作成関数で作っていないもの", onBasis({ ...basisC() }, "01-04"), "2031-01-04"],
+  ];
+  for (const [name, options, day] of cases) {
+    assert.deepEqual(diagnoseSchedule(options), [], name);
+    assert.notEqual(
+      valueAt(options, day),
+      valueAt({ ...options, annualDates: [] }, day),
+      `${name}: 毎年の月日を取り除くと ${day} が変わる`,
+    );
+  }
+});
+
+test('基準のカレンダーの中: "throw" の提供元の対応年の外で基準が投げるとき、その日を決めている毎年の月日を redundant と出さない（取り除くと、値を返した日が例外になる）', () => {
+  for (const basis of [
+    createCalendar({ ...UTC_OPEN, holidayProvider: jp, holidayPolicy: "open" } as CalendarOptions),
+    combineCalendars(
+      [
+        createCalendar({ timeZone: "UTC", holidayProvider: jp, closedWeekdays: [0] }),
+        createCalendar(UTC_OPEN as CalendarOptions),
+      ],
+      { open: "any" },
+    ),
+  ]) {
+    const options = onBasis(basis, "09-01", { businessDayOfMonth: 1, months: [9] });
+    assert.deepEqual(diagnoseSchedule(options), []);
+    assert.equal(valueAt(options, "1950-09-01"), "0");
+    assert.equal(valueAt({ ...options, annualDates: [] }, "1950-09-01"), "throws out-of-range");
+  }
+});
+
+test("基準のカレンダーの中: 作成関数で作っていないカレンダーの形のオブジェクトの項目が欠けていても、診断は error を出さない（作成は成功する）", () => {
+  const plain = createCalendar(UTC_OPEN as CalendarOptions);
+  for (const extra of [{ providers: undefined }, { providers: null }, { providers: [{}] }]) {
+    const like: Record<string, unknown> = { ...plain, outOfRangePolicy: "ignore", ...extra };
+    if (extra.providers === undefined) delete like["providers"];
+    const options = onBasis(like, "01-04");
+    assert.doesNotThrow(() => createSchedule(options));
+    assert.deepEqual(diagnoseSchedule(options), [], JSON.stringify(extra));
+  }
+});
+
+test("基準のカレンダーの中: 作成関数の結果の公開の形（列挙・JSON.stringify・凍結）は、診断が読む中身を持っても変わらない", () => {
+  const schedule = createSchedule({ timeZone: "UTC", weekdayValues: [1, 1, 1, 1, 1, 1, 1] });
+  const made = {
+    createCalendar: basisC(),
+    combineCalendars: combineCalendars([basisC(), basisC()], { open: "all" }),
+    createCalendarFromSchedule: createCalendarFromSchedule(schedule, (v) => v === 1),
+    createSchedule: schedule,
+  };
+  for (const [name, value] of Object.entries(made)) {
+    assert.ok(Object.isFrozen(value), name);
+    // 項目は関数と、カレンダーなら提供元の配列などの公開の項目だけ（Symbol の項目は、スケジュールの既存の内部の項目だけ）
+    assert.deepEqual(
+      Object.getOwnPropertySymbols(value).map(String),
+      name === "createSchedule"
+        ? ["Symbol(bizdays-toolkit.scheduleInfo)", "Symbol(bizdays-toolkit.scheduleValues)"]
+        : [],
+      name,
+    );
+    assert.equal(JSON.stringify(value), JSON.stringify({ ...value }), name);
+  }
 });

@@ -2479,6 +2479,13 @@ export function mapDays<R>(
  */
 const INTERNAL_INFO = Symbol("bizdays-toolkit.scheduleInfo");
 
+/**
+ * @internal 作成関数が作ったスケジュール・カレンダーの中身（取り込んだ規則か、合成した構成カレンダーの配列）。診断が、
+ * 第 n 営業日の規則の基準のカレンダーの中の境目・祝日の年・周期を求めるために使う（decisions.md の 31 番）。WeakMap なので、
+ * 公開の形（列挙・JSON.stringify・凍結・スプレッドでの写し）は変わらず、作成関数で作っていないオブジェクトには中身がない
+ */
+export const PARTS = new WeakMap<object, CompiledSchedule<unknown, string> | readonly object[]>();
+
 /** スケジュールの曜日の値と祝日の値（createCalendarFromSchedule が、作成時に isOpen の返り値を確かめるために使う） */
 const INTERNAL_VALUES = Symbol("bizdays-toolkit.scheduleValues");
 
@@ -2538,6 +2545,7 @@ export function buildSchedule<Value, Kind extends string>(
     dayInfo: (input) => info(lookup.dateOf(input)),
     daysBetween: (from, to) => mapDays(lookup.dateOf(from), lookup.dateOf(to), info),
   };
+  PARTS.set(schedule, compiled);
   return Object.freeze(schedule);
 }
 

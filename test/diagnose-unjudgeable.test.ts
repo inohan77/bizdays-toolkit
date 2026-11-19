@@ -2,9 +2,15 @@
 // 判定できない月の影響を受けない診断は出し、影響を受けうる診断（never-matches・redundant）は出さないことを確かめる。
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createCalendar, createSchedule, type HolidayProvider } from "../src/index.ts";
+import {
+  combineCalendars,
+  createCalendar,
+  createSchedule,
+  type CalendarOptions,
+  type HolidayProvider,
+} from "../src/index.ts";
 import { diagnoseSchedule } from "../src/diagnose/index.ts";
-import { dropUnsure, unsureOf } from "../src/core/diagnose.ts";
+import { dropUnsure, rulesScanWindow, unsureOf } from "../src/core/diagnose.ts";
 import { InternalError, IssueCollector } from "../src/core/errors.ts";
 import { toDayNumber } from "../src/core/date.ts";
 import { compileScheduleOptions } from "../src/core/schedule.ts";
@@ -407,4 +413,78 @@ test("判定できない日（日の単位）: 1970-01-05 始まりの週の規�
   assert.deepEqual(run({ ...week, effectiveFrom: "1970-01-01" }), []);
   // 終わりを窓の最後まで延ばすと、最後の週が 2100 年 1 月にまたぎ、そこで基準が投げるので出ない
   assert.deepEqual(run({ ...week, effectiveFrom: "1970-01-05", effectiveTo: "2099-12-31" }), []);
+});
+
+test("基準のカレンダーの中を調べきれないとき（blind）: 作成関数で作っていない基準・走査が 600 年を超える・中に周期の規則があって走査が 2100 年をまたぐ。redundant を出さず、shadowed・基準を持たない規則の never-matches・個別の日付の redundant は出す", () => {
+  const open = { timeZone: "UTC", closedWeekdays: [] } as CalendarOptions;
+  const periodic = createCalendar({
+    ...open,
+    closedAnnualDates: [{ from: "01-01", to: "01-03", effectiveTo: "2030-12-31" }],
+  } as CalendarOptions);
+  const bases: [string, object, boolean][] = [
+    ["中に有効期間", periodic, false],
+    ["合成", combineCalendars([periodic, createCalendar(open)], { open: "all" }), false],
+    [
+      "6 週ごと（周期 56 年。2100 年をまたがない）",
+      createCalendar({
+        ...open,
+        closedRecurringRules: [{ weekday: 5, interval: 6, anchor: "2026-09-18" }],
+      } as CalendarOptions),
+      false,
+    ],
+    ["作成関数で作っていない", { ...periodic }, true],
+    [
+      "個別の日付が遠く離れて 12 個（走査が 600 年を超える）",
+      createCalendar({
+        ...open,
+        closedDates: [1100, 1250, 1400, 1550, 1700, 1850, 2300, 2450, 2600, 2750, 2900, 3050].map(
+          (y) => `${y}-01-02`,
+        ),
+      } as CalendarOptions),
+      true,
+    ],
+    [
+      "cycle 126 日（周期 168 年。走査が 2100 年をまたぐ）",
+      createCalendar({
+        ...open,
+        closedRecurringRules: [{ cycle: 126, anchor: "2024-06-14", positions: [63] }],
+      } as CalendarOptions),
+      true,
+    ],
+    [
+      "cycle 324 日（周期が上限の 200 年に届く）",
+      createCalendar({
+        ...open,
+        closedRecurringRules: [{ cycle: 324, anchor: "2012-06-16", positions: [25] }],
+      } as CalendarOptions),
+      true,
+    ],
+  ];
+  for (const [name, basis, blind] of bases) {
+    const options = {
+      timeZone: "UTC",
+      weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+      dates: [{ date: "2026-05-05", value: 1 }],
+      recurringRules: [
+        { businessDayOfMonth: 1, months: [1], calendar: basis, value: 0 },
+        { weekday: 3, value: 2 },
+        { weekday: 3, nth: [1], value: 2 },
+        { dayOfMonth: 31, months: [2], value: 3 },
+        { weekday: 2, value: 1 },
+      ],
+    };
+    const compiled = compileScheduleOptions<unknown, string>(new IssueCollector(), options)!;
+    assert.equal(rulesScanWindow(compiled)?.blind, blind, name);
+    // blind なら、規則の redundant（recurringRules[4]。曜日の値と同じ）だけが出なくなる
+    assert.deepEqual(
+      brief(options),
+      [
+        ["warning", "shadowed", "recurringRules[2]"],
+        ["warning", "never-matches", "recurringRules[3]"],
+        ["info", "redundant", "dates[0]"],
+        ...(blind ? [] : [["info", "redundant", "recurringRules[4]"]]),
+      ],
+      name,
+    );
+  }
 });
