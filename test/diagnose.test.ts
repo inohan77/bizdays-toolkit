@@ -7,6 +7,7 @@ import {
   type HolidayProvider,
   type HolidayOverlapPolicy,
   type RecurringRule,
+  type ScheduleOptions,
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 import { SHORT_PROVIDER } from "./support/provider.ts";
@@ -623,7 +624,7 @@ test("shadowed・never-matches・out-of-range: 有効期間", () => {
   );
 });
 
-test("redundant: 走査の範囲は、固定の範囲と規則の有効期間を合わせたもの", () => {
+test("redundant: 走査の範囲は、固定の範囲と規則の有効期間と、有効期間の外側の 1 周期を合わせたもの", () => {
   // 提供元がない設定の固定範囲（2001〜2028 年）の外にある規則を、使われないと誤診しない
   assert.deepEqual(
     brief(
@@ -651,8 +652,9 @@ test("redundant: 走査の範囲は、固定の範囲と規則の有効期間を
     ),
     [],
   );
+  // 有効期間の外側（1991 年から 1 周期）も調べるので、範囲がつながる（0.32.5 までは 1963-1990, 2001-2028）
   assert.ok(
-    /checked 1963-1990, 2001-2028/.test(
+    /checked 1963-2028\)/.test(
       diagnoseCalendar({
         closedWeekdays: [3],
         closedRecurringRules: [{ weekday: 3, nth: 5, effectiveTo: "1990-12-31" }],
@@ -1010,5 +1012,251 @@ test("diagnoseSchedule: タイムゾーンが決まっていて基準のカレ�
   assert.deepEqual(
     brief(diagnoseSchedule({ timeZone: "Asia/Tokyo", weekdayValues, recurringRules: rules })),
     [],
+  );
+});
+
+// ---- 0.32.6: 結果が年によって変わる入力の境目の外側（decisions.md の 31 番） ----
+
+import { sg } from "../src/sg/index.ts";
+
+/** 対応年 from〜to、毎年 1 月 1〜3 日が祝日の提供元（形 B' の基準） */
+const januaryProvider = (from: number, to: number): HolidayProvider => ({
+  id: `january-${from}-${to}`,
+  timeZone: "UTC",
+  supportedYears: { from, to },
+  dataVersion: "1",
+  holidaysInYear: (year) =>
+    [1, 2, 3].map((d) => ({
+      date: `${year}-01-0${d}`,
+      name: `H${d}`,
+      nameEn: `H${d}`,
+      kind: "regular",
+      confirmed: true,
+    })),
+});
+
+/** 設定から、指定の配列の位置の規則を取り除く */
+const without = <O extends object>(options: O, key: keyof O & string, index: number): O => ({
+  ...options,
+  [key]: (options[key] as unknown as unknown[]).filter((_, i) => i !== index),
+});
+
+test("境目の外側（有効期間）: 有効期間の外側だけで効く規則を redundant と出さない（0.32.5 までは出て、取り除くと判定が変わった）", () => {
+  // [名前, 設定, 0.32.5 が redundant と出した位置, 取り除くと判定が変わる日]
+  const cases: [
+    string,
+    CalendarOptions,
+    "closedRecurringRules" | "closedAnnualDates",
+    number,
+    string,
+  ][] = [
+    [
+      "終わった後に効く規則",
+      {
+        closedRecurringRules: [
+          { weekday: 3, effectiveTo: "2030-03-31" },
+          { weekday: 3, nth: [1, 3] },
+        ],
+      },
+      "closedRecurringRules",
+      1,
+      "2030-04-03",
+    ],
+    [
+      "毎年の月日",
+      {
+        closedAnnualDates: [
+          { from: "08-10", to: "08-20", effectiveTo: "2031-12-31" },
+          { date: "08-15" },
+        ],
+      },
+      "closedAnnualDates",
+      1,
+      "2032-08-15",
+    ],
+    [
+      "提供元の外と重なる",
+      {
+        holidayProvider: sg,
+        outOfRangePolicy: "ignore",
+        closedRecurringRules: [
+          { weekday: 3, effectiveTo: "2028-03-31" },
+          { weekday: 3, nth: [1, 3] },
+        ],
+      },
+      "closedRecurringRules",
+      1,
+      "2028-04-05",
+    ],
+    [
+      "始まる前に効く規則",
+      {
+        closedRecurringRules: [
+          { weekday: 3, effectiveFrom: "1995-04-01" },
+          { weekday: 3, nth: [1, 3] },
+        ],
+      },
+      "closedRecurringRules",
+      1,
+      "1995-03-01",
+    ],
+  ];
+  for (const [name, options, key, index, day] of cases) {
+    const path = `${key}[${index}]`;
+    assert.deepEqual(
+      diagnoseCalendar(options).filter((d) => d.path === path),
+      [],
+      name,
+    );
+    assert.notEqual(
+      createCalendar(options).isBusinessDay(day),
+      createCalendar(without(options, key, index)).isBusinessDay(day),
+      `${name}: ${path} を取り除くと ${day} が変わる`,
+    );
+  }
+  // スケジュールでも同じ
+  const schedule: ScheduleOptions<number> = {
+    weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+    recurringRules: [
+      { weekday: 3, value: 0, effectiveTo: "2030-03-31" },
+      { weekday: 3, nth: 1, value: 0 },
+    ],
+  };
+  assert.deepEqual(diagnoseSchedule(schedule), []);
+  assert.notEqual(
+    createSchedule(schedule).valueOn("2030-04-03"),
+    createSchedule(without(schedule, "recurringRules", 1)).valueOn("2030-04-03"),
+  );
+});
+
+test("境目の外側（有効期間）: 有効期間が終わった後に営業日のある設定を no-business-day と出さない", () => {
+  const options: CalendarOptions = {
+    closedWeekdays: [0, 6],
+    closedRecurringRules: [
+      { weekday: 1 },
+      { weekday: 2 },
+      { weekday: 3 },
+      { weekday: 4 },
+      { weekday: 5, effectiveTo: "2030-03-31" },
+    ],
+  };
+  assert.deepEqual(diagnoseCalendar(options), []);
+  assert.equal(createCalendar(options).nextBusinessDay("2026-11-17"), "2030-04-05");
+});
+
+test("境目の外側（有効期間）: 200 年を超える個別の日付の期間は redundant と出さず、その期間が 9999 年まで閉じる設定では no-business-day も出ない（調べきれない期間は、取り除けると言わない）", () => {
+  const options: CalendarOptions = {
+    closedWeekdays: [],
+    closedDates: [{ from: "2026-04-01", to: "9999-12-31" }],
+    closedRecurringRules: ([0, 1, 2, 3, 4, 5, 6] as const).map((weekday) => ({
+      weekday,
+      effectiveTo: "2300-12-31",
+    })),
+  };
+  assert.deepEqual(diagnoseCalendar(options), []);
+  // 2301 年からは個別の日付だけが閉じる（取り除けない）
+  assert.equal(createCalendar(options).isBusinessDay("2301-01-05"), false);
+  assert.equal(
+    createCalendar(without(options, "closedDates", 0)).isBusinessDay("2301-01-05"),
+    true,
+  );
+});
+
+test('境目の外側（"ignore" の提供元）: "ignore" の提供元の対応年の外だけで効く規則を redundant と出さない', () => {
+  const options: CalendarOptions = {
+    holidayProvider: sg,
+    outOfRangePolicy: "ignore",
+    closedAnnualDates: [{ date: "08-09" }],
+  };
+  assert.deepEqual(diagnoseCalendar(options), []);
+  for (const day of ["2028-08-09", "2019-08-09"]) {
+    assert.equal(createCalendar(options).isBusinessDay(day), false, day);
+    assert.equal(
+      createCalendar(without(options, "closedAnnualDates", 0)).isBusinessDay(day),
+      true,
+      day,
+    );
+  }
+});
+
+test('境目の外側（基準のカレンダー）: 第 n 営業日の規則の基準のカレンダーが "ignore" のとき、その対応年の外だけで効く規則を redundant と出さない', () => {
+  const basis = createCalendar({
+    timeZone: "UTC",
+    closedWeekdays: [],
+    holidayProvider: januaryProvider(2001, 2028),
+    outOfRangePolicy: "ignore",
+  });
+  const options: ScheduleOptions<number> = {
+    timeZone: "UTC",
+    weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+    annualDates: [{ date: "01-04", value: 0 }],
+    recurringRules: [{ businessDayOfMonth: 1, months: [1], calendar: basis, value: 0 }],
+  };
+  assert.deepEqual(diagnoseSchedule(options), []);
+  // 対応年の外の年は 1 月 1 日が第 1 営業日なので、1 月 4 日を 0 にするのは毎年の月日だけ
+  assert.equal(createSchedule(options).valueOn("2029-01-04"), 0);
+  assert.equal(createSchedule(without(options, "annualDates", 0)).valueOn("2029-01-04"), 1);
+});
+
+test('境目の外側（端の形）: 足した範囲が基準のカレンダー（"throw"）の対応年の外に出ても、診断は投げず、出た項目を取り除いても判定できる日の値は変わらない', () => {
+  const basis = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
+  const options: ScheduleOptions<number> = {
+    timeZone: "Asia/Tokyo",
+    weekdayValues: [1, 1, 1, 1, 1, 1, 1],
+    recurringRules: [
+      { weekday: 3, value: 0, effectiveTo: "2090-03-31" },
+      { businessDayOfMonth: 1, calendar: basis, value: 0 },
+      { weekday: 3, nth: 1, value: 0 },
+      { weekday: 3, nth: 2, value: 0, effectiveTo: "2080-12-31" },
+    ],
+  };
+  const items = diagnoseSchedule(options);
+  // 第 1 水曜は 2090 年 4 月以降に効く（取り除けない）。第 2 水曜（2080 年まで）は、毎週の水曜（2090 年 3 月まで）に含まれる
+  assert.deepEqual(
+    items.map((d) => [d.code, d.path]),
+    [["shadowed", "recurringRules[3]"]],
+  );
+  const before = createSchedule(options);
+  const after = createSchedule(without(options, "recurringRules", 3));
+  const value = (s: typeof before, day: string): string => {
+    try {
+      return String(s.valueOn(day));
+    } catch (e) {
+      return `throws ${(e as { code?: string }).code}`;
+    }
+  };
+  for (let y = 2050; y <= 2120; y++)
+    for (const md of ["-01-01", "-03-08", "-06-11", "-12-10"]) {
+      const day = `${y}${md}`;
+      const [a, b] = [value(before, day), value(after, day)];
+      if (!a.startsWith("throws")) assert.equal(b, a, day);
+    }
+});
+
+test('境目の外側（端の形）: 対応年が 200 年を超える提供元を "ignore" で使い、有効期間の境目が 1900〜2099 年の外にある設定で、項目が増えない', () => {
+  const long: HolidayProvider = {
+    id: "long",
+    timeZone: "UTC",
+    supportedYears: { from: 1800, to: 2200 },
+    dataVersion: "1",
+    holidaysInYear: (year) => [
+      { date: `${year}-01-01`, name: "N", nameEn: "N", kind: "regular", confirmed: true },
+    ],
+  };
+  const options: CalendarOptions = {
+    holidayProvider: long,
+    outOfRangePolicy: "ignore",
+    closedRecurringRules: [
+      { weekday: 3, effectiveTo: "1850-12-31" },
+      { weekday: 3, nth: [1, 3] },
+    ],
+    closedAnnualDates: [{ date: "01-01" }],
+  };
+  // 0.32.5 は closedAnnualDates[0] を redundant と出した（対応年の外の 2201 年以降は、毎年の月日だけが 1 月 1 日を閉じる）
+  assert.deepEqual(diagnoseCalendar(options), []);
+  assert.equal(createCalendar(options).isBusinessDay("2201-01-01"), false);
+  assert.equal(
+    createCalendar(without(options, "closedAnnualDates", 0)).isBusinessDay("2201-01-01"),
+    true,
   );
 });

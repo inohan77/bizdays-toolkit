@@ -6,6 +6,12 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.6] - 2026-11-18
+
+### Fixed
+
+- The option diagnostics no longer report a rule or date as `redundant` when it takes effect only outside the effective period of another rule (after its `effectiveTo` or before its `effectiveFrom`), or only outside the supported years of a holiday provider used with `outOfRangePolicy: "ignore"` (including the calendar that a schedule's business-day rule counts in). Removing such an item changed the results on those days. For the same reason, `no-business-day` is no longer reported for options that have business days after an effective period ends. The diagnostics now also check one cycle of the rules on each side of these boundaries, so the years in the messages can be wider (for example `checked 1963-2028`). A date range in `closedDates`, `openDates` or a schedule's `dates` that is longer than 200 years is no longer reported as `redundant`, because the diagnostics do not check all of its days
+
 ## [0.32.5] - 2026-11-18
 
 ### Changed
@@ -1038,7 +1044,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.5...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.6...HEAD
+[0.32.6]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.5...v0.32.6
 [0.32.5]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.4...v0.32.5
 [0.32.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.3...v0.32.4
 [0.32.3]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.2...v0.32.3

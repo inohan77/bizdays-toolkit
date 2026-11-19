@@ -96,8 +96,11 @@ function changedAfterRemoval(
   from: string,
   to: string,
   before = judgements(subject, o, from, to),
+  list = subject.diagnose(o),
 ): string[] {
-  const after = judgements(subject, withoutReported(o, subject.diagnose(o)), from, to);
+  // 取り除ける項目がなければ、取り除いた設定は元の設定と同じ（判定し直さない）
+  if (!list.some((d) => REMOVABLE.has(d.code))) return [];
+  const after = judgements(subject, withoutReported(o, list), from, to);
   const changed: string[] = [];
   for (const [date, value] of before)
     if (!value.startsWith("E:") && after.get(date) !== value)
@@ -126,13 +129,18 @@ const sameOnJudgeable = (before: Map<string, string>, after: Map<string, string>
  * 変える規則は、取り除けるものとして出さない。ここでは「個別の日付を除いた設定では、取り除くと結果が変わる」で見分ける。
  * 第 n 営業日の規則がある設定では、診断は個別の日付を残して判定する（同じ 31 番）ので、この種類は起きない。その設定で
  * 残っていた項目は、すべて unknown にする（個別の日付と関係のない見逃しを、known に紛れ込ませない）
+ *
+ * wide（0.32.6）: 対応年で取り除けると見えた項目を、より広い期間（independentWindow）でも確かめ、そこで結果が変わる項目は
+ * 取り除けるものに数えない（"ignore" の提供元の対応年の外だけで効く毎年の月日など。対応年の全日だけでは見分けられない）
  */
 function leftRemovable(
   o: Options,
   from: string,
   to: string,
+  wide?: readonly [string, string],
+  list = CALENDAR.diagnose(o),
 ): { known: string[]; unknown: string[] } {
-  const rest = withoutReported(o, CALENDAR.diagnose(o));
+  const rest = withoutReported(o, list);
   const restOpen = judgements(CALENDAR, rest, from, to);
   const withoutDates = (x: Options): Options => ({ ...x, closedDates: [], openDates: [] });
   const countsBusinessDays = [...ITEM_KEYS].some((key) =>
@@ -141,6 +149,7 @@ function leftRemovable(
         typeof item === "object" && ("businessDayOfMonth" in item || "businessDayOfWeek" in item),
     ),
   );
+  let restWide: Map<string, string> | undefined;
   const known: string[] = [];
   const unknown: string[] = [];
   for (const key of ITEM_KEYS) {
@@ -148,6 +157,14 @@ function leftRemovable(
     for (let i = 0; i < list.length; i++) {
       const smaller = { ...rest, [key]: list.filter((_, k) => k !== i) };
       if (!sameOnJudgeable(restOpen, judgements(CALENDAR, smaller, from, to))) continue;
+      if (
+        wide !== undefined &&
+        !sameOnJudgeable(
+          (restWide ??= judgements(CALENDAR, rest, ...wide)),
+          judgements(CALENDAR, smaller, ...wide),
+        )
+      )
+        continue;
       const hiddenByDates =
         !countsBusinessDays &&
         key !== "closedDates" &&
@@ -432,6 +449,86 @@ test("取り除いて比べる（カレンダー）: 同梱の提供元でも、
   );
 });
 
+/**
+ * 比べる期間（提案書の T2。0.32.6）: 対応年に、設定から直接求めた境目（規則の有効期間の始まりと終わりの次の日、"ignore" の
+ * 提供元の対応年の端）の前後 28 年を足す。診断の走査の範囲（rulesScanWindow）は使わない。診断と同じ範囲だけを比べると、
+ * 範囲の外の誤りを拾えない（0.32.5 までの 3 系統のテストは、有効期間の外側だけで効く規則を redundant と出す誤りを拾えなかった）。
+ * 提供元が "ignore" でなければ、対応年の外の日はどれも例外（out-of-range）で、比べる日がないので、対応年だけを返す
+ */
+function independentWindow(
+  o: Options,
+  years: { readonly from: number; readonly to: number },
+  ignore: boolean,
+): [string, string] {
+  const edges: number[] = [years.from, years.to];
+  const yearOf = (date: string): number => Number(date.slice(0, 4));
+  for (const value of Object.values(o))
+    if (Array.isArray(value))
+      for (const item of value)
+        if (typeof item === "object" && item !== null) {
+          const { effectiveFrom, effectiveTo } = item as {
+            effectiveFrom?: string;
+            effectiveTo?: string;
+          };
+          if (effectiveFrom !== undefined) edges.push(yearOf(effectiveFrom));
+          if (effectiveTo !== undefined) edges.push(yearOf(addDays(effectiveTo, 1)));
+        }
+  if (!ignore) return [`${years.from}-01-01`, `${years.to}-12-31`];
+  edges.push(years.from, years.to + 1);
+  return [`${Math.min(...edges) - 28}-01-01`, `${Math.max(...edges) + 28}-12-31`];
+}
+/** 1 つの項目だけを取り除くと、元の設定で判定できた日の結果が変わる日（その項目が効いている日。形が実際に現れたかを数える） */
+function changedWithout(
+  subject: Subject,
+  o: Options,
+  key: string,
+  index: number,
+  before: Map<string, string>,
+): string[] {
+  const dates = [...before.keys()];
+  const smaller = { ...o, [key]: (o[key] as readonly unknown[]).filter((_, i) => i !== index) };
+  const after = judgements(subject, smaller, dates[0]!, dates[dates.length - 1]!);
+  return dates.filter(
+    (date) => !before.get(date)!.startsWith("E:") && after.get(date) !== before.get(date),
+  );
+}
+/** 形 A の組と形 B の組を作る乱数（2 つの乱数のテストで共通）。value はスケジュールの値（カレンダーでは undefined） */
+function outsidePairs(
+  next: () => number,
+  int: (min: number, max: number) => number,
+  years: { readonly from: number; readonly to: number },
+  value: (() => string) | undefined,
+) {
+  // スケジュールでは、組の 2 つの規則に同じ値を書く（有効期間の中では、第 n 週の規則が取り除けるように見える）
+  const shared = value === undefined ? {} : { value: value() };
+  const v = (): Options => shared;
+  // 2 割は "ignore" の提供元にする（対応年の外は祝日なしとして判定できる。比べる期間が 60 年ほどに広がるので、時間を見て 2 割）
+  const ignore = next() < 0.2;
+  // 4 割は形 A の組: 有効期間のある毎週の規則と、同じ曜日の第 n 週の規則（有効期間の外側だけで効く）
+  const weekday = int(0, 6);
+  const month = String(int(1, 12)).padStart(2, "0");
+  const pairA =
+    next() < 0.4
+      ? [
+          {
+            weekday,
+            ...(next() < 0.5
+              ? { effectiveTo: `2026-${month}-28` }
+              : { effectiveFrom: `2026-${month}-01` }),
+            ...v(),
+          },
+          { weekday, nth: [1, 3], ...v() },
+        ]
+      : [];
+  // "ignore" の半分は形 B の組: 対応年の毎年 11 月の同じ日を祝日にし、同じ月日を毎年の月日に書く（対応年の中は祝日が決め、
+  // 外では毎年の月日だけが決める）
+  const day = `11-0${int(1, 9)}`;
+  const pairB = ignore && next() < 0.5;
+  const yearly: string[] = [];
+  if (pairB) for (let y = years.from; y <= years.to; y++) yearly.push(`${y}-${day}`);
+  return { ignore, pairA, pairB: pairB ? day : undefined, yearly };
+}
+
 test("取り除いて比べる（カレンダー）: 乱数で作った設定でも、診断が出した項目をまとめて取り除いて、判定できた日の結果が変わらない（種は固定）", () => {
   const next = random(20261115);
   const int = (min: number, max: number): number => min + Math.floor(next() * (max - min + 1));
@@ -441,6 +538,9 @@ test("取り除いて比べる（カレンダー）: 乱数で作った設定で
   let decidedAtLanding = 0;
   let hiddenByDates = 0;
   let edgeDecided = 0;
+  let formA = 0;
+  let formB = 0;
+  const COUNTED = 10;
   for (let trial = 0; trial < 300; trial++) {
     // 祝日の塊を 1〜2 つ（最初の塊は 32〜40 日）。規則の日は最初の塊の始まりの近くで、届かない振替が起きやすい形にする
     const first = addDays("2026-03-01", int(0, 14));
@@ -483,8 +583,10 @@ test("取り除いて比べる（カレンダー）: 乱数で作った設定で
     // 判定は、規則が対応年の外の隣の日・振替元を見ると out-of-range になり、臨時営業日が先に決めていれば、ならない
     const edgeDates = next() < 0.3 ? [`2025-01-0${int(1, 3)}`, `2027-12-${int(29, 31)}`] : [];
     const beforeHoliday = edgeDates.length > 0 && next() < 0.5 ? [{ dayBeforeHoliday: true }] : [];
+    const outside = outsidePairs(next, int, years, undefined);
     const o: Options = {
-      holidayProvider: holidaysOn(dates, years),
+      holidayProvider: holidaysOn([...dates, ...outside.yearly], years),
+      ...(outside.ignore ? { outOfRangePolicy: "ignore" } : {}),
       holidayPolicy: next() < 0.5 ? "open" : "closed",
       closedWeekdays: [0, 1, 2, 3, 4, 5, 6].filter(() => next() < 0.25),
       closedRecurringRules: [
@@ -494,12 +596,20 @@ test("取り除いて比べる（カレンダー）: 乱数で作った設定で
         // この走査が届かない振替を受けないと、診断が error を返す）
         ...(next() < 0.4 ? [{ businessDayOfMonth: [1, 2, -1][int(0, 2)]! }] : []),
         ...beforeHoliday,
+        ...outside.pairA,
       ],
       ...(next() < 0.5 ? { closedDates: [near(), ...(next() < 0.3 ? [near()] : [])] } : {}),
       ...(next() < 0.3 || opened.length > 0 || edgeDates.length > 0
         ? { openDates: [...(next() < 0.3 ? [near()] : []), ...opened, ...edgeDates] }
         : {}),
-      ...(next() < 0.3 ? { closedAnnualDates: [near().slice(5)] } : {}),
+      ...(next() < 0.3 || outside.pairB !== undefined
+        ? {
+            closedAnnualDates: [
+              ...(next() < 0.3 ? [near().slice(5)] : []),
+              ...(outside.pairB !== undefined ? [outside.pairB] : []),
+            ],
+          }
+        : {}),
     };
     // 同じ日を臨時営業日と臨時休業日の両方に書いた設定も、そのまま通す（先の臨時営業日が決める）
     const list = diagnoseCalendar(o as CalendarOptions);
@@ -509,12 +619,32 @@ test("取り除いて比べる（カレンダー）: 乱数で作った設定で
       [],
       context,
     );
-    // 対応年の全日を比べる（毎年の月日・有効期間のない規則は、ほかの年にも当たる。9 月の 1 日だけの規則も含める。診断が
-    // 規則どうしを調べる期間も、この提供元では対応年）
+    // 取り除いた前後は、対応年に境目の前後 28 年を足した期間の全日で比べる（independentWindow）。完全性は、対応年の全日で
+    // 確かめる（毎年の月日・有効期間のない規則は、ほかの年にも当たる。9 月の 1 日だけの規則も含める）
     const [from, to] = [`${years.from}-01-01`, `${years.to}-12-31`];
-    const before = judgements(CALENDAR, o, from, to);
-    assert.deepEqual(changedAfterRemoval(CALENDAR, o, from, to, before), [], context);
-    const left = leftRemovable(o, from, to);
+    const [wideFrom, wideTo] = independentWindow(o, years, outside.ignore);
+    const wide = judgements(CALENDAR, o, wideFrom, wideTo);
+    assert.deepEqual(changedAfterRemoval(CALENDAR, o, wideFrom, wideTo, wide, list), [], context);
+    const before = new Map([...wide].filter(([date]) => date >= from && date <= to));
+    // 形 A: 第 n 週の規則を取り除くと、毎週の規則の有効期間の外の日だけが変わる。形 B: 毎年の月日を取り除くと、対応年の外の日だけが変わる
+    const rules = o["closedRecurringRules"] as readonly Options[];
+    // 数えるのは、それぞれ COUNTED 件まで（数えるために、1 つの項目を取り除いた設定を広い期間で判定し直す。0 件でないことを確かめれば足りる）
+    if (outside.pairA.length > 0 && formA < COUNTED) {
+      const [weekly] = outside.pairA as unknown as [
+        { effectiveFrom?: string; effectiveTo?: string },
+      ];
+      const inside = (date: string): boolean =>
+        (weekly.effectiveFrom === undefined || date >= weekly.effectiveFrom) &&
+        (weekly.effectiveTo === undefined || date <= weekly.effectiveTo);
+      const changed = changedWithout(CALENDAR, o, "closedRecurringRules", rules.length - 1, wide);
+      if (changed.length > 0 && !changed.some(inside)) formA++;
+    }
+    if (outside.pairB !== undefined && formB < COUNTED) {
+      const annual = o["closedAnnualDates"] as readonly string[];
+      const changed = changedWithout(CALENDAR, o, "closedAnnualDates", annual.length - 1, wide);
+      if (changed.length > 0 && changed.every((date) => date < from || date > to)) formB++;
+    }
+    const left = leftRemovable(o, from, to, outside.ignore ? [wideFrom, wideTo] : undefined, list);
     assert.deepEqual(left.unknown, [], `取り除けるのに、診断が何も言わない項目がある。${context}`);
     if (left.known.length > 0) hiddenByDates++;
     if (list.some((d) => REMOVABLE.has(d.code))) removed++;
@@ -535,10 +665,16 @@ test("取り除いて比べる（カレンダー）: 乱数で作った設定で
       edgeDecided++;
   }
   console.log(
-    `# 取り除いて比べる（カレンダー）: 300 件（取り除ける項目が出た ${removed}、判定が投げる日がある ${withLost}、明けた日を個別の日付・毎年の月日が決めている ${decidedAtLanding}、個別の日付に隠れて診断が出さない規則がある ${hiddenByDates}、対応年の端の日を個別の日付が決めている ${edgeDecided}）`,
+    `# 取り除いて比べる（カレンダー）: 300 件（取り除ける項目が出た ${removed}、判定が投げる日がある ${withLost}、明けた日を個別の日付・毎年の月日が決めている ${decidedAtLanding}、個別の日付に隠れて診断が出さない規則がある ${hiddenByDates}、対応年の端の日を個別の日付が決めている ${edgeDecided}、有効期間の外側だけで効く規則がある（形 A） ${formA}、"ignore" の提供元の対応年の外だけで効く毎年の月日がある（形 B） ${formB}。形 A・B は ${COUNTED} 件まで数える）`,
   );
   assert.ok(
-    removed > 0 && withLost > 0 && decidedAtLanding > 0 && hiddenByDates > 0 && edgeDecided > 0,
+    removed > 0 &&
+      withLost > 0 &&
+      decidedAtLanding > 0 &&
+      hiddenByDates > 0 &&
+      edgeDecided > 0 &&
+      formA > 0 &&
+      formB > 0,
   );
 });
 
@@ -599,12 +735,17 @@ test("取り除いて比べる（スケジュール）: 乱数で作った設定
     nthWithThrowingBasis: 0,
     /** 第 n 営業日の規則があり、基準のカレンダーが別の提供元を持つ */
     nthWithOtherBasis: 0,
+    /** 有効期間の外側だけで効く規則がある（形 A。COUNTED 件まで数える） */
+    formA: 0,
+    /** "ignore" の提供元の対応年の外だけで効く毎年の月日がある（形 B。COUNTED 件まで数える） */
+    formB: 0,
     /** 元の設定は値を返し、個別の日付・毎年の月日を除くと届かない振替の例外になる日がある（0.32.0 が見逃した形） */
     decidedAtLanding: 0,
     /** 元の設定は値を返し、個別の日付を除くと out-of-range の例外になる、対応年の端の日がある（0.32.1 が見逃した形） */
     edgeDecided: 0,
   };
   const TRIALS = 240;
+  const COUNTED = 10;
   for (let trial = 0; trial < TRIALS; trial++) {
     // 祝日の塊を 1〜2 つ（最初の塊は 32〜40 日）。規則の日は最初の塊の始まりの近く
     const first = addDays("2026-03-01", int(0, 14));
@@ -617,7 +758,8 @@ test("取り除いて比べる（スケジュール）: 乱数で作った設定
     }
     const end = dates[dates.length - 1]!;
     const near = (): string => addDays(end, int(1, 8));
-    const provider = holidaysOn(dates, years);
+    const outside = outsidePairs(next, int, years, pick);
+    const provider = holidaysOn([...dates, ...outside.yearly], years);
     const candidates = [0, 1, 2, 3, 4, 5, 6].filter(() => next() < 0.2).slice(0, 2);
     const lostDay = Number(addDays(first, int(0, 4)).slice(8));
     const lostMonths = [Number(first.slice(5, 7))];
@@ -650,7 +792,8 @@ test("取り除いて比べる（スケジュール）: 乱数で作った設定
       next() < 0.6
         ? [{ businessDayOfMonth: [1, 2, -1][int(0, 2)]!, calendar: basis, value: pick() }]
         : [];
-    const policy = int(0, 3);
+    // 形 B の組は、祝日の値を "h" にする（対応年の中では、祝日が毎年の月日と同じ値を決める）
+    const policy = outside.pairB !== undefined ? 2 : int(0, 3);
     // 3 割は、対応年の端の日（最初の 3 日と最後の 3 日のどれか）に個別の日付を置く（値が曜日の値と同じなら、取り除ける
     // ように見える。後ろの "after-holiday" の規則が対応年の外の前日を見ると、端の日の値は out-of-range になる）
     const edgeDates = next() < 0.3 ? [`2025-01-0${int(1, 3)}`, `2027-12-${int(29, 31)}`] : [];
@@ -658,6 +801,7 @@ test("取り除いて比べる（スケジュール）: 乱数で作った設定
     const withAnnual = next() < 0.3;
     const o: Options = {
       holidayProvider: provider,
+      ...(outside.ignore ? { outOfRangePolicy: "ignore" } : {}),
       weekdayValues: Array.from({ length: 7 }, pick),
       ...(policy === 1
         ? { holidayPolicy: "ignore" }
@@ -669,6 +813,7 @@ test("取り除いて比べる（スケジュール）: 乱数で作った設定
       recurringRules: [
         ...(next() < 0.5 ? [lost] : next() < 0.5 ? [weekly, lost] : [lost, weekly]),
         ...nth,
+        ...outside.pairA,
       ],
       ...(withDates || edgeDates.length > 0
         ? {
@@ -678,7 +823,14 @@ test("取り除いて比べる（スケジュール）: 乱数で作った設定
             ],
           }
         : {}),
-      ...(withAnnual ? { annualDates: [{ date: near().slice(5), value: pick() }] } : {}),
+      ...(withAnnual || outside.pairB !== undefined
+        ? {
+            annualDates: [
+              ...(withAnnual ? [{ date: near().slice(5), value: pick() }] : []),
+              ...(outside.pairB !== undefined ? [{ date: outside.pairB, value: "h" }] : []),
+            ],
+          }
+        : {}),
     };
     const describe = {
       ...o,
@@ -694,10 +846,28 @@ test("取り除いて比べる（スケジュール）: 乱数で作った設定
       [],
       context,
     );
-    // 対応年の全日を比べる（毎年の月日は、ほかの年にも当たる）
+    // 対応年に、境目の前後 28 年を足した期間の全日を比べる（independentWindow。毎年の月日は、ほかの年にも当たる）
     const [from, to] = [`${years.from}-01-01`, `${years.to}-12-31`];
-    const before = judgements(SCHEDULE, o, from, to);
-    assert.deepEqual(changedAfterRemoval(SCHEDULE, o, from, to, before), [], context);
+    const [wideFrom, wideTo] = independentWindow(o, years, outside.ignore);
+    const wide = judgements(SCHEDULE, o, wideFrom, wideTo);
+    assert.deepEqual(changedAfterRemoval(SCHEDULE, o, wideFrom, wideTo, wide, list), [], context);
+    const before = new Map([...wide].filter(([date]) => date >= from && date <= to));
+    const rules = o["recurringRules"] as readonly Options[];
+    if (outside.pairA.length > 0 && seen.formA < COUNTED) {
+      const [weekly] = outside.pairA as unknown as [
+        { effectiveFrom?: string; effectiveTo?: string },
+      ];
+      const inside = (date: string): boolean =>
+        (weekly.effectiveFrom === undefined || date >= weekly.effectiveFrom) &&
+        (weekly.effectiveTo === undefined || date <= weekly.effectiveTo);
+      const changed = changedWithout(SCHEDULE, o, "recurringRules", rules.length - 1, wide);
+      if (changed.length > 0 && !changed.some(inside)) seen.formA++;
+    }
+    if (outside.pairB !== undefined && seen.formB < COUNTED) {
+      const annual = o["annualDates"] as readonly unknown[];
+      const changed = changedWithout(SCHEDULE, o, "annualDates", annual.length - 1, wide);
+      if (changed.length > 0 && changed.every((date) => date < from || date > to)) seen.formB++;
+    }
     if (list.some((d) => REMOVABLE.has(d.code))) seen.removed++;
     if ([...before.values()].includes(`E:${CODE}`)) seen.withLost++;
     if (nth.length > 0) {
@@ -718,7 +888,7 @@ test("取り除いて比べる（スケジュール）: 乱数で作った設定
       seen.edgeDecided++;
   }
   console.log(
-    `# 取り除いて比べる（スケジュール）: ${TRIALS} 件（取り除ける項目が出た ${seen.removed}、値が例外になる日がある ${seen.withLost}、第 n 営業日の規則の基準: 届かない振替なし ${seen.nthWithPlainBasis}・実際に例外を投げる ${seen.nthWithThrowingBasis}・別の提供元 ${seen.nthWithOtherBasis}、明けた日を個別の日付・毎年の月日が決めている ${seen.decidedAtLanding}、対応年の端の日を個別の日付が決めている ${seen.edgeDecided}）`,
+    `# 取り除いて比べる（スケジュール）: ${TRIALS} 件（取り除ける項目が出た ${seen.removed}、値が例外になる日がある ${seen.withLost}、第 n 営業日の規則の基準: 届かない振替なし ${seen.nthWithPlainBasis}・実際に例外を投げる ${seen.nthWithThrowingBasis}・別の提供元 ${seen.nthWithOtherBasis}、明けた日を個別の日付・毎年の月日が決めている ${seen.decidedAtLanding}、対応年の端の日を個別の日付が決めている ${seen.edgeDecided}、有効期間の外側だけで効く規則がある（形 A） ${seen.formA}、"ignore" の提供元の対応年の外だけで効く毎年の月日がある（形 B） ${seen.formB}。形 A・B は ${COUNTED} 件まで数える）`,
   );
   for (const [name, count] of Object.entries(seen)) assert.ok(count > 0, `${name} が 0 件`);
 });

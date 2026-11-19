@@ -138,13 +138,14 @@ const build = (
 };
 /** 期間（日付の範囲の並び）の全日の営業日かどうか（投げた日はエラーコード） */
 const openOver = (o: Obj, ranges: readonly { from: string; to: string }[]): string => {
-  const calendar = lib["createCalendar"]!(o) as { dayInfoOn: (d: string) => Obj };
+  // dayInfoOn ではなく isBusinessDay で求める（open だけを見る。理由・名前の組み立てを省いて速くする）
+  const calendar = lib["createCalendar"]!(o) as { isBusinessDay: (d: string) => boolean };
   const out: string[] = [];
   for (const { from, to } of ranges)
     for (let t = Date.parse(from); t <= Date.parse(to); t += 86_400_000) {
       const d = new Date(t).toISOString().slice(0, 10);
       try {
-        out.push(String(calendar.dayInfoOn(d)["open"]));
+        out.push(String(calendar.isBusinessDay(d)));
       } catch (error) {
         out.push(`E:${String((error as { code?: unknown }).code)}`);
       }
@@ -155,10 +156,20 @@ const openOver = (o: Obj, ranges: readonly { from: string; to: string }[]): stri
  * 対応年で取り除けた項目を、診断が規則どうしを調べる期間（calendarScanWindow）でも取り除けるか確かめ直す。診断は有効期間が
  * 対応年の外に続く規則を、その外まで調べるので、対応年だけで比べると、取り除けない項目を「何も出ない」と数えてしまう
  */
+/** 元の設定の、診断が規則どうしを調べる期間と、その全日の結果（取り除けた項目ごとに求め直さない） */
+const scanned = new WeakMap<
+  Obj,
+  { ranges: ReturnType<typeof calendarScanWindow>; open: unknown }
+>();
 function removableInScanWindow(full: Obj, rest: Obj): boolean {
-  const ranges = calendarScanWindow(full);
-  if (ranges === undefined) return true;
-  return openOver(rest, ranges) === openOver(full, ranges);
+  let base = scanned.get(full);
+  if (base === undefined) {
+    const ranges = calendarScanWindow(full);
+    base = { ranges, open: ranges === undefined ? undefined : openOver(full, ranges) };
+    scanned.set(full, base);
+  }
+  if (base.ranges === undefined) return true;
+  return openOver(rest, base.ranges) === base.open;
 }
 
 /** 対応年の全日の結果（test/support/compare.ts の linesOf。full なら理由・名前・振替元まで） */
@@ -723,6 +734,26 @@ const scheduleValues = (o: Obj): string[] => {
     }
   });
 };
+/** 診断が規則どうしを調べる期間（rulesScanWindow）の全日の値（投げた日は "E"）。期間が求まらなければ空 */
+const scheduleWindowValues = (o: Obj, windowOf: Obj): string[] => {
+  const compiled = scheduleCompile(new scanCore.collector(), windowOf);
+  if (compiled === undefined) return [];
+  const window = scanCore.window(compiled) as
+    | { ranges: { from: number; to: number }[] }
+    | undefined;
+  if (window === undefined) return [];
+  const schedule = lib["createSchedule"]!(o) as { valueOn(d: string): unknown };
+  const out: string[] = [];
+  for (const { from, to } of window.ranges)
+    for (let n = from; n <= to; n++) {
+      try {
+        out.push(JSON.stringify(schedule.valueOn(scanCore.fromDay(n) as string)));
+      } catch {
+        out.push("E");
+      }
+    }
+  return out;
+};
 /** 元の設定で判定できる日（投げなかった日）だけを比べる */
 const sameOnJudgeable = (base: readonly string[], other: readonly string[]): boolean =>
   base.every((v, i) => v === "E" || v === other[i]);
@@ -873,6 +904,8 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
     }
     // 完全性: 取り除いた後に、取り除いても判定できる日の結果が変わらない項目が残らない。分からない規則は除外して数える
     const remainingPaths = paths.filter((p) => !removed.includes(p));
+    /** 元の設定の、診断が規則どうしを調べる期間の値（取り除けた項目ごとに求め直さない） */
+    let windowBase: string[] | undefined;
     remaining.forEach((item, q) => {
       const smaller = scheduleValues(
         buildSchedule(
@@ -882,6 +915,14 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
         ),
       );
       if (!sameOnJudgeable(base, smaller)) return;
+      // 対応年で取り除けた項目を、診断が規則どうしを調べる期間でも確かめ直す（営業日カレンダーのオラクルと同じ。31 番）
+      const smallerSchedule = buildSchedule(
+        remaining.filter((_, k) => k !== q),
+        policy,
+        weekdays,
+      );
+      windowBase ??= scheduleWindowValues(o, o);
+      if (!sameOnJudgeable(windowBase, scheduleWindowValues(smallerSchedule, o))) return;
       if (unsure("redundant", remainingPaths[q]!)) {
         // 実装が分からないとして出さない項目。素朴な定義でも分からない（月の単位の限界）か、素朴な定義では判定できる
         // （実装の求めすぎ。判定できない月の狭め方が減らす対象）かに分けて数える

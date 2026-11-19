@@ -27,7 +27,7 @@ import {
   weekdayOf,
   type DateString,
 } from "./date.ts";
-import { compileCalendarOptions, type CalendarOptions } from "./calendar.ts";
+import { compileCalendarOptions, type Calendar, type CalendarOptions } from "./calendar.ts";
 import {
   internalError,
   InternalError,
@@ -312,6 +312,11 @@ function scanWindow(
   cycle: number,
 ): Window | undefined {
   const ranges: Range[] = [];
+  /** day の前（before）か後の 1 周期。当てはまり方がそろう長さ（openEndedDays）だけ */
+  const side = (day: number, before: boolean): Range =>
+    before
+      ? { from: day - openEndedDays(day - cycle + 1, cycle) + 1, to: day }
+      : { from: day, to: day + openEndedDays(day, cycle) - 1 };
   let extend = true;
   if (source.providers.length === 0) {
     ranges.push({ from: PATTERN_FROM, to: PATTERN_FROM + cycle - 1 });
@@ -328,6 +333,9 @@ function scanWindow(
       extend = false;
     }
     if (from > to) return undefined;
+    // 対応年の外で祝日なしとする設定は、対応年の前後（祝日のない日）も 1 周期ずつ調べる
+    if (extend)
+      ranges.push(side(dayOfYear(from, false) - 1, true), side(dayOfYear(to, true) + 1, false));
     [from, to] = clipYears(from, to);
     ranges.push({ from: dayOfYear(from, false), to: dayOfYear(to, true) });
   }
@@ -335,10 +343,29 @@ function scanWindow(
     for (const rule of rules) {
       if (rule.effectiveFrom === null && rule.effectiveTo === null) continue;
       const span = periodSpan(rule, cycle);
-      const to = Math.min(span.to, span.from + 366 * MAX_WINDOW_YEARS - 1);
-      ranges.push({ from: Math.max(span.from, MIN_DAY), to: Math.min(to, MAX_DAY) });
+      ranges.push({
+        from: span.from,
+        to: Math.min(span.to, span.from + 366 * MAX_WINDOW_YEARS - 1),
+      });
+      // 有効期間の外側（規則がなくなった後・始まる前）も 1 周期ずつ調べる。その期間だけで効く別の規則がありうる
+      if (rule.effectiveTo !== null) ranges.push(side(rule.effectiveTo + 1, false));
+      if (rule.effectiveFrom !== null) ranges.push(side(rule.effectiveFrom - 1, true));
+    }
+    // 第 n 営業日を数える基準のカレンダーが対応年の外で祝日なしとするなら、その対応年の前後（基準に祝日のない日）も 1 周期ずつ
+    for (const rule of rules) {
+      const basis = (rule as { readonly calendar?: Calendar | null }).calendar;
+      if (!basis || basis.outOfRangePolicy !== "ignore" || basis.providers.length === 0) continue;
+      const years = basis.providers.map((p) => p.supportedYears);
+      ranges.push(
+        side(dayOfYear(Math.min(...years.map((r) => r.from)), false) - 1, true),
+        side(dayOfYear(Math.max(...years.map((r) => r.to)), true) + 1, false),
+      );
     }
   }
+  for (let i = 0; i < ranges.length; i++)
+    ranges[i] = { from: Math.max(ranges[i]!.from, MIN_DAY), to: Math.min(ranges[i]!.to, MAX_DAY) };
+  for (let i = ranges.length - 1; i >= 0; i--)
+    if (ranges[i]!.from > ranges[i]!.to) ranges.splice(i, 1);
   ranges.sort((a, b) => a.from - b.from);
   const merged: Range[] = [];
   for (const r of ranges) {
@@ -1292,7 +1319,9 @@ function analyzeRules<Value, Kind extends string>(
     const decided: number[] = [];
     const span: number[] = [];
     let checked = 0;
-    const last = Math.min(rule.to, rule.from + MAX_DATE_RULE_DAYS - 1);
+    // 調べきれない長い期間は、取り除けると言わない（調べ残した日で、この日付だけが決める日がありうる）
+    if (rule.to - rule.from + 1 > MAX_DATE_RULE_DAYS) return false;
+    const last = rule.to;
     for (let n = rule.from; n <= last; n++) {
       span.push(n);
       let decidedBy: DecidingRule<Value> | null;
