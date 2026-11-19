@@ -2480,11 +2480,31 @@ export function mapDays<R>(
 const INTERNAL_INFO = Symbol("bizdays-toolkit.scheduleInfo");
 
 /**
- * @internal 作成関数が作ったスケジュール・カレンダーの中身（取り込んだ規則か、合成した構成カレンダーの配列）。診断が、
- * 第 n 営業日の規則の基準のカレンダーの中の境目・祝日の年・周期を求めるために使う（decisions.md の 31 番）。WeakMap なので、
- * 公開の形（列挙・JSON.stringify・凍結・スプレッドでの写し）は変わらず、作成関数で作っていないオブジェクトには中身がない
+ * @internal 作成関数が作ったスケジュール・カレンダーの中身（取り込んだ規則か、合成した構成カレンダーの配列）の入れ物を置く
+ * Symbol の項目。診断が、第 n 営業日の規則の基準のカレンダーの中の境目・祝日の年・周期を求めるために使う。
+ * 読み方は decisions.md の 31 番、オブジェクトリテラルに含める理由は decisions.md の 4 番。Symbol の項目なので `Object.keys`・`for...in`・
+ * JSON には出ない（列挙できる項目ではある）。スプレッドで写したオブジェクトにも入れ物は写るが、入れ物の持ち主（owner）が写したオブジェクトと違う
+ * ので、中身は読まない（partsOf）
  */
-export const PARTS = new WeakMap<object, CompiledSchedule<unknown, string> | readonly object[]>();
+export const PARTS = Symbol("bizdays-toolkit.parts");
+
+/** @internal 中身の入れ物。owner は、入れ物を持たせたオブジェクト（作成の途中、凍結の前に入れる） */
+export interface PartsHolder {
+  owner: object | undefined;
+  readonly value: CompiledSchedule<unknown, string> | readonly object[] | undefined;
+}
+
+/** @internal 中身の入れ物を作る（持ち主は、持たせたオブジェクトを作った後に入れる） */
+export const partsHolder = (value: PartsHolder["value"]): PartsHolder => ({
+  owner: undefined,
+  value,
+});
+
+/** @internal 作成関数が作ったオブジェクトの中身。入れ物がないか、持ち主が違えば（スプレッドで写したものなど）undefined */
+export function partsOf(object: object): PartsHolder["value"] {
+  const holder = (object as { readonly [PARTS]?: PartsHolder })[PARTS];
+  return holder?.owner === object ? holder.value : undefined;
+}
 
 /** スケジュールの曜日の値と祝日の値（createCalendarFromSchedule が、作成時に isOpen の返り値を確かめるために使う） */
 const INTERNAL_VALUES = Symbol("bizdays-toolkit.scheduleValues");
@@ -2516,14 +2536,17 @@ export function buildSchedule<Value, Kind extends string>(
       ? [...compiled.weekly, compiled.holiday.value]
       : [...compiled.weekly],
   );
+  const parts = partsHolder(compiled);
   const schedule: Schedule<Value, Kind> & {
     readonly [INTERNAL_INFO]: typeof info;
     readonly [INTERNAL_VALUES]: readonly Value[];
+    readonly [PARTS]: PartsHolder;
   } = {
-    // 内部の判定（createCalendarFromSchedule が使う）。Symbol の項目なので列挙されず、JSON にも出ない。
+    // 内部の判定（createCalendarFromSchedule が使う）。Symbol の項目なので `Object.keys`・`for...in`・JSON には出ない。
     // オブジェクトリテラルに含めるのは、あとから defineProperty や WeakMap で付けると作成が遅くなるため（decisions.md の 4 番）
     [INTERNAL_INFO]: info,
     [INTERNAL_VALUES]: values,
+    [PARTS]: parts,
     timeZone: lookup.timeZone,
     providers: lookup.providers,
     outOfRangePolicy: lookup.outOfRangePolicy,
@@ -2545,7 +2568,8 @@ export function buildSchedule<Value, Kind extends string>(
     dayInfo: (input) => info(lookup.dateOf(input)),
     daysBetween: (from, to) => mapDays(lookup.dateOf(from), lookup.dateOf(to), info),
   };
-  PARTS.set(schedule, compiled);
+  parts.owner = schedule;
+  Object.freeze(parts);
   return Object.freeze(schedule);
 }
 

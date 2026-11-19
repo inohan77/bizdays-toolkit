@@ -13,6 +13,7 @@ import {
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 import { SHORT_PROVIDER } from "./support/provider.ts";
+import { PARTS, partsOf } from "../src/core/schedule.ts";
 import { diagnoseCalendar, diagnoseSchedule, type Diagnostic } from "../src/diagnose/index.ts";
 
 /** 判定に使う項目だけにする（message は API に含まない） */
@@ -1477,7 +1478,7 @@ test("基準のカレンダーの中: 作成関数で作っていないカレン
   }
 });
 
-test("基準のカレンダーの中: 作成関数の結果の公開の形（列挙・JSON.stringify・凍結）は、診断が読む中身を持っても変わらない", () => {
+test("基準のカレンダーの中: 作成関数の結果の公開の形（列挙・JSON.stringify・凍結）は変わらず、中身は Symbol の項目の入れ物にあり、スプレッドで写したオブジェクトからは読めない", () => {
   const schedule = createSchedule({ timeZone: "UTC", weekdayValues: [1, 1, 1, 1, 1, 1, 1] });
   const made = {
     createCalendar: basisC(),
@@ -1487,14 +1488,24 @@ test("基準のカレンダーの中: 作成関数の結果の公開の形（列
   };
   for (const [name, value] of Object.entries(made)) {
     assert.ok(Object.isFrozen(value), name);
-    // 項目は関数と、カレンダーなら提供元の配列などの公開の項目だけ（Symbol の項目は、スケジュールの既存の内部の項目だけ）
+    // Symbol の項目は、中身の入れ物（PARTS）と、スケジュールの既存の内部の項目だけ。列挙と JSON には出ない
     assert.deepEqual(
       Object.getOwnPropertySymbols(value).map(String),
       name === "createSchedule"
-        ? ["Symbol(bizdays-toolkit.scheduleInfo)", "Symbol(bizdays-toolkit.scheduleValues)"]
-        : [],
+        ? [
+            "Symbol(bizdays-toolkit.scheduleInfo)",
+            "Symbol(bizdays-toolkit.scheduleValues)",
+            "Symbol(bizdays-toolkit.parts)",
+          ]
+        : ["Symbol(bizdays-toolkit.parts)"],
       name,
     );
+    assert.ok(!Object.keys(value).some((k) => k.includes("parts")), name);
     assert.equal(JSON.stringify(value), JSON.stringify({ ...value }), name);
+    // 中身は作ったオブジェクトからだけ読め、スプレッドで写したオブジェクトからは読めない（入れ物は写るが、持ち主が違う）
+    const copy = { ...value };
+    assert.notEqual(partsOf(value), undefined, name);
+    assert.ok(Object.getOwnPropertySymbols(copy).includes(PARTS), name);
+    assert.equal(partsOf(copy), undefined, name);
   }
 });

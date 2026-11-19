@@ -6,7 +6,7 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
-## [0.32.6] - 2026-11-19
+## [0.32.6] - 2026-11-20
 
 ### Fixed
 

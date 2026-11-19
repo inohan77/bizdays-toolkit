@@ -50,7 +50,7 @@ import {
   jpUsage,
   matchMonthDay,
   matchPattern,
-  PARTS,
+  partsOf,
   type AnnualRule,
   type CompiledPeriod,
   type CompiledSchedule,
@@ -324,7 +324,7 @@ const dayOfYear = (year: number, last: boolean): number =>
  * 入れ子（合成の中、スケジュールから作ったカレンダーの規則の基準）もたどる。中身の分からないカレンダーがあれば false
  */
 function collectBasis(calendar: object, inside: BasisInside): boolean {
-  const parts = PARTS.get(calendar);
+  const parts = partsOf(calendar);
   if (parts === undefined) return false;
   if (Array.isArray(parts)) return parts.every((c: object) => collectBasis(c, inside));
   const { source, annual, recurring, dates } = parts as CompiledSchedule<unknown, string>;

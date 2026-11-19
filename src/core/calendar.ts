@@ -49,6 +49,9 @@ import {
   createHolidayLookup,
   infoOfSchedule,
   PARTS,
+  partsHolder,
+  partsOf,
+  type PartsHolder,
   valuesOfSchedule,
   isWeekday,
   mapDays,
@@ -695,7 +698,10 @@ function buildCalendar<Kind extends string>(
     return found;
   }
 
-  const calendar: Calendar<Kind> = {
+  // 中身は、作った元（スケジュール・合成の参照）から引き継ぐ。元に中身がなければ空の入れ物（診断は中身が分からないとする）
+  const parts = partsHolder(partsOf(lookup));
+  const calendar: Calendar<Kind> & { readonly [PARTS]: PartsHolder } = {
+    [PARTS]: parts,
     timeZone: lookup.timeZone,
     providers: lookup.providers,
     outOfRangePolicy: lookup.outOfRangePolicy,
@@ -814,9 +820,8 @@ function buildCalendar<Kind extends string>(
     businessDaysBetween: (from, to) => calendar.diffBusinessDays(from, to),
     listBusinessDays: (from, to) => calendar.businessDatesBetween(from, to),
   };
-  // 中身は、作った元（スケジュール・合成の参照）から引き継ぐ。元に中身がなければ登録しない（診断は中身が分からないとする）
-  const parts = PARTS.get(lookup);
-  if (parts) PARTS.set(calendar, parts);
+  parts.owner = calendar;
+  Object.freeze(parts);
   return Object.freeze(calendar);
 }
 
@@ -924,7 +929,8 @@ export function combineCalendars<Kind extends string = string>(
   /** 構成カレンダーの祝日の一覧を、日付ごとに先のカレンダーの祝日を採ってまとめる（すべてのカレンダーを呼んでから） */
   const merge = (lists: readonly (readonly Holiday<Kind>[])[]): readonly Holiday<Kind>[] => {
     const byDate = new Map<string, Holiday<Kind>>();
-    for (const list of lists) for (const h of list) if (!byDate.has(h.date)) byDate.set(h.date, h);
+    for (const holidays of lists)
+      for (const h of holidays) if (!byDate.has(h.date)) byDate.set(h.date, h);
     return Object.freeze(
       [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
     );
@@ -932,8 +938,11 @@ export function combineCalendars<Kind extends string = string>(
   /** 構成カレンダーの祝日（すべてのカレンダーを呼び、先のカレンダーの祝日を採る） */
   const holidayOn = (input: DateInput): Holiday<Kind> | undefined =>
     list.map((c) => c.holidayOn(input)).find((h) => h !== undefined);
-  const lookup: HolidayLookup<Kind> = {
+  // 合成の参照に、構成カレンダーの配列を中身として持たせる（buildCalendar が、合成したカレンダーに引き継ぐ）
+  const parts = partsHolder(list);
+  const lookup: HolidayLookup<Kind> & { readonly [PARTS]: PartsHolder } = {
     ...base,
+    [PARTS]: parts,
     isHoliday: (input) => holidayOn(input) !== undefined,
     holidayOn,
     getHoliday: holidayOn,
@@ -972,7 +981,8 @@ export function combineCalendars<Kind extends string = string>(
     return Object.freeze(result);
   }
 
-  PARTS.set(lookup, list);
+  parts.owner = lookup;
+  Object.freeze(parts);
   return buildCalendar(lookup, isOpen, info, searchDayLimit);
 }
 
