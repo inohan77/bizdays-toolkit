@@ -20,10 +20,8 @@
 import {
   formatDate,
   lengthOfMonth,
-  fromDayNumber,
   isValidDate,
   parseDate,
-  toDayNumber,
   weekdayOf,
   type DateString,
 } from "./date.ts";
@@ -61,6 +59,8 @@ import {
   type ScheduleOptions,
   isHolidayBasedRule,
   resultIgnoresHolidays,
+  dateOfDayNumber,
+  dayNumberOf,
 } from "./schedule.ts";
 import type { Holiday } from "./types.ts";
 
@@ -188,11 +188,11 @@ function closestOf(key: string, known: readonly string[]): string | undefined {
  * 割り切れて 400 で割り切れない年（2100 年など）をまたがない 28 年。1901〜2099 年の中なら成り立つ）。
  * 周期（interval・cycle）のある規則は、28 年（10,227 日）が周期の倍数とは限らないので、別に周期を求める（patternCycle）
  */
-const PATTERN_FROM = toDayNumber("2001-01-01");
-const PATTERN_DAYS = toDayNumber("2028-12-31") - PATTERN_FROM + 1;
+const PATTERN_FROM = dayNumberOf("2001-01-01");
+const PATTERN_DAYS = dayNumberOf("2028-12-31") - PATTERN_FROM + 1;
 /** 暦日として扱える範囲（1000〜9999 年）の両端の日数。有効期間から広げた走査は、この範囲に切り詰める */
-const MIN_DAY = toDayNumber("1000-01-01");
-const MAX_DAY = toDayNumber("9999-12-31");
+const MIN_DAY = dayNumberOf("1000-01-01");
+const MAX_DAY = dayNumberOf("9999-12-31");
 
 /** 祝日の提供元があるときに調べる年の上限（長すぎる対応年は 1900〜2099 年に絞る）。周期・有効期間で広げる長さの上限でもある */
 const MAX_WINDOW_YEARS = 200;
@@ -322,7 +322,7 @@ function clipYears(from: number, to: number): [number, number] {
 }
 
 const dayOfYear = (year: number, last: boolean): number =>
-  toDayNumber(`${String(year).padStart(4, "0")}-${last ? "12-31" : "01-01"}`);
+  dayNumberOf(`${String(year).padStart(4, "0")}-${last ? "12-31" : "01-01"}`);
 
 /**
  * 基準のカレンダーの中身（作成関数が登録した規則か、合成の構成カレンダー。schedule.ts の PARTS）を inside に集める。
@@ -425,7 +425,7 @@ function scanWindow(
       merged[merged.length - 1] = { from: last.from, to: Math.max(last.to, r.to) };
     else merged.push(r);
   }
-  const yearOf = (n: number): number => parseDate(fromDayNumber(n)).year;
+  const yearOf = (n: number): number => parseDate(dateOfDayNumber(n)).year;
   const label = merged.map((r) => `${yearOf(r.from)}-${yearOf(r.to)}`).join(", ");
   return { ranges: merged, label, blind: false };
 }
@@ -481,7 +481,7 @@ function patternBits(rule: RecurringRuleCompiled<unknown>): Uint8Array {
   // 周期のある規則は、位相を除いた形（毎週）で調べ、周期と位相は intervalCovers で比べる
   const weekly = rule.interval === null ? rule : { ...rule, interval: null, anchor: null };
   for (let i = 0; i < PATTERN_DAYS; i++) {
-    if (matchPattern(weekly, fromDayNumber(PATTERN_FROM + i))) bits[i] = 1;
+    if (matchPattern(weekly, dateOfDayNumber(PATTERN_FROM + i))) bits[i] = 1;
   }
   return bits;
 }
@@ -501,7 +501,7 @@ function matchesAnyDay(rule: RecurringRuleCompiled<unknown>, cycle: number): boo
       ? Math.min(span.to, span.from + openEndedDays(span.from, cycle) - 1)
       : span.to;
   for (let n = Math.max(span.from, MIN_DAY); n <= Math.min(to, MAX_DAY); n++)
-    if (matchPattern(rule, fromDayNumber(n))) return true;
+    if (matchPattern(rule, dateOfDayNumber(n))) return true;
   return false;
 }
 
@@ -644,7 +644,7 @@ function sameValueIn(a: unknown, b: unknown, seen: Map<object, Set<object>>): bo
 // 規則どうしの診断
 // ------------------------------------------------------------
 
-const yearOf = (dayNumber: number): number => parseDate(fromDayNumber(dayNumber)).year;
+const yearOf = (dayNumber: number): number => parseDate(dateOfDayNumber(dayNumber)).year;
 
 function without<Value, Kind extends string>(
   compiled: CompiledSchedule<Value, Kind>,
@@ -777,7 +777,7 @@ export function unjudgeableDays<Value, Kind extends string>(
   // 前と同じ文字列の経路を通す（fromDayNumber が out-of-range を投げる）
   const monthOf = (day: number): number => {
     if (day < MIN_DAY || day > MAX_DAY) {
-      const { year, month } = parseDate(fromDayNumber(day));
+      const { year, month } = parseDate(dateOfDayNumber(day));
       return year * 12 + month - 1;
     }
     const d = new Date(day * 86_400_000);
@@ -813,7 +813,7 @@ export function unjudgeableDays<Value, Kind extends string>(
         continue;
       }
       // 週の規則: weekStart で区切った週ごとに、その 7 日が属する月で基準が投げるか
-      const start = from - ((weekdayOf(fromDayNumber(from)) - r.weekStart + 7) % 7);
+      const start = from - ((weekdayOf(dateOfDayNumber(from)) - r.weekStart + 7) % 7);
       for (let w = start; w <= to; w += 7) {
         const all = [0, 1, 2, 3, 4, 5, 6].map((i) => w + i);
         const week = all.filter((n) => n >= MIN_DAY && n <= MAX_DAY);
@@ -919,7 +919,7 @@ function checkLostShifts<Value, Kind extends string>(
   for (const { from, to } of window.ranges) {
     const days: number[] = [];
     for (let y = yearOf(from); y <= yearOf(to); y++)
-      for (const h of lookup.holidaysInYear(y)) days.push(toDayNumber(h.date));
+      for (const h of lookup.holidaysInYear(y)) days.push(dayNumberOf(h.date));
     for (let i = 0; i < days.length; i++) {
       // 飛ばす曜日のある規則がなければ、届かないのは祝日だけが上限の日数だけ続いた後なので、そこだけを評価する
       const back = MAX_HOLIDAY_RUN - 1;
@@ -927,7 +927,7 @@ function checkLostShifts<Value, Kind extends string>(
       const last = Math.min(days[i]! + 7, (days[i + 1] ?? Infinity) - 1, to, MAX_DAY);
       for (let n = days[i]! + 1; n <= last; n++) {
         try {
-          resolve(fromDayNumber(n), false);
+          resolve(dateOfDayNumber(n), false);
         } catch (error) {
           // 暦日の範囲・対応年の端の日は、隣の日を見る規則が外に出て例外になる（判定も例外になるので、ここでは調べない）
           if (!atEdge(n, error, window)) throw error;
@@ -1100,7 +1100,7 @@ function analyzeRules<Value, Kind extends string>(
     eachDay(window, (n) => {
       if (!inPeriod(rule, n)) return false;
       try {
-        found = matchPattern(rule, fromDayNumber(n), holidayOfSafe, undefined, lookup.fromJp);
+        found = matchPattern(rule, dateOfDayNumber(n), holidayOfSafe, undefined, lookup.fromJp);
       } catch (error) {
         // 隣の日が暦日の範囲（1000〜9999 年）の外に出る端の日は、当てはまらないとみなす（外は祝日なし）
         if (!atCalendarEdge(n, error)) throw error;
@@ -1117,7 +1117,7 @@ function analyzeRules<Value, Kind extends string>(
     eachDay(window, (n) => {
       if (!inPeriod(rule, n)) return false;
       try {
-        found = matchPattern(rule, fromDayNumber(n), holidayOfSafe, basis, lookup.fromJp);
+        found = matchPattern(rule, dateOfDayNumber(n), holidayOfSafe, basis, lookup.fromJp);
       } catch {
         found = false;
       }
@@ -1139,7 +1139,7 @@ function analyzeRules<Value, Kind extends string>(
       if (window && jpUsage(source as HolidaySource<string>) === "only") {
         eachDay(
           window,
-          (n) => (found = holidayOfSafe(fromDayNumber(n))?.kind === renamedKind.from),
+          (n) => (found = holidayOfSafe(dateOfDayNumber(n))?.kind === renamedKind.from),
         );
         nationalAsRegular = !found;
       } else nationalAsRegular = false;
@@ -1296,7 +1296,7 @@ function analyzeRules<Value, Kind extends string>(
     let found = false;
     eachDay(window, (n) => {
       try {
-        found = resolve(fromDayNumber(n)).day.value === true;
+        found = resolve(dateOfDayNumber(n)).day.value === true;
       } catch (error) {
         // 規則が見る日が暦日の範囲（1000〜9999 年）・対応年の外に出る端の日と、届かない振替の日（decisions.md の 17 番・24 番）は、
         // 判定も例外になるので営業日に数えない
@@ -1329,11 +1329,11 @@ function analyzeRules<Value, Kind extends string>(
     for (const n of days) {
       out.add(n);
       if (countsMonth) {
-        const { year, month, day } = parseDate(fromDayNumber(n));
+        const { year, month, day } = parseDate(dateOfDayNumber(n));
         for (let k = 0; k < lengthOfMonth(year, month); k++) out.add(n - day + 1 + k);
       }
       for (const start of weekStarts) {
-        const first = n - ((weekdayOf(fromDayNumber(n)) - start + 7) % 7);
+        const first = n - ((weekdayOf(dateOfDayNumber(n)) - start + 7) % 7);
         for (let k = 0; k < 7; k++) out.add(first + k);
       }
     }
@@ -1347,7 +1347,7 @@ function analyzeRules<Value, Kind extends string>(
       if (!values.has(n)) {
         let value: unknown;
         try {
-          value = resolve(fromDayNumber(n)).day.value;
+          value = resolve(dateOfDayNumber(n)).day.value;
         } catch {
           value = FAILED;
         }
@@ -1370,7 +1370,7 @@ function analyzeRules<Value, Kind extends string>(
     for (const n of days) {
       let value: unknown;
       try {
-        value = resolve(fromDayNumber(n)).day.value;
+        value = resolve(dateOfDayNumber(n)).day.value;
       } catch {
         value = FAILED;
       }
@@ -1415,7 +1415,7 @@ function analyzeRules<Value, Kind extends string>(
       span.push(n);
       let decidedBy: DecidingRule<Value> | null;
       try {
-        decidedBy = resolve(fromDayNumber(n)).rule;
+        decidedBy = resolve(dateOfDayNumber(n)).rule;
       } catch {
         continue;
       }
@@ -1457,7 +1457,7 @@ function analyzeRules<Value, Kind extends string>(
       eachDay(window, (n) => {
         let by: DecidingRule<Value> | null;
         try {
-          by = resolveNow(fromDayNumber(n)).rule;
+          by = resolveNow(dateOfDayNumber(n)).rule;
         } catch {
           unjudged.add(n);
           return;
@@ -1481,7 +1481,7 @@ function analyzeRules<Value, Kind extends string>(
     for (const n of affected) {
       if (!inWindow(n) || unjudged.has(n)) continue;
       for (const days of decided.values()) days.delete(n);
-      const by = resolveNow(fromDayNumber(n)).rule;
+      const by = resolveNow(dateOfDayNumber(n)).rule;
       if (by) decided.get(by)?.add(n);
     }
   };
@@ -1501,7 +1501,7 @@ function analyzeRules<Value, Kind extends string>(
     const matched: number[] = [];
     if (window)
       eachDay(window, (n) => {
-        if (matchMonthDay(rule, fromDayNumber(n).slice(5))) matched.push(n);
+        if (matchMonthDay(rule, dateOfDayNumber(n).slice(5))) matched.push(n);
       });
     const units = countingUnits(matched);
     unitsOf.set(rule, units);
@@ -1563,7 +1563,7 @@ function analyzeRules<Value, Kind extends string>(
     const paths = new Set<string | null>();
     for (const n of days) {
       try {
-        paths.add(resolveFinal(fromDayNumber(n)).rule?.path ?? null);
+        paths.add(resolveFinal(dateOfDayNumber(n)).rule?.path ?? null);
       } catch {
         paths.add(null);
       }
@@ -1606,7 +1606,7 @@ function compileDiagnoseOptions(options: unknown): { asOf: number | null } {
       `asOf must be a date string "YYYY-MM-DD": ${describeValue(asOf)}`,
     );
   }
-  return { asOf: toDayNumber(asOf) };
+  return { asOf: dayNumberOf(asOf) };
 }
 
 /**
@@ -1622,11 +1622,11 @@ function checkExpired<Value, Kind extends string>(
   const ended = (path: string, last: number, what: string, reach = last, why = ""): void => {
     if (reach < asOf) {
       const until =
-        reach > last ? ` (it could affect results until ${fromDayNumber(reach)}: ${why})` : "";
+        reach > last ? ` (it could affect results until ${dateOfDayNumber(reach)}: ${why})` : "";
       c.info(
         "expired",
         path,
-        `This ${what} ended on ${fromDayNumber(last)}${until}, before ${fromDayNumber(asOf)}; it no longer affects results and can be removed if the past need not be reproduced`,
+        `This ${what} ended on ${dateOfDayNumber(last)}${until}, before ${dateOfDayNumber(asOf)}; it no longer affects results and can be removed if the past need not be reproduced`,
       );
     }
   };
@@ -1638,8 +1638,8 @@ function checkExpired<Value, Kind extends string>(
   const countedReach = (last: number): number => {
     let reach = last;
     if (byMonth) {
-      const { year, month } = parseDate(fromDayNumber(last));
-      reach = toDayNumber(formatDate(year, month, lengthOfMonth(year, month)));
+      const { year, month } = parseDate(dateOfDayNumber(last));
+      reach = dayNumberOf(formatDate(year, month, lengthOfMonth(year, month)));
     }
     return byWeek ? Math.max(reach, last + 6) : reach;
   };

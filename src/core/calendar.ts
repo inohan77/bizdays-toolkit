@@ -7,15 +7,7 @@
  * 合成する combineCalendars（両方が営業している日・どちらかが営業している日）でも同じ実装を使う。
  */
 
-import {
-  addDays,
-  lengthOfMonth,
-  formatDate,
-  fromDayNumber,
-  toDayNumber,
-  type DateString,
-  type Weekday,
-} from "./date.ts";
+import { addDays, lengthOfMonth, formatDate, type DateString, type Weekday } from "./date.ts";
 import {
   checkUnknownKeys,
   internalError,
@@ -66,6 +58,8 @@ import {
   type HolidaySourceOptions,
   type Schedule,
   type ScheduleDayInfo,
+  dateOfDayNumber,
+  dayNumberOf,
 } from "./schedule.ts";
 import type { Holiday, HolidayProvider } from "./types.ts";
 
@@ -570,9 +564,9 @@ function buildCalendar<Kind extends string>(
 
   /** 営業日（open が true）または休業日（false）を、start から step の向きに searchDayLimit 日まで探す */
   function search(start: DateString, step: 1 | -1, open = true): DateString {
-    let n = toDayNumber(start);
+    let n = dayNumberOf(start);
     for (let i = 0; i < searchDayLimit; i++, n += step) {
-      const date = fromDayNumber(n);
+      const date = dateOfDayNumber(n);
       if (isOpen(date) === open) return date;
     }
     throw open
@@ -592,7 +586,7 @@ function buildCalendar<Kind extends string>(
 
   function countOpen(from: number, toExclusive: number): number {
     let count = 0;
-    for (let n = from; n < toExclusive; n++) if (isOpen(fromDayNumber(n))) count++;
+    for (let n = from; n < toExclusive; n++) if (isOpen(dateOfDayNumber(n))) count++;
     return count;
   }
 
@@ -661,12 +655,12 @@ function buildCalendar<Kind extends string>(
     limited: boolean,
   ): DateString | undefined {
     const { year, month } = parseMonth(start.slice(0, 7));
-    const first = toDayNumber(formatDate(year, month, 1));
+    const first = dayNumberOf(formatDate(year, month, 1));
     const last = first + lengthOfMonth(year, month) - 1;
-    let n = toDayNumber(start);
+    let n = dayNumberOf(start);
     for (let i = 0; n >= first && n <= last; i++, n += step) {
       if (limited && i >= searchDayLimit) throw noBusinessDay(start);
-      const date = fromDayNumber(n);
+      const date = dateOfDayNumber(n);
       if (isOpen(date)) return date;
     }
     return undefined;
@@ -756,8 +750,8 @@ function buildCalendar<Kind extends string>(
       return date;
     },
     diffBusinessDays(from, to) {
-      const a = toDayNumber(dateOf(from));
-      const b = toDayNumber(dateOf(to));
+      const a = dayNumberOf(dateOf(from));
+      const b = dayNumberOf(dateOf(to));
       // 逆順で営業日がないときに -0 を返さない（Intl.NumberFormat などは "-0" と表示する）
       return a <= b ? countOpen(a, b) : 0 - countOpen(b, a);
     },
@@ -766,8 +760,8 @@ function buildCalendar<Kind extends string>(
       const b = dateOf(to);
       if (a > b) throw rangeError("invalid-range", `"from" must not be after "to" (${a} > ${b})`);
       const result: DateString[] = [];
-      for (let n = toDayNumber(a); n <= toDayNumber(b); n++) {
-        const date = fromDayNumber(n);
+      for (let n = dayNumberOf(a); n <= dayNumberOf(b); n++) {
+        const date = dateOfDayNumber(n);
         if (isOpen(date)) result.push(date);
       }
       return Object.freeze(result);

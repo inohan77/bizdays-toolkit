@@ -113,6 +113,9 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
 // 綴りから、実行環境の Intl が返す名前を求める（覚えていれば作らない）。使えない綴りは、Intl の例外をそのまま投げる。
 // 書式は Intl が返す名前ごとに 1 つだけ作る（formatterFor に渡るのは、Intl が返した名前だけ）
 function zoneNameOf(timeZone: string): string {
+  // Intl が返した名前そのもの（作成のたびに渡る提供元の名前、瞬間を暦日に直すときに渡る検証済みの名前など）は、キーを
+  // 作らずに返す（0.32.7。0.32.6 までは、瞬間を暦日に直す処理（wallParts）だけが同じ確かめをしていた）
+  if (zoneNames.get(timeZone) === timeZone) return timeZone;
   // ケルビン記号（U+212A）などが k にならないように、文字列全体には toLowerCase を掛けない
   const key = timeZone.replace(/[A-Z]+/g, (s) => s.toLowerCase());
   let name = zoneNames.get(key);
@@ -182,7 +185,7 @@ function wallParts(
   // 時差の形（"+09:00"）は、UTC の書式に時差を足した瞬間を渡して読む（時差ごとに書式を作らない。時差は固定なので結果は同じ）
   // 検証を通っていない綴り（createCalendar で作っていないカレンダーの形のオブジェクトを合成したとき）も、Intl が返す名前に
   // 直してから読む（綴りごとに書式を作らない。結果と、使えない綴りで Intl が投げる例外は同じ）
-  const zone = zoneNames.get(timeZone) === timeZone ? timeZone : zoneNameOf(timeZone);
+  const zone = zoneNameOf(timeZone);
   const offset = OFFSET_ZONE_RE.exec(zone);
   const parts = formatterFor(offset ? "UTC" : zone).formatToParts(
     new Date(

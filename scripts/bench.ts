@@ -121,8 +121,20 @@ const hours = createSchedule({
 // 基準の対応年の外にかかり、基準が投げる月を診断が何度も評価する経路（0.32.7 で、投げた月を覚えるようにした）の退行を拾う
 const sgBasis = createCalendar({ holidayProvider: sg, closedWeekdays: [0, 6] });
 
+// 10 年分の暦日を、種を固定した乱数の順に並べたもの。1 日だけの判定の計測は同じ日を繰り返すので、直前の 1 組を覚える
+// 変換（0.32.7）が毎回当たり、実際の使い方より速く出る。毎回違う日で呼ぶ計測で、その当たり外れに関わる退行を拾う
+const shuffledDays = Array.from({ length: 3653 }, (_, i) => addDaysSimple("2020-01-01", i));
+for (let i = shuffledDays.length - 1, seed = 1; i > 0; i--) {
+  seed = (seed * 1103515245 + 12345) % 2147483648;
+  const j = seed % (i + 1);
+  [shuffledDays[i], shuffledDays[j]] = [shuffledDays[j]!, shuffledDays[i]!];
+}
+let nextDay = 0;
+const anotherDay = (): string => shuffledDays[nextDay++ % shuffledDays.length]!;
+
 const cases: Case[] = [
   { name: "isBusinessDay（店舗・1 日）", run: () => store.isBusinessDay("2026-11-23") },
+  { name: "isBusinessDay（店舗・毎回違う日）", run: () => store.isBusinessDay(anotherDay()) },
   {
     name: "addBusinessDays（店舗・250 営業日）",
     run: () => store.addBusinessDays("2026-01-05", 250),
@@ -140,6 +152,7 @@ const cases: Case[] = [
     run: () => diff(museum, "2026-01-01", "2027-01-01"),
   },
   { name: "valueOn（スケジュール・1 日）", run: () => hours.valueOn("2026-11-03") },
+  { name: "valueOn（スケジュール・毎回違う日）", run: () => hours.valueOn(anotherDay()) },
   {
     name: "createCalendar（店舗の設定）",
     run: () => createCalendar({ holidayProvider: jp, closedWeekdays: [0] }),

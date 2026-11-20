@@ -430,9 +430,10 @@ const CASES: readonly Case[] = [
     inject: () =>
       edit(
         "dist/core/schedule.js",
+        // 判定の曜日の行（0.32.7 から、日数の記憶を通す weekdayOfDate）
         replaceOnce(
-          "const weekday = weekdayOf(date);",
-          "const weekday = (weekdayOf(date) + 1) % 7;",
+          "const weekday = weekdayOfDate(date);",
+          "const weekday = (weekdayOfDate(date) + 1) % 7;",
         ),
       ),
     expect: "**失敗**（意図した変更なら",

@@ -5,14 +5,12 @@
  */
 
 import {
-  addDays,
   lengthOfMonth,
   formatDate,
   fromDayNumber,
   isValidDate,
   parseDate,
   toDayNumber,
-  weekdayOf,
   type DateString,
   type Weekday,
 } from "./date.ts";
@@ -44,6 +42,36 @@ import {
 export type { CivilDateTimeParts } from "./input.ts";
 import { HOLIDAY_KEY_PATTERN, type Holiday, type HolidayProvider } from "./types.ts";
 import type { Calendar } from "./calendar.ts";
+
+// 直前に日数と行き来した暦日 1 組。1 日の判定の中で同じ暦日の日数・曜日を何度も求め、日を順にたどる走査は作った暦日の
+// 日数をすぐ求め直すため、解析し直さずに済ませる（判定の結果ではなく、暦日と日数の対応だけを覚える。decisions.md の 16 番。
+// 0.32.7）。変換が成功したときだけ書き換えるので、不正な日付で例外になっても、正しい古い組が残る。date.ts に置かないのは、
+// date.ts が国別の提供元の小さい入口にも入り、その大きさを増やさないため。初めから正しい 1 組を入れておく（空の文字列を
+// 入れると、その文字列が不正な日付として投げなくなる）
+let memoDate: DateString = "1970-01-01";
+let memoDay = 0;
+
+/** @internal toDayNumber と同じ。直前に日数と行き来した暦日なら、覚えた日数を返す */
+export function dayNumberOf(date: DateString): number {
+  if (date !== memoDate) {
+    memoDay = toDayNumber(date);
+    memoDate = date;
+  }
+  return memoDay;
+}
+
+/** @internal fromDayNumber と同じ。作った暦日と日数の対応を覚える */
+export function dateOfDayNumber(dayNumber: number): DateString {
+  const date = fromDayNumber(dayNumber);
+  memoDate = date;
+  memoDay = Math.floor(dayNumber);
+  return date;
+}
+
+/** 1970-01-01 からの日数の曜日（1970-01-01 は木曜日） */
+const weekdayOfDayNumber = (dayNumber: number): Weekday =>
+  ((((dayNumber + 4) % 7) + 7) % 7) as Weekday;
+const weekdayOfDate = (date: DateString): Weekday => weekdayOfDayNumber(dayNumberOf(date));
 
 // ------------------------------------------------------------
 // 公開する型
@@ -819,7 +847,7 @@ function checkDate(c: IssueCollector, path: string, value: unknown): number | un
     c.error("invalid-date", path, `Invalid date ${describeValue(value)} (expected YYYY-MM-DD)`);
     return undefined;
   }
-  return toDayNumber(value);
+  return dayNumberOf(value);
 }
 
 function checkMonthDay(c: IssueCollector, path: string, value: unknown): string | undefined {
@@ -1054,7 +1082,8 @@ export function basisFromPredicate(isOpen: (date: DateString) => boolean): Basis
     if (days === undefined) {
       const list: number[] = [];
       const dim = lengthOfMonth(year, month);
-      for (let d = 1; d <= dim; d++) if (isOpen(formatDate(year, month, d))) list.push(d);
+      // d はその月に実在する日なので、作った文字列を解析し直さない（0.32.7）
+      for (let d = 1; d <= dim; d++) if (isOpen(formatDate(year, month, d, true))) list.push(d);
       days = Object.freeze(list);
       // 持つのは 240 か月（20 年）分まで。ふつうの使い方の期間はすべて持ち、診断の長い走査（1900 年代から 2099 年まで）
       // でも記憶を一定に抑える上限で、測って決めた値ではない。超えたら全消去する（走査は月の順に進むので、古い月を
@@ -1212,11 +1241,11 @@ export function compileRecurringRules<Value>(
         } else interval = i as number;
         const a = checkDate(c, `${p}.anchor`, entry["anchor"]);
         if (a === undefined) ok = false;
-        else if (weekday !== null && weekdayOf(entry["anchor"] as DateString) !== weekday) {
+        else if (weekday !== null && weekdayOfDate(entry["anchor"] as DateString) !== weekday) {
           c.error(
             "invalid-option",
             `${p}.anchor`,
-            `must be on the same weekday as "weekday" (${String(entry["anchor"])} is weekday ${weekdayOf(entry["anchor"] as DateString)})`,
+            `must be on the same weekday as "weekday" (${String(entry["anchor"])} is weekday ${weekdayOfDate(entry["anchor"] as DateString)})`,
           );
           ok = false;
         } else anchor = a;
@@ -1634,14 +1663,15 @@ export function matchPattern(
     if (b === undefined) return false;
     if (rule.weekStart !== null) {
       // 週の第 n 営業日: weekStart の曜日から 7 日間の、基準で営業日である日を数える（月をまたぐ週は両方の月の基準を見る）
-      const start = addDays(date, -((weekdayOf(date) - rule.weekStart + 7) % 7));
-      const week: DateString[] = [];
-      for (let i = 0; i < 7; i++) {
-        const d = addDays(start, i);
-        const at = parseDate(d);
-        if (b(at.year, at.month).includes(at.day)) week.push(d);
+      // 日は通し番号で数える（暦日の文字列を作るのは、基準の月を知るときだけ。0.32.7）
+      const self = dayNumberOf(date);
+      const start = self - ((weekdayOfDayNumber(self) - rule.weekStart + 7) % 7);
+      const week: number[] = [];
+      for (let n = start; n < start + 7; n++) {
+        const at = parseDate(dateOfDayNumber(n));
+        if (b(at.year, at.month).includes(at.day)) week.push(n);
       }
-      const at = week.indexOf(date);
+      const at = week.indexOf(self);
       if (at < 0) return false;
       return rule.businessDays.has(at + 1) || rule.businessDays.has(at - week.length);
     }
@@ -1652,7 +1682,7 @@ export function matchPattern(
   }
   if (rule.holiday || rule.dayAfterHoliday || rule.dayBeforeHoliday) {
     if (holidayOf === undefined) return false;
-    if (rule.weekdays && !rule.weekdays.has(weekdayOf(date))) return false;
+    if (rule.weekdays && !rule.weekdays.has(weekdayOfDate(date))) return false;
     const selected = (h: Holiday<string>): boolean =>
       (rule.kinds === null ||
         rule.kinds.has(h.kind) ||
@@ -1665,25 +1695,25 @@ export function matchPattern(
     // 祝日の翌日は前日が祝日、祝前日は翌日が祝日（どちらもその日自身は祝日でない）。
     // skipWeekdays があれば、祝日とその曜日が続く塊の前後の日で、絞り込みは塊の中で最も近い祝日に当てる
     const skip = rule.skipWeekdays;
-    if (holidayOf(date) !== undefined || skip?.has(weekdayOf(date))) return false;
+    if (holidayOf(date) !== undefined || skip?.has(weekdayOfDate(date))) return false;
     const step = rule.dayAfterHoliday ? -1 : 1;
+    const self = dayNumberOf(date);
     for (let k = 1; k <= MAX_HOLIDAY_RUN; k++) {
-      const next = addDays(date, step * k);
-      const h = holidayOf(next);
+      const h = holidayOf(dateOfDayNumber(self + step * k));
       if (h !== undefined) return selected(h);
-      if (!skip?.has(weekdayOf(next))) return false;
+      if (!skip?.has(weekdayOfDayNumber(self + step * k))) return false;
     }
     return false;
   }
   if (rule.cycle !== null) {
-    const offset = (toDayNumber(date) - rule.anchor!) % rule.cycle;
+    const offset = (dayNumberOf(date) - rule.anchor!) % rule.cycle;
     return rule.positions!.has(((offset + rule.cycle) % rule.cycle) + 1);
   }
   const dim = lengthOfMonth(year, month);
   if (rule.weekday !== null) {
-    if (weekdayOf(date) !== rule.weekday) return false;
+    if (weekdayOfDate(date) !== rule.weekday) return false;
     if (rule.interval !== null)
-      return (toDayNumber(date) - rule.anchor!) % (7 * rule.interval) === 0;
+      return (dayNumberOf(date) - rule.anchor!) % (7 * rule.interval) === 0;
     if (rule.nth === null) return true;
     return rule.nth.has(Math.ceil(day / 7)) || (rule.nth.has(-1) && day + 7 > dim);
   }
@@ -1698,7 +1728,7 @@ export function matchRecurring(
   basis?: BasisOfMonth,
   fromJp?: FromJp,
 ): boolean {
-  return inPeriod(rule, toDayNumber(date)) && matchPattern(rule, date, holidayOf, basis, fromJp);
+  return inPeriod(rule, dayNumberOf(date)) && matchPattern(rule, date, holidayOf, basis, fromJp);
 }
 
 /**
@@ -2274,7 +2304,7 @@ export function matchMonthDay(rule: AnnualRule<unknown>, monthDay: string): bool
 
 /** @internal 毎年の月日の規則がその日に当てはまるか（有効期間を含む） */
 export function matchAnnual(rule: AnnualRule<unknown>, date: DateString): boolean {
-  return inPeriod(rule, toDayNumber(date)) && matchMonthDay(rule, date.slice(5));
+  return inPeriod(rule, dayNumberOf(date)) && matchMonthDay(rule, date.slice(5));
 }
 
 /** @internal 値を決めた規則（祝日・曜日で決まった場合は null） */
@@ -2362,23 +2392,27 @@ export function createResolver<Value, Kind extends string>(
     rule: RecurringRuleCompiled<Value>,
     date: DateString,
   ): DateString | undefined {
+    // 日は通し番号でさかのぼる（暦日の文字列は 1 日に 1 回だけ作る。0.32.7）
+    const self = dayNumberOf(date);
     for (let k = 1; k <= MAX_HOLIDAY_RUN; k++) {
-      const prev = addDays(date, -k);
+      const prev = dateOfDayNumber(self - k);
       // 飛ばす日は祝日と、skipWeekdays の曜日。それ以外の日に達したら、振替元はない
-      if (!isHolidayOfNeighbour(prev) && !rule.skipWeekdays?.has(weekdayOf(prev))) return undefined;
+      if (!isHolidayOfNeighbour(prev) && !rule.skipWeekdays?.has(weekdayOfDayNumber(self - k)))
+        return undefined;
       if (matchRecurring(rule, prev, holidayOfNeighbour, undefined, lookup.fromJp)) return prev;
     }
     // 上限まで祝日（と飛ばす曜日）が続いた。振替は届かないが、黙って取りこぼさないよう、連続の先頭までを検出のためだけに
     // さかのぼり、届かなかった振替元が実際にあるときに知らせる（decisions.md の 24 番）。暦日の範囲の端で止まる
-    const first = toDayNumber(date) - MAX_HOLIDAY_RUN_SCAN;
-    for (let n = toDayNumber(date) - MAX_HOLIDAY_RUN - 1; n >= MIN_DAY_NUMBER; n--) {
+    const first = self - MAX_HOLIDAY_RUN_SCAN;
+    for (let n = self - MAX_HOLIDAY_RUN - 1; n >= MIN_DAY_NUMBER; n--) {
       // ここまで連続が終わらなければ、取りこぼしがないと確かめられない
       if (n < first) {
         onLostShift(rule, date, undefined);
         return undefined;
       }
-      const prev = fromDayNumber(n);
-      if (!isHolidayOfNeighbour(prev) && !rule.skipWeekdays?.has(weekdayOf(prev))) return undefined;
+      const prev = dateOfDayNumber(n);
+      if (!isHolidayOfNeighbour(prev) && !rule.skipWeekdays?.has(weekdayOfDayNumber(n)))
+        return undefined;
       if (matchRecurring(rule, prev, holidayOfNeighbour, undefined, lookup.fromJp)) {
         onLostShift(rule, date, prev);
         return undefined;
@@ -2388,8 +2422,8 @@ export function createResolver<Value, Kind extends string>(
   }
 
   return function resolve(date: DateString, withHoliday = true): Resolution<Value, Kind> {
-    const dayNumber = toDayNumber(date);
-    const weekday = weekdayOf(date);
+    const dayNumber = dayNumberOf(date);
+    const weekday = weekdayOfDate(date);
     const holiday = lookup.holidayOfDate(date, holidayUnused && !withHoliday);
     const make = (
       value: Value,
@@ -2469,7 +2503,7 @@ export function mapDays<R>(
     throw rangeError("invalid-range", `"from" must not be after "to" (${from} > ${to})`);
   }
   const result: R[] = [];
-  for (let n = toDayNumber(from); n <= toDayNumber(to); n++) result.push(fn(fromDayNumber(n)));
+  for (let n = dayNumberOf(from); n <= dayNumberOf(to); n++) result.push(fn(dateOfDayNumber(n)));
   return Object.freeze(result);
 }
 
