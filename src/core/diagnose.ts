@@ -234,18 +234,23 @@ const atEdge = (n: number, error: unknown, window: Window | undefined): boolean 
 };
 
 /**
- * 期限のない側を調べる日数。from から days 日の範囲が、100 で割り切れて 400 で割り切れない年（2100 年など）にかかるなら、
- * 28 年の 2 倍まで広げる（その年をまたぐ 28 年には、年の種類が欠ける。decisions.md の 31 番）
+ * 日の通し番号の範囲（暦日の範囲に切り詰める）が、100 で割り切れて 400 で割り切れない年（2100 年など）にかかるか。その年を
+ * またぐ 28 年には年の種類が欠け、当てはまり方が 28 年でそろわない（decisions.md の 31 番）。期限のない側を調べる日数
+ * （openEndedDays）と、基準の中に周期の規則があるときに分からない側に倒す判定（rulesScanWindow の blind）の両方が使う
  */
-function openEndedDays(from: number, days: number): number {
+function crossesShortCentury(from: number, to: number): boolean {
   const lo = Math.max(from, MIN_DAY);
-  const hi = Math.min(from + days - 1, MAX_DAY);
-  if (lo > hi) return days;
+  const hi = Math.min(to, MAX_DAY);
+  if (lo > hi) return false;
   const last = yearOf(hi);
   for (let y = Math.ceil(yearOf(lo) / 100) * 100; y <= last; y += 100)
-    if (y % 400 !== 0) return Math.max(days, 2 * PATTERN_DAYS);
-  return days;
+    if (y % 400 !== 0) return true;
+  return false;
 }
+
+/** 期限のない側を調べる日数。from から days 日の範囲が 2100 年などにかかるなら、28 年の 2 倍まで広げる */
+const openEndedDays = (from: number, days: number): number =>
+  crossesShortCentury(from, from + days - 1) ? Math.max(days, 2 * PATTERN_DAYS) : days;
 
 /**
  * 有効期間のある規則を調べる範囲（暦日の範囲に切り詰める前）。期限のない側は、期限のある側から当てはまり方がそろう長さ
@@ -346,14 +351,6 @@ function collectBasis(calendar: object, inside: BasisInside): boolean {
   inside.rules.push(...recurring);
   return recurring.every((r) => r.calendar === null || collectBasis(r.calendar, inside));
 }
-
-/** 範囲が、100 で割り切れて 400 で割り切れない年（2100 年など）にかかるか（その年をまたぐと、当てはまり方がそろわない） */
-const crossesShortCentury = ({ from, to }: Range): boolean => {
-  const last = yearOf(Math.min(to, MAX_DAY));
-  for (let y = Math.ceil(yearOf(Math.max(from, MIN_DAY)) / 100) * 100; y <= last; y += 100)
-    if (y % 400 !== 0) return true;
-  return false;
-};
 
 /**
  * 毎年の月日・繰り返しの規則を調べる期間（decisions.md の 31 番）。祝日が年ごとに変わるので、提供元の対応年を使う。
@@ -462,7 +459,7 @@ export function rulesScanWindow(
     (cycle >= max && own < max) ||
     days > MAX_SCAN_DAYS ||
     (inside.rules.some((r) => r.interval !== null || r.cycle !== null) &&
-      window.ranges.some(crossesShortCentury));
+      window.ranges.some((r) => crossesShortCentury(r.from, r.to)));
   if (!blind) return window;
   return { ...(known ? scanWindow(source, rules, own)! : window), blind };
 }
@@ -718,15 +715,23 @@ function guardBases<Value, Kind extends string>(
     recurring: compiled.recurring.map((r) => {
       const basis = r.basis;
       if (basis === null || r.calendar === null) return r;
+      // この規則の基準が判定できない印で投げた月。同じ月を何度も評価して、そのたびに例外を作らない（例外を作る時間の大半は、
+      // スタックの記録。0.32.7）。前提: 同じ月はいつも同じに投げる（基準は凍結されたカレンダーの判定で、提供元は同じ年に同じ
+      // データを返す。祝日の記憶と同じ前提。decisions.md の 4 番・16 番。作成関数で作っていないカレンダーの形のオブジェクトは、
+      // 作成後に投げ方を変えないことを、渡す側に任せる）。集合は 1 回の診断の中で作られ、終われば捨てられる
+      const thrown = new Set<number>();
       return {
         ...r,
         basis: (year: number, month: number) => {
+          const m = year * 12 + month - 1;
+          if (thrown.has(m)) return [];
           try {
             return basis(year, month);
           } catch (error) {
             if (!UNJUDGEABLE.has(String((error as { code?: unknown }).code))) throw error;
             // 投げた月だけを記録する（週の規則が隣の月を見る扱いは unjudgeableDays が決める）。記録は見張りに使う
-            unknownMonths.add(year * 12 + month - 1);
+            unknownMonths.add(m);
+            thrown.add(m);
             return [];
           }
         },
@@ -768,9 +773,15 @@ export function unjudgeableDays<Value, Kind extends string>(
   const months = new Set<number>();
   const bases = compiled.recurring.filter((r) => r.basis !== null && r.calendar !== null);
   if (!window || bases.length === 0) return { days, months };
+  // 日の通し番号から、年 × 12 + 月 - 1 を求める（暦日の文字列を作らない。1 日ずつ呼ぶので。0.32.7）。暦日の範囲の外は、
+  // 前と同じ文字列の経路を通す（fromDayNumber が out-of-range を投げる）
   const monthOf = (day: number): number => {
-    const { year, month } = parseDate(fromDayNumber(day));
-    return year * 12 + month - 1;
+    if (day < MIN_DAY || day > MAX_DAY) {
+      const { year, month } = parseDate(fromDayNumber(day));
+      return year * 12 + month - 1;
+    }
+    const d = new Date(day * 86_400_000);
+    return d.getUTCFullYear() * 12 + d.getUTCMonth();
   };
   for (const r of bases) {
     const thrown = new Map<number, boolean>();
@@ -795,8 +806,10 @@ export function unjudgeableDays<Value, Kind extends string>(
       const to = Math.min(range.to, r.effectiveTo ?? Infinity);
       if (from > to) continue;
       if (r.weekStart === null) {
-        for (let n = from; n <= to; n++)
-          if (inMonths(monthOf(n)) && throws(monthOf(n))) days.add(n);
+        for (let n = from; n <= to; n++) {
+          const m = monthOf(n);
+          if (inMonths(m) && throws(m)) days.add(n);
+        }
         continue;
       }
       // 週の規則: weekStart で区切った週ごとに、その 7 日が属する月で基準が投げるか

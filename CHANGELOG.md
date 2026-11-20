@@ -6,6 +6,12 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.7] - 2026-11-20
+
+### Changed
+
+- The option diagnostics of a schedule are faster when a business-day rule counts on a calendar with a holiday provider and the scan reaches years outside the provider's supported years (for example, a schedule without a provider counting on the Japanese holiday calendar). A month in which that calendar throws is now evaluated once per rule in a diagnosis, instead of every time the scan looks at it. On the maintainer's machine, such a schedule is diagnosed in about 40% of the time of 0.32.6. Results, exceptions and diagnostics are unchanged
+
 ## [0.32.6] - 2026-11-20
 
 ### Fixed
@@ -1044,7 +1050,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.6...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.7...HEAD
+[0.32.7]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.6...v0.32.7
 [0.32.6]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.5...v0.32.6
 [0.32.5]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.4...v0.32.5
 [0.32.4]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.3...v0.32.4
