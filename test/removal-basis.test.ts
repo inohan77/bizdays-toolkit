@@ -15,6 +15,7 @@ import { diagnoseSchedule } from "../src/diagnose/index.ts";
 import { jp } from "../src/jp/index.ts";
 import { sg } from "../src/sg/index.ts";
 import { random } from "./support/catalog.ts";
+import { withoutStackTraces } from "./support/stack.ts";
 
 // 第 n 営業日の規則の基準のカレンダーの中（有効期間・個別の日付・周期・提供元の対応年。合成・スケジュールから作ったもの・
 // 入れ子・作成関数で作っていないもの）が走査の範囲の外で変わっても、診断が出した項目をまとめて取り除いて、元の設定で値を
@@ -52,16 +53,18 @@ const JAN_SEP: readonly string[] = (() => {
     }
   return out;
 })();
-/** 日の一覧の結果（例外は "E:" と code） */
+/** 日の一覧の結果（例外は "E:" と code）。1 日ずつ呼ぶ繰り返しの間だけ、スタックの記録を止める（code だけを見るため） */
 function valuesOn(o: Options, days: readonly string[]): Map<string, string> {
   const schedule = createSchedule(o as never);
   const out = new Map<string, string>();
-  for (const date of days)
-    try {
-      out.set(date, JSON.stringify(schedule.valueOn(date)));
-    } catch (e) {
-      out.set(date, `E:${isBizdaysError(e) ? e.code : String(e)}`);
-    }
+  withoutStackTraces(() => {
+    for (const date of days)
+      try {
+        out.set(date, JSON.stringify(schedule.valueOn(date)));
+      } catch (e) {
+        out.set(date, `E:${isBizdaysError(e) ? e.code : String(e)}`);
+      }
+  });
   return out;
 }
 

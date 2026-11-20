@@ -13,6 +13,7 @@ import { jp } from "../src/jp/index.ts";
 import { sg } from "../src/sg/index.ts";
 import { random } from "./support/catalog.ts";
 import { holidayRun, holidaysOn } from "./support/provider.ts";
+import { withoutStackTraces } from "./support/stack.ts";
 
 // 診断が「取り除いても結果が変わらない・使われない」と出した項目（redundant・shadowed・never-matches）をまとめて取り除いても、
 // 元の設定で判定できた日の結果が変わらないこと（decisions.md の 31 番）を、営業日カレンダーとスケジュールで確かめる。
@@ -76,17 +77,19 @@ function withoutReported(o: Options, list: readonly Reported[]): Options {
     out[key] = (o[key] as readonly unknown[]).filter((_, i) => !indexes.has(i));
   return out;
 }
-/** 期間の全日の結果（例外は "E:" と code） */
+/** 期間の全日の結果（例外は "E:" と code）。1 日ずつ呼ぶ繰り返しの間だけ、スタックの記録を止める（code だけを見るため） */
 function judgements(subject: Subject, o: Options, from: string, to: string): Map<string, string> {
   const judge = subject.judge(o);
   const out = new Map<string, string>();
-  for (let date = from; date <= to; date = addDays(date, 1)) {
-    try {
-      out.set(date, JSON.stringify(judge(date)));
-    } catch (e) {
-      out.set(date, `E:${isBizdaysError(e) ? e.code : String(e)}`);
+  withoutStackTraces(() => {
+    for (let date = from; date <= to; date = addDays(date, 1)) {
+      try {
+        out.set(date, JSON.stringify(judge(date)));
+      } catch (e) {
+        out.set(date, `E:${isBizdaysError(e) ? e.code : String(e)}`);
+      }
     }
-  }
+  });
   return out;
 }
 /** 取り除いた後に、元の設定で判定できた日の結果が変わった日（「日付: 前 → 後」）。元の設定で例外だった日は比べない */
@@ -178,6 +181,35 @@ function leftRemovable(
   }
   return { known, unknown };
 }
+
+test("取り除いて比べる: スタックの記録を止めるのは 1 日ずつ呼ぶ繰り返しの間だけで、抜けた後は（例外で抜けたときも）元に戻る", () => {
+  const limit = Error.stackTraceLimit;
+  const frames = (): number => (new Error("frames").stack ?? "").split("\n").length;
+  assert.ok(limit > 0 && frames() > 1);
+  assert.equal(
+    withoutStackTraces(() => Error.stackTraceLimit),
+    0,
+  );
+  assert.equal(Error.stackTraceLimit, limit);
+  assert.throws(
+    () =>
+      withoutStackTraces(() => {
+        throw new Error("thrown while stopped");
+      }),
+    /thrown while stopped/,
+  );
+  assert.equal(Error.stackTraceLimit, limit);
+  // 対応年の外の日で例外になる期間を判定しても、code は今までどおり受け、抜けた後の例外にはスタックが付く
+  const days = judgements(
+    CALENDAR,
+    { holidayProvider: holidaysOn([], { from: 2025, to: 2027 }) },
+    "2024-12-30",
+    "2025-01-02",
+  );
+  assert.deepEqual([...days.values()], ["E:out-of-range", "E:out-of-range", "true", "true"]);
+  assert.equal(Error.stackTraceLimit, limit);
+  assert.ok(frames() > 1);
+});
 
 test("取り除いて比べる（カレンダー）: 取り除くと明けた日の判定が例外になる項目を、redundant にしない（決まった設定）", () => {
   // 2026-07-01 から 40 日の祝日。7 月 1 日・5 日の規則は、明けた 8 月 10 日（月曜日）に届かない

@@ -1488,7 +1488,7 @@ test("基準のカレンダーの中: 作成関数の結果の公開の形（列
   };
   for (const [name, value] of Object.entries(made)) {
     assert.ok(Object.isFrozen(value), name);
-    // Symbol の項目は、中身の入れ物（PARTS）と、スケジュールの既存の内部の項目だけ。列挙と JSON には出ない
+    // Symbol の項目は、中身の入れ物（PARTS）と、スケジュールの既存の内部の項目だけ。Object.keys・for...in・JSON には出ない
     assert.deepEqual(
       Object.getOwnPropertySymbols(value).map(String),
       name === "createSchedule"
