@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         # npm の動作要件を満たすバージョン（RELEASING.md の「開発環境のバージョン」）
-        node: ["22.23.4", "24.22.2", "26.13.0"]
+        node: ["22.23.5", "24.22.3", "26.13.1"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,7 +51,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -72,7 +72,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       # ドライバーの場所は、ランナーのイメージが環境変数で示す
       - run: node scripts/test-browsers.ts chrome "${CHROMEWEBDRIVER}/chromedriver"
@@ -89,7 +89,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - run: sudo safaridriver --enable
       - run: node scripts/test-browsers.ts safari /usr/bin/safaridriver
@@ -105,7 +105,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - name: Install workerd
         env:
@@ -131,7 +131,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - name: Install Bun
         env:
@@ -156,7 +156,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - name: Install Deno
         env:
@@ -204,7 +204,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - name: Install TypeScript ${{ matrix.version }} into a temporary directory
         env:
@@ -256,7 +256,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - name: Fetch the published version for comparison
         run: |
@@ -288,7 +288,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - name: Fetch the published version for comparison
         run: |
@@ -325,7 +325,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm test:oracle
         env:
           ORACLE_FULL: "1"
@@ -347,8 +347,8 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
-      # pnpm test:tools は、check ジョブの pnpm check が同じバージョン（Node.js 26.13.0）で動かすので、ここでは動かさない
+          node-version: "26.13.1"
+      # pnpm test:tools は、check ジョブの pnpm check が同じバージョン（Node.js 26.13.1）で動かすので、ここでは動かさない
       - name: Check that the check scripts fail on injected errors
         run: |
           node scripts/tool-selftest.ts | tee -a "${GITHUB_STEP_SUMMARY}"
@@ -365,7 +365,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - name: Check that every catch clause in src/core is reached
         run: |
           node scripts/check-catch-coverage.ts | tee -a "${GITHUB_STEP_SUMMARY}"
@@ -386,7 +386,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: node --import ./scripts/strict-warnings.ts --test --test-name-pattern="診断と判定の一致" test/faulty-provider.test.ts
         env:
           CONSISTENCY_FULL: "1"
@@ -418,7 +418,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - name: Check the generators of the callers against the record
         run: |
           node scripts/record-generator-features.ts --worktree --check | tee -a "${GITHUB_STEP_SUMMARY}"
@@ -438,7 +438,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - name: Fetch the published versions for comparison
         run: |

@@ -45,7 +45,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-toolchain
         with:
-          node-version: "26.13.0"
+          node-version: "26.13.1"
       - run: pnpm build
       - name: Choose the seed and the scale
         env:
