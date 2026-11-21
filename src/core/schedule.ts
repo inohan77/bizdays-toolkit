@@ -2382,7 +2382,7 @@ export function createResolver<Value, Kind extends string>(
         while (ordered < count && dates[ordered]!.from > dates[ordered - 1]!.to) ordered++;
         if (ordered >= count) sorted = dates;
       } else if (lookups > 2 * Math.log2(count + 1)) {
-        // 並べるのは、順に調べた回数が「日付の数の 2 を底とする対数」の 2 倍を超えてから。並べる手間は、測ると順に調べるおよそ
+        // 並べるのは、順に調べた回数が「日付の数に 1 を足した数の 2 を底とする対数」の 2 倍を超えてから。並べる手間は、測ると順に調べるおよそ
         // その回数分なので、順に調べた手間が並べる手間に追いついたところで並べる（作って数回だけ判定する使い方では並べず、並べる
         // 手間が判定の数に対して大きくならない。日付の数による境目は置かない）
         // 始まりの日と添字を 1 つの数（(始まりの日 − 1000-01-01 の日数) × 日付の数 + 添字）にし、数の配列として並べる（比べる関数を

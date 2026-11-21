@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  addDays,
   combineCalendars,
   createCalendar,
   createCalendarFromSchedule,
@@ -1508,4 +1509,30 @@ test("基準のカレンダーの中: 作成関数の結果の公開の形（列
     assert.ok(Object.getOwnPropertySymbols(copy).includes(PARTS), name);
     assert.equal(partsOf(copy), undefined, name);
   }
+});
+
+test("周期の規則を含む設定の限界: 提供元のない設定で、2 月 29 日の規則は 2004-02-29 からの 1,461 日の周期の規則と同じ日に当たるとして redundant と出て、取り除いても 1901〜2099 年の結果は変わらないが、その外（2104-02-29 など）では変わる（決定 31 番の限界。今の挙動の見張りで、望ましい挙動としてではない）", () => {
+  const leapDay: RecurringRule = { dayOfMonth: 29, months: [2] };
+  const everyFourYears: RecurringRule = { cycle: 1461, anchor: "2004-02-29", positions: [1] };
+  const options: CalendarOptions = { closedRecurringRules: [leapDay, everyFourYears] };
+  assert.deepEqual(brief(diagnoseCalendar(options)), [
+    {
+      severity: "info",
+      code: "redundant",
+      path: "closedRecurringRules[0]",
+      relatedPath: "closedRecurringRules[1]",
+    },
+  ]);
+  const before = createCalendar(options);
+  const after = createCalendar({ closedRecurringRules: [everyFourYears] });
+  const changed: string[] = [];
+  for (let d = "1890-01-01"; d <= "2210-12-31"; d = addDays(d, 1)) {
+    if (before.isBusinessDay(d) !== after.isBusinessDay(d)) changed.push(d);
+  }
+  assert.deepEqual(
+    changed.filter((d) => d >= "1901-01-01" && d <= "2099-12-31"),
+    [],
+  );
+  assert.ok(changed.includes("2104-02-29"));
+  assert.ok(changed.includes("1896-02-29"));
 });

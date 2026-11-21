@@ -9,6 +9,7 @@
  * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。上限を変えたバージョンでは、CHANGELOG の測定値（測定 N）も
  * 1 つ以上照合できなければ失敗する（checkChangelogFigures。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。
  * 上げる値は数値の決まりで決める（残りが 1% 未満になったら、測定 × 1.02 を 100 バイト単位に切り上げた値。raisedLimitFor）。
+ * 上限を上げたバージョンでは、README（英日）のサイズの値の「測ったバージョン」が今のバージョンであることも求める（checkReadmeMeasured）。
  */
 
 import "./strict-warnings.ts";
@@ -77,6 +78,29 @@ const raisedLimitFor = (size: number): number => Math.ceil((size * RAISE) / 100)
 let baseLimitsForRule: Record<string, number> | undefined;
 
 /**
+ * 上限を上げたバージョンでは、README（英日）のサイズの値を測り直す（RELEASING.md の「README のサイズの値」）。
+ * 測ったかどうかは README に書いた「測ったバージョン」で見分け、今のバージョン（package.json の version）と同じであることを求める。
+ * 上限を上げた事実はタグと比べるこの検査だけが知っているので、ここで止める（check-package はマイナー系列だけを見る）
+ */
+function checkReadmeMeasured(base: string): boolean {
+  let ok = true;
+  for (const [file, pattern] of [
+    ["README.md", /measured for (\d+\.\d+\.\d+)/],
+    ["docs/README.ja.md", /(\d+\.\d+\.\d+) で測定/],
+  ] as const) {
+    const measured = pattern.exec(readFileSync(file, "utf8"))?.[1];
+    if (measured !== pkg.version) {
+      console.error(
+        `Size limits raised since ${base}, but ${file} states sizes measured for ${measured ?? "(not stated)"}, ` +
+          `not ${pkg.version}; re-measure with scripts/measure-bundle.ts (RELEASING.md "README のサイズの値")`,
+      );
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+/**
  * 前のバージョンのタグと比べて上限が上がっていれば、CHANGELOG に理由の記載があるかを確かめる。
  *
  * 比べるタグと、記載を探す節:
@@ -135,9 +159,11 @@ function checkLimitChanges(): { ok: boolean; changed: boolean } {
   const detail = raised
     .map(([entry, limit]) => `${entry} ${baseLimits[entry] ?? "(new)"} -> ${limit}`)
     .join(", ");
+  const readmeOk = checkReadmeMeasured(base);
   if (noted) {
-    console.log(`OK   limits raised since ${base} (${detail}); reason is in CHANGELOG`);
-    return { ok: true, changed: true };
+    if (readmeOk)
+      console.log(`OK   limits raised since ${base} (${detail}); reason is in CHANGELOG`);
+    return { ok: readmeOk, changed: true };
   }
   console.error(
     `Size limits raised since ${base} (${detail}), but CHANGELOG [${searched.join("] / [")}] ` +

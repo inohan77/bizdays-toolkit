@@ -267,6 +267,17 @@ const CASES: readonly Case[] = [
     expect: 'has no entry mentioning "サイズの上限"',
   },
   {
+    tool: "check-size",
+    name: "上限を上げたのに README のサイズの値を測り直していない",
+    args: TOOLS["check-size"]!,
+    // README の「測ったバージョン」を前のバージョンにする（0.31.5 と 0.32.5〜0.32.7 で、上限を上げて測り直さなかった形）
+    inject: () => {
+      edit("size-limits.json", replaceOnce(/(?<key>"\.\/uk"\s*:\s*)\d+/, "$<key>9999"));
+      edit("README.md", replaceOnce(/measured for \d+\.\d+\.\d+/, "measured for 0.1.0"));
+    },
+    expect: "README.md states sizes measured for 0.1.0",
+  },
+  {
     tool: "check-readme-examples",
     name: "例の結果の不一致",
     args: TOOLS["check-readme-examples"]!,
