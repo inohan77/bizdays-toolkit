@@ -93,11 +93,24 @@ const store = createCalendar({
 });
 
 // 個別の日付の規則が多い設定（臨時休業日 500 件）
-const manyDates = createCalendar({
+// 臨時休業日 500 件は、種を固定した乱数の順に並べ替えて渡す（始まりの順に書いた日付では、判定のための並べ替えの手間が
+// ほとんどかからず、その退行を拾えない。0.32.7）
+const closed500 = Array.from({ length: 500 }, (_, i) => addDaysSimple("2020-01-01", i * 7 + 3));
+for (let i = closed500.length - 1, seed = 7; i > 0; i--) {
+  seed = (seed * 1103515245 + 12345) % 2147483648;
+  const j = seed % (i + 1);
+  [closed500[i], closed500[j]] = [closed500[j]!, closed500[i]!];
+}
+const manyDatesOptions = {
   holidayProvider: jp,
-  closedWeekdays: [0, 6],
-  closedDates: Array.from({ length: 500 }, (_, i) => addDaysSimple("2020-01-01", i * 7 + 3)),
-});
+  closedWeekdays: [0, 6] as const,
+  closedDates: closed500,
+};
+const manyDates = createCalendar(manyDatesOptions);
+// 同じ 500 件を始まりの順に書いた設定と、判定する 20 日（2020〜2023 年に散らす）。始まりの順に書いた日付は、最初の判定でそれを
+// 確かめて並べずに引くので、その確かめが外れる退行を拾う（0.32.7）。20 回は、確かめを外した形との差がいちばん大きく出た回数
+const sortedDatesOptions = { ...manyDatesOptions, closedDates: [...closed500].sort() };
+const probe20 = Array.from({ length: 20 }, (_, i) => addDaysSimple("2020-01-02", i * 59));
 
 // 繰り返しの規則と振替を使う設定（博物館: 月曜休館・祝日の場合は次の祝日でない日、第 3 水曜休館、月末棚卸）
 const museum = createCalendar({
@@ -156,6 +169,23 @@ const cases: Case[] = [
   {
     name: "createCalendar（店舗の設定）",
     run: () => createCalendar({ holidayProvider: jp, closedWeekdays: [0] }),
+  },
+  {
+    // 個別の日付を始まりの順に並べるのは、順に調べた回数が日付の数の対数の 2 倍を超えてから（0.32.7）。作って 1 回だけ判定する
+    // 使い方で、並べる手間がかかる退行を拾う
+    name: "createCalendar と 1 回の判定（臨時休業日 500 件）",
+    run: () => createCalendar(manyDatesOptions).isBusinessDay("2026-11-24"),
+  },
+  {
+    // 始まりの順に書いた個別の日付を、最初の判定で確かめて並べずに引く経路（0.32.7）。CI の bench-compare が失敗にするのは 2 倍
+    // からで、この確かめが外れたときの遅れ（1 割ほど）は Job Summary の表で見る
+    name: "createCalendar と 20 回の判定（臨時休業日 500 件・始まりの順）",
+    run: () => {
+      const calendar = createCalendar(sortedDatesOptions);
+      let open = 0;
+      for (const date of probe20) if (calendar.isBusinessDay(date)) open++;
+      return open;
+    },
   },
   {
     // 診断の走査（1 日ごとの日付の変換）と、規則どうしの比較（代表の 28 年間の当てはまり）の退行を拾う。提供元のない設定で、

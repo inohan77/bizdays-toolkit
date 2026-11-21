@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, createSchedule, toDateTimeParts } from "../src/index.ts";
 import { jp, toJapanDateTime } from "../src/jp/index.ts";
+import { random } from "./support/catalog.ts";
 
 type Hours = { open: string; close: string } | null;
 const weekday: Hours = { open: "10:00", close: "21:00" };
@@ -83,6 +84,123 @@ test("期間の指定と、先に書いた規則の優先", () => {
   assert.equal(s.valueOn("2027-01-02"), 1, "配列で先に書いた期間が優先");
   assert.equal(s.dayInfoOn("2027-01-03").name, "年末年始");
   assert.equal(s.valueOn("2027-01-04"), 0);
+});
+
+test("重なる個別の日付は、始まりの早い日付ではなく、配列で先に書いた日付が決める", () => {
+  // 始まりの順に並べると書いた順と逆になる組を 2 つ入れる。重なる日付があるので、判定は書いた順に調べる
+  // （重ならないときだけ始まりの順に並べて二分探索で引く。0.32.7。decisions.md の 16 番）
+  const s = createSchedule<number>({
+    weekdayValues: [0, 0, 0, 0, 0, 0, 0],
+    dates: [
+      { from: "2026-03-10", to: "2026-03-20", value: 1, name: "A" },
+      { from: "2026-03-01", to: "2026-03-31", value: 2, name: "B" },
+      { from: "2026-05-01", to: "2026-05-31", value: 3, name: "C" },
+      { date: "2026-05-15", value: 4, name: "D" },
+    ],
+  });
+  const at = (date: string) => {
+    const day = s.dayInfoOn(date);
+    return [day.value, day.name, day.rulePath];
+  };
+  assert.deepEqual(at("2026-03-05"), [2, "B", "dates[1]"]);
+  assert.deepEqual(at("2026-03-15"), [1, "A", "dates[0]"]);
+  assert.deepEqual(
+    at("2026-03-25"),
+    [2, "B", "dates[1]"],
+    "後から始まる A が終わった後も、B が決める",
+  );
+  assert.deepEqual(
+    at("2026-05-15"),
+    [3, "C", "dates[2]"],
+    "C の中の D より、先に書いた C が決める",
+  );
+  assert.deepEqual(at("2026-05-16"), [3, "C", "dates[2]"]);
+  assert.deepEqual(at("2026-04-15"), [0, undefined, undefined]);
+});
+
+test("接する期間（重ならない）と、1 日だけ重なる期間", () => {
+  const weekdayValues = [0, 0, 0, 0, 0, 0, 0] as const;
+  // 接する: 重ならないので、始まりの順に並べて引く（書いた順と逆）
+  const touch = createSchedule<number>({
+    weekdayValues,
+    dates: [
+      { from: "2026-06-11", to: "2026-06-20", value: 2, name: "後" },
+      { from: "2026-06-01", to: "2026-06-10", value: 1, name: "前" },
+    ],
+  });
+  // 1 日だけ重なる: 書いた順に調べ、重なる 6/10 は先に書いた「前」が決める（重ならないと誤って見なして始まりの順で引くと、
+  // 6/10 に始まる「後」になる）
+  const overlap = createSchedule<number>({
+    weekdayValues,
+    dates: [
+      { from: "2026-06-01", to: "2026-06-10", value: 1, name: "前" },
+      { from: "2026-06-10", to: "2026-06-20", value: 2, name: "後" },
+    ],
+  });
+  const at = (s: typeof touch, date: string) => [s.valueOn(date), s.dayInfoOn(date).rulePath];
+  assert.deepEqual(at(touch, "2026-05-31"), [0, undefined]);
+  assert.deepEqual(at(touch, "2026-06-01"), [1, "dates[1]"]);
+  assert.deepEqual(at(touch, "2026-06-10"), [1, "dates[1]"]);
+  assert.deepEqual(at(touch, "2026-06-11"), [2, "dates[0]"]);
+  assert.deepEqual(at(touch, "2026-06-20"), [2, "dates[0]"]);
+  assert.deepEqual(at(touch, "2026-06-21"), [0, undefined]);
+  assert.deepEqual(at(overlap, "2026-06-09"), [1, "dates[0]"]);
+  assert.deepEqual(at(overlap, "2026-06-10"), [1, "dates[0]"]);
+  assert.deepEqual(at(overlap, "2026-06-11"), [2, "dates[1]"]);
+  assert.deepEqual(at(overlap, "2026-06-20"), [2, "dates[1]"]);
+  assert.deepEqual(at(overlap, "2026-06-21"), [0, undefined]);
+});
+
+test("乱数の個別の日付（重なる・接する・離れる）でも、日を決めるのは配列で先に書いた日付（種を固定）", () => {
+  // ガイドの約束（同じ種類の規則が重なるときは、配列で先に書いたものが優先）を、重なる並びと重ならない並びの両方で確かめる。
+  // 狭い窓に日付を詰め、暦日の範囲の端の窓も混ぜる。始まりの日が同じ日付の組もできる
+  const rand = random(32_707);
+  const DAY = 86_400_000;
+  const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
+  // 1970-01-01（日数が 0）をまたぐ窓を含める
+  const windows = [
+    Date.UTC(2026, 0, 1),
+    Date.UTC(9999, 10, 20),
+    Date.UTC(1000, 0, 1),
+    Date.UTC(1969, 11, 10),
+  ];
+  let overlapping = 0;
+  let sameStart = 0;
+  for (let k = 0; k < 300; k++) {
+    const start = windows[k % windows.length]!;
+    const span = 40;
+    const entries = Array.from({ length: 1 + Math.floor(rand() * 20) }, (_, i) => {
+      const from = start + Math.floor(rand() * span) * DAY;
+      const to = Math.min(
+        from + Math.floor(rand() * (rand() < 0.6 ? 2 : 8)) * DAY,
+        Date.UTC(9999, 11, 31),
+      );
+      return { from, to, value: i + 1 };
+    });
+    const sorted = [...entries].sort((a, b) => a.from - b.from);
+    if (sorted.some((e, i) => i > 0 && e.from <= sorted[i - 1]!.to)) overlapping++;
+    if (sorted.some((e, i) => i > 0 && e.from === sorted[i - 1]!.from)) sameStart++;
+    const s = createSchedule<number>({
+      weekdayValues: [0, 0, 0, 0, 0, 0, 0],
+      dates: entries.map((e) =>
+        e.from === e.to
+          ? { date: iso(e.from), value: e.value }
+          : { from: iso(e.from), to: iso(e.to), value: e.value },
+      ),
+    });
+    for (let t = start; t < start + (span + 9) * DAY && t <= Date.UTC(9999, 11, 31); t += DAY) {
+      const i = entries.findIndex((e) => e.from <= t && t <= e.to);
+      const day = s.dayInfoOn(iso(t));
+      assert.deepEqual(
+        [day.value, day.rulePath],
+        i < 0 ? [0, undefined] : [entries[i]!.value, `dates[${i}]`],
+        `設定 ${k} の ${iso(t)}`,
+      );
+    }
+  }
+  // 重なる並びと、重ならない並びの両方を通り、始まりの日が同じ日付の組も含んだこと
+  assert.ok(overlapping > 50 && overlapping < 250, `重なる並び ${overlapping}`);
+  assert.ok(sameStart > 100, `始まりの日が同じ組を含む並び ${sameStart}`);
 });
 
 test("瞬間は祝日の提供元のタイムゾーンで暦日にする", () => {

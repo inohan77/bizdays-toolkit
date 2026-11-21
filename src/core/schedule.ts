@@ -2367,6 +2367,54 @@ export function createResolver<Value, Kind extends string>(
 ): (date: DateString, withHoliday?: boolean) => Resolution<Value, Kind> {
   const { weekly, holiday: holidayRule, annual, dates, recurring } = compiled;
   const hasShift = recurring.some((r) => r.holidayOverlapPolicy === "after-holiday");
+  // 個別の日付のどの 2 つも重ならないときは、始まりの順に並べ、二分探索で引く（毎日すべての日付を順に調べない。重ならなければ、
+  // ある日を含む日付は 1 つだけなので、書いた順の優先は結果に関わらない。重なるときは書いた順に調べる。decisions.md の 16 番。
+  // 0.32.7）
+  let sorted: readonly DateRule<Value>[] | null | undefined;
+  let lookups = 0;
+  const dateRuleOf = (n: number): DateRule<Value> | undefined => {
+    if (sorted === undefined) {
+      const count = dates.length;
+      if (lookups++ === 0) {
+        // 最初の判定で、始まりの順に書いてあり、どの 2 つも重ならないかを確かめ、そうならそのまま二分探索で引く（写さず、並べない。
+        // 確かめる手間は、順に 1 回調べるのと同じ程度）
+        let ordered = 1;
+        while (ordered < count && dates[ordered]!.from > dates[ordered - 1]!.to) ordered++;
+        if (ordered >= count) sorted = dates;
+      } else if (lookups > 2 * Math.log2(count + 1)) {
+        // 並べるのは、順に調べた回数が「日付の数の 2 を底とする対数」の 2 倍を超えてから。並べる手間は、測ると順に調べるおよそ
+        // その回数分なので、順に調べた手間が並べる手間に追いついたところで並べる（作って数回だけ判定する使い方では並べず、並べる
+        // 手間が判定の数に対して大きくならない。日付の数による境目は置かない）
+        // 始まりの日と添字を 1 つの数（(始まりの日 − 1000-01-01 の日数) × 日付の数 + 添字）にし、数の配列として並べる（比べる関数を
+        // 渡して並べると、書いた順がばらばらなときに手間が大きい）。始まりの日は 1000-01-01 以降なので数は 0 以上の整数で、日付が
+        // 27 億個までなら 2 の 53 乗より小さく、剰余で添字を正しく取り出せる。始まりの日が同じ日付は添字の順に並ぶ（重なるので、
+        // 並べた結果は使わない）。取り出した日付が前の日付の終わりより後に始まることを 1 つずつ確かめ、通らなければ書いた順に調べる。
+        // 確かめを通った並びは、同じ日付を 2 度含まない（始まりが前の日付より必ず後）ので、すべての日付を重ならない順に並べたもので、
+        // 並べ方を誤っても（数が丸められても）結果は変わらない（遅くなるだけ）
+        const keys = new Float64Array(count);
+        for (let i = 0; i < count; i++) keys[i] = (dates[i]!.from - MIN_DAY_NUMBER) * count + i;
+        keys.sort();
+        const s: DateRule<Value>[] = [];
+        for (let i = 0; i < count; i++) {
+          const r = dates[keys[i]! % count]!;
+          if (i > 0 && r.from <= s[i - 1]!.to) break;
+          s.push(r);
+        }
+        sorted = s.length === count ? s : null;
+      }
+    }
+    if (!sorted) return dates.find((r) => n >= r.from && n <= r.to);
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid]!.from <= n) lo = mid + 1;
+      else hi = mid;
+    }
+    // 範囲の外の添字（-1）は読まない（配列の外を読むと、V8 が遅い経路に切り替わる）
+    const r = lo > 0 ? sorted[lo - 1]! : undefined;
+    return r !== undefined && n <= r.to ? r : undefined;
+  };
   /**
    * 結果が祝日に依存しない設定なら、値だけを求める判定（営業日か・第 n 営業日の数え方・探索）は、未確定の祝日でも
    * unconfirmedHolidayPolicy: "throw" で投げない（祝日の日と祝日でない日の判定が同じなので、結果に影響しない。
@@ -2448,7 +2496,7 @@ export function createResolver<Value, Kind extends string>(
     };
 
     // 1. 個別の日付  2. 毎年の月日
-    const byDate = dates.find((r) => dayNumber >= r.from && dayNumber <= r.to);
+    const byDate = dateRuleOf(dayNumber);
     if (byDate) return make(byDate.value, "date", byDate, byDate.name);
     const byAnnual = annual.find((r) => matchAnnual(r, date));
     if (byAnnual) return make(byAnnual.value, "annual", byAnnual, byAnnual.name);
