@@ -598,20 +598,25 @@ test("オラクル: no-business-day は営業日が本当にない設定だけ�
       );
     // 数え方の限界: 第 n 営業日の規則と、毎週の曜日（第 n 曜日・隔週・月の絞り込みのない曜日の規則）を閉じる・開く
     // 繰り返しの規則があり、その 2 つの有効期間が重なる（数える基準は繰り返しの規則を除くので、その曜日は数え方に入らない。
-    // 16 番）。前提を満たす組（第 n 営業日の規則ごとに、重なる曜日の規則の数を足したもの）だけ counting-basis が出る。
+    // 16 番）。ただし、数える基準は定休日（closedWeekdays）を含むので、曜日の規則がその曜日の定休日の扱いを変えるとき
+    // だけ（閉じる規則はその曜日が定休日でないとき、開く規則はその曜日が定休日のとき）数え方が変わる。前提を満たす組
+    // （第 n 営業日の規則ごとに、重なる曜日の規則の数を足したもの）だけ counting-basis が出る。
     // オラクルは outOfRangePolicy: "ignore" なので、対応年の外で使われない曜日の規則はない
-    const rules = list.filter(([k]) => k.endsWith("RecurringRules")).map(([, v]) => v as Obj);
+    const rules = list
+      .filter(([k]) => k.endsWith("RecurringRules"))
+      .map(([k, v]) => ({ open: k === "openRecurringRules", v: v as Obj }));
     const from = (v: Obj): string => (v["effectiveFrom"] as string | undefined) ?? "0000-01-01";
     const to = (v: Obj): string => (v["effectiveTo"] as string | undefined) ?? "9999-12-31";
     const pairs = rules
-      .filter((v) => "businessDayOfMonth" in v || "businessDayOfWeek" in v)
-      .flatMap((n) =>
+      .filter(({ v }) => "businessDayOfMonth" in v || "businessDayOfWeek" in v)
+      .flatMap(({ v: n }) =>
         rules.filter(
-          (v) =>
+          ({ open, v }) =>
             "weekday" in v &&
             !("nth" in v) &&
             !("interval" in v) &&
             !("months" in v) &&
+            weekdays.includes(v["weekday"] as number) === open &&
             from(n) <= to(v) &&
             from(v) <= to(n),
         ),

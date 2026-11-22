@@ -63,6 +63,38 @@
       "introducedIn": "0.31.0",
       "source": "CHANGELOG.md",
       "summary": "redundant を逐次除去で判定する（出た項目をまとめて取り除ける）。同じ規則を 2 つ書いたときの前の規則の redundant など、まとめて取り除くと結果が変わる redundant を出さなくし、代わりに決める規則を relatedPath に付ける"
+    },
+    {
+      "trait": "counting-rules-with-dates",
+      "targets": ["diagnose"],
+      "removedCodes": ["no-business-day"],
+      "introducedIn": "0.32.8",
+      "source": "CHANGELOG.md",
+      "summary": "自分の設定を基準に数える第 n 営業日の規則と個別の日付のある設定で、臨時休業日が数え方を変えて営業日が残るのに出していた誤った no-business-day を出さなくする（個別の日付の両端の月・週を、日付を残して調べる）"
+    },
+    {
+      "trait": "counting-rules-with-long-or-outside-dates",
+      "targets": ["diagnose"],
+      "removedCodes": ["never-matches", "redundant"],
+      "introducedIn": "0.32.8",
+      "source": "CHANGELOG.md",
+      "summary": "自分の設定を基準に数える第 n 営業日の規則と、走査の範囲の外にかかる・範囲を覆う個別の日付のある設定で、取り除くと結果が変わる規則に出していた誤った never-matches・redundant を出さなくする（走査の範囲を個別の日付を除いて調べ、個別の日付の両端の月・週を範囲の外でも調べる。長い日付が覆う日だけで使われる規則も使われないと出さなくなる）"
+    },
+    {
+      "trait": "unconfirmed-holidays-throw",
+      "targets": ["diagnose"],
+      "removedCodes": ["redundant"],
+      "introducedIn": "0.32.8",
+      "source": "CHANGELOG.md",
+      "summary": "unconfirmedHolidayPolicy: \"throw\" の設定で、取り除くと未確定の祝日で例外（unconfirmed-holiday）になる日ができる規則に出していた誤った redundant を出さなくする"
+    },
+    {
+      "trait": "counting-rule-with-weekly-rule-as-closed-weekdays",
+      "targets": ["diagnose"],
+      "removedCodes": ["counting-basis"],
+      "introducedIn": "0.32.8",
+      "source": "CHANGELOG.md",
+      "summary": "その曜日の定休日の扱いを変えない毎週の曜日の規則（定休日の曜日を閉じる規則、定休日でない曜日を開く規則）を理由に出していた、事実と違う counting-basis を出さなくする"
     }
   ]
 }

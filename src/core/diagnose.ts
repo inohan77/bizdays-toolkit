@@ -890,6 +890,49 @@ export function unsureOf<Value, Kind extends string>(
 }
 
 /**
+ * 個別の日付の両端の月・週（自分の設定を基準に数える第 n 営業日の規則と、個別の日付の両方があるときだけ。ほかは空）。
+ * 個別の日付の始まりと終わりを含む月と、その前後 6 日（月をまたぐ端の週）を返す。個別の日付は数え方を変えるので、この範囲では、
+ * 規則が当てはまる日・決める日が、日付のない月・週と違いうる。日付の期間の内側の日は、その日付が決めるので、規則を取り除いても
+ * 変わらない。数え方が変わって規則の当たる日・決める日が動くのは、期間と期間の外の日が同じ月・週にある両端だけなので、足すのは
+ * 両端の月だけでよく、9999 年まで続く日付でも、日付 1 つにつき 86 日を超えない。走査の範囲（window）の外でも返す。
+ * outOfRangePolicy: "throw" で提供元があるときは、走査の範囲（対応年）の中だけを返す（外の日は判定が例外になる）。
+ * 走査の範囲がなければ（規則どうしの診断をしない設定）空（decisions.md の 31 番）
+ */
+function dateUnitsOf<Value, Kind extends string>(
+  window: Window | undefined,
+  compiled: CompiledSchedule<Value, Kind>,
+): Range[] {
+  const { dates, recurring, source } = compiled;
+  if (!window || dates.length === 0) return [];
+  if (!recurring.some((r) => r.businessDays !== null && r.calendar === null)) return [];
+  const throws = source.providers.length > 0 && source.outOfRangePolicy !== "ignore";
+  const lo = throws ? window.ranges[0]!.from : MIN_DAY;
+  const hi = throws ? window.ranges[window.ranges.length - 1]!.to : MAX_DAY;
+  const ranges: Range[] = [];
+  for (const d of dates) {
+    for (const edge of d.from === d.to ? [d.from] : [d.from, d.to]) {
+      const { year, month, day } = parseDate(dateOfDayNumber(edge));
+      const from = Math.max(edge - day + 1 - 6, lo);
+      const to = Math.min(edge - day + lengthOfMonth(year, month) + 6, hi);
+      if (from <= to) ranges.push({ from, to });
+    }
+  }
+  return mergeRanges(ranges);
+}
+
+/** 範囲を始まりの順に並べ、重なる・隣り合うものをまとめる */
+function mergeRanges(ranges: readonly Range[]): Range[] {
+  const merged: Range[] = [];
+  for (const r of [...ranges].sort((x, y) => x.from - y.from)) {
+    const last = merged[merged.length - 1];
+    if (last && r.from <= last.to + 1)
+      merged[merged.length - 1] = { from: last.from, to: Math.max(last.to, r.to) };
+    else merged.push(r);
+  }
+  return merged;
+}
+
+/**
  * 届かない振替（"after-holiday" の規則の日が、長い祝日の連続が明けた日に振り替えられない）を、規則ごとに 1 件の warning で
  * 知らせる。判定はその日で holiday-run-too-long を投げる（設定は作成できる。out-of-range・no-business-day と同じ形）。
  * 規則どうしの走査は、その日を調べるとは限らず、届かない振替を投げずに評価するので、ここで確かめる。
@@ -994,18 +1037,48 @@ function analyzeRules<Value, Kind extends string>(
   if (!checkProviderData(c, source as HolidaySource<string>)) return;
   // 祝日の引き方は、未確定の祝日を常に受け入れる（判定が同じ設定は診断も同じ）。対応年の外の扱いは、利用者の設定のままにする
   // （outOfRangePolicy: "throw" なら、対応年の外の隣の日・振替元を見た判定は、利用者の判定と同じに out-of-range になり、
-  // その日は判定できない日になる。走査の範囲は対応年なので、範囲の中の日の祝日は引ける。decisions.md の 17 番）
+  // その日は判定できない日になる。走査の範囲は対応年なので、範囲の中の日の祝日は引ける。decisions.md の 17 番）。
+  // 例外は redundant の判定の strictLookup（下）だけ
   const lookup = createHolidayLookup({
     ...source,
     unconfirmedHolidayPolicy: "accept",
   });
   const basis = createBasis(compiled, lookup);
+  // unconfirmedHolidayPolicy: "throw" の設定では、redundant の判定で、取り除く前後の片方だけが未確定の祝日を引いて投げる日が
+  // あれば、取り除けるものとして出さない（利用者の判定では、値を返していた日が unconfirmed-holiday になるため）。値は
+  // "accept" の lookup で比べる（"throw" で比べると、未確定の祝日だけに効く規則が redundant になる。decisions.md の 17 番・31 番）
+  const strictLookup =
+    source.unconfirmedHolidayPolicy === "throw" ? createHolidayLookup({ ...source }) : null;
   const cycle = patternCycle(recurring);
-  const window = rulesScanWindow(compiled);
+  // 自分の設定を基準に数える規則と個別の日付がある設定は、2 つの範囲を調べる（decisions.md の 31 番）。
+  // (1) 走査の範囲（rulesWindow）は、個別の日付を除いて調べる（日付に左右されない月・週の代表。数える規則のない設定と同じ）。
+  // (2) 個別の日付の両端の月・週（dateUnits）は、走査の範囲の外でも、個別の日付を残して調べる（数え方が変わる月・週）。
+  // (1) を個別の日付を残して調べると、範囲の外にある日付の月・週を調べず、範囲を覆う長い日付があると、日付の外の年で決める
+  // 規則を「使われない」とする（0.32.7 まで）
+  const rulesWindow = rulesScanWindow(compiled);
+  const dateUnits = dateUnitsOf(rulesWindow, compiled);
+  const window =
+    rulesWindow && dateUnits.length > 0
+      ? { ...rulesWindow, ranges: mergeRanges([...rulesWindow.ranges, ...dateUnits]) }
+      : rulesWindow;
+  const inDateUnits = (n: number): boolean => dateUnits.some((r) => r.from <= n && n <= r.to);
+  /** 個別の日付の両端の月・週では base のまま、ほかの日では base から個別の日付を除いて判定する */
+  const resolverIn = (
+    base: CompiledSchedule<Value, Kind>,
+    using: typeof lookup = lookup,
+  ): ReturnType<typeof createResolver<Value, Kind>> => {
+    const withDates = createResolver(base, using, throwLostShift);
+    if (dateUnits.length === 0) return withDates;
+    const noDates = createResolver({ ...base, dates: [] }, using, throwLostShift);
+    return (date, withHoliday) =>
+      (inDateUnits(dayNumberOf(date)) ? withDates : noDates)(date, withHoliday);
+  };
+  const basisNoDates =
+    dateUnits.length > 0 ? createBasis({ ...compiled, dates: [] }, lookup) : basis;
   /** 使われないことが分かった規則（redundant を重ねて出さない） */
   const unused = new Set<DecidingRule<Value>>();
 
-  checkLostShifts(c, compiled, lookup, window);
+  checkLostShifts(c, compiled, lookup, rulesWindow);
 
   // --- 個別の日付: 対応年の外・覆われている ---
   dates.forEach((rule, j) => {
@@ -1117,7 +1190,15 @@ function analyzeRules<Value, Kind extends string>(
     eachDay(window, (n) => {
       if (!inPeriod(rule, n)) return false;
       try {
-        found = matchPattern(rule, dateOfDayNumber(n), holidayOfSafe, basis, lookup.fromJp);
+        // 個別の日付を残した基準で当てはまるか、個別の日付の両端の月・週の外では、個別の日付を除いた基準でも当てはまれば、
+        // 当てはまる日がある。両方を見るので、never-matches が出る設定は、(1) を日付を残して調べた形より増えない（長い個別の
+        // 日付の内側の月でだけ当てはまる規則は、当てはまる日があるので never-matches にせず、redundant で「使われない」と出す）
+        const date = dateOfDayNumber(n);
+        found =
+          matchPattern(rule, date, holidayOfSafe, basis, lookup.fromJp) ||
+          (basisNoDates !== basis &&
+            !inDateUnits(n) &&
+            matchPattern(rule, date, holidayOfSafe, basisNoDates, lookup.fromJp));
       } catch {
         found = false;
       }
@@ -1274,6 +1355,9 @@ function analyzeRules<Value, Kind extends string>(
         r.interval === null &&
         r.months === null &&
         !unused.has(r) &&
+        // その曜日の定休日の扱いを変えない規則（定休日と同じ曜日の休業の規則、定休日でない曜日の営業の規則）は、数える
+        // 基準（定休日を含む）と同じ扱いなので、数え方に関わらず、出さない（16 番）
+        !sameValue(compiled.weekly[r.weekday], r.value) &&
         periodsOverlap(rule, r),
     );
     for (const weekly of weeklies) {
@@ -1290,19 +1374,31 @@ function analyzeRules<Value, Kind extends string>(
   }
 
   // --- 営業日が 1 日もない（営業日カレンダー） ---
-  // 個別の日付は有限なので、臨時営業日（値が true）がなければ、個別の日付を除いて調べる
-  if (isCalendar && window && !dates.some((r) => r.value === true)) {
-    const resolve = createResolver(without(compiled, null, true), lookup, throwLostShift);
-    let found = false;
-    eachDay(window, (n) => {
+  // 個別の日付は有限なので、臨時営業日（値が true）がなければ、走査の範囲を、個別の日付を除いて調べる。自分の設定を基準に
+  // 数える規則があるときは、臨時休業日が数え方を変える（第 n 営業日が後ろにずれる）ので、加えて個別の日付の両端の月・週を、
+  // 日付を残して調べる。どちらかに営業日があれば出さない（走査の範囲の確かめはそのままなので、出る設定は増えない。
+  // decisions.md の 30 番）
+  if (isCalendar && window && rulesWindow && !dates.some((r) => r.value === true)) {
+    const noDates = createResolver(without(compiled, null, true), lookup, throwLostShift);
+    const withDates =
+      dateUnits.length > 0 ? createResolver(compiled, lookup, throwLostShift) : null;
+    const inRules = (n: number): boolean =>
+      rulesWindow.ranges.some((r) => r.from <= n && n <= r.to);
+    const open = (resolve: typeof noDates, n: number): boolean => {
       try {
-        found = resolve(dateOfDayNumber(n)).day.value === true;
+        return resolve(dateOfDayNumber(n)).day.value === true;
       } catch (error) {
         // 規則が見る日が暦日の範囲（1000〜9999 年）・対応年の外に出る端の日と、届かない振替の日（decisions.md の 17 番・24 番）は、
         // 判定も例外になるので営業日に数えない
         if (!atEdge(n, error, window) && !isLostShift(error)) throw error;
-        found = false;
+        return false;
       }
+    };
+    let found = false;
+    eachDay(window, (n) => {
+      found =
+        (inRules(n) && open(noDates, n)) ||
+        (withDates !== null && inDateUnits(n) && open(withDates, n));
       return found;
     });
     if (!found) {
@@ -1317,7 +1413,8 @@ function analyzeRules<Value, Kind extends string>(
 
   // --- 取り除いても結果が変わらない ---
   // 自分の設定を基準に第 n 営業日を数える規則（閉じる・開くの両方）があれば、個別の日付と毎年の月日は数え方を変える（16 番）。
-  // それらを取り除くと、決めていた日のほかに、同じ月・週の別の日も変わりうるので、その月・週の日をすべて調べる（31 番）
+  // それらを取り除くと、決めていた日のほかに、同じ月・週の別の日も変わりうるので、その月・週の日をすべて調べる（31 番）。
+  // 毎年の月日・繰り返しの規則は、走査の範囲を個別の日付を除いて、個別の日付の両端の月・週を日付を残して調べる（resolverIn）
   const counting = recurring.filter((r) => r.businessDays !== null && r.calendar === null);
   const countsMonth = counting.some((r) => r.weekStart === null);
   const weekStarts = [
@@ -1358,15 +1455,33 @@ function analyzeRules<Value, Kind extends string>(
   };
   /**
    * 規則を取り除いた設定で、days の結果が元の設定と同じか。片方だけが判定できない日は変わったとみなし（取り除ける側に
-   * 倒さない）、両方とも判定できない日は同じとみなす
+   * 倒さない）、両方とも判定できない日は同じとみなす。unconfirmedHolidayPolicy: "throw" の設定では、片方だけが
+   * unconfirmed-holiday を投げる日も変わったとみなす（strictLookup）
    */
   const redundant = (
     rule: DecidingRule<Value>,
     base: CompiledSchedule<Value, Kind>,
     days: Iterable<number>,
     original: (n: number) => unknown,
+    /** 毎年の月日・繰り返しの規則の判定では、個別の日付の両端の月・週の外を、個別の日付を除いて調べる（resolverIn） */
+    split = false,
   ): boolean => {
-    const resolve = createResolver(without(base, rule, false), lookup, throwLostShift);
+    const make = (b: CompiledSchedule<Value, Kind>, using: typeof lookup) =>
+      split ? resolverIn(b, using) : createResolver(b, using, throwLostShift);
+    const resolve = make(without(base, rule, false), lookup);
+    const strictAfter = strictLookup ? make(without(base, rule, false), strictLookup) : null;
+    const strictBefore = strictLookup ? make(base, strictLookup) : null;
+    const throwsUnconfirmed = (
+      r: ReturnType<typeof createResolver<Value, Kind>>,
+      n: number,
+    ): boolean => {
+      try {
+        r(dateOfDayNumber(n));
+        return false;
+      } catch (error) {
+        return (error as { code?: unknown }).code === "unconfirmed-holiday";
+      }
+    };
     for (const n of days) {
       let value: unknown;
       try {
@@ -1378,6 +1493,12 @@ function analyzeRules<Value, Kind extends string>(
       if (value === FAILED || before === FAILED) {
         if (value !== before) return false;
       } else if (!sameValue(before, value)) return false;
+      if (
+        strictAfter &&
+        strictBefore &&
+        throwsUnconfirmed(strictBefore, n) !== throwsUnconfirmed(strictAfter, n)
+      )
+        return false;
     }
     return true;
   };
@@ -1439,8 +1560,8 @@ function analyzeRules<Value, Kind extends string>(
     return true;
   };
 
-  // 毎年の月日・繰り返しの規則は、調べる期間の全日を調べる。個別の日付は有限なので除いて調べる
-  // （第 n 営業日を数える規則があれば、個別の日付が数え方を変えるので残す）
+  // 毎年の月日・繰り返しの規則は、調べる期間の全日を調べる。個別の日付は有限なので除いて調べる（第 n 営業日を数える
+  // 規則があれば、個別の日付が数え方を変えるので、個別の日付の両端の月・週では残す。resolverIn）
   const candidates = window
     ? [...annual, ...recurring].filter((r) => !unused.has(r) && !unsure("redundant", r.path))
     : [];
@@ -1453,7 +1574,7 @@ function analyzeRules<Value, Kind extends string>(
   const decidedIn = (rule: DecidingRule<Value>): Set<number> => {
     if (!decided && window) {
       const map = new Map<DecidingRule<Value>, Set<number>>(candidates.map((r) => [r, new Set()]));
-      const resolveNow = createResolver(current(counting.length > 0), lookup, throwLostShift);
+      const resolveNow = resolverIn(current(counting.length > 0));
       eachDay(window, (n) => {
         let by: DecidingRule<Value> | null;
         try {
@@ -1477,7 +1598,7 @@ function analyzeRules<Value, Kind extends string>(
    */
   const refresh = (affected: Iterable<number>): void => {
     if (!decided) return;
-    const resolveNow = createResolver(current(counting.length > 0), lookup, throwLostShift);
+    const resolveNow = resolverIn(current(counting.length > 0));
     for (const n of affected) {
       if (!inWindow(n) || unjudged.has(n)) continue;
       for (const days of decided.values()) days.delete(n);
@@ -1489,9 +1610,7 @@ function analyzeRules<Value, Kind extends string>(
    * 元の設定の結果（日ごとに 1 回だけ判定する）。出た規則を取り除いても、調べた日の結果は変わらず、ほかの日は取り除いた規則に
    * 左右されないので、取り除いた後も同じものを使う
    */
-  const originalNow = originalOf(
-    createResolver(current(counting.length > 0), lookup, throwLostShift),
-  );
+  const originalNow = originalOf(resolverIn(current(counting.length > 0)));
   /** 毎年の月日が当てはまる日を含む月・週（第 n 営業日を数える規則があるとき、取り除くと変わりうる日） */
   const unitsOf = new Map<AnnualRule<Value>, Set<number>>();
   const annualUnits = (rule: AnnualRule<Value>): Set<number> => {
@@ -1517,8 +1636,8 @@ function analyzeRules<Value, Kind extends string>(
         : days;
     const ok =
       checkedDays === days
-        ? redundant(rule, base, days, () => rule.value)
-        : redundant(rule, base, checkedDays, originalNow);
+        ? redundant(rule, base, days, () => rule.value, true)
+        : redundant(rule, base, checkedDays, originalNow, true);
     if (!ok) return false;
     affected = [...days, ...checkedDays];
     reported.set(rule, {
@@ -1532,7 +1651,8 @@ function analyzeRules<Value, Kind extends string>(
   };
 
   // 毎年の月日・繰り返しの規則を先に判定する。第 n 営業日を数える規則がないときは個別の日付を除いて判定するので、個別の
-  // 日付の判定に依存しない。あるときは日付を残して判定し、日付を取り除いた後は、調べた月・週の日を判定し直す（refresh）
+  // 日付の判定に依存しない。あるときは個別の日付の両端の月・週で日付を残して判定し、日付を取り除いた後は、調べた月・週の日を
+  // 判定し直す（refresh）
   // 1 回の走査で 1 件以上取り除かなければ終わるので、走査の回数は候補の数 + 1 を超えない（超えたら作りの誤り）。
   // 最後に取り除いた後に判定した規則は、同じ設定で判定し直しても同じなので、次の走査では飛ばす（version で数える）
   const maxPasses = candidates.length + dates.length + 1;
@@ -1557,8 +1677,9 @@ function analyzeRules<Value, Kind extends string>(
   }
   if (reported.size === 0) return;
   // relatedPath は、出た規則をすべて取り除いた設定で、その規則が決めていた日を決める規則（1 つに定まるときだけ。
-  // 曜日・祝日の扱いが決める日や、判定できない日があれば付けない）
-  const resolveFinal = createResolver(current(true), lookup, throwLostShift);
+  // 曜日・祝日の扱いが決める日や、判定できない日があれば付けない）。決めていた日は、毎年の月日・繰り返しの規則では調べた範囲
+  // （走査の範囲と、個別の日付の両端の月・週）の日。数える規則と個別の日付のある設定では、走査の範囲を個別の日付を除いて求める（31 番）
+  const resolveFinal = resolverIn(current(true));
   const relatedOf = (days: readonly number[]): string | undefined => {
     const paths = new Set<string | null>();
     for (const n of days) {

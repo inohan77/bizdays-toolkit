@@ -6,6 +6,17 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.8] - 2026-11-23
+
+### Fixed
+
+- The option diagnostics of a calendar could report a rule as `never-matches` or `redundant` although removing it changed the results, breaking the promise that the reported rules can be removed all together (design decisions 31). This happened in calendar options with an nth-business-day rule that counts the calendar's own business days (`businessDayOfMonth` or `businessDayOfWeek` in `closedRecurringRules` or `openRecurringRules`) and specific dates (`closedDates`, `openDates`), because a specific date changes the count in its month and week: when a date lies outside the years the diagnostics scan (2001–2028 without a holiday provider, so any date from 2029 on or before 2001), or when a long date range covers those years (for example `{ from: "1000-01-01", to: "2029-03-31" }` before opening). The diagnostics now check the scanned years without the specific dates and, in addition, the month and the six days around it at both ends of every specific date, also outside the scanned years. Most such options get fewer items; in some, the incorrect item is replaced by a correct one (a rule that matches only days decided by a specific date is reported as `redundant` instead of `never-matches`, a duplicate rule as `shadowed` instead of `never-matches`, or another rule as `redundant`). In such options, a rule that is used only on days inside a long specific date range is no longer reported as unused, as in options without such an nth-business-day rule. Options with many specific dates outside the scanned years take longer to diagnose (on the maintainer's machine, about two to four times as long as 0.32.7 with 1,000 such dates)
+- For the same reason, `no-business-day` could be reported for such options although they have business days (a closed date moves the nth business day of its month to a day that the rules alone close)
+- With `unconfirmedHolidayPolicy: "throw"`, the diagnostics of calendars and schedules could report a rule as `redundant` although removing it made a day throw `unconfirmed-holiday` (the remaining rules, such as the origin of an `"after-holiday"` rule, then look up an unconfirmed holiday on that day). Such a rule is no longer reported
+- `counting-basis` was reported for a weekly weekday rule that does not change how its weekday is counted: a closed rule on a weekday in `closedWeekdays`, or an open rule on a weekday not in it. The count already treats that weekday the same way
+- Documentation: the guide and the design decisions (31) now say that `relatedPath` of `redundant` is found with all reported rules removed, that with `outOfRangePolicy: "throw"` the rules reported as `out-of-range` with "so this rule is never used" are removed together with the others, and that the promise covers the days that can be judged before the removal (a day that already throws can be judged after it). The design decisions (30) now describe the range checked for `no-business-day`. Results are unchanged
+- None of these fixes changes the results of calendars and schedules. If you removed rules because an earlier version reported them as `redundant` or `never-matches`, check that the results you rely on have not changed. A test that compares the whole diagnostics of the options above (such as `assert.deepEqual`) needs the new items
+
 ## [0.32.7] - 2026-11-21
 
 ### Changed
@@ -1053,7 +1064,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.7...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.8...HEAD
+[0.32.8]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.7...v0.32.8
 [0.32.7]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.6...v0.32.7
 [0.32.6]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.5...v0.32.6
 [0.32.5]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.4...v0.32.5

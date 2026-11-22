@@ -11,6 +11,7 @@ import {
   random,
   randomCalendarOptions,
   randomRules,
+  randomScheduleOptions,
   type Context,
   type Obj,
 } from "./catalog.ts";
@@ -267,6 +268,120 @@ export function withCountingRule(rand: () => number, options: Obj): Obj {
   };
 }
 
+/**
+ * 0.32.8 の診断の性質のテストの種と試行の数。全日（1901〜2099 年、"throw" では日本の提供元の対応年）を比べるので 1 件が重い
+ * （0.2〜1 秒）。pnpm check は sampleEvery 件に 1 件の抜き出しで、全件は DIAGNOSE_PROPERTY_FULL=1（CI の diagnose-consistency）。
+ * 数は、0.32.7 の src/core/diagnose.ts のまま全件を動かすと、範囲の外と長い日付の性質が失敗する数にした（開発の記録の 0.32.8）
+ */
+export const DIAGNOSE_WIDE = {
+  seed: 20261122,
+  /** 範囲の外と長い日付（自作の短い提供元・提供元なし） */
+  runs: 240,
+  /** 日本の提供元で outOfRangePolicy: "throw" と unconfirmedHolidayPolicy: "throw"（カレンダー・スケジュール） */
+  throwRuns: 120,
+  /** 240 と 120 のどちらでも、抜き出しが 0 件にならない */
+  sampleEvery: 20,
+} as const;
+/** 範囲の外と長い日付の性質で比べる期間（周期の規則も含めて約束が成り立つ範囲。decisions.md の 31 番の「限界」） */
+export const WIDE_RANGE = { from: "1901-01-01", to: "2099-12-31" } as const;
+
+const WIDE_CONTEXT: Record<"short" | "none", Context> = {
+  short: CONTEXTS["diagnose-properties（範囲の外と長い日付）"],
+  none: { ...CONTEXTS["diagnose-properties（範囲の外と長い日付）"], holidays: false },
+};
+
+/**
+ * 自分の設定を基準に数える第 n 営業日の規則（月・週。数え方の端に当たりやすい位置も）を 1 つ足し、半分の設定では、
+ * 数える規則と同じ日を決めうる日・曜日の規則も前に足す（取り除いて比べる組を作るため）
+ */
+export function withOwnCountingRule(rand: () => number, options: Obj): Obj {
+  const p = picker(rand);
+  const counting = p.pick<Obj>([
+    { businessDayOfMonth: p.pick([1, 2, 3, -1, -2, 20, 22, 23, 26]) },
+    { businessDayOfMonth: [1, 2] },
+    { businessDayOfWeek: p.pick([1, 2, 5, 6, -1]), weekStart: p.pick([0, 1]) },
+  ]);
+  const key = p.chance(0.7) ? "closedRecurringRules" : "openRecurringRules";
+  const out: Obj = { ...options, [key]: [...((options[key] as unknown[]) ?? []), counting] };
+  if (p.chance(0.5))
+    out["closedRecurringRules"] = [
+      p.pick<Obj>([{ weekday: p.int(0, 6) }, { dayOfMonth: p.pick([1, 2, 3, -1]) }]),
+      ...((out["closedRecurringRules"] as unknown[]) ?? []),
+    ];
+  return out;
+}
+
+/**
+ * 範囲の外と長い日付の性質の設定（自作の短い提供元か提供元なし。outOfRangePolicy: "ignore"。数える規則をいつも入れ、
+ * 3 割は全曜日を閉じるか空にして、営業日の少ない設定（no-business-day の確かめ）も作る）
+ */
+export function diagnoseWideOptions(rand: () => number, source: "short" | "none"): Obj {
+  const p = picker(rand);
+  const options = withOwnCountingRule(rand, randomCalendarOptions(p, WIDE_CONTEXT[source]));
+  if (p.chance(0.3)) {
+    if (p.chance(0.5)) options["closedWeekdays"] = [0, 1, 2, 3, 4, 5, 6];
+    else {
+      options["closedWeekdays"] = [];
+      options["closedRecurringRules"] = [
+        ...((options["closedRecurringRules"] as unknown[]) ?? []),
+        { dayOfMonth: 1 },
+        { businessDayOfMonth: Array.from({ length: 30 }, (_, i) => i + 2) },
+      ];
+    }
+  }
+  if (source === "none") delete options["holidayPolicy"];
+  return {
+    ...(source === "short" ? { holidayProvider: SHORT_PROVIDER, timeZone: "UTC" } : {}),
+    outOfRangePolicy: "ignore",
+    ...options,
+  };
+}
+
+/** 日本の提供元の "throw" の性質の設定の種類（outOfRangePolicy・unconfirmedHolidayPolicy のどちらを "throw" にするか） */
+export type ThrowKind = "out-of-range" | "unconfirmed";
+/** "throw" の性質の試行の種類（カレンダーの out-of-range・unconfirmed、スケジュールの unconfirmed を順に） */
+export const throwKindOf = (run: number): { kind: ThrowKind; schedule: boolean } =>
+  [
+    { kind: "out-of-range" as const, schedule: false },
+    { kind: "unconfirmed" as const, schedule: false },
+    { kind: "unconfirmed" as const, schedule: true },
+  ][run % 3]!;
+
+/**
+ * 日本の提供元の "throw" の性質の設定（提供元は名前 "jp"。呼び出し側が本物に置き換える）。カレンダーは半分に数える規則を
+ * 入れる。unconfirmed は unconfirmedHolidayPolicy: "throw" と outOfRangePolicy: "ignore"、out-of-range は既定の "throw"。
+ * スケジュールの第 n 営業日の規則の基準は CALENDAR_REF のまま（呼び出し側が置き換える）
+ */
+export function diagnoseThrowOptions(rand: () => number, run: number): Obj {
+  const p = picker(rand);
+  const { kind, schedule } = throwKindOf(run);
+  const ctx = CONTEXTS["diagnose-properties（日本・throw）"];
+  const source: Obj = {
+    holidayProvider: "jp",
+    timeZone: "Asia/Tokyo",
+    ...(kind === "unconfirmed"
+      ? { unconfirmedHolidayPolicy: "throw", outOfRangePolicy: "ignore" }
+      : {}),
+  };
+  const made = schedule ? randomScheduleOptions(p, ctx) : randomCalendarOptions(p, ctx);
+  const options = !schedule && p.chance(0.5) ? withOwnCountingRule(rand, made) : made;
+  // unconfirmed の半分は、曜日の規則を前に、振替（"after-holiday"）の曜日の規則を後ろに足す（取り除いた規則の代わりに、
+  // 残りの規則が未確定の祝日を引く組を作るため）
+  if (kind === "unconfirmed" && p.chance(0.5)) {
+    // スケジュールの前の規則は、土日（目録の weekdayValues の "closed"）を同じ値にする
+    options[schedule ? "recurringRules" : "closedRecurringRules"] = [
+      schedule ? { weekday: p.pick([0, 6]), value: "closed" } : { weekday: p.int(0, 6) },
+      ...((options[schedule ? "recurringRules" : "closedRecurringRules"] as unknown[]) ?? []),
+      {
+        weekday: p.int(1, 5),
+        holidayOverlapPolicy: "after-holiday",
+        ...(schedule ? { value: p.pick(["A", "B"]) } : {}),
+      },
+    ];
+  }
+  return { ...source, ...options };
+}
+
 /** 全日を比べるテストの提供元（4 件に 3 件は対応年の短い提供元、残りは提供元なし） */
 export const diagnoseSourceOf = (run: number): DiagnoseSource => (run % 4 === 3 ? "none" : "short");
 /** 全範囲を走査するテストの提供元（日本と、提供元なしを交互に） */
@@ -323,6 +438,20 @@ export function siteTrials(site: string): Trial[] {
         options: diagnoseOptions(rand, fullRangeSourceOf(run)),
         scan: { ...JP_FULL_RANGE, wide: true },
       });
+    rand = random(DIAGNOSE_WIDE.seed);
+    for (let run = 0; run < DIAGNOSE_WIDE.runs; run++)
+      out.push({
+        kind: "calendar",
+        options: diagnoseWideOptions(rand, run % 2 === 0 ? "short" : "none"),
+        scan: { ...WIDE_RANGE, wide: true },
+      });
+    rand = random(DIAGNOSE_WIDE.seed + 1);
+    for (let run = 0; run < DIAGNOSE_WIDE.throwRuns; run++)
+      out.push({
+        kind: throwKindOf(run).schedule ? "schedule" : "calendar",
+        options: diagnoseThrowOptions(rand, run),
+        scan: { ...JP_FULL_RANGE, wide: true },
+      });
   } else if (site === "result-compare") {
     const seen = new Set<string>();
     for (const newShapes of [true, false])
@@ -373,6 +502,18 @@ export const CONTEXT_USES: readonly ContextUse[] = [
     ctx: DIAGNOSE_CONTEXT[source],
     kinds: ["calendar"],
   })),
+  ...(["short", "none"] as const).map((source): ContextUse => ({
+    site: "diagnose-properties",
+    name: `diagnose-properties（範囲の外と長い日付${source === "none" ? "・提供元なし" : ""}）`,
+    ctx: WIDE_CONTEXT[source],
+    kinds: ["calendar"],
+  })),
+  {
+    site: "diagnose-properties",
+    name: "diagnose-properties（日本・throw）",
+    ctx: CONTEXTS["diagnose-properties（日本・throw）"],
+    kinds: ["calendar", "schedule"],
+  },
   ...[true, false].flatMap((newShapes) =>
     [true, false].map((withHolidays): ContextUse => {
       const { name, ctx } = contextOf(withHolidays, newShapes);

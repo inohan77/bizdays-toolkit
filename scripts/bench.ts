@@ -111,6 +111,8 @@ const manyDates = createCalendar(manyDatesOptions);
 // 確かめて並べずに引くので、その確かめが外れる退行を拾う（0.32.7）。20 回は、確かめを外した形との差がいちばん大きく出た回数
 const sortedDatesOptions = { ...manyDatesOptions, closedDates: [...closed500].sort() };
 const probe20 = Array.from({ length: 20 }, (_, i) => addDaysSimple("2020-01-02", i * 59));
+// 走査の範囲（2001〜2028 年）の外の臨時休業日 30 件（2029 年から 1 年おき。診断の計測に使う。0.32.8）
+const outsideDates = Array.from({ length: 30 }, (_, i) => addDaysSimple("2029-01-05", i * 365));
 
 // 繰り返しの規則と振替を使う設定（博物館: 月曜休館・祝日の場合は次の祝日でない日、第 3 水曜休館、月末棚卸）
 const museum = createCalendar({
@@ -200,6 +202,22 @@ const cases: Case[] = [
               { weekday: 3, nth: [2] },
               { weekday: 5, nth: [4] },
             ],
+          },
+          ["source", "calendar"],
+        ) as never,
+      ),
+  },
+  {
+    // 自分の設定を基準に数える規則と、走査の範囲（2001〜2028 年）の外の個別の日付の設定（0.32.8）。個別の日付の両端の月・週を
+    // 足して調べるので、範囲の外の日付が多いほど延びる。その退行を見張る。1 回は 10 ミリ秒ほど（実装者の機械）
+    name: "diagnoseCalendar（提供元なし・数える規則と走査の範囲の外の臨時休業日 30 件）",
+    run: () =>
+      diagnoseModule.diagnoseCalendar(
+        (legacy ? toLegacy : (o: Record<string, unknown>) => o)(
+          {
+            closedWeekdays: [0, 6],
+            closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: -1 }],
+            closedDates: outsideDates,
           },
           ["source", "calendar"],
         ) as never,

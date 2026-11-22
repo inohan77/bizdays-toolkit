@@ -57,6 +57,12 @@ export interface Context {
   readonly newShapes: boolean;
   /** 入力の誤りの規則（曜日に合わない起点・自分の曜日を含む飛ばす曜日）を混ぜるか（前のバージョンとエラーコードを比べる） */
   readonly invalid: boolean;
+  /**
+   * 個別の日付を、21 日までの期間のほかに、数か月〜数十年の期間・200 年を超える期間・1000-01-01 からの期間・9999-12-31 までの
+   * 期間でも作るか（0.32.8。診断が規則どうしを調べる走査の範囲（提供元なしでは 2001〜2028 年）の外の日付と、範囲を覆う
+   * 長い日付を作るため。年は years から選ぶ）。省略は作らない（今までの文脈の乱数の並びを変えない）
+   */
+  readonly wideDates?: boolean;
 }
 
 /**
@@ -104,6 +110,34 @@ export const CONTEXTS = {
     effectiveYears: [2026, 2031],
     newShapes: true,
     invalid: false,
+  },
+  /**
+   * test/diagnose-properties.test.ts（0.32.8。走査の範囲（2001〜2028 年）の外と、範囲を覆う長い個別の日付・有効期間。
+   * 対応年の短い自作の提供元と、提供元なし（呼び出し側が holidays を外す））
+   */
+  "diagnose-properties（範囲の外と長い日付）": {
+    holidays: true,
+    kinds: ["regular", "substitute", "citizens", "x"],
+    keys: ["new-year", "b", "mon", "xmas"],
+    years: [1990, 2060],
+    effectiveYears: [1990, 2060],
+    newShapes: true,
+    invalid: false,
+    wideDates: true,
+  },
+  /**
+   * test/diagnose-properties.test.ts（0.32.8。日本の提供元で、outOfRangePolicy: "throw" と unconfirmedHolidayPolicy: "throw" を
+   * 試す。日付と有効期間は対応年（1955〜2099 年）の両端の近くと、未確定の年（confirmedThrough の後）にも作る）
+   */
+  "diagnose-properties（日本・throw）": {
+    holidays: true,
+    kinds: ["regular", "substitute", "citizens", "x"],
+    keys: ["new-year", "vernal-equinox", "autumnal-equinox", "culture"],
+    years: [1950, 2105],
+    effectiveYears: [1950, 2105],
+    newShapes: true,
+    invalid: false,
+    wideDates: true,
   },
   /** test/diagnose-properties.test.ts（日本の提供元の全範囲を走査する） */
   "diagnose-properties（日本の全範囲）": {
@@ -351,8 +385,6 @@ export const COMMON_RULE_KEYS = ["effectiveFrom", "effectiveTo", "name"] as cons
 export const EXCLUDED_KEYS: Readonly<Record<string, string>> = {
   "CalendarOptions.searchDayLimit":
     "作らない。理由: 探索の上限で、判定の結果を変えない（上限の検査は探索の関数のテストで確かめる）",
-  "HolidaySourceOptions.unconfirmedHolidayPolicy":
-    '作らない。理由: 未確定の祝日のガードで、診断は常に "accept" で評価する（17 番）。"throw" の挙動は単体のテストで確かめる',
 };
 
 /** 選択肢の値の目録（公開の型の文字列の合併） */
@@ -442,10 +474,26 @@ const annualDate = (p: Picker, ctx: Context): unknown => {
     withPeriod["effectiveTo"] = addDays(withPeriod["effectiveFrom"] as string, p.int(0, 400));
   return withPeriod;
 };
-/** 個別の日付（日付か、21 日までの期間） */
+/** 個別の日付（日付か、21 日までの期間。文脈の wideDates があれば、長い期間も） */
 const specificDate = (p: Picker, ctx: Context): unknown => {
   const from = date(p, ctx.years);
+  if (ctx.wideDates) return wideDate(p, from);
   return p.chance(0.5) ? from : { from, to: addDays(from, p.int(0, 20)) };
+};
+const YEAR_DAYS = 366;
+/**
+ * 文脈の wideDates の個別の日付: 日付 3 割、45 日までの期間 2 割、46 日〜3 年 1 割、9〜40 年 1 割、200 年を超える期間 1 割、
+ * 1000-01-01 から 1 割、9999-12-31 まで 1 割
+ */
+const wideDate = (p: Picker, from: string): unknown => {
+  const r = p.rand();
+  if (r < 0.3) return from;
+  if (r < 0.5) return { from, to: addDays(from, p.int(0, 45)) };
+  if (r < 0.6) return { from, to: addDays(from, p.int(46, 3 * YEAR_DAYS)) };
+  if (r < 0.7) return { from, to: addDays(from, p.int(9 * YEAR_DAYS, 40 * YEAR_DAYS)) };
+  if (r < 0.8) return { from, to: addDays(from, p.int(201 * YEAR_DAYS, 300 * YEAR_DAYS)) };
+  if (r < 0.9) return { from: "1000-01-01", to: from };
+  return { from, to: "9999-12-31" };
 };
 
 /** 営業日カレンダーの設定（提供元とタイムゾーンは呼び出し側が足す） */

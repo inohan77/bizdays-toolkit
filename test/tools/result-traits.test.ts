@@ -138,3 +138,100 @@ test("basisClosedWeekdays: CI の種の基準を持つスケジュールで、�
       `基準の定休日の形「${shape}」が 1 件も出ない: ${JSON.stringify([...shapes])}`,
     );
 });
+
+test("0.32.8 の特徴: 数える規則と長い・範囲の外の日付、unconfirmed の throw、定休日と同じ扱いの曜日の規則にだけ付く", () => {
+  const calendar = (options: Record<string, unknown>): Case => ({
+    id: "t",
+    kind: "calendar",
+    providers: [],
+    options,
+    from: "2026-01-01",
+    to: "2026-12-31",
+  });
+  const counting = { closedRecurringRules: [{ businessDayOfMonth: 1 }] };
+  const LONG = "counting-rules-with-long-or-outside-dates";
+  // 走査の範囲（2001〜2028 年）の端の月・外にかかる日付と、28 日を超える日付
+  for (const d of [
+    "2029-01-05",
+    "2000-12-31",
+    "2001-01-31",
+    "2028-12-01",
+    { from: "2026-01-01", to: "2026-01-29" },
+  ])
+    assert.ok(
+      traitsOfCase(calendar({ ...counting, closedDates: [d] })).includes(LONG),
+      JSON.stringify(d),
+    );
+  // 範囲の中の短い日付、数える規則のない設定、スケジュールには付けない
+  for (const d of ["2001-02-01", "2028-11-30", { from: "2026-01-01", to: "2026-01-28" }])
+    assert.ok(
+      !traitsOfCase(calendar({ ...counting, openDates: [d] })).includes(LONG),
+      JSON.stringify(d),
+    );
+  assert.ok(!traitsOfCase(calendar({ closedDates: ["2029-01-05"] })).includes(LONG));
+  assert.ok(
+    !traitsOfCase({
+      ...schedule([]),
+      options: { ...schedule([]).options, dates: [{ date: "2029-01-05", value: "X" }] },
+    }).includes(LONG),
+  );
+  // unconfirmedHolidayPolicy: "throw" だけ
+  assert.ok(
+    traitsOfCase(schedule(["jp"], { unconfirmedHolidayPolicy: "throw" })).includes(
+      "unconfirmed-holidays-throw",
+    ),
+  );
+  assert.ok(
+    !traitsOfCase(schedule(["jp"], { unconfirmedHolidayPolicy: "accept" })).includes(
+      "unconfirmed-holidays-throw",
+    ),
+  );
+  // 定休日（省略は土日）と同じ扱いの毎週の曜日の規則だけ
+  const K6 = "counting-rule-with-weekly-rule-as-closed-weekdays";
+  assert.ok(
+    traitsOfCase(
+      calendar({ closedRecurringRules: [{ weekday: 6 }, { businessDayOfMonth: 1 }] }),
+    ).includes(K6),
+  );
+  assert.ok(
+    traitsOfCase(
+      calendar({ closedWeekdays: [0], openRecurringRules: [{ weekday: 1 }], ...counting }),
+    ).includes(K6),
+  );
+  assert.ok(
+    !traitsOfCase(
+      calendar({
+        closedWeekdays: [0],
+        closedRecurringRules: [{ weekday: 1 }, { businessDayOfMonth: 1 }],
+      }),
+    ).includes(K6),
+  );
+  assert.ok(
+    !traitsOfCase(
+      calendar({ closedWeekdays: [0], openRecurringRules: [{ weekday: 0 }], ...counting }),
+    ).includes(K6),
+  );
+  assert.ok(
+    !traitsOfCase(
+      calendar({ closedRecurringRules: [{ weekday: 6, nth: 1 }, { businessDayOfMonth: 1 }] }),
+    ).includes(K6),
+  );
+  // 固定の設定のうち 0.32.8 の形は、それぞれの特徴を持つ
+  const fixed = new Map(fixedCases().map((c) => [c.id, traitsOfCase(c)]));
+  assert.ok(
+    fixed.get("fixed-counting-closed-date-business-day")!.includes("counting-rules-with-dates"),
+  );
+  for (const id of [
+    "fixed-counting-open-dates-2050",
+    "fixed-counting-week-closed-date-2029",
+    "fixed-counting-month-closed-date-2042",
+    "fixed-counting-long-closed-date",
+  ])
+    assert.ok(fixed.get(id)!.includes(LONG), id);
+  for (const id of [
+    "fixed-unconfirmed-throw-after-holiday",
+    "fixed-unconfirmed-throw-after-holiday-schedule",
+  ])
+    assert.ok(fixed.get(id)!.includes("unconfirmed-holidays-throw"), id);
+  assert.ok(fixed.get("fixed-counting-basis-weekday-as-closed-weekday")!.includes(K6));
+});

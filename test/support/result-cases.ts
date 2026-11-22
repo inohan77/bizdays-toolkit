@@ -278,8 +278,85 @@ export function fixedCases(): Case[] {
     cal("fixed-calendar-date-with-value", ["jp"], {
       closedDates: [{ date: "2026-12-01", value: true }],
     }),
+    // 0.32.8: 自分の設定を基準に数える規則と個別の日付のある設定の診断（test/diagnose-counting-dates.test.ts と同じ設定）。
+    // 臨時休業日が数え方を変えて営業日が残る設定に no-business-day を出さない（P7）。0.30.3 より前とは比べない（0.30.3 で直した
+    // 個別の日付の誤った redundant も同じ設定で消え、1 つの許可に収まらない）
+    {
+      ...cal0("fixed-counting-closed-date-business-day", {
+        closedRecurringRules: [
+          { dayOfMonth: 1 },
+          { businessDayOfMonth: Array.from({ length: 30 }, (_, i) => i + 2) },
+        ],
+        closedDates: ["2026-01-01"],
+      }),
+      minBase: "0.30.3",
+    },
+    // 走査の範囲（2001〜2028 年）の外の臨時営業日・臨時休業日の月・週で決める規則に、never-matches・redundant を出さない（P8・P9）
+    cal0("fixed-counting-open-dates-2050", {
+      closedWeekdays: [0, 6],
+      openDates: ["2050-01-01", "2050-01-08", "2050-01-15", "2050-01-22", "2050-01-29"],
+      closedRecurringRules: [{ businessDayOfMonth: 26 }],
+    }),
+    {
+      ...cal0("fixed-counting-week-closed-date-2029", {
+        closedWeekdays: [],
+        closedRecurringRules: [{ weekday: 6 }, { businessDayOfWeek: 6, weekStart: 1 }],
+        closedDates: ["2029-05-08"],
+      }),
+      minBase: "0.30.0",
+    },
+    cal0("fixed-counting-month-closed-date-2042", {
+      closedWeekdays: [],
+      closedRecurringRules: [{ dayOfMonth: 2 }, { businessDayOfMonth: 2 }],
+      closedDates: [{ from: "2042-03-10", to: "2042-05-01" }],
+    }),
+    // 走査の範囲を覆う長い臨時休業日の外の年で決める規則を、使われないと出さない（P11）
+    cal0("fixed-counting-long-closed-date", {
+      closedWeekdays: [0, 6],
+      closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: -1 }],
+      closedDates: [{ from: "1000-01-01", to: "2029-03-31" }],
+    }),
+    // unconfirmedHolidayPolicy: "throw" で、取り除くと未確定の祝日で例外になる日ができる規則を redundant にしない（P10）
+    cal("fixed-unconfirmed-throw-after-holiday", ["jp"], {
+      unconfirmedHolidayPolicy: "throw",
+      closedWeekdays: [0, 6],
+      closedRecurringRules: [{ weekday: 6 }, { weekday: 1, holidayOverlapPolicy: "after-holiday" }],
+    }),
+    sch("fixed-unconfirmed-throw-after-holiday-schedule", ["jp"], {
+      unconfirmedHolidayPolicy: "throw",
+      weekdayValues: [null, "a", "a", "a", "a", "a", null],
+      recurringRules: [
+        { weekday: 6, value: null },
+        { weekday: 1, holidayOverlapPolicy: "after-holiday", value: "b" },
+      ],
+    }),
+    // 定休日の扱いを変えない毎週の曜日の規則に counting-basis を出さない（K6）
+    cal("fixed-counting-basis-weekday-as-closed-weekday", ["jp"], {
+      closedWeekdays: [1],
+      closedRecurringRules: [{ weekday: 1 }, { businessDayOfMonth: 3 }],
+    }),
   ];
 }
+
+/** 個別の日付の始まりと終わり（"YYYY-MM-DD" と { date }・{ from, to }） */
+const dateEndsOf = (options: Obj): { from: string; to: string }[] =>
+  ["closedDates", "openDates"].flatMap((k) =>
+    Array.isArray(options[k])
+      ? (options[k] as unknown[]).map((d) =>
+          typeof d === "string"
+            ? { from: d, to: d }
+            : {
+                from: String((d as Obj)["from"] ?? (d as Obj)["date"]),
+                to: String((d as Obj)["to"] ?? (d as Obj)["date"]),
+              },
+        )
+      : [],
+  );
+const dayCount = (from: string, to: string): number =>
+  (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000;
+/** 毎週の曜日の規則（第 n 曜日・隔週・月の絞り込みのない曜日の規則） */
+const isWeeklyRule = (r: Obj): boolean =>
+  "weekday" in r && !("nth" in r) && !("interval" in r) && !("months" in r);
 
 /** 祝日に従属する規則の形（同じ形の規則どうしを比べるため） */
 const holidayShape = (r: Obj): string | undefined =>
@@ -321,6 +398,19 @@ export function traitsOfCase(one: Case): string[] {
     )
   )
     traits.add("counting-rules-with-dates");
+  // 上の設定のうち、個別の日付のどれかが、走査の範囲（提供元なしでは 2001〜2028 年）の端の月か外にかかるか、28 日を超える
+  // もの。診断は走査の範囲を個別の日付を除いて調べ、個別の日付の両端の月・週を範囲の外でも日付を残して調べるので
+  // （0.32.8）、範囲の中の短い日付だけの設定とは違い、規則の never-matches・redundant が変わりうる
+  if (
+    one.kind === "calendar" &&
+    counts &&
+    dateEndsOf(one.options).some(
+      ({ from, to }) => from < "2001-02-01" || to > "2028-11-30" || dayCount(from, to) > 27,
+    )
+  )
+    traits.add("counting-rules-with-long-or-outside-dates");
+  // unconfirmedHolidayPolicy: "throw" の設定。取り除くと未確定の祝日で例外になる日ができる規則を redundant にしない（0.32.8）
+  if (one.options["unconfirmedHolidayPolicy"] === "throw") traits.add("unconfirmed-holidays-throw");
   // 規則・日付を 2 つ以上持つ設定。redundant を逐次除去で判定し（後の規則を取り除いた後の判定）、代わりに決める規則を
   // relatedPath に付けるので、redundant の結果が変わりうる（0.31.0。1 つだけなら、ほかの規則に依存しない）
   const RULE_LISTS = [
@@ -374,6 +464,25 @@ export function traitsOfCase(one: Case): string[] {
     (weeklyRules.some((r) => "effectiveFrom" in r || "effectiveTo" in r) || weeklyRules.length >= 2)
   )
     traits.add("counting-rule-with-period-weekly-rule");
+  // 基準のカレンダーを持たない第 n 営業日の規則があり、その曜日の定休日の扱いを変えない毎週の曜日の規則（定休日の曜日を
+  // 閉じる規則、定休日でない曜日を開く規則）がある。その規則には counting-basis を出さない（0.32.8）
+  const closedWeekdays = Array.isArray(one.options["closedWeekdays"])
+    ? (one.options["closedWeekdays"] as number[])
+    : [0, 6];
+  if (
+    one.kind === "calendar" &&
+    counts &&
+    ["closedRecurringRules", "openRecurringRules"].some(
+      (key) =>
+        Array.isArray(one.options[key]) &&
+        (one.options[key] as Obj[]).some(
+          (r) =>
+            isWeeklyRule(r) &&
+            closedWeekdays.includes(r["weekday"] as number) === (key === "closedRecurringRules"),
+        ),
+    )
+  )
+    traits.add("counting-rule-with-weekly-rule-as-closed-weekdays");
   // カレンダーの個別の日付・毎年の月日の要素に value（スケジュールの書き方）がある。診断の unknown-option が増える（0.30.8）
   if (
     one.kind === "calendar" &&
