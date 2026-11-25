@@ -1,19 +1,25 @@
 /**
- * 診断の総当たりのオラクルテスト（テスト拡充案の T1）。診断は「最適化した判定」なので、正しさを素朴な定義と突き合わせる:
- * 診断が shadowed・never-matches・redundant と出した項目を、設定から実際に取り除き、対応年の短い自作の提供元の全日で
- * 結果を比べる。項目は明示した一覧（test/fixtures/oracle-items.json。目録の規則の形の代表と、個別の日付・毎年の月日）で、
- * その 2 つまでの組み合わせを総当たりする（乱数の種による当たり外れがなく、目録を変えても項目は変わらない）。
+ * Brute-force oracle test of the diagnostics (T1 of the test expansion plan). The diagnostics are an "optimized
+ * judgement", so their correctness is checked against the naive definition: the items the diagnostics report as
+ * shadowed, never-matches or redundant are really removed from the options, and the results are compared on every
+ * day of a home-made provider with few supported years. The items are an explicit list
+ * (test/fixtures/oracle-items.json: representatives of the rule shapes of the catalog, specific dates and annual
+ * dates), and every combination of up to two of them is tried (no luck of a random seed, and changing the catalog
+ * does not change the items).
  *
- * - 判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。docs/decisions.md の 31 番）
- * - pnpm check では決まった抜き出しだけを試す。すべての組み合わせは ORACLE_FULL=1 で（CI の oracle ジョブ。時間の決まりと
- *   行列の分け方は RELEASING.md の「品質の確認」）
- * - 出た項目はまとめて取り除けること（逐次除去の定義）と、取り除いた後に取り除ける項目が残らないこと（完全性）を確かめる。
- *   完全性は asOf なしの診断で確かめるので、expired（asOf を渡したときだけ出る）を取り除く項目に含めない。
- *   完全性は、対応年で取り除けた項目を、診断が規則どうしを調べる期間（診断と同じ関数 rulesScanWindow で求める）でも
- *   確かめ直してから数え、既知の項目の一覧（KNOWN_INCOMPLETE）と合わなければ失敗にする
- * - ORACLE_TARGET=<パッケージのディレクトリ> で、ビルド済みの別のバージョン（公開済みのバージョンなど）を試せる。ORACLE_SHARD=k/n で、
- *   全件の組み合わせを n 個に分けた k 番目だけを試せる（長い実行を分けるため。ORACLE_FULL=1 と組み合わせたときだけ。
- *   書式の誤り・k >= n・ORACLE_FULL なしは例外）
+ * - The conditions of the judgement follow the diagnostics (outOfRangePolicy: "ignore". docs/decisions.md #31)
+ * - pnpm check tries a fixed sample only. All combinations run with ORACLE_FULL=1 (the oracle job of CI; the time
+ *   rule and the split of the matrix are in the quality checks of RELEASING.md)
+ * - Checks that the reported items can be removed together (the definition of the sequential removal) and that no
+ *   removable item is left afterwards (completeness).
+ *   Completeness is checked with the diagnostics without asOf, so expired (reported only with asOf) is not among
+ *   the removed items.
+ *   For completeness, an item removable within the supported years is checked again over the period in which the
+ *   diagnostics examine rules against each other (computed with the diagnostics' own function rulesScanWindow)
+ *   before it is counted, and a mismatch with the list of known items (KNOWN_INCOMPLETE) fails
+ * - ORACLE_TARGET=<package directory> tries another built version (a published one, ...). ORACLE_SHARD=k/n tries
+ *   only the k-th of n parts of all combinations (to split a long run; only together with ORACLE_FULL=1; a wrong
+ *   format, k >= n or no ORACLE_FULL throws)
  */
 
 import assert from "node:assert/strict";
@@ -37,10 +43,11 @@ const diag = (await import(
     : "../src/diagnose/index.ts"
 )) as Record<string, Fn>;
 /**
- * 診断が規則どうしを調べる期間（日付の範囲の並び。設定の作成に失敗するときと、期間が求まらないときは undefined）。診断と
- * 同じ関数で求める: 設定の組み立ては診断と同じ compileCalendarOptions、期間は analyzeRules が使う rulesScanWindow。
- * ORACLE_TARGET のバージョンに rulesScanWindow がない（0.30.6 まで）なら、今のソースの関数を使う（期間の決め方は 0.30.x の間、
- * 変えていない）
+ * The period in which the diagnostics examine rules against each other (a list of date ranges; undefined when the
+ * options cannot be created or the period cannot be computed). Computed with the diagnostics' own functions: the
+ * options are compiled with compileCalendarOptions, and the period is rulesScanWindow, used by analyzeRules.
+ * When the version of ORACLE_TARGET has no rulesScanWindow (up to 0.30.6), the function of the current source is
+ * used (how the period is decided did not change during 0.30.x)
  */
 type Core = Record<string, Fn>;
 const coreOf = async (dir: string | undefined, name: string): Promise<Core> =>
@@ -76,8 +83,8 @@ const calendarScanWindow = (
 
 const FULL = flagEnv("ORACLE_FULL");
 /**
- * "k/n": 全件の組み合わせを n 個に分けた k 番目（0 始まり）だけを試す（長い実行を分けるため。CI の oracle ジョブ）。
- * 書式の誤り・k >= n・ORACLE_FULL なしは、何も試さずに合格しないよう例外にする
+ * "k/n": tries only the k-th (0-based) of n parts of all combinations (to split a long run; the oracle job of CI).
+ * A wrong format, k >= n or no ORACLE_FULL throws, so that nothing passes without being tried
  */
 const SHARD = ((): { k: number; n: number } | undefined => {
   const text = process.env["ORACLE_SHARD"];
@@ -88,8 +95,9 @@ const SHARD = ((): { k: number; n: number } | undefined => {
   const n = Number(m[2]);
   if (n === 0 || k >= n)
     throw new Error(`ORACLE_SHARD ${text}: k must be less than n (0 <= k < n)`);
-  // 全件なしの分け方は例外にする: pnpm check の決まった抜き出し（111 件に 1 件）をさらに分けると、間隔と n の公約数で
-  // 分が 0 件になりうる（111 と 3 なら 1/3・2/3 が 0 件）。分けるのは全件（CI の oracle ジョブ）のときだけ
+  // Splitting without the full set throws: splitting the fixed sample of pnpm check (1 in 111) further can leave
+  // a part with 0 items through a common divisor of the interval and n (with 111 and 3, parts 1/3 and 2/3 are
+  // empty). Only the full set (the oracle job of CI) is split
   if (!FULL)
     throw new Error(
       `ORACLE_SHARD ${text} needs ORACLE_FULL=1 (the sample of pnpm check is not split)`,
@@ -97,13 +105,14 @@ const SHARD = ((): { k: number; n: number } | undefined => {
   return { k, n };
 })();
 /**
- * expired を確かめる基準日。2026-07-21 は、短い提供元の 7 月の第 3 月曜日（2026-07-20。祝日）で終わる "after-holiday" の
- * 規則の振替先（終わりの日の後の日。13 番）を試す
+ * Reference dates for checking expired. 2026-07-21 tries the day an "after-holiday" rule moves to (a day after
+ * its last day; decisions.md #13) when the rule ends on the third Monday of July of the short provider
+ * (2026-07-20, a holiday)
  */
 const AS_OFS = ["2026-07-01", "2026-07-21"] as const;
 
 // ------------------------------------------------------------
-// 項目の一覧（test/fixtures/oracle-items.json に明示した一覧。閉じる・開く規則の両方に置く）
+// The list of items (the explicit list of test/fixtures/oracle-items.json; put into both closing and opening rules)
 // ------------------------------------------------------------
 
 type Item = readonly [key: string, value: unknown];
@@ -116,8 +125,9 @@ const fixture = JSON.parse(
 const items: readonly Item[] = fixture.items;
 
 /**
- * 項目の一覧がまだ持っていない形のキーと、その理由。test/tools/catalog.test.ts の到達性と同じ形で、一覧が目録のすべての形と
- * キーを含むかを確かめ、ここに載っていない不足は失敗にする（載っているのに不足していない項目も、古い記載として失敗）
+ * Keys of shapes the list of items does not have yet, with the reason. In the same form as the reachability of
+ * test/tools/catalog.test.ts, it is checked that the list contains every shape and key of the catalog, and a gap
+ * not listed here fails (an entry here that is not a gap also fails as stale)
  */
 const ITEM_GAPS: Readonly<Record<string, string>> = {};
 
@@ -136,9 +146,9 @@ const build = (
   for (const [k, v] of list) ((o[k] ??= []) as unknown[]).push(v);
   return o;
 };
-/** 期間（日付の範囲の並び）の全日の営業日かどうか（投げた日はエラーコード） */
+/** Whether each day of a period (a list of date ranges) is a business day (the error code on a day that throws) */
 const openOver = (o: Obj, ranges: readonly { from: string; to: string }[]): string => {
-  // dayInfoOn ではなく isBusinessDay で求める（open だけを見る。理由・名前の組み立てを省いて速くする）
+  // Uses isBusinessDay, not dayInfoOn (only `open` is needed; skipping reason and name is faster)
   const calendar = lib["createCalendar"]!(o) as { isBusinessDay: (d: string) => boolean };
   const out: string[] = [];
   for (const { from, to } of ranges)
@@ -153,10 +163,15 @@ const openOver = (o: Obj, ranges: readonly { from: string; to: string }[]): stri
   return out.join(",");
 };
 /**
- * 対応年で取り除けた項目を、診断が規則どうしを調べる期間（calendarScanWindow）でも取り除けるか確かめ直す。診断は有効期間が
- * 対応年の外に続く規則を、その外まで調べるので、対応年だけで比べると、取り除けない項目を「何も出ない」と数えてしまう
+ * Checks again, over the period in which the diagnostics examine rules against each other (calendarScanWindow),
+ * whether an item removable within the supported years is removable. The diagnostics examine a rule whose
+ * effective period continues outside the supported years also outside them, so comparing the supported years
+ * alone would count an item that cannot be removed as "nothing reported"
  */
-/** 元の設定の、診断が規則どうしを調べる期間と、その全日の結果（取り除けた項目ごとに求め直さない） */
+/**
+ * The period in which the diagnostics examine the original options, and the results of all its days (not
+ * computed again per removable item)
+ */
 const scanned = new WeakMap<
   Obj,
   { ranges: ReturnType<typeof calendarScanWindow>; open: unknown }
@@ -172,7 +187,10 @@ function removableInScanWindow(full: Obj, rest: Obj): boolean {
   return openOver(rest, base.ranges) === base.open;
 }
 
-/** 対応年の全日の結果（test/support/compare.ts の linesOf。full なら理由・名前・振替元まで） */
+/**
+ * The results of all days of the supported years (linesOf of test/support/compare.ts; with `full`, also reason,
+ * name and the original day of a move)
+ */
 const snapshot = (o: Obj, full: boolean): string[] =>
   linesOf(lib["createCalendar"]!(o) as { dayInfoOn: (d: string) => DayLike }, SHORT_DAYS, full);
 const same = (a: readonly string[], b: readonly string[], from = 0) =>
@@ -182,12 +200,15 @@ const pathsOf = (list: readonly Item[]): string[] => {
   return list.map(([k]) => `${k}[${(count[k] = (count[k] ?? -1) + 1)}]`);
 };
 
-/** 休業日の扱いの方針と定休日（項目 1 つの設定は 3 × 3 通りすべて、項目 2 つの設定は方針 3 通り × 土日） */
+/**
+ * Holiday policies and closed weekdays (options with one item: all 3 × 3; options with two items: the 3 policies
+ * × weekends)
+ */
 const POLICIES = ["closed", "open", "ignore"] as const;
 const WEEKDAY_SETS: readonly (readonly number[])[] = [[0, 6], [0], []];
-/** 項目 2 つの設定で、定休日 [0]・[] と組み合わせるものは、種で決まる抜き出し（この割合） */
+/** Of the options with two items, those combined with closed weekdays [0] and [] are a seeded sample (this rate) */
 const OTHER_WEEKDAYS_RATE = 1 / 8;
-/** pnpm check（ORACLE_FULL なし）は、全件の設定から、この間隔の決まった抜き出しだけを試す */
+/** pnpm check (no ORACLE_FULL) tries only a fixed sample of all options, at this interval */
 const SAMPLE_EVERY = 111;
 
 interface Config {
@@ -197,8 +218,8 @@ interface Config {
 }
 
 /**
- * 失敗のメッセージに入れる、設定を作り直せる情報（項目・休業日の扱いの方針・定休日・取り除いた項目）。
- * build(items, holidayPolicy, closedWeekdays) に渡せば、同じ設定ができる
+ * The information for rebuilding the options, for failure messages (items, holiday policy, closed weekdays,
+ * removed items). Passing it to build(items, holidayPolicy, closedWeekdays) gives the same options
  */
 function describeConfig(
   list: readonly Item[],
@@ -214,7 +235,10 @@ function describeConfig(
   });
 }
 
-/** 全件の設定（決まった順。定休日 [0]・[] との 2 つの組み合わせは、種で決まる抜き出し）と、その内訳 */
+/**
+ * All options (in a fixed order; the combinations of two with closed weekdays [0] and [] are a seeded sample)
+ * and their breakdown
+ */
 const plan = (() => {
   const all: Config[] = [];
   const pick = random(20261102);
@@ -251,7 +275,7 @@ const plan = (() => {
   };
 })();
 
-/** 試す設定 */
+/** The options tried */
 const configs = (): readonly Config[] => plan.chosen;
 
 interface Report {
@@ -259,15 +283,20 @@ interface Report {
   unsound: string[];
   incomplete: Map<string, number>;
   codes: Record<string, number>;
-  /** 対応年では取り除けたが、診断の期間で確かめ直して取り除けなかった項目の数と、確かめ直しの時間（ミリ秒） */
+  /**
+   * The number of items removable within the supported years but not when checked again over the diagnostics'
+   * period, and the time of the re-check (milliseconds)
+   */
   rechecked: number;
   recheckMs: number;
 }
 
 /**
- * 設定ごとの診断（asOf なし）の結果。テストどうしで使い回す（同じ設定の同じ診断を何度も計算しない）。診断は決定的で
- * （decisions.md の 30 番）、返す配列は凍結されている（4 番）ので、あるテストの扱いが別のテストの結果に影響しない。
- * 鍵は設定のオブジェクトそのもの（plan.chosen の要素。JSON にすると、明示的な undefined のような違いが消える）
+ * The diagnostics (without asOf) per options, shared between tests (the same diagnostics of the same options are
+ * not computed again). The diagnostics are deterministic (decisions.md #30) and the returned array is frozen
+ * (decisions.md #4), so what one test does cannot affect another's result.
+ * The key is the options object itself (an element of plan.chosen; as JSON, differences such as an explicit
+ * undefined would disappear)
  */
 const DIAG_CACHE = new WeakMap<Config, Obj[]>();
 const diagnoseOnce = (config: Config): Obj[] => {
@@ -310,8 +339,9 @@ function run(
 }
 
 /**
- * テストごとの時間（ミリ秒）。全件の実行では、分の設定の数と一緒に Job Summary に出す（分の時間の偏りが、設定の費用の
- * 偏りかランナーの性能の差かを、次の実行から区別するため。RELEASING.md の「品質の確認」の診断のオラクル）
+ * Time per test (milliseconds). The full run prints it in the Job Summary with the number of options of the
+ * part (so that, from the next run on, an uneven time of a part can be told apart: uneven cost of the options or
+ * a difference in runner performance. The diagnostics oracle in the quality checks of RELEASING.md)
  */
 const testTimes: [string, number][] = [];
 let testStart = 0;
@@ -380,15 +410,17 @@ test("オラクル: 項目の一覧は目録のすべての形とキーを含む
 });
 
 // ------------------------------------------------------------
-// 健全性: 出た項目を取り除いても、結果が変わらない
+// Soundness: removing the reported items changes no result
 // ------------------------------------------------------------
 
 /**
- * 健全性と完全性を数える（docs/decisions.md の 31 番の逐次除去の定義）。
- * - 健全性: shadowed・never-matches と出た項目は、1 つだけ取り除いても全日の結果が変わらない（決して使われない）。
- *   shadowed・never-matches・redundant と出た項目をまとめて取り除いても、全日の結果が変わらない
- * - 完全性: 出た項目をまとめて取り除いた設定で、残りのどの項目を 1 つ取り除いても結果が変わる（これ以上取り除けない）。
- *   変わらない項目は、診断が規則どうしを調べる期間でも確かめ直してから数える
+ * Counts soundness and completeness (the definition of the sequential removal, docs/decisions.md #31).
+ * - Soundness: an item reported as shadowed or never-matches can be removed alone without changing the result
+ *   of any day (it is never used). The items reported as shadowed, never-matches or redundant can be removed
+ *   together without changing the result of any day
+ * - Completeness: in the options without the reported items, removing any one remaining item changes a result
+ *   (nothing more can be removed). An item that changes nothing is checked again over the period in which the
+ *   diagnostics examine rules against each other before it is counted
  */
 function checkRemovals(
   list: readonly Item[],
@@ -444,17 +476,21 @@ function checkRemovals(
 }
 
 /**
- * 取り除いても変わらないのに診断が何も言わない項目（完全性の報告に出る項目）のうち、理由が分かっていて受け入れるもの
- * （項目 → 理由）。ここにない項目が出たら失敗、ここにある項目が出なくなっても失敗（一覧が古くなるのを防ぐ）。
- * 0.30.7 で、対応年だけで比べていたために出ていた 2 件（どちらも診断の期間では取り除けない）を確かめ直しで外したので、空
+ * Items that change nothing when removed although the diagnostics say nothing (the items in the completeness
+ * report) that are accepted with a known reason (item → reason). An item missing here fails, and an item here
+ * that no longer appears fails too (so that the list does not go stale).
+ * Empty: 0.30.7 removed, through the re-check, the 2 items that appeared only because the supported years alone
+ * were compared (neither can be removed over the diagnostics' period)
  */
 const KNOWN_INCOMPLETE: Readonly<Record<string, string>> = {};
 
 /**
- * 完全性の数え方の見張り。診断の結果を空にして渡し、(1) 本当に取り除ける項目（定休日の土曜の個別の日付）を数えること、
- * (2) 対応年では取り除けるが診断の期間では取り除けない項目（2026 年からの毎月 1 日を閉じる規則と、5・7 月の月曜を開く規則。
- * 2028-05-01 などで結果が変わる）は確かめ直しで数えないこと、を確かめる。報告の仕組みが壊れて何も数えなくなっても、
- * 確かめ直しがいつも「取り除けない」と答えて取りこぼしを隠すように壊れても、ここで止まる
+ * Watch over the counting of completeness. With empty diagnostics passed in, it checks that (1) an item that
+ * really can be removed (a specific date on a Saturday, a closed weekday) is counted, and (2) items removable
+ * within the supported years but not over the diagnostics' period (a rule closing the 1st of every month from
+ * 2026 and a rule opening Mondays in May and July; the result changes on 2028-05-01 and other days) are not
+ * counted, thanks to the re-check. It stops both a reporting mechanism that broke and counts nothing, and a
+ * re-check that broke by always answering "cannot be removed" and hiding misses
  */
 test("オラクル: 完全性の数え方は、診断が何も言わない取り除ける項目を数え、診断の期間で取り除けない項目は数えない", () => {
   const report: Report = {
@@ -488,7 +524,8 @@ test("オラクル: 完全性の数え方は、診断が何も言わない取り
 test("オラクル: shadowed・never-matches・redundant と出た項目は、まとめて取り除いても全日の結果が変わらず、取り除いた後にこれ以上取り除ける項目がない（既知の項目を除く）", () => {
   const report = run(checkRemovals, [
     ...configs(),
-    // 項目 3 つの固定の設定（oracle-items.json の jointFixed。組み合わせの総当たりは 2 項目までなので、ここで足す）
+    // Fixed options with three items (jointFixed of oracle-items.json; the brute-force combinations go up to two
+    // items, so these are added here)
     ...fixture.jointFixed.map((c) => ({ list: c.items, policy: c.policy, weekdays: c.weekdays })),
   ]);
   summarize("健全性と完全性", report);
@@ -497,8 +534,9 @@ test("オラクル: shadowed・never-matches・redundant と出た項目は、�
     [],
     "診断が取り除いても変わらないと言った項目（1 つずつ、またはまとめて）で、結果が変わった",
   );
-  // 完全性: 一覧にない「取り除けるのに何も出ない」項目は失敗。一覧の項目が出なくなったら失敗（全件を 1 回で試すときだけ。
-  // 分けた実行では、一覧の項目がほかの分にある）
+  // Completeness: an item "removable but nothing reported" that is not in the list fails. A listed item that no
+  // longer appears fails (only when the full set runs in one go; in a split run a listed item may be in another
+  // part)
   assert.deepEqual(
     [...report.incomplete.keys()].filter((k) => !(k in KNOWN_INCOMPLETE)),
     [],
@@ -511,7 +549,7 @@ test("オラクル: shadowed・never-matches・redundant と出た項目は、�
       "KNOWN_INCOMPLETE の項目が出なくなった（直ったか、網から外れた。一覧から外す）",
     );
   assert.ok(report.configs > 0 && (report.codes["redundant"] ?? 0) > 0, "オラクルが空振りしている");
-  // 全件では、取り除ける項目の 3 つのコードがどれも出ている（expired は次のテストが確かめる）
+  // In the full set, all three codes of removable items appear (expired is checked by the next test)
   if (FULL)
     for (const code of ["shadowed", "never-matches", "redundant"])
       assert.ok(
@@ -521,10 +559,10 @@ test("オラクル: shadowed・never-matches・redundant と出た項目は、�
 });
 
 // ------------------------------------------------------------
-// 診断のコードごとの約束
+// Promises per diagnostic code
 // ------------------------------------------------------------
 
-/** 項目の終わりの日（日付 "YYYY-MM-DD" のときだけ。毎年の月日や、終わりのない規則は undefined） */
+/** The last day of an item (only for a date "YYYY-MM-DD"; undefined for annual dates and rules without an end) */
 const endOf = (item: Item): string | undefined => {
   const v = item[1] as Obj | string;
   const end = typeof v === "string" ? v : ((v["effectiveTo"] ?? v["to"]) as string | undefined);
@@ -532,14 +570,17 @@ const endOf = (item: Item): string | undefined => {
 };
 
 test("オラクル: expired は、終わりが基準日より前で、基準日以降の結果に影響しない", () => {
-  // expired は暦日の比較だけで決まるので、終わりが基準日より前の項目を含まない設定には出ない。そうした設定の診断は省く
-  // （費用を下げるための取引。省いた設定に誤った expired が出ても、ここでは捕まえない。出さないことは
-  // test/diagnose-as-of.test.ts の単体のテスト（終わりのない規則・毎年の月日を並べた設定を、いくつもの基準日で）が確かめる）
+  // expired follows from comparing calendar dates alone, so it does not appear for options without an item that
+  // ends before the reference date. The diagnostics of such options are skipped (a trade to lower the cost: a
+  // wrong expired on skipped options is not caught here. That it is not reported is checked by the unit tests of
+  // test/diagnose-as-of.test.ts, with options of rules without an end and annual dates, for several reference
+  // dates)
   let checked = 0;
   let diagnosed = 0;
   for (const asOf of AS_OFS) {
     const fromIndex = SHORT_DAYS.indexOf(asOf);
-    // 終わりが基準日より前の項目を含む設定だけを、先に選んで回す（使わない診断を計算しない）
+    // Only options with an item that ends before the reference date are chosen first and run (diagnostics that
+    // are not used are not computed)
     const chosen = configs().filter(
       (c) =>
         c.list.some((item) => (endOf(item) ?? asOf) < asOf) &&
@@ -596,12 +637,14 @@ test("オラクル: no-business-day は営業日が本当にない設定だけ�
       r.unsound.push(
         `no-business-day なのに営業日がある ${describeConfig(list, policy, weekdays)}`,
       );
-    // 数え方の限界: 第 n 営業日の規則と、毎週の曜日（第 n 曜日・隔週・月の絞り込みのない曜日の規則）を閉じる・開く
-    // 繰り返しの規則があり、その 2 つの有効期間が重なる（数える基準は繰り返しの規則を除くので、その曜日は数え方に入らない。
-    // 16 番）。ただし、数える基準は定休日（closedWeekdays）を含むので、曜日の規則がその曜日の定休日の扱いを変えるとき
-    // だけ（閉じる規則はその曜日が定休日でないとき、開く規則はその曜日が定休日のとき）数え方が変わる。前提を満たす組
-    // （第 n 営業日の規則ごとに、重なる曜日の規則の数を足したもの）だけ counting-basis が出る。
-    // オラクルは outOfRangePolicy: "ignore" なので、対応年の外で使われない曜日の規則はない
+    // A limit of the counting: there is an nth-business-day rule and a recurring rule that closes or opens a
+    // weekday every week (a weekday rule without nth occurrence, every-other-week or month filter), and their
+    // effective periods overlap (the counting basis leaves out recurring rules, so that weekday is not part of
+    // the count. decisions.md #16). However, the counting basis includes the closed weekdays (closedWeekdays),
+    // so the count changes only when the weekday rule changes how that weekday is treated (a closing rule when
+    // the weekday is not a closed weekday, an opening rule when it is). counting-basis appears exactly for the
+    // pairs that satisfy the premise (per nth-business-day rule, the number of overlapping weekday rules).
+    // The oracle uses outOfRangePolicy: "ignore", so no weekday rule is unused outside the supported years
     const rules = list
       .filter(([k]) => k.endsWith("RecurringRules"))
       .map(([k, v]) => ({ open: k === "openRecurringRules", v: v as Obj }));
@@ -638,22 +681,23 @@ test("オラクル: no-business-day は営業日が本当にない設定だけ�
 });
 
 // ------------------------------------------------------------
-// スケジュールのオラクル: 基準のカレンダーが投げる月のある設定（docs/decisions.md の 31 番）
+// Oracle for schedules: options with a month in which the basis calendar throws (docs/decisions.md #31)
 // ------------------------------------------------------------
-// 営業日カレンダーの第 n 営業日の規則は自分の設定で数え、基準のカレンダーを書けないので、判定できない月はスケジュール
-// （recurringRules の calendar）にしか起きない。項目をスケジュールの recurringRules・annualDates まで広げ、基準は
-// oracle-items.json に参照の印（BASIS_*）で書く。比べるのは valueOn で、元の設定で投げた日は比べない（整合 10 と同じ）
+// The nth-business-day rules of a business calendar count on its own options and cannot have a basis calendar, so
+// months that cannot be judged occur only in schedules (`calendar` of recurringRules). The items are extended to
+// recurringRules and annualDates of schedules, and the bases are written in oracle-items.json as reference marks
+// (BASIS_*). valueOn is compared, and days on which the original options throw are not (as in consistency 10)
 
 interface ScheduleItem {
   readonly key: "recurringRules" | "annualDates";
   readonly entry: Obj;
-  /** ZIP-B・B_3 の固定の設定を短い窓に移した形（試した設定の数を形ごとに出す） */
+  /** The form of the fixed options of ZIP-B and B_3 moved into the short window (the number tried is printed per form) */
   readonly shape?: string;
 }
 const scheduleItems: readonly ScheduleItem[] = (
   fixture as unknown as { scheduleItems: ScheduleItem[] }
 ).scheduleItems;
-/** 2025〜2027 年の短い提供元を、対応年や未確定の年を変えて包む */
+/** Wraps the short provider of 2025-2027 with other supported years or unconfirmed years */
 const shortWith = (id: string, to: number, unconfirmedFrom?: number): unknown => ({
   ...SHORT_PROVIDER,
   id,
@@ -663,24 +707,26 @@ const shortWith = (id: string, to: number, unconfirmedFrom?: number): unknown =>
       unconfirmedFrom !== undefined && year >= unconfirmedFrom ? { ...h, confirmed: false } : h,
     ),
 });
-/** 基準のカレンダー（印 → カレンダー）。どれもスケジュールと同じ UTC */
+/** The basis calendars (mark → calendar). All in UTC like the schedules */
 const BASES: Readonly<Record<string, unknown>> = {
-  // 投げない（提供元なし）
+  // Never throws (no provider)
   BASIS_NONE: lib["createCalendar"]!({ timeZone: "UTC", closedWeekdays: [0, 6] }),
-  // 窓（2025〜2027 年）の中の年（2027 年）で投げる
+  // Throws in a year inside the window (2025-2027): 2027
   BASIS_IN: lib["createCalendar"]!({
     holidayProvider: shortWith("SHORT-2026", 2026),
     timeZone: "UTC",
     closedWeekdays: [0, 6],
   }),
-  // 窓の両端の外（と、規則の形を調べる代表の 28 年間の 2001〜2024・2028 年）で投げる
+  // Throws outside both ends of the window (and in 2001-2024 and 2028 of the representative 28 years in which
+  // the shapes of rules are examined)
   BASIS_EDGE: lib["createCalendar"]!({
     holidayProvider: SHORT_PROVIDER,
     timeZone: "UTC",
     closedWeekdays: [0, 6],
   }),
-  // 窓の中（2027 年）だけで投げる: 2001〜2028 年を対応年にし、2027 年の祝日だけが未確定（代表の 28 年間では投げないので、
-  // 週の狭め方だけの効果を分けて測れる）
+  // Throws only inside the window (2027): the supported years are 2001-2028 and only the holidays of 2027 are
+  // unconfirmed (it does not throw in the representative 28 years, so the effect of narrowing weeks alone can be
+  // measured separately)
   BASIS_INSIDE: lib["createCalendar"]!({
     holidayProvider: {
       ...SHORT_PROVIDER,
@@ -697,7 +743,8 @@ const BASES: Readonly<Record<string, unknown>> = {
     closedWeekdays: [0, 6],
     unconfirmedHolidayPolicy: "throw",
   }),
-  // 2026 年からの祝日が未確定で、未確定の祝日のある月で投げる（対応年の外でも投げる）
+  // The holidays from 2026 are unconfirmed, and it throws in months with an unconfirmed holiday (and outside the
+  // supported years)
   BASIS_UNCONFIRMED: lib["createCalendar"]!({
     holidayProvider: shortWith("SHORT-UNCONFIRMED", 2027, 2026),
     timeZone: "UTC",
@@ -728,7 +775,7 @@ const buildSchedule = (
   }
   return o;
 };
-/** 窓の全日の値（投げた日は "E"） */
+/** The values of all days of the window ("E" on a day that throws) */
 const scheduleValues = (o: Obj): string[] => {
   const schedule = lib["createSchedule"]!(o) as { valueOn(d: string): unknown };
   return SHORT_DAYS.map((d) => {
@@ -739,7 +786,10 @@ const scheduleValues = (o: Obj): string[] => {
     }
   });
 };
-/** 診断が規則どうしを調べる期間（rulesScanWindow）の全日の値（投げた日は "E"）。期間が求まらなければ空 */
+/**
+ * The values of all days of the period in which the diagnostics examine rules against each other
+ * (rulesScanWindow) ("E" on a day that throws). Empty when the period cannot be computed
+ */
 const scheduleWindowValues = (o: Obj, windowOf: Obj): string[] => {
   const compiled = scheduleCompile(new scanCore.collector(), windowOf);
   if (compiled === undefined) return [];
@@ -759,7 +809,7 @@ const scheduleWindowValues = (o: Obj, windowOf: Obj): string[] => {
     }
   return out;
 };
-/** 元の設定で判定できる日（投げなかった日）だけを比べる */
+/** Compares only the days the original options can judge (the days that did not throw) */
 const sameOnJudgeable = (base: readonly string[], other: readonly string[]): boolean =>
   base.every((v, i) => v === "E" || v === other[i]);
 const schedulePathsOf = (list: readonly ScheduleItem[]): string[] => {
@@ -767,10 +817,14 @@ const schedulePathsOf = (list: readonly ScheduleItem[]): string[] => {
   return list.map(({ key }) => `${key}[${(count[key] = (count[key] ?? -1) + 1)}]`);
 };
 /**
- * 素朴な定義の「分からない規則」（判定できない日の求め方の内部を使わない。docs/decisions.md の 31 番）: 項目の有効期間 ∩
- * 窓に、元の設定の valueOn で投げた日が 1 日でもあれば分からない（投げた日は実際の評価で決まるので、週の前後の余白は要らない）。
- * 窓は診断が規則どうしを調べる期間（rulesScanWindow。比べる 2025〜2027 年より広いことがある）で、その全日の valueOn を見る。基準の
- * カレンダーを持たない繰り返しの規則の never-matches は、規則の形だけで決まるので分かる（実装と同じ例外）
+ * The naive definition of an "unsure rule" (without the internals of how unjudgeable days are found.
+ * docs/decisions.md #31): unsure when, in the item's effective period ∩ the window, valueOn of the original
+ * options throws on at least one day (thrown days follow from the actual evaluation, so no margin of weeks
+ * around is needed).
+ * The window is the period in which the diagnostics examine rules against each other (rulesScanWindow; it can be
+ * wider than the compared 2025-2027), and valueOn of all its days is examined. never-matches of a recurring rule
+ * without a basis calendar follows from the rule's shape alone and is sure (the same exception as the
+ * implementation)
  */
 const naiveUnsureFor = (
   list: readonly ScheduleItem[],
@@ -790,8 +844,9 @@ const naiveUnsureFor = (
   };
 };
 /**
- * 実装の「分からない規則」（今のソースの unjudgeableDays・unsureOf）。完全性の除外にだけ使う（実装が出さないと決めた
- * 規則は出ない）。ORACLE_TARGET のバージョンでは除外しない
+ * The "unsure rules" of the implementation (unjudgeableDays and unsureOf of the current source). Used only for
+ * the exclusion from completeness (a rule the implementation decided not to report is not reported). Nothing is
+ * excluded for a version of ORACLE_TARGET
  */
 const unsureCore = target
   ? undefined
@@ -807,15 +862,22 @@ const unsureFor = (o: Obj): ((code: string, path: string) => boolean) => {
   const compiled = unsureCore.compile(new unsureCore.collector(), o);
   if (compiled === undefined) return () => false;
   const window = unsureCore.diagnose["rulesScanWindow"]!(compiled);
-  const unknown = unsureCore.diagnose["unjudgeableDays"]!(compiled, window);
-  // 基準のカレンダーの中を調べきれない設定（blind）も、実装が出さないと決めた規則として除く
+  // The bases are guarded first, as the diagnostics do: a month in which a basis throws is recognized by what
+  // the guarded basis returns
+  const guarded = unsureCore.diagnose["guardBases"]!(compiled, new Set<number>());
+  const unknown = unsureCore.diagnose["unjudgeableDays"]!(guarded, window);
+  // Options in which the inside of a basis calendar cannot be examined completely (blind) are also left out as
+  // rules the implementation decided not to report
   const blind = (window as { blind?: boolean } | undefined)?.blind;
   return unsureCore.diagnose["unsureOf"]!(compiled, unknown, blind) as (
     c: string,
     p: string,
   ) => boolean;
 };
-/** 診断が規則どうしを調べる期間の全日のうち、元の設定の valueOn で投げる日（素朴な定義の入力） */
+/**
+ * Of all days of the period in which the diagnostics examine rules against each other, the days on which
+ * valueOn of the original options throws (the input of the naive definition)
+ */
 const scheduleCompile = (await coreOf(undefined, "schedule"))["compileScheduleOptions"]!;
 const thrownInWindow = (o: Obj): string[] => {
   const compiled = scheduleCompile(new scanCore.collector(), o);
@@ -837,7 +899,10 @@ const thrownInWindow = (o: Obj): string[] => {
     }
   return thrown;
 };
-/** pnpm check（ORACLE_FULL なし）は、全件の設定から、この間隔の決まった抜き出しだけを試す（固定の設定の形は常に含める） */
+/**
+ * pnpm check (no ORACLE_FULL) tries only a fixed sample of all options, at this interval (the forms of the fixed
+ * options are always included)
+ */
 const SCHEDULE_SAMPLE_EVERY = 20;
 const schedulePlan = (() => {
   const all: { list: ScheduleItem[]; policy: string; weekdays: readonly number[] }[] = [];
@@ -851,7 +916,8 @@ const schedulePlan = (() => {
           all.push({ list, policy, weekdays });
         }
     }
-  // 抜き出しでも、固定の設定の形は項目 1 つ・方針 closed・定休日 [0, 6] の設定を常に含める
+  // Also in a sample, the forms of the fixed options always include the options with one item, policy closed
+  // and closed weekdays [0, 6]
   const always = (c: (typeof all)[number]) =>
     c.list.length === 1 &&
     c.list[0]!.shape !== undefined &&
@@ -891,13 +957,14 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
       list,
       list.some((x) => typeof x.entry["calendar"] === "string") ? thrownInWindow(o) : [],
     );
-    // 分からない規則への約束（素朴な定義で確かめる。実装の集合が狭すぎて、出してはいけない診断を出すことを見つける）
+    // The promise about unsure rules (checked with the naive definition; finds an implementation whose set is
+    // too narrow and reports a diagnostic it must not report)
     for (const x of d)
       if (naive(x["code"] as string, x["path"] as string))
         unsound.push(
           `素朴な定義で分からない規則に ${String(x["code"])} ${String(x["path"])} ${describe()}`,
         );
-    // 健全性: 出た項目をまとめて取り除いても、判定できる日の結果が変わらない
+    // Soundness: removing the reported items together does not change the result of a day that can be judged
     const removed = paths.filter((path) =>
       d.some(
         (x) =>
@@ -912,9 +979,13 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
       unsound.push(`まとめて取り除くと変わる ${describe(removed)}`);
       continue;
     }
-    // 完全性: 取り除いた後に、取り除いても判定できる日の結果が変わらない項目が残らない。分からない規則は除外して数える
+    // Completeness: after the removal, no item is left whose removal does not change the result of a day that
+    // can be judged. Unsure rules are left out of the count
     const remainingPaths = paths.filter((p) => !removed.includes(p));
-    /** 出た項目を取り除いた後の設定（rest）の、診断が規則どうしを調べる期間の値（取り除けた項目ごとに求め直さない） */
+    /**
+     * The values, over the period in which the diagnostics examine rules against each other, of the options
+     * after removing the reported items (rest) (not computed again per removable item)
+     */
     let windowBase: string[] | undefined;
     remaining.forEach((item, q) => {
       const smallerSchedule = buildSchedule(
@@ -923,14 +994,17 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
         weekdays,
       );
       if (!sameOnJudgeable(base, scheduleValues(smallerSchedule))) return;
-      // 対応年で取り除けた項目を、診断が規則どうしを調べる期間でも確かめ直す。営業日カレンダーのオラクル（removableInScanWindow）
-      // と同じく、出た項目を取り除いた後の設定（rest）を基準に、その走査の範囲で比べる（元の設定を基準にすると、出た項目が
-      // 対応年の外で値を変えたとき、その差で完全性の確かめから黙って外れる。31 番）
+      // An item removable within the supported years is checked again over the period in which the diagnostics
+      // examine rules against each other. As in the oracle for business calendars (removableInScanWindow), the
+      // options after removing the reported items (rest) are the basis, compared over their scan range (with the
+      // original options as the basis, a reported item that changes a value outside the supported years would
+      // silently drop the item out of the completeness check through that difference. decisions.md #31)
       windowBase ??= scheduleWindowValues(rest, rest);
       if (!sameOnJudgeable(windowBase, scheduleWindowValues(smallerSchedule, rest))) return;
       if (unsure("redundant", remainingPaths[q]!)) {
-        // 実装が分からないとして出さない項目。素朴な定義でも分からない（月の単位の限界）か、素朴な定義では判定できる
-        // （実装の求めすぎ。判定できない月の狭め方が減らす対象）かに分けて数える
+        // An item the implementation does not report as unsure. Counted separately: also unsure by the naive
+        // definition (the limit of the month as unit), or judgeable by the naive definition (the implementation
+        // asks for too much; what narrowing the unjudgeable months reduces)
         if (naive("redundant", remainingPaths[q]!)) unsureBoth++;
         else unsureOnlyImpl++;
         return;
@@ -959,13 +1033,15 @@ test("スケジュールのオラクル: 基準のカレンダーが投げる月
     [],
     "スケジュールのオラクルの完全性（分からない規則を除く）",
   );
-  // 空振りしていない: 基準の 4 種と、固定の設定の形がどれも試されている（分けた実行では、ほかの分にあることがある）
+  // Not an empty run: the 4 kinds of bases and every form of the fixed options were tried (in a split run they
+  // may be in another part)
   if (SHARD === undefined) {
     for (const basis of Object.keys(BASES))
       assert.ok((byBasis[basis] ?? 0) > 0, `基準 ${basis} を試していない`);
     for (const shape of new Set(scheduleItems.flatMap((x) => (x.shape ? [x.shape] : []))))
       assert.ok((byShape[shape] ?? 0) > 0, `形「${shape}」を試していない`);
-    // 判定できない日（日の単位）は、素朴な定義と同じ項目を分からないとする（求めすぎは 0 件。0.31.0 で狭めた結果）
+    // The unjudgeable days (by day) make the same items unsure as the naive definition (0 items asked for too
+    // much; the result of the narrowing in 0.31.0)
     assert.equal(unsureOnlyImpl, 0, "実装の求めすぎ（素朴な定義では判定できるのに出さない項目）");
     assert.ok(unsureBoth > 0, "素朴な定義でも分からない項目が 0 件（素朴な定義が働いていない）");
   }

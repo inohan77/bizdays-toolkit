@@ -1,10 +1,12 @@
 /**
- * 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダー。
- * 1 日の判定の優先順位は docs/guide.md の「Business-day calendars」と docs/decisions.md の 11 番。
+ * A business calendar that combines holidays with the closing days of a company or shop.
+ * The priority within the judgement of one day: "Business-day calendars" in docs/guide.md and
+ * docs/decisions.md #11.
  *
- * 内部では、営業日かどうか（真偽値）を返すスケジュール（createSchedule）として作っている。
- * 営業日の探索・調整・月の営業日などの機能は buildCalendar に切り出し、作成済みのカレンダーを
- * 合成する combineCalendars（両方が営業している日・どちらかが営業している日）でも同じ実装を使う。
+ * Internally it is a schedule (createSchedule) whose value is whether the day is a business day (a boolean).
+ * Searching and adjusting business days, the business days of a month and the like live in buildCalendar, and
+ * combineCalendars, which combines created calendars (days when all are open / when any is open), uses the same
+ * implementation.
  */
 
 import { addDays, lengthOfMonth, formatDate, type DateString, type Weekday } from "./date.ts";
@@ -19,7 +21,13 @@ import {
 } from "./errors.ts";
 import { isOptionsObject } from "./options.ts";
 import { renameKeys, writtenKey } from "./renamed.ts";
-import { distinctTimeZones, parseTimeOfDaySeconds, toCivil, type DateInput } from "./input.ts";
+import {
+  distinctTimeZones,
+  parseTimeOfDaySeconds,
+  toCivil,
+  type CivilDateTime,
+  type DateInput,
+} from "./input.ts";
 import {
   checkClosingDay,
   closingDayIn,
@@ -64,22 +72,24 @@ import {
 import type { Holiday, HolidayProvider } from "./types.ts";
 
 /**
- * 祝日の扱い。
+ * How holidays are treated.
  * @public
  */
 export type HolidayPolicy = "closed" | "open" | "ignore";
 
 /**
- * 毎年の月日 "MM-DD"（名前付き・有効期間付きも可）。どの年にもない月日（"11-31" など）は invalid-annual-date。
- * "02-29" はうるう年だけに当たる（ほかの年の 2 月 28 日・3 月 1 日に読み替えない。decisions.md の 12 番）。
+ * An annual month-day "MM-DD" (optionally with a name and an effective period). A month-day that exists in no
+ * year ("11-31", ...) is invalid-annual-date. "02-29" matches leap years only (it is not read as February 28 or
+ * March 1 in other years. decisions.md #12).
  * @public
  */
 export type AnnualDate =
   | string
   | ({ readonly date: string; readonly name?: string } & EffectivePeriod);
 /**
- * 毎年の月日の期間（from > to なら年をまたぐ。例: 12-31 〜 01-03）。端の月日は AnnualDate と同じ。
- * うるう年でない年は、端の "02-29" を除いた間の日だけを含む（from: "02-20", to: "02-29" は 2 月 28 日まで）。
+ * A range of annual month-days (from > to crosses the year end, e.g. 12-31 to 01-03). The ends are as in
+ * AnnualDate. In a year that is not a leap year, an end of "02-29" is left out and only the days in between are
+ * included (from: "02-20", to: "02-29" ends on February 28).
  * @public
  */
 export interface AnnualRange extends EffectivePeriod {
@@ -88,12 +98,12 @@ export interface AnnualRange extends EffectivePeriod {
   readonly name?: string;
 }
 /**
- * 個別の日付 "YYYY-MM-DD"（名前付きも可）。
+ * A specific date "YYYY-MM-DD" (optionally with a name).
  * @public
  */
 export type SpecificDate = DateString | { readonly date: DateString; readonly name?: string };
 /**
- * 個別の日付の期間（両端を含む）。
+ * A range of specific dates (both ends included).
  * @public
  */
 export interface DateRange {
@@ -103,45 +113,47 @@ export interface DateRange {
 }
 
 /**
- * 営業日カレンダーの設定。
+ * Options of a business calendar.
  * @public
  */
 export interface CalendarOptions<Kind extends string = string> extends HolidaySourceOptions<Kind> {
-  /** 定休日の曜日（0 = 日曜日） */
+  /** Regular closed weekdays (0 = Sunday) */
   readonly closedWeekdays?: readonly Weekday[];
-  /** 毎年の休業日（有効期間 effectiveFrom・effectiveTo を付けられる） */
+  /** Days closed every year (an effective period, effectiveFrom / effectiveTo, can be added) */
   readonly closedAnnualDates?: readonly (AnnualDate | AnnualRange)[];
-  /** 臨時休業日 */
+  /** Extra closed days */
   readonly closedDates?: readonly (SpecificDate | DateRange)[];
-  /** 臨時営業日（ほかのすべての規則より優先） */
+  /** Extra business days (take priority over every other rule) */
   readonly openDates?: readonly (SpecificDate | DateRange)[];
   /**
-   * 繰り返しの休業日。書ける規則の形はガイドの「Recurring rules」の表（曜日・周期・月の日・第 n 営業日・祝日・祝日の前後など）。
-   * 祝日に当たったときの扱いは規則ごとに holidayOverlapPolicy で指定する（既定: "under-holiday"）。
-   * 有効期間（effectiveFrom・effectiveTo）を付けると、期間の外では書かれていないのと同じに扱う
+   * Recurring closed days. The shapes of rules are in the table of "Recurring rules" in the guide (weekday,
+   * cycle, day of month, nth business day, holiday, day before / after a holiday, ...).
+   * What happens on a holiday is set per rule with holidayOverlapPolicy (default: "under-holiday").
+   * With an effective period (effectiveFrom / effectiveTo), the rule is treated as not written outside it
    */
   readonly closedRecurringRules?: readonly RecurringRule<Kind>[];
-  /** 繰り返しの営業日。closedRecurringRules と同じ日に当たる場合はこちらが優先 */
+  /** Recurring business days. They take priority when they match the same day as closedRecurringRules */
   readonly openRecurringRules?: readonly RecurringRule<Kind>[];
-  /** 祝日の扱い（既定: "closed"） */
+  /** How holidays are treated (default: "closed") */
   readonly holidayPolicy?: HolidayPolicy;
   /**
-   * 営業日・休業日を探すときに調べる最大日数（既定: 3660）。超えたら、営業日の探索は code: "no-business-day"、
-   * 休業日の探索（nextClosedDay・previousClosedDay）は code: "no-closed-day" の RangeError
+   * Maximum number of days examined when searching for a business day or a closed day (default: 3660). Beyond
+   * it, a search for a business day throws a RangeError with code: "no-business-day" and a search for a closed
+   * day (nextClosedDay, previousClosedDay) one with code: "no-closed-day"
    */
   readonly searchDayLimit?: number;
-  /** @deprecated 0.30.0 で closedAnnualDates に改名した。1.0.0 で削除する */
+  /** @deprecated Renamed to closedAnnualDates in 0.30.0. Removed in 1.0.0 */
   readonly closedAnnual?: readonly (AnnualDate | AnnualRange)[];
-  /** @deprecated 0.30.0 で closedRecurringRules に改名した。1.0.0 で削除する */
+  /** @deprecated Renamed to closedRecurringRules in 0.30.0. Removed in 1.0.0 */
   readonly closedRecurring?: readonly RecurringRule<Kind>[];
-  /** @deprecated 0.30.0 で openRecurringRules に改名した。1.0.0 で削除する */
+  /** @deprecated Renamed to openRecurringRules in 0.30.0. Removed in 1.0.0 */
   readonly openRecurring?: readonly RecurringRule<Kind>[];
-  /** @deprecated 0.30.0 で searchDayLimit に改名した。1.0.0 で削除する */
+  /** @deprecated Renamed to searchDayLimit in 0.30.0. Removed in 1.0.0 */
   readonly maxSearchDays?: number;
 }
 
 /**
- * 営業・休業を決めた規則（既知の値）。
+ * The rule that decided open or closed (known values).
  * @public
  */
 export type KnownDayReason =
@@ -153,98 +165,107 @@ export type KnownDayReason =
   | "closed-recurring"
   | "holiday"
   | "closed-weekday"
-  /** どの設定にも当たらなかった営業日 */
+  /** A business day that matched no option */
   | "default"
-  /** スケジュールから作ったカレンダーで、曜日の値で営業日になった日 */
+  /** In a calendar made from a schedule, a day that is a business day by its weekday value */
   | "open-weekday";
 
 /**
- * 営業・休業を決めた規則。将来のバージョンで値が増えることがあるので、分岐では「その他」も扱うこと。
- * すべての値を網羅したことを型で確かめたい場合は KnownDayReason を使う。
+ * The rule that decided open or closed. Later versions may add values, so handle "anything else" when branching.
+ * Use KnownDayReason to check by type that every value is handled.
  * @public
  */
 export type DayReason = KnownDayReason | (string & {});
 
 /**
- * 1 日分の判定結果。
+ * The judgement of one day.
  * @public
  */
 export interface DayInfo<Kind extends string = string> {
   readonly date: DateString;
   readonly weekday: Weekday;
-  /** 営業日か */
+  /** Whether the day is a business day */
   readonly open: boolean;
-  /** @deprecated 0.30.0 で open に改名した（同じ値）。1.0.0 で削除する */
+  /** @deprecated Renamed to open in 0.30.0 (same value). Removed in 1.0.0 */
   readonly businessDay: boolean;
-  /** 判定を決めた規則 */
+  /** The rule that decided the judgement */
   readonly reason: DayReason;
-  /** 判定を決めた規則の名前（休業日の名前・祝日名など） */
+  /** Name of the rule that decided the judgement (name of the closed day, holiday name, ...) */
   readonly name?: string;
-  /** その日が祝日なら祝日（holidayPolicy に関係なく付く） */
+  /** The holiday, when the day is one (present whatever holidayPolicy is) */
   readonly holiday?: Holiday<Kind>;
-  /** 祝日から振り替えられた繰り返しの規則で決まった場合、振替の元の日付（holidayOverlapPolicy: "after-holiday"） */
+  /**
+   * When a recurring rule moved from a holiday decided the day, the original date of the move
+   * (holidayOverlapPolicy: "after-holiday")
+   */
   readonly shiftedFrom?: DateString;
   /**
-   * 判定を決めた規則の設定の中の位置（規則の診断の path と同じ形。例: "closedRecurringRules[0]"）。
-   * 個別の日付・毎年の休業日・繰り返しの規則（振替先を含む）で決まった日にだけ付き、祝日・定休日の曜日で決まった日には付かない
+   * Position in the options of the rule that decided the judgement (the same form as `path` of the diagnostics,
+   * e.g. "closedRecurringRules[0]"). Present only on days decided by a specific date, an annual closed day or a
+   * recurring rule (including the day it moved to); absent on days decided by a holiday or a closed weekday
    */
   readonly optionPath?: string;
-  /** @deprecated 0.30.0 で optionPath に改名した（同じ値）。1.0.0 で削除する */
+  /** @deprecated Renamed to optionPath in 0.30.0 (same value). Removed in 1.0.0 */
   readonly rulePath?: string;
   /**
-   * 合成したカレンダー（combineCalendars）で、判定を決めたカレンダーの番号（渡した配列の位置）。
-   * reason・name・shiftedFrom・optionPath はそのカレンダーの結果。合成していないカレンダーでは付かない
+   * In a combined calendar (combineCalendars), the number of the calendar that decided the judgement (its
+   * position in the array passed). reason, name, shiftedFrom and optionPath are that calendar's result. Absent
+   * in a calendar that is not combined
    */
   readonly decidedBy?: number;
   /**
-   * 合成したカレンダーで、判定を決めたカレンダーまでの番号の列（外側から順）。入れ子でない合成では長さ 1 で、
-   * 先頭は decidedBy と同じ。合成したカレンダーをさらに合成したとき、optionPath がどのカレンダーの設定の位置かを
-   * 結果だけから辿れる（例: [0, 1] は 0 番のカレンダーの中の 1 番）。合成していないカレンダーでは付かない
+   * In a combined calendar, the numbers leading to the calendar that decided the judgement (outermost first).
+   * Length 1 for a combination that is not nested, and its first element equals decidedBy. When combined
+   * calendars are combined again, it tells from the result alone which calendar's options optionPath points
+   * into (e.g. [0, 1] is calendar 1 inside calendar 0). Absent in a calendar that is not combined
    */
   readonly decidedByPath?: readonly number[];
 }
 
 /**
- * カレンダーの合成のオプション。
+ * Options for combining calendars.
  * @public
  */
 export interface CombineCalendarsOptions {
   /**
-   * 営業日とする条件。"all": すべてのカレンダーが営業日（例: 自社と銀行の両方が営業している日）/
-   * "any": いずれかのカレンダーが営業日（例: 複数の店舗のどこかが開いている日）
+   * The condition for a business day. "all": every calendar is open (e.g. days when both the company and the
+   * bank are open) / "any": any calendar is open (e.g. days when one of several shops is open)
    */
   readonly open: "all" | "any";
   /**
-   * 営業日・休業日を探すときに調べる最大日数（既定: 3660）。超えたら、営業日の探索は code: "no-business-day"、
-   * 休業日の探索（nextClosedDay・previousClosedDay）は code: "no-closed-day" の RangeError
+   * Maximum number of days examined when searching for a business day or a closed day (default: 3660). Beyond
+   * it, a search for a business day throws a RangeError with code: "no-business-day" and a search for a closed
+   * day (nextClosedDay, previousClosedDay) one with code: "no-closed-day"
    */
   readonly searchDayLimit?: number;
-  /** @deprecated 0.30.0 で searchDayLimit に改名した。1.0.0 で削除する */
+  /** @deprecated Renamed to searchDayLimit in 0.30.0. Removed in 1.0.0 */
   readonly maxSearchDays?: number;
 }
 
 /**
- * 営業日を探すときのオプション。
+ * Options for searching for a business day.
  * @public
  */
 export interface BusinessDayOnOrAfterOptions {
   /**
-   * 締め時刻 "HH:mm" または "HH:mm:ss"（カレンダーのタイムゾーン）。
-   * 入力の時刻は分の精度（秒を切り捨てた分）で、その分の始まりと比べる（"14:00:30" なら 14:00 の入力は締めの前、14:01 は後）。
-   * 入力の時刻がこの時刻以降なら、その日は対象にしない。時刻を持たない入力（暦日の文字列・Temporal の PlainDate など）
-   * と組み合わせると code: "invalid-argument" の RangeError（締め時刻が黙って無視されるのを防ぐため）
+   * Cutoff time "HH:mm" or "HH:mm:ss" (in the calendar's time zone).
+   * The input's time has minute precision (seconds dropped) and the start of that minute is compared (with
+   * "14:00:30", an input at 14:00 is before the cutoff and one at 14:01 is after).
+   * When the input's time is at or after this time, that day is not a candidate. Combined with an input without
+   * a time (a date string, Temporal's PlainDate, ...) it throws a RangeError with code: "invalid-argument" (so
+   * that the cutoff is not silently ignored)
    */
   readonly cutoff?: string;
 }
 
 /**
- * 休業日に当たった日付の調整の方法（営業日の慣行）。
- * - "following": 翌営業日
- * - "preceding": 前営業日
- * - "modified-following": 翌営業日。ただし月が変わるなら前営業日
- * - "modified-preceding": 前営業日。ただし月が変わるなら翌営業日
+ * How a date on a closed day is adjusted (business day conventions).
+ * - "following": the next business day
+ * - "preceding": the previous business day
+ * - "modified-following": the next business day, but the previous one when the month would change
+ * - "modified-preceding": the previous business day, but the next one when the month would change
  *
- * 月が変わるかは、調整する前の日付の月と比べる。
+ * Whether the month changes is judged against the month of the date before adjustment.
  * @namingSource isda
  * @public
  */
@@ -255,100 +276,204 @@ export type BusinessDayConvention =
   | "modified-preceding";
 
 /**
- * 日付の調整のオプション。
+ * Options for adjusting a date.
  * @public
  */
 export interface AdjustOptions {
-  /** 調整の方法 */
+  /** How to adjust */
   readonly convention: BusinessDayConvention;
 }
 
 /**
- * 月の期日のオプション。
+ * Options for the due date of a month.
  * @public
  */
 export interface DueDateOptions {
-  /** 期日の日（1〜31、-1 は末日）。その月にない日（2 月 30 日など）は末日に読み替える */
+  /** Day of the due date (1-31; -1 is the last day). A day the month lacks (February 30, ...) is the last day */
   readonly dayOfMonth: DayOfMonth;
-  /** 期日が休業日のときの調整の方法 */
+  /** How to adjust when the due date is a closed day */
   readonly convention: BusinessDayConvention;
 }
 
 /**
- * 営業日カレンダー。
+ * A business calendar.
  * @public
  */
 export interface Calendar<Kind extends string = string> extends HolidayLookup<Kind> {
-  /** 1 日分の判定結果（営業日か・理由・祝日） */
+  /**
+   * The judgement of one day.
+   * @param input - A date input, converted to a calendar date in the calendar's time zone.
+   * @returns A frozen DayInfo: whether the day is a business day, the rule that decided it, and the holiday on that
+   *   day if any.
+   * @throws RangeError for an invalid input, or `out-of-range`, `unconfirmed-holiday`, `holiday-run-too-long` when
+   *   the judgement of that day throws.
+   */
   dayInfoOn(input: DateInput): DayInfo<Kind>;
-  /** @deprecated 0.30.0 で dayInfoOn に改名した。1.0.0 で削除する */
+  /**
+   * @deprecated Renamed to `dayInfoOn` in 0.30.0 (same behaviour). Removed in 1.0.0.
+   */
   dayInfo(input: DateInput): DayInfo<Kind>;
-  /** 期間内の日ごとの判定結果（両端を含む。from が to より後ならエラー） */
+  /**
+   * The judgement of every day of a period.
+   * @param from - First day.
+   * @param to - Last day (inclusive).
+   * @returns A frozen array of DayInfo in date order.
+   * @throws RangeError `invalid-range` when `from` is after `to`; the errors of {@link Calendar.dayInfoOn} for any
+   *   day of the period.
+   */
   daysBetween(from: DateInput, to: DateInput): readonly DayInfo<Kind>[];
-  /** 営業日か */
+  /**
+   * Whether a day is a business day.
+   * @param input - A date input.
+   * @returns true for a business day.
+   * @throws As {@link Calendar.dayInfoOn}; with results that do not depend on holidays, an unconfirmed holiday does
+   *   not throw.
+   */
   isBusinessDay(input: DateInput): boolean;
-  /** 翌営業日（入力日の翌日以降） */
+  /**
+   * The first business day after the input day (the input day itself is not considered).
+   * @param input - A date input.
+   * @returns "YYYY-MM-DD".
+   * @throws RangeError `no-business-day` when none is found within searchDayLimit days; `out-of-range` when the
+   *   search leaves the years 1000-9999; any error of judging a day on the way.
+   */
   nextBusinessDay(input: DateInput): DateString;
-  /** 前営業日（入力日の前日以前） */
+  /**
+   * The last business day before the input day (the input day itself is not considered).
+   * @param input - A date input.
+   * @returns "YYYY-MM-DD".
+   * @throws As {@link Calendar.nextBusinessDay}.
+   */
   previousBusinessDay(input: DateInput): DateString;
   /**
-   * 翌休業日（入力日の翌日以降の、営業日でない日）。searchDayLimit 日のうちに見つからなければ
-   * code: "no-closed-day" の RangeError
+   * The first day after the input day that is not a business day.
+   * @param input - A date input.
+   * @returns "YYYY-MM-DD".
+   * @throws RangeError `no-closed-day` when none is found within searchDayLimit days; otherwise as {@link
+   *   Calendar.nextBusinessDay}.
    */
   nextClosedDay(input: DateInput): DateString;
-  /** 前休業日（入力日の前日以前の、営業日でない日）。見つからなければ code: "no-closed-day" の RangeError */
+  /**
+   * The last day before the input day that is not a business day.
+   * @param input - A date input.
+   * @returns "YYYY-MM-DD".
+   * @throws As {@link Calendar.nextClosedDay}.
+   */
   previousClosedDay(input: DateInput): DateString;
   /**
-   * 入力日が営業日ならその日、そうでなければ翌営業日。cutoff で締め時刻を指定できる
-   * （cutoff を指定するときの入力は、時刻を持つもの。時刻のない入力と組み合わせると invalid-argument）
+   * The input day when it is a business day, otherwise the next business day.
+   * @param input - A date input. With `cutoff`, it must have a time of day.
+   * @param options - `cutoff`: when the input's time (to the minute) is at or after it, the search starts from the
+   *   next day.
+   * @returns "YYYY-MM-DD".
+   * @throws RangeError `invalid-argument` for options that are not an object, or for `cutoff` with a date-only input;
+   *   `invalid-time` for an invalid `cutoff`; otherwise as {@link Calendar.nextBusinessDay}.
    */
   businessDayOnOrAfter(input: DateInput, options?: BusinessDayOnOrAfterOptions): DateString;
-  /** 入力日が営業日ならその日、そうでなければ前営業日 */
+  /**
+   * The input day when it is a business day, otherwise the previous business day.
+   * @param input - A date input.
+   * @returns "YYYY-MM-DD".
+   * @throws As {@link Calendar.nextBusinessDay}.
+   */
   businessDayOnOrBefore(input: DateInput): DateString;
   /**
-   * n 営業日後（負なら前）。入力日自身は数えない。
-   * n = 0 のときは businessDayOnOrAfter と同じ
+   * The day n business days after the input day (before it when n is negative). The input day itself is not counted.
+   * @param input - A date input.
+   * @param n - Integer. 0 gives the same result as {@link Calendar.businessDayOnOrAfter}.
+   * @returns "YYYY-MM-DD".
+   * @throws RangeError `invalid-argument` when n is not an integer; otherwise as {@link Calendar.nextBusinessDay}
+   *   (the limit applies to each step).
    */
   addBusinessDays(input: DateInput, n: number): DateString;
-  /** from 以上 to 未満の営業日の数（to が前なら負） */
+  /**
+   * The number of business days from `from` (inclusive) to `to` (exclusive).
+   * @param from - A date input.
+   * @param to - A date input.
+   * @returns A non-negative count when `from` is not after `to`; otherwise the negated count of [to, from). Never -0.
+   * @throws The errors of judging any day of the range.
+   */
   diffBusinessDays(from: DateInput, to: DateInput): number;
-  /** 期間内の営業日（両端を含む） */
+  /**
+   * The business days of a period.
+   * @param from - First day.
+   * @param to - Last day (inclusive).
+   * @returns A frozen array of "YYYY-MM-DD" in date order.
+   * @throws RangeError `invalid-range` when `from` is after `to`; the errors of judging any day of the period.
+   */
   businessDatesBetween(from: DateInput, to: DateInput): readonly DateString[];
-  /** @deprecated 0.30.0 で diffBusinessDays に改名した。1.0.0 で削除する */
+  /**
+   * @deprecated Renamed to `diffBusinessDays` in 0.30.0 (same behaviour). Removed in 1.0.0.
+   */
   businessDaysBetween(from: DateInput, to: DateInput): number;
-  /** @deprecated 0.30.0 で businessDatesBetween に改名した。1.0.0 で削除する */
+  /**
+   * @deprecated Renamed to `businessDatesBetween` in 0.30.0 (same behaviour). Removed in 1.0.0.
+   */
   listBusinessDays(from: DateInput, to: DateInput): readonly DateString[];
   /**
-   * 営業日ならその日、休業日なら convention に従って調整した営業日。
-   * 月が変わるか（modified-…）は、調整する前の日付の月と比べる
+   * The input day when it is a business day, otherwise the business day chosen by the convention.
+   * @param input - A date input.
+   * @param options - `convention`: "following" (next business day), "preceding" (previous), "modified-following"
+   *   (next, but the previous one if the next is in another month), "modified-preceding" (the mirror). "Another
+   *   month" is relative to the input day's month.
+   * @returns "YYYY-MM-DD". For the modified conventions the month of the input day is searched first, in the
+   *   convention's direction and then in the opposite direction; only when that month has no business day does the
+   *   search cross the month in the convention's direction.
+   * @throws RangeError `invalid-argument` for options that are not an object or an unknown convention;
+   *   `no-business-day` when searchDayLimit days were examined without a business day (the opposite-direction search
+   *   inside the month is not limited); `out-of-range`; any error of judging a day on the way.
+   * @see decisions.md #17, #21
    */
   adjust(input: DateInput, options: AdjustOptions): DateString;
   /**
-   * 月 "YYYY-MM" の第 n 営業日。n が負なら月末から数える（-1 は最終営業日）。
-   * その月の営業日が足りなければ code: "no-business-day" の RangeError
+   * The n-th business day of a month.
+   * @param month - "YYYY-MM".
+   * @param n - Non-zero integer; negative counts from the end of the month (-1 is the last business day).
+   * @returns "YYYY-MM-DD".
+   * @throws RangeError `invalid-month`; `invalid-argument` when n is 0 or not an integer; `no-business-day` when the
+   *   month has fewer business days; any error of judging a day of the month.
    */
   nthBusinessDayOfMonth(month: MonthString, n: number): DateString;
-  /** 月 "YYYY-MM" の最初の営業日（nthBusinessDayOfMonth(month, 1)） */
+  /**
+   * The first business day of a month: `nthBusinessDayOfMonth(month, 1)`.
+   */
   firstBusinessDayOfMonth(month: MonthString): DateString;
-  /** 月 "YYYY-MM" の最後の営業日（nthBusinessDayOfMonth(month, -1)） */
+  /**
+   * The last business day of a month: `nthBusinessDayOfMonth(month, -1)`.
+   */
   lastBusinessDayOfMonth(month: MonthString): DateString;
   /**
-   * 月 "YYYY-MM" の dayOfMonth 日を期日とし、休業日なら convention で調整した日。
-   * その月にない日は末日に読み替えてから調整する（例: 2 月の 30 日払いは 2 月末日）
+   * A due date: a day of a month, adjusted by a convention when it is not a business day.
+   * @param month - "YYYY-MM".
+   * @param options - `dayOfMonth` (1-31, or -1 for the last day; a day the month does not have reads as its last day,
+   *   before the adjustment) and `convention`.
+   * @returns "YYYY-MM-DD".
+   * @throws RangeError `invalid-argument` for options that are not an object, an invalid `dayOfMonth` or convention;
+   *   `invalid-month`; otherwise as {@link Calendar.adjust}.
    */
   dueDate(month: MonthString, options: DueDateOptions): DateString;
   /**
-   * 営業日を考慮した締め日で区切ったときに、日付が属する月。
-   * 各月の締め日（締め日がその月にない場合は末日）を convention で営業日に調整した日を D(m) とし、
-   * 日付が D(m) 以下となる最小の m を返す。前月の締め日から当月の締め日までに営業日がない月（長期休業）は
-   * 固有の期間を持たず、その日は次の月に属する
+   * The month a day belongs to when months are cut at a closing day adjusted to a business day.
+   * @param input - A date input.
+   * @param closingDayOfMonth - 1-31, or -1 for the last day (a day the month does not have reads as its last day).
+   * @param options - `convention` used to adjust each month's closing day.
+   * @returns "YYYY-MM": the earliest month m whose adjusted closing day D(m) is on or after the day. A month with no
+   *   business day between the previous closing day and its own has no period; its days belong to the next month.
+   * @throws RangeError `invalid-argument` for an invalid closing day or options (checked in this order, before the
+   *   input); otherwise as {@link Calendar.adjust}.
+   * @see decisions.md #23
    */
   closingMonth(input: DateInput, closingDayOfMonth: number, options: AdjustOptions): MonthString;
   /**
-   * 営業日を考慮した締め日で区切ったときの、その月分の期間（両端を含む暦日。前月の調整後の締め日の翌日から
-   * 当月の調整後の締め日まで）。暦日を渡すと、その日が属する期間（closingMonth で求めた月の期間）。
-   * 月を渡して、その月に固有の期間がない（前月の締め日から当月の締め日までに営業日がない）ときは
-   * code: "no-business-day" の RangeError。返す値は変更できず、name は付かない
+   * The period (both ends inclusive) of a month cut at a closing day adjusted to a business day: from the day after
+   * the previous month's adjusted closing day to the month's adjusted closing day.
+   * @param input - "YYYY-MM", or a date input meaning the period that day belongs to. A string with three or more
+   *   hyphen-separated parts, and any non-string, is read as a date.
+   * @param closingDayOfMonth - 1-31, or -1 for the last day.
+   * @param options - `convention` used to adjust each closing day.
+   * @returns A frozen `{ from, to }` of date strings, without `name`.
+   * @throws RangeError `no-business-day` when a month is given that has no period of its own; `invalid-argument`,
+   *   `invalid-month`; otherwise as {@link Calendar.adjust}.
    */
   closingPeriod(
     input: DateInput | MonthString,
@@ -357,7 +482,7 @@ export interface Calendar<Kind extends string = string> extends HolidayLookup<Ki
   ): { readonly from: DateString; readonly to: DateString };
 }
 
-/** @internal 営業日カレンダーの設定の項目 */
+/** @internal Keys of the options of a business calendar */
 export const CALENDAR_OPTION_KEYS = [
   "holidayProvider",
   "timeZone",
@@ -378,7 +503,18 @@ interface CompiledCalendar<Kind extends string> {
   readonly searchDayLimit: number;
 }
 
-/** @internal 営業日カレンダーの設定を検証して取り込む（誤りは c に集める） */
+/**
+ * Validates business-calendar options and compiles them into schedule form (values are true for open, false for
+ * closed).
+ * @param c - Receives every problem found: errors, `unknown-option` and `deprecated-option` warnings.
+ * @param options - The options as given; any value.
+ * @returns The compiled schedule and searchDayLimit (3660 when omitted or invalid); undefined when `options` is not
+ *   an options object. A result is returned even when errors were recorded; callers must check `c`.
+ * @remarks Order of rules in the result: open dates before closed dates, open recurring rules before closed recurring
+ *   rules.
+ * @internal
+ * @see decisions.md #6
+ */
 export function compileCalendarOptions<Kind extends string>(
   c: IssueCollector,
   options: unknown,
@@ -412,7 +548,7 @@ export function compileCalendarOptions<Kind extends string>(
     }
   }
 
-  // null は省略ではなく値の誤り（decisions.md の 6 番）。省略と同じに扱うのは undefined だけ
+  // null is a wrong value, not omission (decisions.md #6). Only undefined is treated as omission
   const holidayPolicy = o["holidayPolicy"] === undefined ? "closed" : o["holidayPolicy"];
   if (holidayPolicy !== "closed" && holidayPolicy !== "open" && holidayPolicy !== "ignore") {
     c.error("invalid-option", "holidayPolicy", 'must be "closed", "open" or "ignore"');
@@ -468,9 +604,9 @@ export function compileCalendarOptions<Kind extends string>(
       weekly: Object.freeze([0, 1, 2, 3, 4, 5, 6].map((w) => !closedWeekdays.has(w))),
       holiday: holidayPolicy === "ignore" ? "ignore" : { value: holidayPolicy === "open" },
       annual,
-      // 臨時営業日を先に並べて、臨時休業日より優先する
+      // Extra business days come first, so they take priority over extra closed days
       dates: [...open, ...closed],
-      // 繰り返しの営業日を先に並べて、繰り返しの休業日より優先する
+      // Recurring business days come first, so they take priority over recurring closed days
       recurring: [...openRecurringRules, ...closedRecurringRules],
     },
     searchDayLimit: Number.isInteger(searchDayLimit) ? (searchDayLimit as number) : 3660,
@@ -478,10 +614,12 @@ export function compileCalendarOptions<Kind extends string>(
 }
 
 /**
- * 祝日と休業日の規則から営業日カレンダーを作る。
- *
- * 設定は作る時点で取り込まれるので、あとから元の配列を書き換えても結果は変わらない。
- * 設定の誤りは code 付きの RangeError になる。
+ * Creates a business calendar from holidays and closing rules.
+ * @param options - Calendar options; default `{}` (weekends are not closed unless `closedWeekdays` says so). The
+ *   options are copied at creation: changing the arrays afterwards changes nothing.
+ * @returns A frozen Calendar.
+ * @throws RangeError with the code of the first invalid option (`invalid-option`, `invalid-date`, ...), its message
+ *   prefixed by the option's path.
  * @public
  */
 export function createCalendar<Kind extends string = string>(
@@ -502,17 +640,24 @@ export function createCalendar<Kind extends string = string>(
 }
 
 /**
- * @internal スケジュールの 1 日分の結果（値は営業日か）を、営業日カレンダーの結果に変換する。
- * reason はスケジュールの reason と営業・休業の組み合わせで決まる。createCalendar の closedAnnualDates は休業だけなので
- * "open-annual" にはならないが、createCalendarFromSchedule では annual の値で営業になる日がある
+ * Converts the schedule's result for one day into a calendar DayInfo.
+ * @param day - The schedule's day info.
+ * @param open - Whether the day is a business day.
+ * @param fromSchedule - true for a calendar created from a schedule.
+ * @returns A frozen DayInfo. `reason` combines the schedule reason with `open`: date → open-date/closed-date, annual
+ *   → open-annual/closed-annual, recurring → open-recurring/closed-recurring, holiday → holiday, weekday →
+ *   closed-weekday, or when open "open-weekday" (fromSchedule) or "default". `name` is omitted for a weekday reason.
+ *   `businessDay` and `rulePath` mirror `open` and `optionPath`.
+ * @throws InternalError for an unknown schedule reason.
+ * @internal
  */
-function dayInfoFromScheduleDay<Kind extends string>(
+export function dayInfoFromScheduleDay<Kind extends string>(
   day: ScheduleDayInfo<boolean, Kind>,
   open: boolean,
   fromSchedule: boolean,
 ): DayInfo<Kind> {
   let reason: KnownDayReason;
-  // 内部では閉じた型（KnownScheduleDayReason）で分岐し、値が増えたときの対応漏れを型で検出する
+  // Internally the branch uses the closed type (KnownScheduleDayReason), so the types detect an unhandled new value
   const known = day.reason as KnownScheduleDayReason;
   switch (known) {
     case "date":
@@ -542,7 +687,7 @@ function dayInfoFromScheduleDay<Kind extends string>(
     businessDay: open,
     reason,
   };
-  // 曜日で決まった日には名前を付けない（祝日名は holiday で分かる）
+  // A day decided by its weekday gets no name (the holiday name is in `holiday`)
   if (day.name !== undefined && day.reason !== "weekday") result.name = day.name;
   if (day.holiday !== undefined) result.holiday = day.holiday;
   if (day.shiftedFrom !== undefined) result.shiftedFrom = day.shiftedFrom;
@@ -551,148 +696,390 @@ function dayInfoFromScheduleDay<Kind extends string>(
 }
 
 /**
- * @internal 祝日を調べる機能と 1 日分の判定から、営業日カレンダーの機能（探索・調整・月の営業日・期日）を組み立てる。
- * createCalendar・combineCalendars・createCalendarFromSchedule で共用する
+ * The per-day judgement and the search limit that the calendar calculations work on.
+ * @internal
  */
-function buildCalendar<Kind extends string>(
+export interface CalendarCore {
+  /** Whether a date is a business day; may throw. */
+  readonly isOpen: (date: DateString) => boolean;
+  /** Positive integer: the number of days a search examines. */
+  readonly searchDayLimit: number;
+}
+
+/**
+ * The adjustment conventions.
+ * @internal
+ */
+export const CONVENTIONS: readonly BusinessDayConvention[] = [
+  "following",
+  "preceding",
+  "modified-following",
+  "modified-preceding",
+];
+
+/**
+ * Creates the `no-business-day` RangeError for a search that started at `start`.
+ * @internal
+ */
+export function noBusinessDay(core: CalendarCore, start: DateString): RangeError {
+  return rangeError(
+    "no-business-day",
+    `No business day found within ${core.searchDayLimit} days from ${start}`,
+  );
+}
+
+/**
+ * Finds the first day, starting at `start` itself and moving by `step`, whose business-day status equals `open`.
+ * @param core - Judgement and limit.
+ * @param start - First day examined.
+ * @param step - 1 forward, -1 backward.
+ * @param open - true to find a business day, false a closed day.
+ * @returns The date.
+ * @throws RangeError `no-business-day` / `no-closed-day` after searchDayLimit days were examined; `out-of-range`
+ *   when the search leaves the years 1000-9999; any error of `isOpen`.
+ * @internal
+ */
+export function searchDay(
+  core: CalendarCore,
+  start: DateString,
+  step: 1 | -1,
+  open = true,
+): DateString {
+  const { isOpen, searchDayLimit } = core;
+  let n = dayNumberOf(start);
+  for (let i = 0; i < searchDayLimit; i++, n += step) {
+    const date = dateOfDayNumber(n);
+    if (isOpen(date) === open) return date;
+  }
+  throw open
+    ? noBusinessDay(core, start)
+    : rangeError(
+        "no-closed-day",
+        `No closed day found within ${searchDayLimit} days from ${start}`,
+      );
+}
+
+/**
+ * Number of business days among the day numbers from `from` (inclusive) to `toExclusive`.
+ * @internal
+ */
+export function countOpen(core: CalendarCore, from: number, toExclusive: number): number {
+  const { isOpen } = core;
+  let count = 0;
+  for (let n = from; n < toExclusive; n++) if (isOpen(dateOfDayNumber(n))) count++;
+  return count;
+}
+
+/**
+ * Finds the first business day from `start` moving by `step`, without leaving the month of `start` (days outside
+ * the month are never evaluated).
+ * @param core - Judgement and limit.
+ * @param start - First day examined.
+ * @param step - 1 or -1.
+ * @param limited - true to throw after searchDayLimit days were examined.
+ * @returns The date, or undefined when the end of the month is reached.
+ * @throws RangeError `no-business-day` (only with `limited`); any error of `isOpen`.
+ * @internal
+ */
+export function searchInMonth(
+  core: CalendarCore,
+  start: DateString,
+  step: 1 | -1,
+  limited: boolean,
+): DateString | undefined {
+  const { isOpen, searchDayLimit } = core;
+  const { year, month } = parseMonth(start.slice(0, 7));
+  const first = dayNumberOf(formatDate(year, month, 1));
+  const last = first + lengthOfMonth(year, month) - 1;
+  let n = dayNumberOf(start);
+  for (let i = 0; n >= first && n <= last; i++, n += step) {
+    if (limited && i >= searchDayLimit) throw noBusinessDay(core, start);
+    const date = dateOfDayNumber(n);
+    if (isOpen(date)) return date;
+  }
+  return undefined;
+}
+
+/**
+ * Implements {@link Calendar.adjust} for a date string.
+ * @param core - Judgement and limit.
+ * @param date - "YYYY-MM-DD".
+ * @param options - Must have a valid `convention`.
+ * @returns `date` when it is a business day; otherwise per convention. Modified conventions: search within the
+ *   month in the convention's direction (limited by searchDayLimit), then within the month in the opposite
+ *   direction (not limited), then across the month in the convention's direction.
+ * @throws RangeError `invalid-argument` for a missing or unknown convention; the errors of {@link searchDay}.
+ * @internal
+ * @see decisions.md #17, #21
+ */
+export function adjustDate(
+  core: CalendarCore,
+  date: DateString,
+  options: AdjustOptions | undefined,
+): DateString {
+  const convention = (options as { convention?: unknown } | undefined)?.convention;
+  if (!CONVENTIONS.includes(convention as BusinessDayConvention)) {
+    throw rangeError(
+      "invalid-argument",
+      `convention must be one of ${CONVENTIONS.map((v) => `"${v}"`).join(", ")}`,
+    );
+  }
+  if (core.isOpen(date)) return date;
+  switch (convention as BusinessDayConvention) {
+    case "following":
+      return searchDay(core, date, 1);
+    case "preceding":
+      return searchDay(core, date, -1);
+    // The month itself is searched first, and the search crosses into another month in the original direction
+    // only when the month has no business day at all (days outside the month that do not matter are not
+    // evaluated; throwing on evaluated days: decisions.md #17; crossing months: decisions.md #21)
+    case "modified-following":
+      return (
+        searchInMonth(core, date, 1, true) ??
+        searchInMonth(core, date, -1, false) ??
+        searchDay(core, date, 1)
+      );
+    case "modified-preceding":
+      return (
+        searchInMonth(core, date, -1, true) ??
+        searchInMonth(core, date, 1, false) ??
+        searchDay(core, date, -1)
+      );
+    default:
+      throw rangeError("invalid-argument", `Unknown convention: ${String(convention)}`);
+  }
+}
+
+/**
+ * The closing day of a month, adjusted to a business day: D(m).
+ * @param core - Judgement and limit.
+ * @param month - Year and month.
+ * @param closingDayOfMonth - A valid closing day.
+ * @param options - Adjustment convention.
+ * @returns "YYYY-MM-DD".
+ * @internal
+ * @see decisions.md #23
+ */
+export function closingDate(
+  core: CalendarCore,
+  month: { year: number; month: number },
+  closingDayOfMonth: number,
+  options: AdjustOptions,
+): DateString {
+  return adjustDate(core, dayOfMonth(month, closingDayIn(month, closingDayOfMonth)), options);
+}
+
+/**
+ * The earliest month m with `date` ≤ D(m) ({@link closingDate}). D is non-decreasing in m, so the search walks from
+ * the plain calendar closing month backward, then forward.
+ * @param core - Judgement and limit.
+ * @param date - "YYYY-MM-DD".
+ * @param closingDayOfMonth - Validated here.
+ * @param options - Adjustment convention.
+ * @returns Year and month.
+ * @throws RangeError `invalid-argument` for an invalid closing day; the errors of {@link adjustDate}.
+ * @internal
+ */
+export function closingMonthOf(
+  core: CalendarCore,
+  date: DateString,
+  closingDayOfMonth: number,
+  options: AdjustOptions,
+): { year: number; month: number } {
+  checkClosingDay(closingDayOfMonth);
+  let month = parseMonth(calendarClosingMonth(date, closingDayOfMonth));
+  // D increases with the month (never decreases), so starting from the closing month of the calendar date the
+  // search goes forward (with "following", the previous month's closing date moved past a long closure into
+  // this month or later) and backward (with "preceding", this month's closing date moved before `date`)
+  while (date <= closingDate(core, shiftMonth(month, -1), closingDayOfMonth, options)) {
+    month = shiftMonth(month, -1);
+  }
+  while (date > closingDate(core, month, closingDayOfMonth, options)) month = shiftMonth(month, 1);
+  return month;
+}
+
+/**
+ * The closing period of a closing month: from the day after D(m - 1) through D(m).
+ * @param core - Judgement and limit.
+ * @param month - The closing month.
+ * @param closingDayOfMonth - A valid closing day.
+ * @param options - Adjustment convention.
+ * @returns A frozen `{ from, to }`.
+ * @throws RangeError `no-business-day` when the month has no days of its own (from > to).
+ * @internal
+ */
+export function closingPeriodOfMonth(
+  core: CalendarCore,
+  month: { year: number; month: number },
+  closingDayOfMonth: number,
+  options: AdjustOptions,
+): { readonly from: DateString; readonly to: DateString } {
+  const to = closingDate(core, month, closingDayOfMonth, options);
+  const from = addDays(closingDate(core, shiftMonth(month, -1), closingDayOfMonth, options), 1);
+  if (from > to) {
+    throw rangeError(
+      "no-business-day",
+      `${formatMonth(month)} has no closing period of its own: there is no business day between the previous closing day and ${to} (its days belong to the next month)`,
+    );
+  }
+  return Object.freeze({ from, to });
+}
+
+/**
+ * The business days of a month, in date order.
+ * @param core - Judgement.
+ * @param month - "YYYY-MM".
+ * @returns A new array of date strings.
+ * @throws RangeError `invalid-month`; any error of `isOpen`.
+ * @internal
+ */
+export function businessDaysOfMonth(core: CalendarCore, month: MonthString): DateString[] {
+  const { isOpen } = core;
+  const { year, month: m } = parseMonth(month);
+  const result: DateString[] = [];
+  for (let d = 1; d <= lengthOfMonth(year, m); d++) {
+    const date = formatDate(year, m, d);
+    if (isOpen(date)) result.push(date);
+  }
+  return result;
+}
+
+/**
+ * Implements {@link Calendar.nthBusinessDayOfMonth}.
+ * @param core - Judgement.
+ * @param month - "YYYY-MM".
+ * @param n - Non-zero integer; negative counts from the end.
+ * @returns The date.
+ * @throws RangeError `invalid-argument`, `invalid-month`, `no-business-day`.
+ * @internal
+ */
+export function nthOfMonth(core: CalendarCore, month: MonthString, n: number): DateString {
+  if (!Number.isInteger(n) || n === 0) {
+    throw rangeError("invalid-argument", `n must be a non-zero integer: ${describeValue(n)}`);
+  }
+  const days = businessDaysOfMonth(core, month);
+  const found = n > 0 ? days[n - 1] : days[days.length + n];
+  if (found === undefined) {
+    throw rangeError(
+      "no-business-day",
+      `${month} has ${days.length} business day(s); requested ${n > 0 ? "" : "last "}#${Math.abs(n)}`,
+    );
+  }
+  return found;
+}
+
+/**
+ * The first day a search for {@link Calendar.businessDayOnOrAfter} examines.
+ * @param civil - The input as a calendar date and minutes since midnight (null for a date-only input).
+ * @param cutoff - The `cutoff` option, or undefined.
+ * @returns The input's date, or the next day when the input's time (start of its minute) is at or after the
+ *   cutoff.
+ * @throws RangeError `invalid-time` for a wrong cutoff; `invalid-argument` for a cutoff with a date-only input.
+ * @internal
+ */
+export function startAfterCutoff(civil: CivilDateTime, cutoff: unknown): DateString {
+  if (cutoff === undefined) return civil.date;
+  const seconds = parseTimeOfDaySeconds(cutoff);
+  if (civil.minutes === null) {
+    throw rangeError(
+      "invalid-argument",
+      "cutoff requires an input with a time of day (a Date, a date-time string or a Temporal value with a time); a date-only input would silently ignore the cutoff",
+    );
+  }
+  // The input's time has minute precision, so the start of the input's minute (second 0) is compared. When
+  // the cutoff's seconds are not 0, an input in the same minute is before the cutoff
+  return civil.minutes * 60 >= seconds ? addDays(civil.date, 1) : civil.date;
+}
+
+/**
+ * Implements {@link Calendar.addBusinessDays} for a date string.
+ * @param core - Judgement and limit.
+ * @param start - "YYYY-MM-DD".
+ * @param n - Integer (the caller validates it); 0 returns the first business day on or after `start`.
+ * @returns The date |n| business days after (n > 0) or before (n < 0) `start`.
+ * @throws The errors of {@link searchDay}.
+ * @internal
+ */
+export function addBusinessDaysTo(core: CalendarCore, start: DateString, n: number): DateString {
+  let date = start;
+  if (n === 0) return searchDay(core, date, 1);
+  const step = n > 0 ? 1 : -1;
+  for (let remaining = Math.abs(n); remaining > 0; remaining--) {
+    date = searchDay(core, addDays(date, step), step);
+  }
+  return date;
+}
+
+/**
+ * The business days from `a` through `b` (both ends inclusive), in date order.
+ * @returns A frozen array of date strings.
+ * @throws RangeError `invalid-range` when `a` is after `b`; any error of `isOpen`.
+ * @internal
+ */
+export function businessDatesIn(
+  core: CalendarCore,
+  a: DateString,
+  b: DateString,
+): readonly DateString[] {
+  const { isOpen } = core;
+  if (a > b) throw rangeError("invalid-range", `"from" must not be after "to" (${a} > ${b})`);
+  const result: DateString[] = [];
+  for (let n = dayNumberOf(a); n <= dayNumberOf(b); n++) {
+    const date = dateOfDayNumber(n);
+    if (isOpen(date)) result.push(date);
+  }
+  return Object.freeze(result);
+}
+
+/**
+ * Implements {@link Calendar.dueDate}.
+ * @param core - Judgement and limit.
+ * @param month - "YYYY-MM".
+ * @param options - The options argument as given (old key names are read as the new ones).
+ * @returns The day `dayOfMonth` of the month (the last day when the month lacks it), adjusted by `convention`.
+ * @throws RangeError `invalid-argument` for options that are not an object, a wrong `dayOfMonth` or a wrong
+ *   `convention`; `invalid-option` when `dayOfMonth` is given under both its old and its new name; `invalid-month`;
+ *   the errors of {@link adjustDate}.
+ * @internal
+ */
+export function dueDateOf(core: CalendarCore, month: MonthString, options: unknown): DateString {
+  const o = optionsObject(
+    options,
+    "dueDate options",
+    (v) => renameKeys("throw", ["dueDate"], "", v),
+    true,
+  );
+  const day = o["dayOfMonth"];
+  if (!isDayOfMonthValue(day)) {
+    throw rangeError(
+      "invalid-argument",
+      `dayOfMonth must be an integer from 1 to 31, or -1 (last day): ${describeValue(day)}`,
+    );
+  }
+  return adjustDate(core, dayOfMonth(parseMonth(month), day), o as unknown as AdjustOptions);
+}
+
+/**
+ * Builds the Calendar methods (search, adjustment, month and closing functions) on top of a holiday lookup and a
+ * per-day judgement. Shared by createCalendar, combineCalendars and createCalendarFromSchedule.
+ * @param lookup - Holiday lookup and time zone conversion; its members are exposed unchanged.
+ * @param isOpen - Whether a date is a business day; may throw.
+ * @param info - DayInfo of a date.
+ * @param searchDayLimit - Positive integer: the number of days a search examines.
+ * @returns A frozen Calendar that carries the contents (`PARTS`) of `lookup` for the diagnostics.
+ * @internal
+ */
+export function buildCalendar<Kind extends string>(
   lookup: HolidayLookup<Kind>,
   isOpen: (date: DateString) => boolean,
   info: (date: DateString) => DayInfo<Kind>,
   searchDayLimit: number,
 ): Calendar<Kind> {
   const dateOf = lookup.dateOf;
+  const core: CalendarCore = { isOpen, searchDayLimit };
 
-  /** 営業日（open が true）または休業日（false）を、start から step の向きに searchDayLimit 日まで探す */
-  function search(start: DateString, step: 1 | -1, open = true): DateString {
-    let n = dayNumberOf(start);
-    for (let i = 0; i < searchDayLimit; i++, n += step) {
-      const date = dateOfDayNumber(n);
-      if (isOpen(date) === open) return date;
-    }
-    throw open
-      ? noBusinessDay(start)
-      : rangeError(
-          "no-closed-day",
-          `No closed day found within ${searchDayLimit} days from ${start}`,
-        );
-  }
-
-  function noBusinessDay(start: DateString) {
-    return rangeError(
-      "no-business-day",
-      `No business day found within ${searchDayLimit} days from ${start}`,
-    );
-  }
-
-  function countOpen(from: number, toExclusive: number): number {
-    let count = 0;
-    for (let n = from; n < toExclusive; n++) if (isOpen(dateOfDayNumber(n))) count++;
-    return count;
-  }
-
-  const CONVENTIONS: readonly BusinessDayConvention[] = [
-    "following",
-    "preceding",
-    "modified-following",
-    "modified-preceding",
-  ];
-  /** 月 m の、営業日に調整した締め日 D(m)（decisions.md の 23 番） */
-  function closingDate(
-    month: { year: number; month: number },
-    closingDayOfMonth: number,
-    options: AdjustOptions,
-  ): DateString {
-    return adjustDate(dayOfMonth(month, closingDayIn(month, closingDayOfMonth)), options);
-  }
-  /** 営業日を考慮した締め日で日付が属する月（date ≤ D(m) となる最小の m）。暦日の締めの月の前月から順に調べる */
-  function closingMonthOf(
-    date: DateString,
-    closingDayOfMonth: number,
-    options: AdjustOptions,
-  ): { year: number; month: number } {
-    checkClosingDay(closingDayOfMonth);
-    let month = parseMonth(calendarClosingMonth(date, closingDayOfMonth));
-    // D は月とともに単調に増える（減らない）ので、暦日の締めの月から、後ろへ（following で前月の締め日が
-    // 長期休業を越えて当月以降に来た場合）、前へ（preceding で当月の締め日が date より前に来た場合）順に探す
-    while (date <= closingDate(shiftMonth(month, -1), closingDayOfMonth, options)) {
-      month = shiftMonth(month, -1);
-    }
-    while (date > closingDate(month, closingDayOfMonth, options)) month = shiftMonth(month, 1);
-    return month;
-  }
-  function adjustDate(date: DateString, options: AdjustOptions | undefined): DateString {
-    const convention = (options as { convention?: unknown } | undefined)?.convention;
-    if (!CONVENTIONS.includes(convention as BusinessDayConvention)) {
-      throw rangeError(
-        "invalid-argument",
-        `convention must be one of ${CONVENTIONS.map((v) => `"${v}"`).join(", ")}`,
-      );
-    }
-    if (isOpen(date)) return date;
-    switch (convention as BusinessDayConvention) {
-      case "following":
-        return search(date, 1);
-      case "preceding":
-        return search(date, -1);
-      // 当月の中を先に探し、当月に営業日がまったくないときだけ元の向きに月をまたぐ（結果に関係しない月の外の日を
-      // 評価しない。評価した日で投げる決まりは decisions.md の 17 番、月をまたぐ決まりは 21 番）
-      case "modified-following":
-        return searchInMonth(date, 1, true) ?? searchInMonth(date, -1, false) ?? search(date, 1);
-      case "modified-preceding":
-        return searchInMonth(date, -1, true) ?? searchInMonth(date, 1, false) ?? search(date, -1);
-      default:
-        throw rangeError("invalid-argument", `Unknown convention: ${String(convention)}`);
-    }
-  }
-
-  /**
-   * 同じ月の中だけで営業日を探す（なければ undefined）。月の端は日の番号で止め、月の外の日は評価しない（1000 年 1 月・9999 年
-   * 12 月でも範囲の外に出ない）。limited なら、search と同じく searchDayLimit 日を調べて見つからないときに no-business-day
-   */
-  function searchInMonth(
-    start: DateString,
-    step: 1 | -1,
-    limited: boolean,
-  ): DateString | undefined {
-    const { year, month } = parseMonth(start.slice(0, 7));
-    const first = dayNumberOf(formatDate(year, month, 1));
-    const last = first + lengthOfMonth(year, month) - 1;
-    let n = dayNumberOf(start);
-    for (let i = 0; n >= first && n <= last; i++, n += step) {
-      if (limited && i >= searchDayLimit) throw noBusinessDay(start);
-      const date = dateOfDayNumber(n);
-      if (isOpen(date)) return date;
-    }
-    return undefined;
-  }
-
-  /** 月の営業日（月初から順） */
-  function businessDaysOfMonth(month: MonthString): DateString[] {
-    const { year, month: m } = parseMonth(month);
-    const result: DateString[] = [];
-    for (let d = 1; d <= lengthOfMonth(year, m); d++) {
-      const date = formatDate(year, m, d);
-      if (isOpen(date)) result.push(date);
-    }
-    return result;
-  }
-
-  function nthOfMonth(month: MonthString, n: number): DateString {
-    if (!Number.isInteger(n) || n === 0) {
-      throw rangeError("invalid-argument", `n must be a non-zero integer: ${describeValue(n)}`);
-    }
-    const days = businessDaysOfMonth(month);
-    const found = n > 0 ? days[n - 1] : days[days.length + n];
-    if (found === undefined) {
-      throw rangeError(
-        "no-business-day",
-        `${month} has ${days.length} business day(s); requested ${n > 0 ? "" : "last "}#${Math.abs(n)}`,
-      );
-    }
-    return found;
-  }
-
-  // 中身は、作った元（スケジュール・合成の参照）から引き継ぐ。元に中身がなければ空の入れ物（診断は中身が分からないとする）
+  // The parts are inherited from the origin (a schedule, a combined lookup). Without parts in the origin the
+  // holder is empty (the diagnostics treat the content as unknown)
   const parts = partsHolder(partsOf(lookup));
   const calendar: Calendar<Kind> & { readonly [PARTS]: PartsHolder } = {
     [PARTS]: parts,
@@ -716,101 +1103,52 @@ function buildCalendar<Kind extends string>(
     dayInfo: (input) => info(dateOf(input)),
     daysBetween: (from, to) => mapDays(dateOf(from), dateOf(to), info),
     isBusinessDay: (input) => isOpen(dateOf(input)),
-    nextBusinessDay: (input) => search(addDays(dateOf(input), 1), 1),
-    previousBusinessDay: (input) => search(addDays(dateOf(input), -1), -1),
-    nextClosedDay: (input) => search(addDays(dateOf(input), 1), 1, false),
-    previousClosedDay: (input) => search(addDays(dateOf(input), -1), -1, false),
+    nextBusinessDay: (input) => searchDay(core, addDays(dateOf(input), 1), 1),
+    previousBusinessDay: (input) => searchDay(core, addDays(dateOf(input), -1), -1),
+    nextClosedDay: (input) => searchDay(core, addDays(dateOf(input), 1), 1, false),
+    previousClosedDay: (input) => searchDay(core, addDays(dateOf(input), -1), -1, false),
     businessDayOnOrAfter(input, options) {
       const opts = optionsObject(options, "businessDayOnOrAfter options");
-      const civil = toCivil(input, lookup.timeZone);
-      let start = civil.date;
-      if (opts["cutoff"] !== undefined) {
-        const cutoff = parseTimeOfDaySeconds(opts["cutoff"]);
-        if (civil.minutes === null) {
-          throw rangeError(
-            "invalid-argument",
-            "cutoff requires an input with a time of day (a Date, a date-time string or a Temporal value with a time); a date-only input would silently ignore the cutoff",
-          );
-        }
-        // 入力の時刻は分の精度なので、入力の分の始まり（秒 0）と比べる。締め時刻の秒が 0 でなければ、同じ分の入力は締めの前
-        if (civil.minutes * 60 >= cutoff) start = addDays(start, 1);
-      }
-      return search(start, 1);
+      return searchDay(core, startAfterCutoff(toCivil(input, lookup.timeZone), opts["cutoff"]), 1);
     },
-    businessDayOnOrBefore: (input) => search(dateOf(input), -1),
+    businessDayOnOrBefore: (input) => searchDay(core, dateOf(input), -1),
     addBusinessDays(input, n) {
       if (!Number.isInteger(n))
         throw rangeError("invalid-argument", `n must be an integer: ${describeValue(n)}`);
-      let date = dateOf(input);
-      if (n === 0) return search(date, 1);
-      const step = n > 0 ? 1 : -1;
-      for (let remaining = Math.abs(n); remaining > 0; remaining--) {
-        date = search(addDays(date, step), step);
-      }
-      return date;
+      return addBusinessDaysTo(core, dateOf(input), n);
     },
     diffBusinessDays(from, to) {
       const a = dayNumberOf(dateOf(from));
       const b = dayNumberOf(dateOf(to));
-      // 逆順で営業日がないときに -0 を返さない（Intl.NumberFormat などは "-0" と表示する）
-      return a <= b ? countOpen(a, b) : 0 - countOpen(b, a);
+      // Do not return -0 for a reversed range without business days (Intl.NumberFormat and others show "-0")
+      return a <= b ? countOpen(core, a, b) : 0 - countOpen(core, b, a);
     },
-    businessDatesBetween(from, to) {
-      const a = dateOf(from);
-      const b = dateOf(to);
-      if (a > b) throw rangeError("invalid-range", `"from" must not be after "to" (${a} > ${b})`);
-      const result: DateString[] = [];
-      for (let n = dayNumberOf(a); n <= dayNumberOf(b); n++) {
-        const date = dateOfDayNumber(n);
-        if (isOpen(date)) result.push(date);
-      }
-      return Object.freeze(result);
-    },
-    adjust: (input, options) => adjustDate(dateOf(input), adjustOptions(options, "adjust options")),
-    nthBusinessDayOfMonth: nthOfMonth,
-    firstBusinessDayOfMonth: (month) => nthOfMonth(month, 1),
-    lastBusinessDayOfMonth: (month) => nthOfMonth(month, -1),
-    // 締め日のメソッドは、締め日 → オプション → 入力の順に確かめる（2 つが誤っているときの code を 2 つのメソッドでそろえる）
+    businessDatesBetween: (from, to) => businessDatesIn(core, dateOf(from), dateOf(to)),
+    adjust: (input, options) =>
+      adjustDate(core, dateOf(input), adjustOptions(options, "adjust options")),
+    nthBusinessDayOfMonth: (month, n) => nthOfMonth(core, month, n),
+    firstBusinessDayOfMonth: (month) => nthOfMonth(core, month, 1),
+    lastBusinessDayOfMonth: (month) => nthOfMonth(core, month, -1),
+    // The closing-day methods check the closing day, then the options, then the input (so that both methods give
+    // the same code when two of them are wrong)
     closingMonth(input, closingDayOfMonth, rawOptions) {
       checkClosingDay(closingDayOfMonth);
       const options = adjustOptions(rawOptions, "closingMonth options");
-      return formatMonth(closingMonthOf(dateOf(input), closingDayOfMonth, options));
+      return formatMonth(closingMonthOf(core, dateOf(input), closingDayOfMonth, options));
     },
     closingPeriod(input, closingDayOfMonth, rawOptions) {
       checkClosingDay(closingDayOfMonth);
       const options = adjustOptions(rawOptions, "closingPeriod options");
-      // ルートの closingPeriod と同じ読み分け（ハイフンで区切った部分が 3 つ以上の文字列と、文字列でない値は暦日。
-      // それ以外の文字列は月）。暦日は dateOf で暦日にする
+      // Read like the root closingPeriod (a string with three or more hyphen-separated parts, and a value that
+      // is not a string, are a calendar date; any other string is a month). A date becomes a calendar date with
+      // dateOf
       const month =
         typeof input !== "string" || readsAsDate(input)
-          ? closingMonthOf(dateOf(input), closingDayOfMonth, options)
+          ? closingMonthOf(core, dateOf(input), closingDayOfMonth, options)
           : parseMonth(input as string);
-      const to = closingDate(month, closingDayOfMonth, options);
-      const from = addDays(closingDate(shiftMonth(month, -1), closingDayOfMonth, options), 1);
-      if (from > to) {
-        throw rangeError(
-          "no-business-day",
-          `${formatMonth(month)} has no closing period of its own: there is no business day between the previous closing day and ${to} (its days belong to the next month)`,
-        );
-      }
-      return Object.freeze({ from, to });
+      return closingPeriodOfMonth(core, month, closingDayOfMonth, options);
     },
-    dueDate(month, options) {
-      const o = optionsObject(
-        options,
-        "dueDate options",
-        (v) => renameKeys("throw", ["dueDate"], "", v),
-        true,
-      );
-      const day = o["dayOfMonth"];
-      if (!isDayOfMonthValue(day)) {
-        throw rangeError(
-          "invalid-argument",
-          `dayOfMonth must be an integer from 1 to 31, or -1 (last day): ${describeValue(day)}`,
-        );
-      }
-      return adjustDate(dayOfMonth(parseMonth(month), day), o as unknown as AdjustOptions);
-    },
+    dueDate: (month, options) => dueDateOf(core, month, options),
     businessDaysBetween: (from, to) => calendar.diffBusinessDays(from, to),
     listBusinessDays: (from, to) => calendar.businessDatesBetween(from, to),
   };
@@ -820,15 +1158,27 @@ function buildCalendar<Kind extends string>(
 }
 
 /**
- * メソッド・関数のオプションの引数を受ける: undefined は省略、普通のオブジェクトは明示的な undefined を除いて返す。
- * それ以外（null・数・配列・関数・Date・Map など）は例外（code は既定で invalid-argument、作る関数の設定は invalid-option。
- * decisions.md の 8 番。黙ってオプションなしとして通さない。6 番）
+ * Reads an options argument of a method or function.
+ * @param options - The argument as given.
+ * @param what - Name used in the error message.
+ * @param rename - Applied to the object before use (renamed keys); default identity.
+ * @param required - true when the argument cannot be omitted.
+ * @param code - Error code; default `invalid-argument` (creation functions pass `invalid-option`).
+ * @returns `{}` for undefined when not required; otherwise a copy of the object without properties that are
+ *   undefined.
+ * @throws RangeError with `code` when the value is not an options object (null, numbers, arrays, Date, ...), or
+ *   undefined when required.
+ * @internal
+ * @see decisions.md #6, #8
  */
-function optionsObject(
+export function optionsObject(
   options: unknown,
   what: string,
   rename: (v: Record<string, unknown>) => Record<string, unknown> = (v) => v,
-  /** 省略できないオプション（dueDate・combineCalendars・adjust・closingMonth・closingPeriod）。undefined も、オブジェクトでないことを伝える */
+  /**
+   * Options that cannot be omitted (dueDate, combineCalendars, adjust, closingMonth, closingPeriod): undefined is
+   * also reported as not being an object
+   */
   required = false,
   code: KnownErrorCode = "invalid-argument",
 ): Record<string, unknown> {
@@ -839,11 +1189,20 @@ function optionsObject(
   return withoutUndefined(rename(options));
 }
 
-/** 調整の規則のオプション（adjust・closingMonth・closingPeriod）。省略できず、普通のオブジェクトだけを受ける（8 番） */
-const adjustOptions = (options: unknown, what: string): AdjustOptions =>
+/**
+ * Reads the required options object of adjust, closingMonth and closingPeriod.
+ * @throws RangeError `invalid-argument` when it is not an options object.
+ * @internal
+ */
+export const adjustOptions = (options: unknown, what: string): AdjustOptions =>
   optionsObject(options, what, undefined, true) as unknown as AdjustOptions;
 
-const isCalendarLike = (v: unknown): v is Calendar =>
+/**
+ * Whether a value has the shape of a calendar: an object with functions `dayInfoOn` and `isBusinessDay`, a string
+ * `timeZone` and an array `providers`. Objects not created by this library pass too.
+ * @internal
+ */
+export const isCalendarLike = (v: unknown): v is Calendar =>
   typeof v === "object" &&
   v !== null &&
   typeof (v as Calendar).dayInfoOn === "function" &&
@@ -852,28 +1211,31 @@ const isCalendarLike = (v: unknown): v is Calendar =>
   Array.isArray((v as Calendar).providers);
 
 /**
- * 作成済みの営業日カレンダーを合成する。"all" はすべてのカレンダーが営業している日、"any" はいずれかが
- * 営業している日を営業日とする。返すのは通常の営業日カレンダーで、営業日の加減算・調整・期日などが合成結果で動く。
- *
- * - dayInfoOn の reason・name・shiftedFrom・optionPath は、合成結果と同じ判定をした最初のカレンダーの結果で、
- *   その番号を decidedBy で返す。入れ子の合成では、内側の番号まで含めた列を decidedByPath で返す。
- *   holiday・isHoliday・holidaysInYear などは、すべてのカレンダーの同じ参照を呼び、日付ごとに先のカレンダー
- *   （その中では先の提供元）の祝日を採る。方針は各カレンダーのもので、どれかのカレンダーが投げる日だけ投げる
- * - タイムゾーンはすべてのカレンダーで同じでなければならない（time-zone-conflict）。
- *   2 つ未満、同じカレンダーを 2 回渡した場合は invalid-argument
- * - 合成したカレンダーをさらに合成することもできる。規則の診断（diagnoseCalendar）の対象にはならないので、
- *   元のカレンダーの設定をそれぞれ診断する
- * @public
+ * Validates the arguments of {@link combineCalendars}.
+ * @param calendars - The argument as given.
+ * @param options - The argument as given (old key names are read as the new ones).
+ * @returns `list`: a frozen copy of the calendars; `mode`; `searchDayLimit` (default 3660); `zone`: the common
+ *   time zone.
+ * @throws RangeError `invalid-argument` (not an array of two or more distinct calendars), `invalid-option`
+ *   (options that are not an object, or with a wrong `open` or `searchDayLimit`), `time-zone-conflict`.
+ * @internal
+ * @see decisions.md #4, #6
  */
-export function combineCalendars<Kind extends string = string>(
+export function checkCombineArguments<Kind extends string>(
   calendars: readonly Calendar<Kind>[],
   options: CombineCalendarsOptions,
-): Calendar<Kind> {
+): {
+  list: readonly Calendar<Kind>[];
+  mode: "all" | "any";
+  searchDayLimit: number;
+  zone: string;
+} {
   if (!Array.isArray(calendars) || calendars.length < 2) {
     throw rangeError("invalid-argument", "calendars must be an array of two or more calendars");
   }
-  // 渡された配列を写して凍結し、以降はこの写しだけを使う（作成の後に配列を書き換えても、合成は変わらない。decisions.md の 4 番）。
-  // 穴は undefined の要素として検証する（forEach は穴を飛ばす。decisions.md の 6 番）
+  // The array passed is copied and frozen, and only the copy is used from here on (changing the array after
+  // creation does not change the combination. decisions.md #4). A hole is validated as an undefined element
+  // (forEach skips holes. decisions.md #6)
   const list = Object.freeze(Array.from(calendars));
   list.forEach((c, i) => {
     if (!isCalendarLike(c))
@@ -907,32 +1269,113 @@ export function combineCalendars<Kind extends string = string>(
       `Calendars use different time zones (${zones.join(", ")}); combine calendars with the same time zone`,
     );
   }
+  return { list, mode, searchDayLimit, zone: zones[0]! };
+}
+
+/**
+ * Merges holiday lists: per date the holiday of the earliest list wins.
+ * @returns A frozen array sorted by date.
+ * @internal
+ */
+export function mergeHolidayLists<Kind extends string>(
+  lists: readonly (readonly Holiday<Kind>[])[],
+): readonly Holiday<Kind>[] {
+  const byDate = new Map<string, Holiday<Kind>>();
+  for (const holidays of lists)
+    for (const h of holidays) if (!byDate.has(h.date)) byDate.set(h.date, h);
+  return Object.freeze(
+    [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+  );
+}
+
+/**
+ * Combined business-day status: with "all" every result must be true, with "any" at least one.
+ * @internal
+ */
+export const combinedOpen = (results: readonly boolean[], mode: "all" | "any"): boolean =>
+  mode === "all" ? results.every(Boolean) : results.some(Boolean);
+
+/**
+ * Combined DayInfo of a date from the results of the member calendars.
+ * @param date - The date.
+ * @param results - DayInfo of each member calendar, in the written order.
+ * @param mode - "all" or "any".
+ * @returns A frozen DayInfo. reason, name, shiftedFrom and optionPath come from the first calendar whose
+ *   judgement equals the combined one (`decidedBy`; `decidedByPath` prepends it to that calendar's own path);
+ *   `holiday` is the first holiday among the results.
+ * @internal
+ */
+export function combinedDayInfo<Kind extends string>(
+  date: DateString,
+  results: readonly DayInfo<Kind>[],
+  mode: "all" | "any",
+): DayInfo<Kind> {
+  const open = mode === "all" ? results.every((r) => r.open) : results.some((r) => r.open);
+  // The first calendar with the same judgement as the combined result (with "all": the first closed one when
+  // closed; when open all are open, so number 0)
+  const decidedBy = results.findIndex((r) => r.open === open);
+  const decided = results[decidedBy]!;
+  const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
+    date,
+    weekday: decided.weekday,
+    open,
+    businessDay: open,
+    reason: decided.reason,
+  };
+  if (decided.name !== undefined) result.name = decided.name;
+  // The holiday is the first one in the results of the member calendars (not looked up again; a day on which a
+  // member calendar throws has already thrown above)
+  const holiday = results.find((r) => r.holiday !== undefined)?.holiday;
+  if (holiday !== undefined) result.holiday = holiday;
+  if (decided.shiftedFrom !== undefined) result.shiftedFrom = decided.shiftedFrom;
+  if (decided.optionPath !== undefined) result.optionPath = result.rulePath = decided.optionPath;
+  result.decidedBy = decidedBy;
+  // When the inner calendar is a combined one, its own number goes before that path (length 1 when not nested)
+  result.decidedByPath = Object.freeze([decidedBy, ...(decided.decidedByPath ?? [])]);
+  return Object.freeze(result);
+}
+
+/**
+ * Combines existing business calendars into one.
+ * @param calendars - Two or more distinct calendars with the same time zone. The array is copied.
+ * @param options - `open`: "all" (a day is a business day when every calendar is open) or "any" (when at least one
+ *   is); `searchDayLimit` (default 3660).
+ * @returns A frozen Calendar. Every calendar is judged for every day, so a day throws when any calendar throws.
+ *   `dayInfoOn` reports `reason`, `name`, `shiftedFrom` and `optionPath` of the first calendar whose result equals
+ *   the combined result, its index as `decidedBy`, and the chain of indexes through nested combinations as
+ *   `decidedByPath`. Holidays are taken per date from the first calendar that has one. A combined calendar can be
+ *   combined again; it cannot be diagnosed (diagnose the options of its parts).
+ * @throws RangeError `invalid-argument` when `calendars` is not an array of two or more calendars or contains the
+ *   same calendar twice; `invalid-option` for invalid options; `time-zone-conflict` when the time zones differ.
+ * @public
+ * @see decisions.md #4, #6, #17
+ */
+export function combineCalendars<Kind extends string = string>(
+  calendars: readonly Calendar<Kind>[],
+  options: CombineCalendarsOptions,
+): Calendar<Kind> {
+  const { list, mode, searchDayLimit, zone } = checkCombineArguments(calendars, options);
   const providers: HolidayProvider<Kind>[] = [];
   for (const c of list) for (const p of c.providers) if (!providers.includes(p)) providers.push(p);
-  // 合成の参照は、タイムゾーンの変換と提供元・方針の値（要約。どれかが "throw" なら "throw"）のためだけに使う。祝日は和集合から
-  // 引かず、構成カレンダーの結果から求める（和集合に方針を一律に当てると、あるカレンダーの方針が別のカレンダーにしか
-  // 属さない提供元にまで当たり、どの構成カレンダーも投げない日に投げる。decisions.md の 17 番）
+  // The combined lookup is used only for time-zone conversion and for the provider and policy values (a summary:
+  // "throw" when any is "throw"). Holidays are not looked up from the union but taken from the results of the
+  // member calendars (applying one policy to the union would apply a calendar's policy to providers that belong
+  // only to another calendar and throw on a day on which no member calendar throws. decisions.md #17)
   const base = createHolidayLookup<Kind>({
     providers: Object.freeze(providers),
-    timeZone: zones[0]!,
+    timeZone: zone,
     outOfRangePolicy: list.every((c) => c.outOfRangePolicy === "ignore") ? "ignore" : "throw",
     unconfirmedHolidayPolicy: list.some((c) => c.unconfirmedHolidayPolicy === "throw")
       ? "throw"
       : "accept",
   });
-  /** 構成カレンダーの祝日の一覧を、日付ごとに先のカレンダーの祝日を採ってまとめる（すべてのカレンダーを呼んでから） */
-  const merge = (lists: readonly (readonly Holiday<Kind>[])[]): readonly Holiday<Kind>[] => {
-    const byDate = new Map<string, Holiday<Kind>>();
-    for (const holidays of lists)
-      for (const h of holidays) if (!byDate.has(h.date)) byDate.set(h.date, h);
-    return Object.freeze(
-      [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
-    );
-  };
-  /** 構成カレンダーの祝日（すべてのカレンダーを呼び、先のカレンダーの祝日を採る） */
+  /**
+   * The holiday on a day: every calendar is asked, the first holiday found is returned.
+   */
   const holidayOn = (input: DateInput): Holiday<Kind> | undefined =>
     list.map((c) => c.holidayOn(input)).find((h) => h !== undefined);
-  // 合成の参照に、構成カレンダーの配列を中身として持たせる（buildCalendar が、合成したカレンダーに引き継ぐ）
+  // The combined lookup holds the array of member calendars as its parts (buildCalendar passes them on to the
+  // combined calendar)
   const parts = partsHolder(list);
   const lookup: HolidayLookup<Kind> & { readonly [PARTS]: PartsHolder } = {
     ...base,
@@ -940,40 +1383,21 @@ export function combineCalendars<Kind extends string = string>(
     isHoliday: (input) => holidayOn(input) !== undefined,
     holidayOn,
     getHoliday: holidayOn,
-    holidaysInYear: (year) => merge(list.map((c) => c.holidaysInYear(year))),
-    holidaysBetween: (from, to) => merge(list.map((c) => c.holidaysBetween(from, to))),
+    holidaysInYear: (year) => mergeHolidayLists(list.map((c) => c.holidaysInYear(year))),
+    holidaysBetween: (from, to) => mergeHolidayLists(list.map((c) => c.holidaysBetween(from, to))),
   };
 
-  // すべてのカレンダーを判定する（結果が決まった時点で止めると、後のカレンダーが投げる日に投げない。17 番）
-  const isOpen = (date: DateString): boolean => {
-    const results = list.map((c) => c.isBusinessDay(date));
-    return mode === "all" ? results.every(Boolean) : results.some(Boolean);
-  };
-
-  function info(date: DateString): DayInfo<Kind> {
-    const results = list.map((c) => c.dayInfoOn(date));
-    const open = mode === "all" ? results.every((r) => r.open) : results.some((r) => r.open);
-    // 合成結果と同じ判定をした最初のカレンダー（"all" で休業なら最初に休みのもの、営業ならすべて営業なので 0 番）
-    const decidedBy = results.findIndex((r) => r.open === open);
-    const decided = results[decidedBy]!;
-    const result: { -readonly [K in keyof DayInfo<Kind>]: DayInfo<Kind>[K] } = {
+  const isOpen = (date: DateString): boolean =>
+    combinedOpen(
+      list.map((c) => c.isBusinessDay(date)),
+      mode,
+    );
+  const info = (date: DateString): DayInfo<Kind> =>
+    combinedDayInfo(
       date,
-      weekday: decided.weekday,
-      open,
-      businessDay: open,
-      reason: decided.reason,
-    };
-    if (decided.name !== undefined) result.name = decided.name;
-    // 祝日は、求めた構成カレンダーの結果から先頭の 1 つを採る（引き直さない。構成カレンダーが投げる日は上で投げている）
-    const holiday = results.find((r) => r.holiday !== undefined)?.holiday;
-    if (holiday !== undefined) result.holiday = holiday;
-    if (decided.shiftedFrom !== undefined) result.shiftedFrom = decided.shiftedFrom;
-    if (decided.optionPath !== undefined) result.optionPath = result.rulePath = decided.optionPath;
-    result.decidedBy = decidedBy;
-    // 内側が合成したカレンダーなら、その経路の前に自分の番号を付ける（入れ子でなければ長さ 1）
-    result.decidedByPath = Object.freeze([decidedBy, ...(decided.decidedByPath ?? [])]);
-    return Object.freeze(result);
-  }
+      list.map((c) => c.dayInfoOn(date)),
+      mode,
+    );
 
   parts.owner = lookup;
   Object.freeze(parts);
@@ -981,41 +1405,40 @@ export function combineCalendars<Kind extends string = string>(
 }
 
 /**
- * スケジュールから作る営業日カレンダーのオプション。
+ * Options for a business calendar made from a schedule.
  * @public
  */
 export interface CalendarFromScheduleOptions {
   /**
-   * 営業日・休業日を探すときに調べる最大日数（既定: 3660）。超えたら、営業日の探索は code: "no-business-day"、
-   * 休業日の探索（nextClosedDay・previousClosedDay）は code: "no-closed-day" の RangeError
+   * Maximum number of days examined when searching for a business day or a closed day (default: 3660). Beyond
+   * it, a search for a business day throws a RangeError with code: "no-business-day" and a search for a closed
+   * day (nextClosedDay, previousClosedDay) one with code: "no-closed-day"
    */
   readonly searchDayLimit?: number;
-  /** @deprecated 0.30.0 で searchDayLimit に改名した。1.0.0 で削除する */
+  /** @deprecated Renamed to searchDayLimit in 0.30.0. Removed in 1.0.0 */
   readonly maxSearchDays?: number;
 }
 
 /**
- * スケジュール（createSchedule）から営業日カレンダーを作る。isOpen が true を返す値の日を営業日とする。
- * isOpen は boolean を返す関数にする（boolean でない値を返すと code: "invalid-argument" の RangeError。作成時に曜日の値と
- * holidayPolicy: { value } の値で呼んで確かめ、ほかの値の日は判定したときに確かめる）。
- * 営業時間表のような日ごとの値が設定の正本で、営業日の計算（加減算・調整・期日など）も同じ設定から行いたいときに使う
- * （営業日カレンダーを別に書いて同期を取る必要がなくなる）。
- *
- * - isOpen は値だけで決まる純粋な関数であること（日付・時刻・外部の状態を見ない）。営業日の探索は isOpen を繰り返し呼ぶので、
- *   結果が変わる関数を渡すと探索の結果が呼ぶたびに変わる。日付で変えたい条件は、スケジュールの規則（dates・recurringRules）に書く
- * - dayInfoOn の reason は、スケジュールの reason と営業・休業の組み合わせ（date → "open-date"/"closed-date"、annual → "open-annual"/
- *   "closed-annual"、recurring → "open-recurring"/"closed-recurring"、holiday → "holiday"、weekday → "open-weekday"/"closed-weekday"）。
- *   name・holiday・shiftedFrom・optionPath はスケジュールの結果をそのまま引き継ぐ
- * - 祝日の判定（holiday・isHoliday など）・タイムゾーン・outOfRangePolicy はスケジュールのもの。規則の診断（diagnoseSchedule）は
- *   スケジュールの設定に対して行う
+ * Creates a business calendar from a schedule: a day is a business day when `isOpen` returns true for its value.
+ * @param schedule - A schedule created by createSchedule.
+ * @param isOpen - Must return a boolean and depend only on the value (it is called repeatedly by searches). Checked
+ *   at creation with the weekday values and the holiday value, and again at every judgement.
+ * @param options - `searchDayLimit` (default 3660).
+ * @returns A frozen Calendar. `reason` is the schedule reason combined with open/closed (weekday →
+ *   "open-weekday"/"closed-weekday"); `name`, `holiday`, `shiftedFrom` and `optionPath` are the schedule's. Holidays,
+ *   time zone and policies are the schedule's.
+ * @throws RangeError `invalid-argument` when `schedule` is not a schedule, `isOpen` is not a function or returns a
+ *   non-boolean; `invalid-option` for invalid options.
  * @public
+ * @see decisions.md #8
  */
 export function createCalendarFromSchedule<Value, Kind extends string = string>(
   schedule: Schedule<Value, Kind>,
   isOpen: (value: Value) => boolean,
   options?: CalendarFromScheduleOptions,
 ): Calendar<Kind> {
-  // null・数などでは、内部の印を読む前に止める（読むと TypeError で落ちる）
+  // null, numbers and the like stop before the internal mark is read (reading it would fail with a TypeError)
   const info =
     typeof schedule === "object" && schedule !== null ? infoOfSchedule(schedule) : undefined;
   if (info === undefined) {
@@ -1024,7 +1447,7 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
   if (typeof isOpen !== "function") {
     throw rangeError("invalid-argument", "isOpen must be a function (value) => boolean");
   }
-  // 設定がオブジェクトでなければ invalid-option（黙って無視しない。decisions.md の 8 番）
+  // Options that are not an object are invalid-option (not silently ignored. decisions.md #8)
   const o = optionsObject(
     options,
     "createCalendarFromSchedule options",
@@ -1036,8 +1459,10 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
   if (!Number.isInteger(searchDayLimit) || searchDayLimit < 1) {
     throw rangeError("invalid-option", "searchDayLimit must be a positive integer");
   }
-  // isOpen は boolean を返す関数でなければならない（1 や "open" を黙って休業日にしない）。作成時に曜日の値と祝日の値で確かめ、
-  // 判定のたびにも確かめる（規則の値は作成時には分からない）
+  /**
+   * Calls `isOpen` and checks the result.
+   * @throws RangeError `invalid-argument` when it is not a boolean.
+   */
   const judge = (value: Value): boolean => {
     const result: unknown = isOpen(value);
     if (typeof result !== "boolean") {
@@ -1049,14 +1474,15 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
     return result;
   };
   for (const value of valuesOfSchedule(schedule)) judge(value);
-  // 値だけを求める判定（結果が祝日に依存しない設定なら未確定の祝日で投げない。祝日は引くので、対応年の外は今までどおり投げる）
+  // A judgement for the value only (options whose result does not depend on holidays do not throw for an
+  // unconfirmed holiday; holidays are still looked up, so a year outside the supported years throws as before)
   const open = (date: DateString): boolean => judge(schedule.valueOn(date));
   return buildCalendar(
     schedule,
     open,
     (date) => {
       const day = info(date);
-      // 変換は value を読まない（営業・休業は open で渡す）ので、boolean の値として扱ってよい
+      // The conversion does not read `value` (open or closed is passed as `open`), so it may be treated as boolean
       return dayInfoFromScheduleDay(
         day as ScheduleDayInfo<unknown, Kind> as ScheduleDayInfo<boolean, Kind>,
         judge(day.value),
@@ -1068,13 +1494,13 @@ export function createCalendarFromSchedule<Value, Kind extends string = string>(
 }
 
 /**
- * @deprecated 0.30.0 で CombineCalendarsOptions に改名した。1.0.0 で削除する
+ * @deprecated Renamed to CombineCalendarsOptions in 0.30.0. Removed in 1.0.0
  * @public
  */
 export type CombineOptions = CombineCalendarsOptions;
 
 /**
- * @deprecated 0.30.0 で BusinessDayOnOrAfterOptions に改名した。1.0.0 で削除する
+ * @deprecated Renamed to BusinessDayOnOrAfterOptions in 0.30.0. Removed in 1.0.0
  * @public
  */
 export type BusinessDayOptions = BusinessDayOnOrAfterOptions;

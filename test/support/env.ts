@@ -1,6 +1,7 @@
-// テストが読む環境変数（数でない値や決めた値以外を黙って既定に戻さず、例外にする。RELEASING.md の「品質の確認」）。
+// The environment variables tests read (a value that is not a number, or not one of the defined values, throws
+// instead of silently falling back to the default. The quality checks of RELEASING.md).
 
-/** 整数の環境変数（未設定・空なら fallback） */
+/** An integer environment variable (`fallback` when unset or empty) */
 export function intEnv(name: string, fallback: number): number {
   const text = process.env[name];
   if (text === undefined || text === "") return fallback;
@@ -9,7 +10,7 @@ export function intEnv(name: string, fallback: number): number {
   return Number(text);
 }
 
-/** "1" なら true、未設定・空・"0" なら false の環境変数（ほかの値は例外） */
+/** An environment variable that is true for "1" and false when unset, empty or "0" (any other value throws) */
 export function flagEnv(name: string): boolean {
   const text = process.env[name];
   if (text === undefined || text === "" || text === "0") return false;

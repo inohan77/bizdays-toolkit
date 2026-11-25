@@ -19,7 +19,8 @@ test("祝前日: 翌日が祝日でその日自身は祝日でない日だけに
     holidayPolicy: { value: "holiday" },
     recurringRules: [{ dayBeforeHoliday: true, value: "eve", name: "祝前日料金" }],
   });
-  // 2026-04-29（昭和の日）、05-03〜05-06（憲法記念日・みどりの日・こどもの日・振替休日）
+  // 2026-04-29 (Showa Day), 05-03 to 05-06 (Constitution Memorial Day, Greenery Day, Children's Day, a
+  // substitute)
   assert.deepEqual(
     ["2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-02", "2026-05-03"].map((d) =>
       eve.valueOn(d),
@@ -36,9 +37,9 @@ test("祝前日: 翌日が祝日でその日自身は祝日でない日だけに
     optionPath: "recurringRules[0]",
     rulePath: "recurringRules[0]",
   });
-  // 元日の前日（12-31 は祝日でない）
+  // The day before New Year's Day (12-31 is not a holiday)
   assert.equal(eve.valueOn("2026-12-31"), "eve");
-  // 祝日の翌日と祝前日は対になる（2026-05-07 は祝日の翌日で、祝前日ではない）
+  // Day after and day before a holiday are a pair (2026-05-07 is the day after a holiday, not the day before one)
   const both = createCalendar({
     holidayProvider: jp,
     holidayPolicy: "open",
@@ -53,7 +54,7 @@ test("祝前日: 翌日が祝日でその日自身は祝日でない日だけに
 });
 
 test("祝前日: 曜日・月の絞り込み、有効期間、配列の順番", () => {
-  // 「祝前日は深夜まで営業（土日に当たる祝前日は通常どおり）」
+  // "Open until late on the day before a holiday (as usual when that day is on a weekend)"
   const weekdaysOnly = createSchedule<string>({
     holidayProvider: jp,
     weekdayValues: ["-20", "-20", "-20", "-20", "-20", "-20", "-20"],
@@ -72,8 +73,10 @@ test("祝前日: 曜日・月の絞り込み、有効期間、配列の順番", 
   assert.equal(may.isBusinessDay("2026-05-02"), false);
   assert.equal(may.isBusinessDay("2026-04-28"), true, "5 月以外");
   assert.equal(may.isBusinessDay("2027-05-02"), true, "有効期間の外");
-  // 祝日と祝日の間が 1 日の年は、その日が祝日の翌日でも祝前日でもある。先に書いた規則が決める
-  // 2027-09-20（月・敬老の日）と 2027-09-23（木・秋分の日）: 09-21 は翌日だけ、09-22 は祝前日だけ
+  // In a year with one day between two holidays, that day is both the day after and the day before a holiday.
+  // The rule written first decides.
+  // 2027-09-20 (Mon, Respect for the Aged Day) and 2027-09-23 (Thu, Autumnal Equinox Day): 09-21 is only a day
+  // after, 09-22 only a day before
   const rules: RecurringRule[] = [
     { dayAfterHoliday: true, name: "翌日" },
     { dayBeforeHoliday: true, name: "前日" },
@@ -85,13 +88,15 @@ test("祝前日: 曜日・月の絞り込み、有効期間、配列の順番", 
   });
   assert.equal(sep.dayInfoOn("2027-09-21").name, "翌日");
   assert.equal(sep.dayInfoOn("2027-09-22").name, "前日");
-  // 2026-09-21（敬老の日）・09-22（国民の休日）・09-23（秋分の日）は連休で、09-20（日）が祝前日
+  // 2026-09-21 (Respect for the Aged Day), 09-22 (citizens' holiday) and 09-23 (Autumnal Equinox Day) are a run,
+  // and 09-20 (Sun) is the day before it
   assert.equal(sep.dayInfoOn("2026-09-20").name, "前日");
   assert.equal(sep.dayInfoOn("2026-09-22").reason, "holiday", "連休の中の日は祝日");
 });
 
 test("祝前日: 締め時刻の繰り上げ、対応年の終わり、提供元なし", () => {
-  // 「祝前日は当日出荷の受付を 12:00 まで」: 締め時刻をスケジュールの値にして cutoff に渡す
+  // "Same-day shipping is accepted until 12:00 on the day before a holiday": the cutoff time is a schedule value
+  // passed to cutoff
   const shipping = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
   const cutoffs = createSchedule<string>({
     holidayProvider: jp,
@@ -105,7 +110,8 @@ test("祝前日: 締め時刻の繰り上げ、対応年の終わり、提供元
   assert.equal(at("2026-11-02T11:30"), "2026-11-02", "祝前日の 12:00 前は当日");
   assert.equal(at("2026-11-02T13:00"), "2026-11-04", "祝前日の 12:00 後は翌営業日（11-03 は祝日）");
   assert.equal(at("2026-11-04T13:00"), "2026-11-04", "通常の日は 14:00 まで当日");
-  // 対応年の最後の日の祝前日は、翌日（対応年の外）の祝日が分からないので out-of-range（0.30.0。outOfRangePolicy: "ignore" なら外は祝日なし）
+  // The day before a holiday on the last supported day is out-of-range, because the holiday of the next day
+  // (outside the supported years) is unknown (0.30.0; with outOfRangePolicy: "ignore" the outside has no holidays)
   const edge = createCalendar({
     holidayProvider: jp,
     closedRecurringRules: [{ dayBeforeHoliday: true }],
@@ -121,7 +127,7 @@ test("祝前日: 締め時刻の繰り上げ、対応年の終わり、提供元
     closedRecurringRules: [{ dayBeforeHoliday: true }],
   });
   assert.equal(ignore.isBusinessDay(`${jp.supportedYears.to}-12-31`), true);
-  // 提供元がなければ、1 日も当てはまらない
+  // Without a provider no day matches
   const none = createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true }] });
   assert.equal(none.isBusinessDay("2026-12-31"), true);
 });

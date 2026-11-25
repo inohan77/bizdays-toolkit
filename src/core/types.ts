@@ -1,70 +1,76 @@
 import type { DateString } from "./date.ts";
 
-/** @internal 祝日の識別子（Holiday.key）の形式 */
+/** @internal Format of a holiday key (Holiday.key) */
 export const HOLIDAY_KEY_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
- * 祝日・休日 1 日分。
+ * One holiday.
  * @public
  */
 export interface Holiday<Kind extends string = string> {
-  /** 暦日 "YYYY-MM-DD" */
+  /** Calendar date "YYYY-MM-DD" */
   readonly date: DateString;
-  /** 現地語の名称 */
+  /** Name in the local language */
   readonly name: string;
-  /** 英語の名称 */
+  /** Name in English */
   readonly nameEn: string;
   /**
-   * ほかの言語の名称（省略可能）。キーは BCP 47 の言語タグの正規の形（例: "zh-Hant", "ko"）。
-   * 同梱の提供元は、公式の出典がある言語の名称だけを付ける。利用者が実装した提供元が付けた場合に、検証して複製・凍結して返す
+   * Names in other languages (optional). Keys are BCP 47 language tags in canonical form (e.g. "zh-Hant", "ko").
+   * Bundled providers add only names that have an official source. Names added by a user's provider are
+   * validated, copied and frozen before being returned
    */
   readonly names?: Readonly<Record<string, string>>;
-  /** 種別（国ごとに定義。日本は JpHolidayKind） */
+  /** Kind (defined per country; JpHolidayKind for Japan) */
   readonly kind: Kind;
   /**
-   * その日が観測している祝日の識別子（省略可能）。/^[a-z0-9][a-z0-9-]*$/ に限る。
-   * name が公式データの呼び方を写すのに対し、key は規則（{ holiday: true, keys: [...] }）から祝日を指すための安定した
-   * 識別子で、提供元が決め、バージョンをまたいで変えない（日付の移動・公式の改名があっても同じ祝日なら同じ key）。
-   * 振替日は元の祝日の key を持つ。種別と同じ情報しか持たない日（日本の国民の休日）や一度きりの日（臨時の祝日）は持たない。
-   * 同じ年に同じ key が複数回現れることはある（振替日と元の祝日、年に 2 回ある振替休日）
+   * Key of the holiday observed on the day (optional). Limited to /^[a-z0-9][a-z0-9-]*$/.
+   * `name` copies the wording of the official data, whereas `key` is a stable identifier for pointing at a
+   * holiday from a rule ({ holiday: true, keys: [...] }); the provider chooses it and keeps it across versions
+   * (the same holiday keeps its key when its date moves or it is officially renamed).
+   * A substitute day has the key of the original holiday. A day that carries no more than its kind (Japan's
+   * citizens' holiday) and a one-off day (a special holiday) have none.
+   * The same key can appear more than once in a year (a substitute day and its holiday; two substitute days)
    */
   readonly key?: string;
   /**
-   * 公式に確定しているか。
-   * 例: 日本の春分・秋分の日は前年 2 月の官報で確定するため、それより先の年は false（計算による予測）
+   * Whether the day is officially confirmed.
+   * Example: Japan's equinox days are confirmed by the official gazette of the previous February, so later
+   * years are false (predicted by calculation)
    */
   readonly confirmed: boolean;
 }
 
 /**
- * 祝日の提供元（国・地域ごとのルール）。
+ * A holiday provider (the rules of a country or region).
  *
- * 他の国・地域の祝日はこのインターフェースを実装して createCalendar・createSchedule に渡す。
- * holidaysInYear が返すデータは、年ごとに初めて使うときに検証され、誤りがあれば
- * code: "invalid-provider-data" の例外になる。返した祝日は、契約の項目（date・name・nameEn・names・
- * kind・confirmed・key）だけを持つ変更できないオブジェクトに複製される。
- * 祝日が長く続くとき、"after-holiday" の規則の本来の日が、振り替わる先の日より 31 日を超えて前にあると振り替えられず、
- * 連続が明けた日の判定が code: "holiday-run-too-long" の例外になる（振替元をさかのぼるのは 31 日まで。祝日の前後の規則は
- * 連続の長さによらず当てはまる。長い休業は closedDates・closedAnnualDates で書く。decisions.md の 24 番）。
+ * Implement this interface for other countries or regions and pass it to createCalendar / createSchedule.
+ * The data returned by holidaysInYear is validated the first time each year is used; wrong data throws with
+ * code: "invalid-provider-data". Returned holidays are copied into immutable objects that have only the
+ * contract's properties (date, name, nameEn, names, kind, confirmed, key).
+ * In a long run of holidays, an "after-holiday" rule whose original day is more than 31 days before the day it
+ * would move to is not moved, and judging the day after the run throws with code: "holiday-run-too-long" (the
+ * original day is searched for at most 31 days back; rules for the days before and after a holiday apply
+ * whatever the length of the run; write a long closure with closedDates / closedAnnualDates. decisions.md #24).
  *
- * 項目を足すときのバージョンは RELEASING.md の区分の表による。1.0.0 以降、マイナーバージョンで足す項目は省略可能なものに限る
- * （必須にすると、自作の提供元が型エラーになるため）。
+ * The version in which a property may be added follows the classification table of RELEASING.md. From 1.0.0,
+ * a property added in a minor version must be optional (a required one would be a type error in users'
+ * providers).
  * @public
  */
 export interface HolidayProvider<Kind extends string = string> {
   /**
-   * ISO 3166-1 alpha-2（国）・ISO 3166-2（地域）のコード、または該当するコードがない地域ではその形に合わせた独自のコード
-   * （大文字で書く）。例: "JP", "US-CA", "FR-AM"
+   * ISO 3166-1 alpha-2 (country) or ISO 3166-2 (region) code or, for a region without a code, an own code of
+   * the same shape (upper case). Examples: "JP", "US-CA", "FR-AM"
    */
   readonly id: string;
-  /** 祝日を判定する基準のタイムゾーン（IANA 名）。例: "Asia/Tokyo" */
+  /** Time zone in which the holidays are judged (IANA name). Example: "Asia/Tokyo" */
   readonly timeZone: string;
-  /** 対応している年の範囲（両端を含む） */
+  /** Supported years (both ends included) */
   readonly supportedYears: { readonly from: number; readonly to: number };
-  /** 反映済みのデータのバージョン（例: 反映済みの官報の年月 "2026-02"） */
+  /** Version of the reflected data (e.g. year and month of the reflected official gazette, "2026-02") */
   readonly dataVersion: string;
-  /** この年までは公式に確定している（それより後は confirmed: false を含みうる） */
+  /** Officially confirmed through this year (later years may contain confirmed: false) */
   readonly confirmedThrough?: number;
-  /** その年の祝日・休日（同じ日付は 1 件まで。順序は問わない） */
+  /** Holidays of the year (at most one per date; any order) */
   holidaysInYear(year: number): readonly Holiday<Kind>[];
 }

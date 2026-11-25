@@ -18,7 +18,7 @@ const company = createCalendar({
     { from: "12-29", to: "01-03", name: "年末年始休業" },
     { from: "08-13", to: "08-15", name: "夏季休業" },
   ],
-  openDates: ["2026-12-26"], // 土曜の臨時営業
+  openDates: ["2026-12-26"], // an extra business day on a Saturday
 });
 const bank = createCalendar({
   holidayProvider: jp,
@@ -93,7 +93,7 @@ test("合成: dayInfoOn は合成結果と同じ判定をした最初のカレ�
   assert.equal(any.dayInfoOn("2026-12-26").decidedBy, 0, "自社の臨時営業で営業");
   assert.equal(any.dayInfoOn("2026-12-26").reason, "open-date");
   assert.equal(any.dayInfoOn("2027-01-02").decidedBy, 0, "すべて休みなら 0 番");
-  // 合成していないカレンダーには decidedBy・decidedByPath が付かない
+  // A calendar that is not combined has no decidedBy / decidedByPath
   assert.equal("decidedBy" in company.dayInfoOn("2026-12-29"), false);
   assert.equal("decidedByPath" in company.dayInfoOn("2026-12-29"), false);
   assert.ok(Object.isFrozen(all.dayInfoOn("2026-12-29").decidedByPath));
@@ -149,7 +149,7 @@ test("合成: 祝日の提供元は和集合、outOfRangePolicy はどれかが 
   assert.equal(ignore.isBusinessDay("2150-01-01"), true);
   assert.equal(combineCalendars([a, bank], { open: "all" }).outOfRangePolicy, "throw");
 
-  // 利用者の提供元（同じタイムゾーン）との和集合
+  // A union with a user's provider (the same time zone)
   const custom = createCalendar({
     holidayProvider: {
       id: "X",
@@ -198,7 +198,8 @@ test("合成: 祝日の提供元は和集合、outOfRangePolicy はどれかが 
     "合成したカレンダー（0 番）の年末年始休業",
   );
   assert.equal(nested.dayInfoOn("2026-12-29").name, "年末年始休業");
-  // 入れ子の合成では、内側のカレンダーまでの経路が decidedByPath で分かる（optionPath は [0, 0] 番の設定の位置）
+  // In a nested combination decidedByPath gives the path to the inner calendar (optionPath is a position in the
+  // options of calendar [0, 0])
   assert.deepEqual(nested.dayInfoOn("2026-12-29").decidedByPath, [0, 0]);
   assert.equal(nested.dayInfoOn("2026-12-29").optionPath, "closedAnnualDates[0]");
   assert.deepEqual(
@@ -274,7 +275,8 @@ test("合成: 入力の誤り", () => {
 });
 
 test("合成: 方針の違うカレンダーを合成しても、合成が投げるのは構成カレンダーのどれかが投げる日だけで、isBusinessDay と dayInfoOn・祝日のメソッドで例外の有無がそろう（decisions.md の 17 番）", () => {
-  // 0.31.2 まで、合成は和集合の提供元に「どれかが throw なら throw」を一律に当て、どの構成カレンダーも投げない日に投げていた
+  // Up to 0.31.2 a combination applied "throw if any is throw" to the union of the providers and threw on days
+  // on which no member calendar throws
   const utc = { closedWeekdays: [0, 6] as const, timeZone: "UTC" };
   const jpThrow = createCalendar({
     ...utc,
@@ -308,7 +310,7 @@ test("合成: 方針の違うカレンダーを合成しても、合成が投げ
       const nested = combineCalendars([c, calendars[0]!], { open });
       for (const date of days) {
         const where = `${name}・${open}・${date}`;
-        // 構成カレンダーのどれかが投げれば、その code で投げる（先のカレンダーの code）
+        // When any member calendar throws, the combination throws with that code (the code of the first calendar)
         const expectInfo = calendars.map((k) => throws(() => k.dayInfoOn(date))).find((x) => x);
         assert.equal(
           throws(() => c.dayInfoOn(date)),
@@ -338,7 +340,7 @@ test("合成: 方針の違うカレンダーを合成しても、合成が投げ
         );
         if (expectInfo !== undefined) combinedThrew++;
         if (expectInfo === undefined && expectHoliday === undefined) {
-          // 祝日は、先頭から最初に祝日を持つカレンダーのもの
+          // The holiday is the one of the first calendar that has a holiday
           const holiday = calendars.map((k) => k.holidayOn(date)).find((h) => h !== undefined);
           assert.deepEqual(c.dayInfoOn(date).holiday, holiday, `holiday ${where}`);
           assert.deepEqual(c.holidayOn(date), holiday, `holidayOn の値 ${where}`);
@@ -367,7 +369,7 @@ test("合成: 方針の違うカレンダーを合成しても、合成が投げ
         );
       }
     }
-  // 構成カレンダーが投げる日も試していること（空振りしない）
+  // Days on which a member calendar throws are tried too (not an empty run)
   assert.ok(combinedThrew > 0, "構成カレンダーが投げる日がない");
 });
 

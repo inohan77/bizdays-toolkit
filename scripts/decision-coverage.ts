@@ -1,36 +1,45 @@
 /**
- * 公開の名前が、決定の文書（docs/decisions.md）のどこで決まっているかを確かめる（check-claims.ts が呼ぶ）。
+ * Checks where in the decisions document (docs/decisions.md) the public names are decided (called by
+ * check-claims.ts).
  *
- * 設定の項目を足したのに、その既定値や扱いの理由が決定の文書にない、という漏れを防ぐ。確かめるのは 2 つ:
+ * Prevents the omission of adding an option key without its default or the reason for its handling in the
+ * decisions document. Two checks:
  *
- * 1. 利用者が書く入力の項目は、etc/option-decisions.json に「型.項目 → 決定の番号」があり、その番号の節に、項目の
- *    名前がバッククォートの中で現れること。番号は、その項目の扱い（省略したときの扱い、必須にしたこと、受ける値）を
- *    決めている決定を 1 つ書く。対象は、設定の型（名前が Options で終わる型・繰り返しの規則の型・有効期間）のすべての
- *    項目と、そのほかの入力の型（提供元の契約・Temporal の形の入力・スケジュールの祝日の値・日付の項目）の省略できる
- *    項目。同じ名前の項目でも型ごとに行が分かれるので、片方の型の扱いだけが書かれている場合を見つけられる（0.32.2 の
- *    後の点検で、スケジュールの holidayPolicy の既定の理由が、営業日カレンダーの側にしかなかった）。項目を持つ公開の型は、
- *    入力か結果かをこのファイルで分類する（分類のない型は失敗にする。新しい入力の型が、対象から黙って外れない）
- * 2. 関数・メソッド・例外の code は、決定の文書のどこかにバッククォートの中で現れるか、etc/undocumented-names.json に
- *    理由付きで載っていること（新しい公開の名前を足したときに、決定を書くか、書かない理由を書くかを選ばせる）
+ * 1. Every input property users write has "Type.property → decision number" in etc/option-decisions.json, and
+ *    the section of that number mentions the property's name inside backticks. The number is the one decision
+ *    that decides the property's handling (what omission means, why it is required, the accepted values).
+ *    Covered: every property of the option types (types whose name ends with Options, the recurring-rule types,
+ *    the effective period) and the optional properties of the other input types (the provider contract,
+ *    Temporal-shaped inputs, the holiday value of schedules, date entries). A property of the same name has one
+ *    row per type, which finds the case where only one type's handling is written (a review after 0.32.2 found
+ *    the reason for the default of a schedule's holidayPolicy only on the business-calendar side). Public types
+ *    with properties are classified as input or result in this file (an unclassified type fails, so a new input
+ *    type cannot silently fall outside)
+ * 2. Every function, method and error code is mentioned inside backticks somewhere in the decisions document, or
+ *    is listed with a reason in etc/undocumented-names.json (adding a public name forces a choice between
+ *    writing a decision and writing why not)
  *
- * どちらの一覧も、載っているのに要らなくなった行（公開の型にない項目・決定の文書に現れるようになった名前）は失敗にする。
- * 限界: 確かめるのは名前が現れることまでで、理由が十分に書かれているか、指した番号が本当にその型の項目を決めているかは、
- * 人が読んで確かめる。繰り返しの規則は形ごとの型（8 つ）を RecurringRule に、日付の項目の型を DateEntry にまとめるので、
- * 形をまたぐ同じ名前の項目（months・skipWeekdays・calendar・anchor など）は 1 行で確かめる（形ごとに扱いが違っても
- * 見つけられない）。結果の型の項目は対象にしていない。2 の検査は、同じ名前が複数の型にあるメソッドの漏れを見つけられない。
+ * In both lists a row that is no longer needed (a property the public types lack, a name the decisions document
+ * now mentions) fails.
+ * Limits: only the presence of the name is checked; whether the reason is sufficient and whether the number
+ * really decides that type's property is checked by a person. The recurring rules' per-shape types (8) are
+ * merged into RecurringRule and the date-entry types into DateEntry, so properties of the same name across
+ * shapes (months, skipWeekdays, calendar, anchor, ...) are checked with one row (a difference between shapes is
+ * not found). Properties of result types are not covered. Check 2 cannot find the omission of a method whose
+ * name exists on several types.
  */
 
 import { RENAMED_KEYS } from "../src/core/renamed.ts";
 
-/** 型の項目（公開の API の記録 etc/api.md の interface から読む） */
+/** A property of a type (read from the interfaces of etc/api.md, the record of the public API) */
 interface Member {
   readonly name: string;
-  /** 省略できるか */
+  /** Whether it can be omitted */
   readonly optional: boolean;
   readonly type: string;
 }
 
-/** etc/api.md の interface の名前と項目（項目は、その interface に直接書かれたものだけ） */
+/** Names and members of the interfaces of etc/api.md (only the members written directly in the interface) */
 export function interfacesOf(api: string): Map<string, { fields: Member[]; methods: string[] }> {
   const out = new Map<string, { fields: Member[]; methods: string[] }>();
   for (const m of api.matchAll(
@@ -38,8 +47,9 @@ export function interfacesOf(api: string): Map<string, { fields: Member[]; metho
   )) {
     const body = m[2]!;
     out.set(m[1]!, {
-      // 4 つの空白で始まる行だけ（入れ子の型の項目は数えない）
-      // 型が複数の行にわたる項目もあるので、型は最初の行だけを読む（never・undefined を見分けるのに足りる）
+      // Only lines starting with four spaces (members of nested types are not counted).
+      // A member's type can span several lines, so only its first line is read (enough to recognise never and
+      // undefined)
       fields: [...body.matchAll(/^ {4}readonly (\w+)(\??): ([^\n]*)$/gm)].map((f) => ({
         name: f[1]!,
         optional: f[2] === "?",
@@ -51,19 +61,21 @@ export function interfacesOf(api: string): Map<string, { fields: Member[]; metho
   return out;
 }
 
-/** 設定の型（名前で決まる）。すべての項目を確かめる */
+/** Option types (decided by name). Every property is checked */
 const isOptionType = (name: string): boolean =>
   name.endsWith("Options") || name.endsWith("Pattern") || name === "EffectivePeriod";
-/** 一覧での型の名前。繰り返しの規則の形ごとの型と、日付の項目の型は、それぞれ 1 つにまとめる */
+/** Type names in the list. The per-shape types of recurring rules and the date-entry types are each merged into one */
 const RULE = "RecurringRule";
 const DATE_ENTRY = "DateEntry";
 /**
- * 設定の型のほかに、利用者が書く入力の型（一覧での型の名前）。省略できる項目を確かめる（必須の項目は形の定義で、
- * 省略したときの扱いという選ぶ余地がない）。all は、すべての項目を確かめる型（項目のどれを書くかで意味が変わる）
+ * Input types users write besides the option types (names as in the list). Their optional properties are checked
+ * (a required property defines the shape and leaves no choice about omission). `all` marks a type whose every
+ * property is checked (which properties are written changes the meaning)
  */
 const INPUT_TYPES: Readonly<Record<string, { readonly listed: string; readonly all?: true }>> = {
   HolidayProvider: { listed: "HolidayProvider" },
-  // 結果の型でもあるが、提供元を書く人が holidaysInYear で返し、withSubstituteDays にも渡す
+  // Also a result type, but people who write providers return it from holidaysInYear and pass it to
+  // withSubstituteDays
   Holiday: { listed: "Holiday" },
   TemporalDateLike: { listed: "TemporalDateLike" },
   TemporalDateTimeLike: { listed: "TemporalDateLike" },
@@ -81,7 +93,7 @@ const INPUT_TYPES: Readonly<Record<string, { readonly listed: string; readonly a
   ScheduleAnnualDate: { listed: DATE_ENTRY },
   ScheduleAnnualRange: { listed: DATE_ENTRY },
 };
-/** 結果の型・メソッドを持つ型（項目は確かめない。メソッドは publicNamesOf が見る） */
+/** Result types and types with methods (properties are not checked; methods are examined by publicNamesOf) */
 const RESULT_TYPES: ReadonlySet<string> = new Set([
   "Calendar",
   "Schedule",
@@ -94,16 +106,17 @@ const RESULT_TYPES: ReadonlySet<string> = new Set([
   "OptionsMigration",
 ]);
 
-/** etc/api.md の、項目を持つ型（interface と、項目を持つ型の別名）の名前と項目 */
+/** Names and members of the types with properties in etc/api.md (interfaces and type aliases with properties) */
 export function typesWithMembers(api: string): Map<string, Member[]> {
   const out = new Map<string, Member[]>();
   for (const [name, { fields }] of interfacesOf(api)) out.set(name, fields);
-  // 型の別名は、定義の中の readonly の項目をすべて拾う（共用体のどの形の項目かは区別しない）
+  // For a type alias every readonly property in the definition is taken (without telling which shape of the
+  // union it belongs to)
   for (const m of api.matchAll(/^export type (\w+)(?:<[^\n]*?>)? = ([\s\S]*?);\n```/gm)) {
     const seen = new Map<string, Member>();
     for (const f of m[2]!.matchAll(/readonly (\w+)(\??): ([^;\n]*)/g)) {
       const prior = seen.get(f[1]!);
-      // 同じ名前が複数の形にあるときは、どれかで省略できれば、省略できる項目として扱う
+      // When the same name is in several shapes, it is optional if it can be omitted in any of them
       seen.set(f[1]!, {
         name: f[1]!,
         optional: f[2] === "?" || prior?.optional === true,
@@ -115,15 +128,18 @@ export function typesWithMembers(api: string): Map<string, Member[]> {
   return out;
 }
 
-/** 0.30.0 の旧名か（同じ型に新しい名前があるか、まとめた型の旧名）。決定の 10 番がまとめて決めている */
+/**
+ * Whether a key is an old name of 0.30.0 (the same type has the new name, or an old name of a merged type).
+ * Decision #10 decides them together
+ */
 const isOldName = (key: string, siblings: ReadonlySet<string>, listed: string): boolean =>
   RENAMED_KEYS.some(
     (r) => r.from === key && (siblings.has(r.to) || (listed === RULE && r.place === "rule")),
   );
 
 /**
- * 確かめる入力の項目（「型.項目」）と、分類されていない型。形を分けるための never・undefined の項目と、
- * 0.30.0 の旧名は除く
+ * The input properties to check ("Type.property") and the unclassified types. never / undefined properties that
+ * only separate shapes and the old names of 0.30.0 are left out
  */
 export function optionKeysOf(api: string): { keys: string[]; unclassified: string[] } {
   const keys = new Set<string>();
@@ -146,22 +162,23 @@ export function optionKeysOf(api: string): { keys: string[]; unclassified: strin
   return { keys: [...keys].sort(), unclassified: unclassified.sort() };
 }
 
-/** 公開の関数・メソッド・例外の code の名前 */
+/** Names of the public functions, methods and error codes */
 export function publicNamesOf(api: string, errorsSource: string): string[] {
   const names = new Set<string>();
   for (const m of api.matchAll(/^export declare function (\w+)/gm)) names.add(m[1]!);
   const interfaces = interfacesOf(api);
   for (const owner of ["Calendar", "Schedule", "HolidayLookup"])
     for (const method of interfaces.get(owner)?.methods ?? []) names.add(method);
-  // コメントの中の引用符の語（説明に出てくる "throw" など）を code と数えないように、コメントを除いてから読む
-  const codes = (/export type KnownErrorCode =([\s\S]*?);/.exec(errorsSource)?.[1] ?? "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/.*$/gm, "");
+  // Comments are removed before reading, so that quoted words in comments (a "throw" in a description, ...) are
+  // not counted as codes (and before looking for the ";" that ends the type: a ";" inside a comment must not
+  // cut the type short)
+  const source = errorsSource.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const codes = /export type KnownErrorCode =([\s\S]*?);/.exec(source)?.[1] ?? "";
   for (const m of codes.matchAll(/"([a-z-]+)"/g)) names.add(m[1]!);
   return [...names].sort();
 }
 
-/** 決定の文書の節（番号 → 本文） */
+/** Sections of the decisions document (number → body) */
 export function decisionSections(decisions: string): Map<number, string> {
   const heads = [...decisions.matchAll(/^### (\d+)\. .+$/gm)];
   const out = new Map<number, string>();
@@ -174,9 +191,11 @@ export function decisionSections(decisions: string): Map<number, string> {
 }
 
 /**
- * 文の中に、名前がコード片（1 行の中の、バッククォートで囲んだ部分）の中で現れるか。`{ sameAs: 0 }` のように、ほかの字と
- * 一緒でもよい。コード片は左から順に対で切り出す（閉じのバッククォートから次の開きまでの、コード片の外の語は数えない）。
- * 前後に英数字・下線・ハイフンが続くもの（別の名前の一部）は数えない。行をまたぐコード片と、コードブロックの中は読まない
+ * Whether a name occurs in the text inside a code span (a part of one line between backticks). Other characters
+ * may accompany it, as in `{ sameAs: 0 }`. Code spans are cut out in pairs from the left (words outside code
+ * spans, between a closing backtick and the next opening one, are not counted). An occurrence continued by a
+ * letter, digit, underscore or hyphen on either side (part of another name) is not counted. Code spans across
+ * lines and the contents of code blocks are not read
  */
 export function mentions(text: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -190,12 +209,13 @@ export interface Coverage {
   readonly failures: string[];
   readonly optionKeys: number;
   readonly names: number;
-  /** 公開の名前のうち、決定の文書に現れるもの（残りは、理由を書かない一覧に載っている） */
+  /** Public names that occur in the decisions document (the rest are in the list of reasons for not writing one) */
   readonly mentioned: number;
 }
 
 /**
- * 確かめた結果。optionDecisions は「型.項目 → 決定の番号」、undocumented は「名前 → 決定に書かない理由」
+ * The result of the check. optionDecisions is "Type.property → decision number"; undocumented is "name → reason
+ * for no decision"
  */
 export function decisionCoverage(input: {
   readonly api: string;
@@ -206,7 +226,7 @@ export function decisionCoverage(input: {
 }): Coverage {
   const failures: string[] = [];
   const sections = decisionSections(input.decisions);
-  // 1. 設定の項目
+  // 1. Option keys
   const { keys, unclassified } = optionKeysOf(input.api);
   for (const name of unclassified)
     failures.push(
@@ -234,7 +254,7 @@ export function decisionCoverage(input: {
       failures.push(
         `etc/option-decisions.json: ${key} is listed, but it is not an option in etc/api.md (remove the entry)`,
       );
-  // 2. 関数・メソッド・例外の code
+  // 2. Functions, methods and error codes
   const names = publicNamesOf(input.api, input.errorsSource);
   let mentioned = 0;
   for (const name of names) {

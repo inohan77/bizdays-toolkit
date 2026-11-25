@@ -1,14 +1,18 @@
 /**
- * 英国の bank holidays（GOV.UK の区分: England and Wales・Scotland・Northern Ireland）の計算。
+ * Calculation of UK bank holidays (divisions of GOV.UK: England and Wales, Scotland, Northern Ireland).
  *
- * - 毎年の祝日: 1971 年の Banking and Financial Dealings Act の附則と、毎年の布告で定まる日を規則で計算する
- *   （England and Wales・Northern Ireland の Good Friday と Christmas Day は慣習法上の休日だが、GOV.UK の一覧と同じく含める）
- * - 振替: 土曜日・日曜日に当たる固定日の祝日は、その後で最も近い、祝日でない平日に振り替える（日付順に割り当てる）
- * - 臨時の祝日・移動: 布告ごとの日付をテーブルで持つ
- * - 識別子（key）: 毎年の祝日に GOV.UK の区分名から 1 つ（KnownUkHolidayKey）。振替日は元の祝日の key、臨時の祝日は持たない
+ * - Annual holidays: the days set by the schedule to the Banking and Financial Dealings Act 1971 and by the
+ *   yearly proclamations are computed by rule (Good Friday and Christmas Day in England and Wales and Northern
+ *   Ireland are common-law holidays, but are included as in the GOV.UK list)
+ * - Substitution: a fixed-date holiday on a Saturday or Sunday moves to the nearest following weekday that is
+ *   not a holiday (assigned in date order)
+ * - Special holidays and moves: the dates of each proclamation are kept in tables
+ * - Keys: one per annual holiday, from the GOV.UK title (KnownUkHolidayKey). A substitute day has the key of
+ *   its holiday; special holidays have none
  *
- * 年ごとの正（GOV.UK・当時の政府の一覧・布告）と検証のフィクスチャは decisions.md の 28 番。
- * CONFIRMED_THROUGH より後の年は、規則による予測（confirmed: false）。
+ * The authority per year (GOV.UK, the government lists of the time, proclamations) and the verification
+ * fixtures: decisions.md #28.
+ * Years after CONFIRMED_THROUGH are predicted by rule (confirmed: false).
  */
 
 import {
@@ -21,31 +25,32 @@ import {
   type DateString,
 } from "../core/date.ts";
 import { describeValue, rangeError } from "../core/errors.ts";
-import type { Holiday } from "../core/types.ts";
+import type { Holiday, HolidayProvider } from "../core/types.ts";
 
 /**
- * 英国の祝日の種別（既知の値）。
+ * Kinds of UK holidays (known values).
  * @public
  */
 export type KnownUkHolidayKind =
-  /** 毎年の祝日（布告で日付が移動した年を含む） */
+  /** Annual holiday (including years in which a proclamation moved its date) */
   | "regular"
-  /** 土曜日・日曜日に当たった祝日の振替 */
+  /** Substitute for a holiday on a Saturday or Sunday */
   | "substitute"
-  /** 布告による臨時の祝日（記念式典・国葬など） */
+  /** Special holiday by proclamation (commemorations, state funerals, ...) */
   | "special";
 
 /**
- * 英国の祝日の種別。将来のバージョンで値が増えることがあるので、分岐では「その他」も扱うこと。
- * すべての値を網羅したことを型で確かめたい場合は KnownUkHolidayKind を使う。
+ * Kind of a UK holiday. Later versions may add values, so handle "anything else" when branching.
+ * Use KnownUkHolidayKind to check by type that every value is handled.
  * @public
  */
 export type UkHolidayKind = KnownUkHolidayKind | (string & {});
 
 /**
- * 英国の毎年の bank holiday の識別子（Holiday.key。既知の値）。GOV.UK の区分名から付け、布告で日付が移った年も同じ値。
- * 振替日は元の祝日の key を持ち、臨時の祝日（special）は key を持たない。
- * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * Keys of the annual UK bank holidays (Holiday.key; known values). Taken from the GOV.UK titles; the same value
+ * in years in which a proclamation moved the date.
+ * A substitute day has the key of its holiday; special holidays have no key.
+ * Used for completion when writing `keys` of a rule (the type is open, so other strings pass too).
  * @namingSource holiday-key
  * @public
  */
@@ -63,25 +68,25 @@ export type KnownUkHolidayKey =
   | "christmas"
   | "boxing-day";
 
-/** @internal GOV.UK の区分 */
+/** @internal Division of GOV.UK */
 export type UkDivision = "england-and-wales" | "scotland" | "northern-ireland";
 
-/** @internal 対応年 */
+/** @internal Supported years */
 export const SUPPORTED_YEARS = Object.freeze({ from: 1974, to: 2099 });
-/** @internal GOV.UK が日付を公表している最後の年 */
+/** @internal The last year for which GOV.UK publishes dates */
 export const CONFIRMED_THROUGH = 2028;
-/** @internal 反映済みの GOV.UK のデータの年月（2026 年の Scotland の World Cup bank holiday の追加） */
+/** @internal Year and month of the reflected GOV.UK data (Scotland's World Cup bank holiday of 2026 added) */
 export const DATA_VERSION = "2026-02";
 
 interface Entry {
   readonly date: DateString;
   readonly name: string;
   readonly kind: KnownUkHolidayKind;
-  /** 観測している祝日の識別子（振替日は元の祝日のもの。臨時の祝日は持たない） */
+  /** Key of the observed holiday (a substitute day has its holiday's; special holidays have none) */
   readonly key?: KnownUkHolidayKey;
 }
 
-/** 固定日の祝日（土曜日・日曜日なら振り替える） */
+/** A fixed-date holiday (substituted when on a Saturday or Sunday) */
 interface FixedDay {
   readonly month: number;
   readonly day: number;
@@ -106,7 +111,7 @@ const ALL: readonly UkDivision[] = ["england-and-wales", "scotland", "northern-i
 const NOT_SCOTLAND: readonly UkDivision[] = ["england-and-wales", "northern-ireland"];
 const SCOTLAND: readonly UkDivision[] = ["scotland"];
 
-/** 布告で毎年の祝日の日付を移した年（名称が変わる場合は name） */
+/** Years in which a proclamation moved the date of an annual holiday (`name` when the name changes) */
 const MOVED: readonly {
   readonly year: number;
   readonly from: string;
@@ -114,9 +119,11 @@ const MOVED: readonly {
   readonly name?: string;
   readonly divisions: readonly UkDivision[];
 }[] = [
-  // 1977 年: Silver Jubilee で England・Wales・NI の Spring を 6 月 6 日に（"in its stead"）。Scotland に Spring はまだない
+  // 1977: for the Silver Jubilee, Spring in England, Wales and NI moved to June 6 ("in its stead"). Scotland had
+  // no Spring holiday yet
   { year: 1977, from: SPRING, date: "1977-06-06", divisions: NOT_SCOTLAND },
-  // 1995 年: VE Day 50 周年で England・Wales・NI の Early May を 5 月 8 日に（5 月 1 日は布告されなかった）。Scotland の 5 月第 1 月曜は附則
+  // 1995: for the 50th anniversary of VE Day, Early May in England, Wales and NI moved to May 8 (May 1 was not
+  // proclaimed). Scotland's first Monday in May is in the schedule
   { year: 1995, from: EARLY_MAY, date: "1995-05-08", divisions: NOT_SCOTLAND },
   { year: 2002, from: SPRING, date: "2002-06-04", divisions: ALL },
   { year: 2012, from: SPRING, date: "2012-06-04", divisions: ALL },
@@ -130,18 +137,19 @@ const MOVED: readonly {
   { year: 2022, from: SPRING, date: "2022-06-02", divisions: ALL },
 ];
 
-/** 布告による臨時の祝日 */
+/** Special holidays by proclamation */
 const SPECIAL_DAYS: readonly {
   readonly date: DateString;
   readonly name: string;
   readonly divisions: readonly UkDivision[];
 }[] = [
-  // 名称の根拠と、固有の名称のない日に理由を括弧で添える規則: docs/sources/uk-bank-holidays-1974-1999.md 第 5 節
-  // 1977 年 Silver Jubilee: England・Wales・NI は 6/7 を追加（Spring は 6/6 に移動）、Scotland は 6/6 だけ
+  // Grounds for the names, and the rule of adding the reason in parentheses to days without a name of their own:
+  // docs/sources/uk-bank-holidays-1974-1999.md section 5.
+  // 1977 Silver Jubilee: England, Wales and NI added 6/7 (Spring moved to 6/6); Scotland only 6/6
   { date: "1977-06-06", name: "Silver Jubilee bank holiday", divisions: SCOTLAND },
   { date: "1977-06-07", name: "Silver Jubilee bank holiday", divisions: NOT_SCOTLAND },
   { date: "1981-07-29", name: "Royal Wedding bank holiday", divisions: ALL },
-  // 1995 年: England・Wales・NI は Early May を 5/8 に移動、Scotland は附則の 5/1 に加えて 5/8 を追加
+  // 1995: England, Wales and NI moved Early May to 5/8; Scotland added 5/8 to the 5/1 of the schedule
   {
     date: "1995-05-08",
     name: "Additional bank holiday (VE Day 50th anniversary)",
@@ -166,9 +174,10 @@ const SPECIAL_DAYS: readonly {
 ];
 
 /**
- * 振替の日付は規則どおりで、どちらの祝日の振替かの割り当てだけが規則と異なる年。
- * 2023 年の Scotland（1 月 1 日が日曜日）は、GOV.UK では 1/2 が New Year’s Day の振替、1/3 が 2nd January の振替。
- * 同じ曜日の並びの 2012・2017 年は、附則どおり 1/2 が 2nd January、1/3 が New Year’s Day の振替
+ * Years in which the substitute dates follow the rule and only the assignment (which holiday each substitutes)
+ * differs. In Scotland in 2023 (January 1 on a Sunday), GOV.UK has 1/2 as the substitute for New Year’s Day and
+ * 1/3 for 2nd January. In 2012 and 2017, with the same weekdays, 1/2 is 2nd January as in the schedule and 1/3
+ * the substitute for New Year’s Day
  */
 const RENAMED: readonly {
   readonly divisions: readonly UkDivision[];
@@ -177,11 +186,13 @@ const RENAMED: readonly {
   readonly kind: KnownUkHolidayKind;
   readonly key: KnownUkHolidayKey;
 }[] = [
-  // 振替日の名称の割り当て。当時の一覧・布告・Hansard の文言に揃える（根拠: docs/sources/uk-bank-holidays-1974-1999.md 付録 C、
-  // docs/sources/uk-bank-holidays-2000-2011.md）。12/25 が土曜日の年: 27 日が Boxing Day、28 日が Christmas Day の代わり
+  // Assignment of the names of substitute days, following the lists, proclamations and Hansard wording of the
+  // time (grounds: docs/sources/uk-bank-holidays-1974-1999.md appendix C,
+  // docs/sources/uk-bank-holidays-2000-2011.md). Years with 12/25 on a Saturday: the 27th is Boxing Day and the
+  // 28th is in lieu of Christmas Day
   { divisions: ALL, date: "1976-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
   { divisions: ALL, date: "1976-12-28", name: CHRISTMAS, kind: "substitute", key: "christmas" },
-  // 1/1 が土曜日の年の Scotland: 3 日が 2nd January（附則）、4 日が New Year’s Day の代わり
+  // Scotland in years with 1/1 on a Saturday: the 3rd is 2nd January (schedule), the 4th in lieu of New Year’s Day
   {
     divisions: SCOTLAND,
     date: "1977-01-03",
@@ -190,7 +201,8 @@ const RENAMED: readonly {
     key: "2nd-january",
   },
   { divisions: SCOTLAND, date: "1977-01-04", name: NEW_YEAR, kind: "substitute", key: "new-year" },
-  // 12/25 が日曜日の年の Scotland: 26 日が Christmas Day（附則）、27 日が Boxing Day（布告）
+  // Scotland in years with 12/25 on a Sunday: the 26th is Christmas Day (schedule), the 27th Boxing Day
+  // (proclamation)
   {
     divisions: SCOTLAND,
     date: "1977-12-26",
@@ -271,10 +283,11 @@ const RENAMED: readonly {
     key: "christmas",
   },
   { divisions: SCOTLAND, date: "2005-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
-  // 2011 年: 当時の政府の一覧は 26 日を Christmas Day、27 日を Boxing Day の振替とした
+  // 2011: the government list of the time had the 26th as the substitute for Christmas Day and the 27th for
+  // Boxing Day
   { divisions: ALL, date: "2011-12-26", name: CHRISTMAS, kind: "substitute", key: "christmas" },
   { divisions: ALL, date: "2011-12-27", name: BOXING, kind: "substitute", key: "boxing-day" },
-  // 2023 年の Scotland: GOV.UK の割り当て（1/2 が New Year’s Day、1/3 が 2nd January）に合わせる
+  // Scotland in 2023: follows the assignment of GOV.UK (1/2 New Year’s Day, 1/3 2nd January)
   { divisions: SCOTLAND, date: "2023-01-02", name: NEW_YEAR, kind: "substitute", key: "new-year" },
   {
     divisions: SCOTLAND,
@@ -285,19 +298,41 @@ const RENAMED: readonly {
   },
 ];
 
-function lastMonday(year: number, month: number): DateString {
+/**
+ * The last Monday of a month.
+ * @param year - Year.
+ * @param month - 1-12.
+ * @returns "YYYY-MM-DD".
+ * @internal
+ */
+export function lastMonday(year: number, month: number): DateString {
   const last = formatDate(year, month, lengthOfMonth(year, month));
   return addDays(last, -((weekdayOf(last) - 1 + 7) % 7));
 }
 
-function isWeekend(date: DateString): boolean {
+/**
+ * Whether a date is a Saturday or a Sunday.
+ * @internal
+ */
+export function isWeekend(date: DateString): boolean {
   const w = weekdayOf(date);
   return w === 0 || w === 6;
 }
 
-/** @internal その年・区分の祝日（日付順） */
+/**
+ * Computes the UK bank holidays of a year for a division: fixed and movable days of the division, days moved or
+ * renamed in particular years, special days, and for a fixed day on a weekend the next weekday that is not already a
+ * holiday (kind "substitute"; the weekend day itself is not listed).
+ * @param division - "england-and-wales", "scotland" or "northern-ireland".
+ * @param year - Integer within SUPPORTED_YEARS.
+ * @returns New frozen holidays sorted by date; `nameEn` equals `name`; `confirmed` is false for years after
+ *   CONFIRMED_THROUGH.
+ * @throws RangeError `invalid-argument` when the year is not an integer; `out-of-range` outside the supported years.
+ * @internal
+ */
 export function computeUkHolidays(division: UkDivision, year: number): Holiday<UkHolidayKind>[] {
-  // 整数でない年（文字列の "2026" など）は範囲の外ではなく引数の誤り（KnownErrorCode の説明）
+  // A year that is not an integer (the string "2026", ...) is a wrong argument, not out of range (see
+  // KnownErrorCode)
   if (!Number.isInteger(year))
     throw rangeError(
       "invalid-argument",
@@ -316,7 +351,7 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
   if (scotland) fixed.push({ month: 1, day: 2, name: SECOND_JANUARY, key: "2nd-january" });
   if (ni) fixed.push({ month: 3, day: 17, name: ST_PATRICK, key: "st-patricks" });
   if (ni) fixed.push({ month: 7, day: 12, name: BOYNE, key: "battle-of-the-boyne" });
-  // St Andrew's Day は St Andrew's Day Bank Holiday (Scotland) Act 2007 で加わった（2007 年から）
+  // St Andrew's Day was added by the St Andrew's Day Bank Holiday (Scotland) Act 2007 (from 2007)
   if (scotland && year >= 2007)
     fixed.push({ month: 11, day: 30, name: ST_ANDREW, key: "st-andrews" });
   fixed.push(
@@ -342,7 +377,8 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
       key: "easter-monday",
     });
   }
-  // 5 月の第 1 月曜日: Scotland は附則、England・Wales・NI は 1978 年から毎年布告される（Early May bank holiday）
+  // First Monday in May: in the schedule for Scotland; proclaimed every year from 1978 for England, Wales and NI
+  // (Early May bank holiday)
   if (scotland || year >= 1978) {
     movable.push({
       date: nthWeekdayOfMonth(year, 5, 1, 1),
@@ -351,7 +387,7 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
       key: "early-may",
     });
   }
-  // 5 月の最終月曜日: England・Wales・NI は附則、Scotland は 1978 年から毎年布告される
+  // Last Monday in May: in the schedule for England, Wales and NI; proclaimed every year from 1978 for Scotland
   if (!scotland || year >= 1978) {
     movable.push({ date: lastMonday(year, 5), name: SPRING, kind: "regular", key: "spring" });
   }
@@ -369,7 +405,7 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
     }
   }
 
-  // 平日に当たる固定日の祝日を先に置き、土曜日・日曜日に当たるものを日付順に振り替える
+  // Fixed-date holidays on weekdays are placed first; those on a Saturday or Sunday are substituted in date order
   const taken = new Set<DateString>(entries.map((e) => e.date));
   const fixedDates = fixed.map((f) => ({
     date: formatDate(year, f.month, f.day),
@@ -408,4 +444,75 @@ export function computeUkHolidays(division: UkDivision, year: number): Holiday<U
         ...(e.key === undefined ? {} : { key: e.key }),
       }),
     );
+}
+
+/** Welsh names of the holidays of Wales (as written in the Welsh version of GOV.UK) */
+const WELSH_NAMES: Readonly<Record<string, string>> = {
+  "New Year’s Day": "Dydd Calan",
+  "Good Friday": "Gwener y Groglith",
+  "Easter Monday": "Llun y Pasg",
+  "Early May bank holiday": "Gŵyl banc dechrau Mai",
+  "Early May bank holiday (VE day)": "Gŵyl banc dechrau Mai (diwrnod VE)",
+  "Spring bank holiday": "Gŵyl banc y gwanwyn",
+  "Summer bank holiday": "Gŵyl banc yr haf",
+  "Christmas Day": "Dydd Nadolig",
+  "Boxing Day": "Dydd San Steffan",
+  "Queen’s Diamond Jubilee": "Jiwbilî Ddiemwnt y Frenhines",
+  "Platinum Jubilee bank holiday": "Gŵyl banc Jiwbilî Blatinwm",
+  "Bank Holiday for the State Funeral of Queen Elizabeth II":
+    "Gŵyl y Banc ar gyfer Angladd Gwladol y Frenhines Elizabeth II",
+  "Bank holiday for the coronation of King Charles III":
+    "Gŵyl y banc ar gyfer coroni Brenin Siarl III",
+};
+
+/**
+ * Adds the Welsh name (`names.cy`) to the holidays that have one.
+ * @param list - Holidays.
+ * @returns A new array; holidays without a Welsh name are returned as they are.
+ * @internal
+ */
+export function withWelsh(list: readonly Holiday<UkHolidayKind>[]): Holiday<UkHolidayKind>[] {
+  return list.map((h) => {
+    const cy = WELSH_NAMES[h.name];
+    return Object.freeze(cy === undefined ? h : { ...h, names: Object.freeze({ cy }) });
+  });
+}
+
+/**
+ * Creates a UK provider for a division.
+ * @param id - Provider ID.
+ * @param division - "england-and-wales", "scotland" or "northern-ireland".
+ * @param transform - Applied to each year's list before caching.
+ * @returns A frozen HolidayProvider (time zone Europe/London) that caches each year.
+ * @internal
+ */
+export function createUkProvider(
+  id: string,
+  division: UkDivision,
+  transform?: (list: readonly Holiday<UkHolidayKind>[]) => Holiday<UkHolidayKind>[],
+): HolidayProvider<UkHolidayKind> {
+  const cache = new Map<number, readonly Holiday<UkHolidayKind>[]>();
+  return Object.freeze({
+    id,
+    timeZone: "Europe/London",
+    supportedYears: SUPPORTED_YEARS,
+    dataVersion: DATA_VERSION,
+    confirmedThrough: CONFIRMED_THROUGH,
+    /**
+     * The holidays of a year, computed once and cached.
+     * @param year - A supported year.
+     * @returns A frozen array of frozen holidays sorted by date.
+     * @throws RangeError `invalid-argument` when the year is not an integer; `out-of-range` outside the supported
+     *   years.
+     */
+    holidaysInYear(year: number): readonly Holiday<UkHolidayKind>[] {
+      let list = cache.get(year);
+      if (!list) {
+        const computed = computeUkHolidays(division, year);
+        list = Object.freeze(transform ? transform(computed) : computed);
+        cache.set(year, list);
+      }
+      return list;
+    },
+  });
 }

@@ -1,21 +1,28 @@
 import "./strict-warnings.ts";
 /**
- * README とドキュメント（docs/guide.md・docs/providers.md。英語・日本語）のコード例を実行し、コメントに書いた結果と比べる（pnpm check から実行。RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）。
+ * Runs the code examples of the README and the documents (docs/guide.md, docs/providers.md; English and
+ * Japanese) and compares them with the results written in comments (run by pnpm check; RELEASING.md, reasons
+ * for the quality mechanisms, "check documents against the implementation").
  *
- * - ts のコードブロックを 1 つずつ別のモジュールにして、ビルド済みの dist（パッケージ名での自己参照）で実行する
- * - 文の後のコメント（`expr; // "2026-11-02"` や、次の行から続く `// { ... }`）の先頭がリテラルなら、実際の値と比べる。
- *   `{…}` は何にでも一致し、`…` を含む文字列は、… 以外の部分を順に含めば一致とする。リテラルでないコメントは比べない
- * - `new Date()`（現在時刻）を使う式は、結果が実行時刻で変わるので比べない
- * - ブロックが import していない公開の名前（createCalendar など）は、各サブパスから補って import する。
- *   ほかのブロックで定義した値を使う断片のために、FIXTURES の定義を補う
- * - 相対パスの import（利用者のプロジェクトのファイル）を含むブロックは、実行できないので飛ばす
- * - 例で createCalendar・createSchedule に渡した設定は、自動で診断（diagnoseCalendar・diagnoseSchedule）にもかける。
- *   error か warning があれば失敗にする。誤りを見せる例は、コードブロックの直前の空でない行の注記
- *   `<!-- example: allow-diagnostics <code>,<code> -->` で許すコードを明示する
- * - 診断の結果を filter・find で絞った例は失敗にする（絞ると、例の設定の誤りが隠れる）。絞る理由のある例は、直前の空でない行の注記
- *   `<!-- example: allow-filtered-diagnostics -->` で明示する
- * - 移行ガイド（docs/migration.md）は、最新のバージョンの節までを実行する（それより前の節は旧名で書かれていて、1.0.0 で動かなくなる）
- * - 例は、コアの数（4 まで）だけ並べて実行する。結果は例の順に読むので、失敗の並びは並べないときと同じ
+ * - Each ts code block becomes its own module and runs against the built dist (self-reference by package name)
+ * - When the comment after a statement (`expr; // "2026-11-02"`, or `// { ... }` continuing from the next line)
+ *   starts with a literal, it is compared with the actual value. `{…}` matches anything, and a string with `…`
+ *   matches when the parts other than … occur in order. A comment that is not a literal is not compared
+ * - An expression using `new Date()` (the current time) is not compared: its result depends on the run time
+ * - Public names a block does not import (createCalendar, ...) are imported from their subpaths.
+ *   For fragments that use values defined in other blocks, the definitions of FIXTURES are supplied
+ * - A block with a relative import (a file of the user's project) cannot run and is skipped
+ * - The options an example passes to createCalendar / createSchedule are also diagnosed automatically
+ *   (diagnoseCalendar, diagnoseSchedule). An error or warning fails. An example that shows a mistake names the
+ *   allowed codes in a note on the last non-empty line before the code block:
+ *   `<!-- example: allow-diagnostics <code>,<code> -->`
+ * - An example that narrows diagnostics with filter or find fails (narrowing hides mistakes in the example's
+ *   options). An example with a reason to narrow says so in a note on the last non-empty line before it:
+ *   `<!-- example: allow-filtered-diagnostics -->`
+ * - The migration guide (docs/migration.md) runs up to the section of the latest version (earlier sections are
+ *   written with the old names, which stop working in 1.0.0)
+ * - Examples run in parallel, as many as there are cores (up to 4). Results are read in example order, so the
+ *   order of failures is the same as without parallelism
  */
 
 import { spawn } from "node:child_process";
@@ -34,7 +41,10 @@ const SUBPATHS = [
   "bizdays-toolkit/provider",
 ];
 
-/** ほかのブロックで定義した値を使う断片のための定義（使っていて、ブロック内で定義していないときだけ補う） */
+/**
+ * Definitions for fragments that use values defined in other blocks (supplied only when used and not defined in
+ * the block)
+ */
 const FIXTURES: Record<string, string> = {
   Hours: "type Hours = { open: string; close: string } | null;",
   weekday: 'const weekday = { open: "10:00", close: "21:00" };',
@@ -44,14 +54,17 @@ const FIXTURES: Record<string, string> = {
 };
 const FIXTURE_ORDER = ["Hours", "weekday", "sunday", "storeHours"];
 
-// 公開の名前と、どのサブパスから補うか（先に見つかったもの）
+// Public names and the subpath each is supplied from (the first one found)
 const exportsOf = new Map<string, string>();
 for (const sub of SUBPATHS) {
   const mod = (await import(sub)) as Record<string, unknown>;
   for (const name of Object.keys(mod)) if (!exportsOf.has(name)) exportsOf.set(name, sub);
 }
 
-/** コメントの先頭のリテラルを取り出す（文字列・数値・真偽値・null・括弧の対応が取れたオブジェクトと配列） */
+/**
+ * Extracts the literal at the start of a comment (string, number, boolean, null, an object or array with
+ * balanced brackets)
+ */
 function leadingLiteral(text: string): string | undefined {
   const t = text.trim();
   const simple = /^(true|false|null|-?\d+(?:\.\d+)?)(?![\w.])/.exec(t);
@@ -82,7 +95,7 @@ function leadingLiteral(text: string): string | undefined {
   return undefined;
 }
 
-/** 行の // コメントを除く（文字列の中の // は除かない） */
+/** Removes the // comment of a line (not a // inside a string) */
 function stripComment(line: string): string {
   let quote: string | undefined;
   for (let i = 0; i < line.length; i++) {
@@ -99,7 +112,7 @@ const commentOf = (line: string): string | undefined => {
   const code = stripComment(line);
   return code.length < line.length ? line.slice(line.indexOf("//", code.length) + 2) : undefined;
 };
-/** 括弧の深さの増減（文字列の中は数えない） */
+/** Change in bracket depth (not counted inside strings) */
 function depthOf(code: string): number {
   let depth = 0;
   let quote: string | undefined;
@@ -128,7 +141,8 @@ function prepare(block: string): { source: string; checks: Check[] } | undefined
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    // 字下げのない文だけを対象にする（複数行にまたがる文は、括弧の対応が取れて ; で終わる行までを 1 つの文とする）
+    // Only statements without indentation (a statement over several lines is one statement up to the line where
+    // the brackets balance and it ends with ;)
     if (
       line === "" ||
       /^\s/.test(line) ||
@@ -149,7 +163,7 @@ function prepare(block: string): { source: string; checks: Check[] } | undefined
     const last = statement.at(-1)!;
     let comment = commentOf(last);
     if (comment === undefined) {
-      // 次の行から続くコメント（`// { ... }`）を集める
+      // Collect the comment continuing from the next line (`// { ... }`)
       const following: string[] = [];
       for (let k = j + 1; k < lines.length && lines[k]!.startsWith("// "); k++) {
         following.push(lines[k]!.replace(/^\/\/\s?/, ""));
@@ -207,7 +221,8 @@ function prepare(block: string): { source: string; checks: Check[] } | undefined
     }
   }
   const head = [...extra].map(([sub, names]) => `import { ${names.join(", ")} } from "${sub}";`);
-  // import を先頭に、補った定義をその後に、例の本体を最後に置く（定義より前に使うと初期化前の参照になるため）
+  // Imports first, supplied definitions next, the example's body last (a use before the definition would be a
+  // reference before initialization)
   const bodyLines = body.split("\n");
   const importLines = bodyLines.filter((l) => /^import\s/.test(l));
   const rest = bodyLines.filter((l) => !/^import\s/.test(l));
@@ -223,7 +238,10 @@ function prepare(block: string): { source: string; checks: Check[] } | undefined
   };
 }
 
-/** 診断の結果を filter・find で絞っているか（呼び出しに続けて絞る形と、結果を入れた変数を絞る形） */
+/**
+ * Whether the diagnostics are narrowed with filter or find (directly after the call, or on a variable holding
+ * the result)
+ */
 function filtersDiagnostics(block: string): boolean {
   const narrow = String.raw`\s*\.\s*(?:filter|find|findLast)\s*\(`;
   if (new RegExp(String.raw`diagnose(?:Calendar|Schedule)\s*\([^;]*?\)` + narrow).test(block))
@@ -237,8 +255,9 @@ function filtersDiagnostics(block: string): boolean {
 }
 
 /**
- * 例の createCalendar・createSchedule を包むモジュール。設定を診断にかけ、許していない error・warning を 1 行ずつ出す
- * （例の import を、パッケージのルートからこのモジュールに付け替える）
+ * The module that wraps createCalendar / createSchedule of an example. It diagnoses the options and prints each
+ * error or warning that is not allowed on one line (the example's import from the package root is redirected to
+ * this module)
  */
 const WRAPPER = `
 import * as lib from "bizdays-toolkit";
@@ -253,10 +272,12 @@ function audit(name: string, issues: readonly { severity: string; code: string; 
     }
   }
 }
-// 同じ設定（name・nameEn を除く）の診断は 1 回だけ行う。英語版と日本語版の例は、名前のほかは同じ設定を書くので、
-// 2 回目は結果を写す（日本語版だけの書き間違いは設定が違うので、診断にかかる。提案書 bizdays-toolkit-0.31.8-proposal の T-3）。
-// 鍵で区別できない値を含む設定は写さない: 同梱の提供元のほかの関数（中身が同じでも、閉じ込めた値が違いうる）と、
-// カレンダー。明示的な undefined は、書かないこととは別の値として鍵に入れる（decisions.md の 6 番）
+// The same options (apart from name and nameEn) are diagnosed once. The English and Japanese examples write the
+// same options except for names, so the second time the result is copied (a typo in the Japanese version only
+// has different options and is diagnosed; T-3 of the proposal bizdays-toolkit-0.31.8-proposal).
+// Options with a value the key cannot tell apart are not copied: functions other than the bundled providers
+// (the same body can close over different values) and calendars. An explicit undefined goes into the key as a
+// value different from not writing it (decisions.md #6)
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -286,7 +307,8 @@ function diagnoseOnce<T>(kind: string, options: unknown, run: () => T): T {
   const file = key ? join(dir!, key + ".json") : undefined;
   if (file && existsSync(file)) return JSON.parse(readFileSync(file, "utf8")) as T;
   const result = run();
-  // 例は並べて実行するので、書きかけのファイルをほかの例が読まないように、別の名前に書いてから置き換える
+  // Examples run in parallel, so the file is written under another name and then renamed, so that no other
+  // example reads a half-written file
   if (file) {
     writeFileSync(file + "." + process.pid, JSON.stringify(result));
     renameSync(file + "." + process.pid, file);
@@ -306,13 +328,14 @@ export function createSchedule(...args: unknown[]): unknown {
 `;
 
 /**
- * パッケージのルートからの読み込み（`from "bizdays-toolkit"`・`from 'bizdays-toolkit'`・`import "bizdays-toolkit"`・
- * 動的な `import("bizdays-toolkit")`・`require("bizdays-toolkit")`（引用符とテンプレートリテラル）。サブパスは含まない）
+ * Loading from the package root (`from "bizdays-toolkit"`, `from 'bizdays-toolkit'`, `import "bizdays-toolkit"`,
+ * dynamic `import("bizdays-toolkit")`, `require("bizdays-toolkit")`, with quotes or template literals; subpaths
+ * are not included)
  */
 const ROOT_IMPORT =
   /\b(?:from|import)\s*["']bizdays-toolkit["']|\b(?:import|require)\s*\(\s*["'`]bizdays-toolkit["'`]\s*\)/;
 
-/** コードブロックの直前の空でない行の注記（`<!-- example: <name> <args> -->`） */
+/** The note on the last non-empty line before a code block (`<!-- example: <name> <args> -->`) */
 function noteOf(text: string, index: number): Map<string, string> {
   const before = text.slice(0, index).trimEnd().split("\n").at(-1) ?? "";
   const notes = new Map<string, string>();
@@ -327,7 +350,9 @@ function parse(text: string): unknown {
   const js = text.replaceAll("{…}", "__ANY__");
   return new Function("__ANY__", "return (" + js + ");")(ANY);
 }
-// 1.0.0 より前のバージョンでだけ返す旧名の項目（docs/migration.md の削除予定の表にある、結果の型の項目）。文書の例は新しい名前だけを書くので、比べない（RELEASING.md の「1.0.0 で行う作業」で消す）
+// Old-name properties returned only by versions before 1.0.0 (the result-type properties in the table of the API
+// to be removed in docs/migration.md). The examples write only the new names, so these are not compared
+// (RELEASING.md, work for 1.0.0, deletes this)
 const DEPRECATED_RESULT_KEYS: string[] = JSON.parse(process.env.README_DEPRECATED_KEYS ?? "[]");
 function match(actual: unknown, expected: unknown): boolean {
   if (expected === ANY) return true;
@@ -362,7 +387,10 @@ export function __check(index: number, actual: unknown): void {
 }
 `;
 
-/** コード例を実行するファイル（README と docs のガイド。英語・日本語。移行ガイドは最新のバージョンの節まで） */
+/**
+ * The files whose code examples run (README and the guides in docs, English and Japanese; the migration guide up
+ * to the section of the latest version)
+ */
 const DOC_FILES = [
   "README.md",
   "docs/README.ja.md",
@@ -373,14 +401,15 @@ const DOC_FILES = [
   "docs/migration.md",
 ];
 
-/** 実行する範囲の文章（移行ガイドは、2 つ目のバージョンの見出し「## 0.x.y」より前まで） */
+/** The part of the text that runs (for the migration guide, up to before the second version heading "## 0.x.y") */
 function runnablePart(file: string, text: string): string {
   if (file !== "docs/migration.md") return text;
   const versions = [...text.matchAll(/^## \d+\.\d+\.\d+\s*$/gm)];
   return versions.length < 2 ? text : text.slice(0, versions[1]!.index);
 }
 
-// 削除予定の表（docs/migration.md）の、結果の型の項目の名前（例: `DayInfo.businessDay` の businessDay）
+// The names of the result-type properties in the table of the API to be removed (docs/migration.md) (e.g.
+// businessDay of `DayInfo.businessDay`)
 const RESULT_TYPES = ["DayInfo", "ScheduleDayInfo", "HolidayLookup", "Calendar", "Schedule"];
 const deprecatedResultKeys = [
   ...readFileSync("docs/migration.md", "utf8").matchAll(/`([A-Za-z]+)\.([A-Za-z]+)`/g),
@@ -390,21 +419,27 @@ const deprecatedResultKeys = [
 
 const dir = mkdtempSync(join(ROOT, ".readme-examples-"));
 const failures: string[] = [];
-/** 診断の結果を写す場所（同じ設定の 2 回目の診断を省く。包むモジュールの diagnoseOnce） */
+/**
+ * Where diagnostics results are copied (saves the second diagnosis of the same options; diagnoseOnce of the
+ * wrapping module)
+ */
 const cacheDir = join(dir, "diagnose-cache");
 let blocks = 0;
-/** 実行する例（準備の段階で集め、あとで並べて実行する） */
+/** The examples to run (collected in the preparation stage, run in parallel later) */
 const jobs: {
   file: string;
   startLine: number;
   checks: Check[];
   path: string;
   env: NodeJS.ProcessEnv;
-  /** この例より前に積んだ、準備の段階の失敗 */
+  /** Failures of the preparation stage collected before this example */
   earlier: string[];
 }[] = [];
 let compared = 0;
-/** 包むモジュールが診断にかけた設定の数（関数ごと）。付け替えが外れると 0 件になるので、0 件なら失敗にする */
+/**
+ * Number of options the wrapping module diagnosed (per function). It is 0 when the redirection fails, so 0 is a
+ * failure
+ */
 const audited: Record<string, number> = { createCalendar: 0, createSchedule: 0 };
 try {
   writeFileSync(join(dir, "__check.ts"), CHECKER);
@@ -425,9 +460,10 @@ try {
       blocks++;
       compared += prepared.checks.length;
       const path = join(dir, `example-${blocks}.ts`);
-      // パッケージのルートの import を、作成した設定を診断にかけるモジュールに付け替える。付け替えは
-      // `from "bizdays-toolkit";` の完全一致なので、ほかの書き方（単引用符・セミコロンなし・import 文だけ・動的な import・
-      // require）が残れば、診断にかけずに通ってしまう。残っていたらその例を失敗にする
+      // The import from the package root is redirected to the module that diagnoses the options created. The
+      // redirection is an exact match of `from "bizdays-toolkit";`, so another spelling (single quotes, no
+      // semicolon, a bare import statement, a dynamic import, require) would pass without being diagnosed. An
+      // example in which one remains fails
       const redirected = prepared.source.replaceAll(
         'from "bizdays-toolkit";',
         'from "./__wrap.ts";',
@@ -453,12 +489,14 @@ try {
             (notes.get("allow-diagnostics") ?? "").split(",").filter(Boolean),
           ),
         },
-        // それまでに積んだ準備の段階の失敗は、この例の結果の前に並べる（失敗の並びを、並べないときと同じにする）
+        // Failures of the preparation stage collected so far go before this example's result (the order of
+        // failures equals the one without parallelism)
         earlier: failures.splice(0),
       });
     }
   }
-  // 例を並べて実行し、結果は例の順に読む（失敗の並びを、並べないときと同じにする）
+  // The examples run in parallel and the results are read in example order (the order of failures equals the
+  // one without parallelism)
   const results: { status: number | null; stdout: string; stderr: string }[] = [];
   let next = 0;
   const worker = async (): Promise<void> => {
@@ -477,7 +515,8 @@ try {
         let stderr = "";
         child.stdout.setEncoding("utf8").on("data", (s: string) => (stdout += s));
         child.stderr.setEncoding("utf8").on("data", (s: string) => (stderr += s));
-        // 起動に失敗したら、その例の失敗にする（spawnSync のときと同じ。close が続いても、結果は最初の 1 回だけ）
+        // A failure to start is that example's failure (as with spawnSync; even if close follows, only the first
+        // result counts)
         child.on("error", (e) => done({ status: null, stdout, stderr: String(e) }));
         child.on("close", (status) => done({ status, stdout, stderr }));
       });
@@ -486,7 +525,7 @@ try {
   await Promise.all(
     Array.from({ length: Math.min(4, availableParallelism(), jobs.length) }, worker),
   );
-  /** 例の結果の失敗（例の出力の 1 行ごとの JSON を読む） */
+  /** The failures in an example's result (reads one JSON per line of the example's output) */
   const failuresOf = (job: (typeof jobs)[number], result: (typeof results)[number]): string[] => {
     const { file, startLine, checks } = job;
     const found: string[] = [];
@@ -512,7 +551,7 @@ try {
           `${file}:${startLine + c.line - 1}: ${c.code}\n  expected ${c.expected}\n  actual   ${JSON.stringify(actual)}`,
         );
       } catch {
-        // 例の出力（console.log など）は無視する
+        // The example's own output (console.log, ...) is ignored
       }
     }
     if (result.status !== 0 && (found.length === 0 || !result.stdout)) {
@@ -520,7 +559,7 @@ try {
     }
     return found;
   };
-  // 最後の例より後に積んだ準備の段階の失敗は、最後に並べる
+  // Failures of the preparation stage collected after the last example go last
   const later = failures.splice(0);
   jobs.forEach((job, i) => failures.push(...job.earlier, ...failuresOf(job, results[i]!)));
   failures.push(...later);

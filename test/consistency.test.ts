@@ -1,7 +1,10 @@
-// API どうしの整合（テスト拡充案の T5）。目録の生成器（test/support/catalog.ts）の設定で、同じことを別の API で問うたときの
-// 答えが一致することを確かめる。設定は、カレンダー・スケジュール、対応年の短い自作の提供元（2025〜2027 年）・提供元なしを含む。
-// pnpm check は決まった抜き出しだけ。全件は CONSISTENCY_API_FULL=1 で、CI の diagnose-consistency ジョブで動かす。
-// 関係ごとに試した設定の数を出し、0 件なら失敗にする。
+// Consistency between APIs (T5 of the test expansion plan). With the options of the catalog generator
+// (test/support/catalog.ts), checks that asking the same thing through different APIs gives the same answer. The
+// options include calendars and schedules, a home-made provider with few supported years (2025-2027) and no
+// provider.
+// pnpm check runs a fixed sample only. The full set runs with CONSISTENCY_API_FULL=1, in the diagnose-consistency
+// job of CI.
+// The number of options tried is printed per relation, and 0 fails.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -43,23 +46,27 @@ import { SHORT_PROVIDER } from "./support/provider.ts";
 import { SHORT_RANGE } from "./support/sites.ts";
 
 const FULL = flagEnv("CONSISTENCY_API_FULL");
-/** 関係ごとの設定の数（抜き出し・全件） */
+/** The number of options per relation (sample, full set) */
 const RUNS = FULL
   ? { days: 120, search: 120, counting: 120, diagnose: 150, migrate: 80, basis: 40 }
   : { days: 12, search: 12, counting: 12, diagnose: 12, migrate: 6, basis: 5 };
 
-/** 自作の提供元の対応年の全日（outOfRangePolicy: "ignore" で試す） */
+/** All days of the supported years of the home-made provider (tried with outOfRangePolicy: "ignore") */
 const DAYS = daysOf(SHORT_RANGE.from, SHORT_RANGE.to);
-/** 隣の年を引かない内側の範囲（既定の "throw" で試す。祝日の翌日・前日の規則が隣の年を見ない） */
+/**
+ * The inner range that does not look into a neighbouring year (tried with the default "throw"; day-after and
+ * day-before-holiday rules do not see a neighbouring year)
+ */
 const INNER = { from: "2025-02-01", to: "2027-11-30" } as const;
-/** 試す 2 通り: 既定の "throw" は内側の範囲、"ignore" は対応年の全範囲 */
+/** The two variants tried: the default "throw" on the inner range, "ignore" on the whole supported years */
 const VARIANTS = [
   { policy: undefined, range: INNER, days: daysOf(INNER.from, INNER.to), label: "throw・内側" },
   { policy: "ignore", range: SHORT_RANGE, days: DAYS, label: "ignore・全範囲" },
 ] as const;
 /**
- * outOfRangePolicy を付ける。スケジュールの第 n 営業日の規則の基準のカレンダーも、同じ提供元・同じ outOfRangePolicy で作り直す
- * （基準のカレンダーが既定の "throw" のままだと、範囲の端の週・月の数え方で隣の年を引いて投げるため）
+ * Adds outOfRangePolicy. The basis calendar of an nth-business-day rule of a schedule is rebuilt too, with the
+ * same providers and the same outOfRangePolicy (a basis calendar left at the default "throw" would look into a
+ * neighbouring year when counting the edge weeks and months of the range, and throw)
  */
 const withPolicy = (options: Obj, policy: string | undefined): Obj => {
   if (policy === undefined) return options;
@@ -77,13 +84,13 @@ const withPolicy = (options: Obj, policy: string | undefined): Obj => {
   return out;
 };
 
-/** 自作の提供元の文脈（祝日に従属する形を作る）と、提供元なしの文脈 */
+/** The context of the home-made provider (shapes that depend on holidays are made) and the context without a provider */
 const SHORT_CTX: Context = CONTEXTS["diagnose-properties"];
 const NONE_CTX: Context = withoutHolidays(SHORT_CTX);
 const source = (withHolidays: boolean): Obj =>
   withHolidays ? { holidayProvider: SHORT_PROVIDER, timeZone: "UTC" } : {};
 
-/** 目録のカレンダーの設定（3 件に 2 件は自作の提供元、残りは提供元なし） */
+/** Calendar options of the catalog (2 of 3 with the home-made provider, the rest without a provider) */
 function calendarOptions(rand: () => number, run: number, ctx?: Context): Obj {
   const withHolidays = run % 3 !== 2;
   return {
@@ -92,7 +99,10 @@ function calendarOptions(rand: () => number, run: number, ctx?: Context): Obj {
   };
 }
 
-/** 目録のスケジュールの設定（数える基準のカレンダーの印は、同じ提供元の土日休みのカレンダーにする） */
+/**
+ * Schedule options of the catalog (the mark of the basis calendar becomes a calendar with the same providers and
+ * closed weekends)
+ */
 function scheduleOptions(rand: () => number, run: number, ctx?: Context): Obj {
   const withHolidays = run % 3 !== 2;
   const o: Obj = {
@@ -108,7 +118,10 @@ function scheduleOptions(rand: () => number, run: number, ctx?: Context): Obj {
   return o;
 }
 
-/** 作成（設定の誤りで作成できなければ undefined。bizdays のエラーコードを持たない例外は投げ直す） */
+/**
+ * Creation (undefined when the options are wrong and cannot be created; an error without a bizdays error code is
+ * rethrown)
+ */
 function tryCreate<T>(make: () => T): T | undefined {
   try {
     return make();
@@ -118,15 +131,18 @@ function tryCreate<T>(make: () => T): T | undefined {
   }
 }
 
-/** 営業日が見つからない設定の探索の失敗（関係の前提を満たさないので飛ばす）か */
+/**
+ * Whether an error is the failed search of options without a business day (skipped: the premise of the relation
+ * is not met)
+ */
 const noBusinessDay = (e: unknown): boolean => isBizdaysError(e) && e.code === "no-business-day";
 
-/** 試した設定の数（関係 → 件数） */
+/** The number of options tried (relation → count) */
 const tried: Record<string, number> = {};
 const count = (relation: string): void => {
   tried[relation] = (tried[relation] ?? 0) + 1;
 };
-/** 件数の行を出し、0 件なら失敗にする（unit は数えたもの） */
+/** Prints the line with the count and fails on 0 (`unit` is what was counted) */
 const report = (relation: string, unit = "設定"): void => {
   console.log(
     `# ${relation}: 試した${unit} ${tried[relation] ?? 0} 件（${FULL ? "全件" : "抜き出し"}）`,
@@ -199,8 +215,9 @@ test("整合 2: 次の営業日・前の営業日は営業日で、その間の�
       for (const d of calendar.daysBetween(previous, day).slice(1, -1))
         assert.equal(d.open, false, `run=${run} ${previous} → ${day}: ${d.date}`);
       assert.ok(next > day && previous < day, `run=${run} ${day}: ${previous} ${next}`);
-      // 次の営業日は、翌日からの営業日の一覧の最初の 1 つ。前の営業日は、前日以前の営業日（0.30.8 までは
-      // test/properties.test.ts の性質「nextBusinessDay との間に営業日はなく…」が同じ恒等式を確かめていた）
+      // The next business day is the first of the list of business days from the next day on. The previous one
+      // is a business day on or before the day before (up to 0.30.8 a property of test/properties.test.ts
+      // checked the same identity, that there is no business day between a day and its nextBusinessDay)
       assert.deepEqual(
         calendar.businessDatesBetween(addDays(day, 1), next),
         [next],
@@ -232,13 +249,15 @@ test("整合 3: 起点が営業日なら、営業日の加算と差は互いに�
       count("整合 3");
       assert.equal(calendar.diffBusinessDays(start, end), n, `run=${run} ${start} +${n} = ${end}`);
       assert.equal(calendar.addBusinessDays(end, -n), start, `run=${run} ${end} -${n}`);
-      // 加算の結果は営業日で、逆向きの差は −n（0.30.8 までは test/properties.test.ts の性質「addBusinessDays の結果は
-      // 営業日で、n 進めて −n 戻ると…」と test/naming.test.ts の T3 が同じ恒等式を確かめていた）。test/properties.test.ts の
-      // 「繰り返しの規則があっても、営業日の移動と数え上げの性質は保たれる」は、日本の提供元と振替のある規則の生成器
-      // （propertyMoveOptions）で同じ式を確かめるので残している（ここの短い提供元の生成器にない組み合わせ）
+      // The result of adding is a business day and the reverse difference is −n (up to 0.30.8 a property of
+      // test/properties.test.ts and T3 of test/naming.test.ts checked the same identity). The property of
+      // test/properties.test.ts about moving and counting business days with recurring rules stays, because it
+      // checks the same formula with the generator of the Japanese provider and moving rules
+      // (propertyMoveOptions), a combination the short provider's generator here lacks
       assert.ok(calendar.isBusinessDay(end), `run=${run} ${end}`);
       assert.equal(calendar.diffBusinessDays(end, start), -n, `run=${run} ${end} -> ${start}`);
-      // 営業日を起点にした 0 日の加算はその日（0.30.8 までは test/naming.test.ts の T3 が n = 0 を含めて確かめていた）
+      // Adding 0 days from a business day gives that day (up to 0.30.8, T3 of test/naming.test.ts checked it
+      // including n = 0)
       assert.equal(calendar.addBusinessDays(start, 0), start, `run=${run} ${start} +0`);
     } catch (e) {
       if (!noBusinessDay(e)) throw e;
@@ -256,7 +275,8 @@ test("整合 4: businessDayOfMonth の規則が決めた日は、基準のカレ
     delete base["openRecurringRules"];
     trials.push({ run, base, n: [1, 2, 3, -1, -2][Math.floor(rand() * 5)]! });
   }
-  // 営業日が n 日に満たない月がある設定（2025 年 2 月は営業日がない。目録の設定では起きないので固定で試す）
+  // Options with a month that has fewer than n business days (February 2025 has none; the catalog options never
+  // do this, so it is tried with fixed options)
   const sparse: Obj = {
     closedWeekdays: [0, 1, 2, 3, 4, 5],
     closedDates: [{ from: "2025-02-01", to: "2025-02-28" }],
@@ -264,7 +284,7 @@ test("整合 4: businessDayOfMonth の規則が決めた日は、基準のカレ
   for (const n of [1, -1]) trials.push({ run: -1, base: sparse, n });
   let missing = 0;
   for (const { run, base, n } of trials) {
-    // 祝日の上でも当てはめる（"over-holiday"）ので、規則が決めた日は第 n 営業日そのもの
+    // Applied on a holiday too ("over-holiday"), so the day the rule decides is the nth business day itself
     const rule = { businessDayOfMonth: n, name: "counted", holidayOverlapPolicy: "over-holiday" };
     const calendar = tryCreate(() =>
       createCalendar({ ...base, closedRecurringRules: [rule] } as CalendarOptions),
@@ -278,14 +298,15 @@ test("整合 4: businessDayOfMonth の規則が決めた日は、基準のカレ
       try {
         expected = basis.nthBusinessDayOfMonth(month as `${number}-${number}`, n);
       } catch (e) {
-        // その月に n 番目の営業日がない（営業日が少ない設定）
+        // The month has no nth business day (options with few business days)
         if (!isBizdaysError(e) || e.code !== "no-business-day") throw e;
         missing++;
       }
       const marked: string[] = DAYS.filter(
         (d) => d.startsWith(month) && calendar.dayInfoOn(d).name === "counted",
       );
-      // 個別の日付・毎年の月日は繰り返しの規則より先に決まるので、それで決まった日には規則が当てはまらない
+      // Specific dates and annual dates decide before recurring rules, so the rule does not match a day they
+      // decide
       const byDate = (d: string): boolean =>
         ["open-date", "closed-date", "open-annual", "closed-annual"].includes(
           calendar.dayInfoOn(d).reason,
@@ -301,7 +322,7 @@ test("整合 4: businessDayOfMonth の規則が決めた日は、基準のカレ
   assert.ok(missing > 0, "整合 4: n 番目の営業日がない月を 1 度も試していない");
 });
 
-/** 作成のエラーコード（成功なら undefined） */
+/** The error code of creation (undefined on success) */
 function creationError(make: () => unknown): string | undefined {
   try {
     make();
@@ -312,9 +333,10 @@ function creationError(make: () => unknown): string | undefined {
 }
 
 test("整合 5: 診断に error がないことと作成が成功することは同じで、作成のエラーコードは診断の error のコードにある", () => {
-  // 入力の誤り（曜日に合わない起点・自分の曜日を含む飛ばす曜日・基準のカレンダーのない第 n 営業日の規則）を混ぜる文脈
+  // A context that mixes in wrong inputs (an anchor on another weekday, skipped weekdays including the rule's
+  // own, an nth-business-day rule without a basis calendar)
   const invalid: Context = { ...SHORT_CTX, invalid: true };
-  /** 診断の error と作成の結果を比べ、作成のエラーコードを返す */
+  /** Compares the errors of the diagnostics with the result of creation and returns the error code of creation */
   const check = (
     kind: "calendar" | "schedule",
     options: Obj,
@@ -333,7 +355,7 @@ test("整合 5: 診断に error がないことと作成が成功することは
     return code;
   };
 
-  // 目録の設定（試行の半分は入力の誤りを混ぜる文脈で作る）
+  // Options of the catalog (half of the trials in the context that mixes in wrong inputs)
   const rand = random(20261109);
   for (let run = 0; run < RUNS.diagnose; run++) {
     for (const kind of ["calendar", "schedule"] as const) {
@@ -345,8 +367,10 @@ test("整合 5: 診断に error がないことと作成が成功することは
     }
   }
 
-  // 目録が意図して入力の誤りにした規則を含む設定（上の試行とは別の種で作る。作成できない側を確かに試すため）。
-  // 誤りの規則を含むまで作り直す（カレンダーの設定に誤りが入るのは 3% ほどなので、上限は 400 回）
+  // Options with a rule the catalog made wrong on purpose (built with another seed than the trials above, to
+  // make sure the side that cannot be created is tried).
+  // Rebuilt until they contain a wrong rule (a wrong rule gets into calendar options about 3% of the time, so
+  // the limit is 400 tries)
   const randInvalid = random(20261114);
   let missed = 0;
   for (let run = 0; run < RUNS.diagnose; run++) {
@@ -376,17 +400,21 @@ test("整合 5: 診断に error がないことと作成が成功することは
   assert.equal(missed, 0, "意図した入力の誤りの規則を含む設定を作れなかった試行がある");
 });
 
-/** 目録が意図して入力の誤りにした規則（test/support/catalog.ts の印）を含む設定か */
+/** Whether the options contain a rule the catalog made wrong on purpose (the mark of test/support/catalog.ts) */
 const hasIntendedInvalid = (options: Obj): boolean =>
   ["closedRecurringRules", "openRecurringRules", "recurringRules"].some(
     (k) => Array.isArray(options[k]) && (options[k] as unknown[]).some(isIntendedInvalid),
   );
 
 test("整合 6: 旧名で書いた設定を移行すると元の新しい名前の設定に戻り、移行を 2 回かけても変わらない", () => {
-  // 移行した設定が元の設定と一致すれば、「移行した設定に deprecated-option が残らない」（新しい名前だけで書いた設定）と
-  // 「移行の前後で結果が同じ」（旧名の設定と新しい名前の設定の結果が同じ）は、metamorphic の変形 1 が確かめる関係に帰着する。
-  // 一致は結果の比較より強い（結果が同じでも、移行が別の書き方の設定を作れば見つける）。旧名の設定の結果と診断は、変形 1 が
-  // 同じ目録の規則の形を（日本の提供元を含む生成器で）確かめる。旧名への書き換えは変形 1 と同じ補助（test/support/old-names.ts）
+  // When the migrated options equal the original ones, "the migrated options have no deprecated-option left"
+  // (options written with new names only) and "the results are the same before and after migration" (old-name
+  // and new-name options give the same results) reduce to the relation checked by transformation 1 of
+  // metamorphic.
+  // Equality is stronger than comparing results (it finds a migration that produces options written another
+  // way even when the results are the same). The results and diagnostics of old-name options are checked by
+  // transformation 1 for the same rule shapes of the catalog (with a generator that includes the Japanese
+  // provider). The rewrite to old names uses the same helper as transformation 1 (test/support/old-names.ts)
   const rand = random(20261110);
   for (let run = 0; run < RUNS.migrate; run++) {
     for (const kind of ["calendar", "schedule"] as const) {
@@ -459,7 +487,8 @@ test("整合 7: スケジュールの第 n 営業日の規則の基準のカレ�
     const schedule = createSchedule(options as unknown as ScheduleOptions<unknown>);
     assert.equal(schedule.daysBetween(SHORT_RANGE.from, SHORT_RANGE.to).length, DAYS.length, name);
   }
-  // C の判定は、基準のカレンダーの対応年の外の月では、基準のカレンダーが投げるので投げる（ガイドの「対応年の外」）
+  // The judgement of C throws in a month outside the supported years of the basis calendar, because the basis
+  // calendar throws (the guide's section on the outside of the supported years)
   const c = createSchedule(cases[2]![1] as unknown as ScheduleOptions<unknown>);
   assert.throws(
     () => c.valueOn("2024-06-05"),
@@ -467,7 +496,10 @@ test("整合 7: スケジュールの第 n 営業日の規則の基準のカレ�
   );
 });
 
-/** 対応年・方針の違う基準のカレンダー（合成した基準の 3 通り・未確定の祝日で投げる基準・スケジュールから作った基準） */
+/**
+ * Basis calendars with other supported years and policies (three combined bases, a basis that throws for
+ * unconfirmed holidays, a basis made from a schedule)
+ */
 function specialBases(): readonly [string, Calendar][] {
   const tz = { timeZone: "Asia/Tokyo" };
   const jpOf = (o: Obj = {}) =>
@@ -507,8 +539,10 @@ function specialBases(): readonly [string, Calendar][] {
 const WEEKDAY_VALUES = ["closed", "open", "open", "open", "open", "open", "closed"];
 
 test("整合 8: 基準のカレンダーが投げる月がある設定（合成した基準・未確定の祝日で投げる基準・スケジュールから作った基準）でも、診断は何も出さない（誤った error・never-matches を含む）", () => {
-  // 有効期間は、なし・基準が判定できる年から・基準の一部が投げる年（シンガポールの対応年の外）からの 3 通り
-  // （0.30.6 で、日本 "throw" とシンガポール "ignore" を合成した基準で 2030 年から当てはまる規則に never-matches を出していた）
+  // The effective period has three variants: none, from a year the basis can judge, and from a year in which
+  // part of the basis throws (outside Singapore's supported years)
+  // (0.30.6 reported never-matches for a rule matching from 2030 with a basis combining Japan "throw" and
+  // Singapore "ignore")
   for (const [name, calendar] of specialBases())
     for (const effectiveFrom of [undefined, "2026-01-01", "2030-01-01"]) {
       const options = {
@@ -530,8 +564,10 @@ test("整合 8: 基準のカレンダーが投げる月がある設定（合成�
   report("整合 8（基準のカレンダーが投げる月がある設定）");
 });
 
-// 整合 10 は整合 8 と同じ基準で、取り除いて全日を比べるので重く、全件（CONSISTENCY_API_FULL=1。CI）のときだけ動かす。
-// 整合 9（事例の再現）は 0.30.9 で整合 8 の有効期間の組に吸収した（番号は振り直さない）
+// Consistency 10 uses the same bases as consistency 8, removes and compares all days, and is heavy, so it runs
+// only in the full set (CONSISTENCY_API_FULL=1; CI).
+// Consistency 9 (the reproduction of a case) was absorbed in 0.30.9 into the effective-period variants of
+// consistency 8 (the numbers are not reassigned)
 
 test(
   "整合 10: 基準のカレンダーを持つスケジュールで、診断が never-matches と出した規則は 1 つずつ、出た規則（redundant・shadowed を含む）はまとめて取り除いても、判定できる日の結果が変わらない",
@@ -552,8 +588,9 @@ test(
     for (let run = 0; run < RUNS.basis; run++) {
       const [, calendar] = bases[run % bases.length]!;
       const generated = randomScheduleOptions(picker(rand), SHORT_CTX);
-      // 当てはまらない規則（有効期間に 2 月がない 2 月の規則）と、週の決まりと同じ値の規則（日曜を休みにする）を混ぜて、
-      // never-matches・redundant が必ず出るようにする
+      // A rule that never matches (a February rule whose effective period has no February) and a rule with the
+      // same value as the weekly values (closing Sundays) are mixed in, so that never-matches and redundant
+      // always appear
       const rules = [
         ...((generated["recurringRules"] as Obj[] | undefined) ?? []).map((r) =>
           "calendar" in r ? { ...r, calendar } : r,
@@ -575,7 +612,7 @@ test(
         recurringRules: rules,
       };
       const issues = diagnoseSchedule(options);
-      // 関係 5: 診断に error がないことと作成が成功することは同じ
+      // Relation 5: no error in the diagnostics is the same as successful creation
       const errors = issues.filter((d) => d.severity === "error").map((d) => d.code);
       const code = creationError(() =>
         createSchedule(options as unknown as ScheduleOptions<unknown>),
@@ -608,11 +645,12 @@ test(
         removable.add(Number(m[1]));
         if (d.code === "shadowed") continue;
         count(`整合 10（${d.code} と判定できる日）`);
-        // never-matches は 1 つだけ取り除いても変わらない（決して当てはまらない）。redundant はまとめて取り除けることだけを
-        // 約束する（逐次除去。31 番）ので、下でまとめて確かめる
+        // never-matches does not change anything when removed alone (it never matches). For redundant only the
+        // removal together is promised (sequential removal. decisions.md #31), which is checked below
         if (d.code === "never-matches") sameOnJudgeableDays(new Set([Number(m[1])]), d.path);
       }
-      // 出た規則をまとめて取り除いても、判定できる日の結果が変わらない（逐次除去。判定できない月にかかわる規則は出ない）
+      // Removing the reported rules together does not change the result of a day that can be judged (sequential
+      // removal; rules touching an unjudgeable month are not reported)
       if (removable.size > 0) {
         count("整合 10（まとめて取り除く）");
         sameOnJudgeableDays(removable, `まとめて ${JSON.stringify([...removable])}`);

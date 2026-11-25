@@ -1,17 +1,19 @@
-// 飛ばしの決まり（テスト拡充案の T3）。前提がそろわないときに飛ばす箇所（テストの skip・todo、スクリプトの SKIP の行）は、
-// この関数を通し、理由を下の意図した飛ばしの一覧から引く。CI（環境変数 CI が空でも "false" でもないとき）では、一覧にない理由や、
-// CI では飛ばさない理由（ci: false）の飛ばしを失敗にする。この関数を通さない飛ばしは test/tools/skip-policy.test.ts が止める。
+// The rule for skipping (T3 of the test expansion plan). A place that skips when a premise is missing (skip and
+// todo of tests, SKIP lines of scripts) goes through these functions and takes its reason from the list of
+// intended skips below. In CI (the environment variable CI is neither empty nor "false"), a reason missing in the
+// list, or a skip whose reason is not skipped in CI (ci: false), fails. A skip that does not go through these
+// functions is stopped by test/tools/skip-policy.test.ts.
 
 export interface IntendedSkip {
-  /** 出力に出す理由 */
+  /** The reason shown in the output */
   readonly reason: string;
-  /** CI でも飛ばしてよいか */
+  /** Whether it may be skipped in CI too */
   readonly ci: boolean;
-  /** 既知の不具合のテスト（todo）か */
+  /** Whether it is a test of a known issue (todo) */
   readonly todo?: boolean;
 }
 
-/** 意図した飛ばしの一覧。足すときは判断を仰ぐ（RELEASING.md の「品質の確認」） */
+/** The list of intended skips. Ask for a decision before adding one (the quality checks of RELEASING.md) */
 export const INTENDED_SKIPS: Readonly<Record<string, IntendedSkip>> = {
   "ci-full-only": {
     reason:
@@ -33,12 +35,18 @@ export const INTENDED_SKIPS: Readonly<Record<string, IntendedSkip>> = {
 
 const inCI = (): boolean => (process.env["CI"] ?? "") !== "" && process.env["CI"] !== "false";
 
-/** 一覧を受け取って skipWhen・todoFor を作る（決まりそのものを、既知の不具合がない時期にも一覧を差し替えて確かめるため） */
+/**
+ * Takes a list and builds skipWhen and todoFor (so that the rule itself can be checked with a substituted list
+ * also at times without a known issue)
+ */
 export function createSkipPolicy(table: Readonly<Record<string, IntendedSkip>>): {
   skipWhen(id: string, active: boolean): string | false;
   todoFor(id: string): string;
 } {
-  /** 理由（id）が一覧にあり、飛ばし（skip）と既知の不具合（todo）を取り違えていないことを、CI かどうかにかかわらず確かめる */
+  /**
+   * Checks, in CI or not, that the reason (id) is in the list and that a skip is not mistaken for a known issue
+   * (todo) or vice versa
+   */
   function entryOf(id: string, todo: boolean): IntendedSkip {
     const entry = table[id];
     if (entry === undefined)
@@ -47,7 +55,7 @@ export function createSkipPolicy(table: Readonly<Record<string, IntendedSkip>>):
       throw new Error(`${id} は${todo ? "既知の不具合（todo）" : "飛ばし（skip）"}の理由ではない`);
     return entry;
   }
-  /** CI では飛ばさない理由（ci: false）なら、CI で失敗にする */
+  /** A reason that is not skipped in CI (ci: false) fails in CI */
   function checkCI(id: string, entry: IntendedSkip): void {
     if (inCI() && !entry.ci) throw new Error(`CI では飛ばさない理由: ${id}（${entry.reason}）`);
   }
@@ -69,9 +77,9 @@ export function createSkipPolicy(table: Readonly<Record<string, IntendedSkip>>):
 const policy = createSkipPolicy(INTENDED_SKIPS);
 
 /**
- * 決まりそのものを確かめる見本の一覧（test/tools/skip-policy.test.ts だけが使う）。既知の不具合がない時期にも todo の扱いを
- * 確かめるため、3 つの種類（CI でも飛ばす・CI では飛ばさない・既知の不具合）を 1 つずつ持つ。テストのファイルに
- * todo: と書くと飛ばしの検査に当たるので、ここに置く
+ * A sample list for checking the rule itself (used only by test/tools/skip-policy.test.ts). To check the
+ * handling of todo also at times without a known issue, it has one of each of the three kinds (skipped in CI
+ * too, not skipped in CI, known issue). Writing todo: in a test file would trigger the skip check, so it is here
  */
 export const POLICY_SAMPLE: Readonly<Record<string, IntendedSkip>> = {
   "sample-skip": { reason: "sample skip", ci: true },
@@ -80,14 +88,16 @@ export const POLICY_SAMPLE: Readonly<Record<string, IntendedSkip>> = {
 };
 
 /**
- * active なら飛ばす理由（node:test の skip に渡す）、そうでなければ false。理由（id）が一覧にあるかと、skip と todo の
- * 取り違えは、active にかかわらずいつも確かめる（打ち間違いを、飛ばす条件がそろう前に見つけるため。CI でなくても失敗）
+ * The reason for skipping when `active` (passed to skip of node:test), otherwise false. Whether the reason (id)
+ * is in the list, and a mix-up of skip and todo, are always checked whatever `active` is (to find a typo before
+ * the condition for skipping is met; it fails outside CI too)
  */
 export const skipWhen = (id: string, active: boolean): string | false =>
   policy.skipWhen(id, active);
 
 /**
- * 既知の不具合のテストの理由（node:test の todo に渡す）。一覧にない理由は、CI でなくても投げる（skipWhen と同じ）。
- * 既知の不具合を一覧に足すときは todo: true にする
+ * The reason of a test of a known issue (passed to todo of node:test). A reason missing in the list throws
+ * outside CI too (as skipWhen).
+ * A known issue added to the list has todo: true
  */
 export const todoFor = (id: string): string => policy.todoFor(id);

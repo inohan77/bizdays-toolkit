@@ -405,6 +405,58 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+  promise-inventory:
+    # 診断の約束の棚卸し（scripts/promise-inventory.ts）の全件を、1 ジョブの時間を RELEASING.md の決まり（10 分以内）に
+    # 収めるため 4 つに分けて動かす（pnpm check は 100 件に 1 件の抜き出し）。約束と違う設定（FINDING）が 1 つでもあれば失敗。
+    # 最後に、ジョブの時間を同じ分の直近 3 回の main の実行と比べる（scripts/job-time.ts。actions: read はそのため）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/4", "2/4", "3/4", "4/4"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "26.13.1"
+      - run: node scripts/promise-inventory.ts --shard "${{ matrix.shard }}"
+      - name: Compare the job time with recent main runs
+        run: node scripts/job-time.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  promise-coverage:
+    # 約束を確かめるテスト（診断の性質のテストの全件と、棚卸しの全件）だけを V8 のブロックの被覆で動かし、src/core/diagnose.ts の
+    # 通らなかった行のかたまりが、etc/promise-coverage.json に理由つきで載っていることを確かめる（scripts/check-promise-coverage.ts）。
+    # 表は Node.js 22.23.5 で作ったので、同じバージョンで動かす。5 つの実行（性質のテストと棚卸しの 4 つの分）を同時に動かす。
+    # 最後に、ジョブの時間を直近 3 回の main の実行と比べる（scripts/job-time.ts。actions: read はそのため）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "22.23.5"
+      - name: Check that every line the promise checks do not reach is listed
+        run: |
+          node scripts/check-promise-coverage.ts 2>&1 | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Compare the job time with recent main runs
+        run: node scripts/job-time.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   generator-features:
     # 実際の呼び出し側（乱数のテストと result-compare）を動かし、作った設定の特徴が生成範囲の記録
     # （test/fixtures/generator-features-0.30.3/）をすべて含むことを確かめる（scripts/record-generator-features.ts）。

@@ -1,11 +1,12 @@
 /**
- * 公開する dist の確認の中身（Node.js・ブラウザー・Cloudflare Workers の共通。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+ * The checks of the published dist (shared by Node.js, browsers and Cloudflare Workers; RELEASING.md, reasons
+ * for the quality mechanisms, "runtimes that are checked").
  *
- * どの実行環境でも動くよう、標準の JavaScript だけで書く（node:test・node:assert などは使わない）。
- * 読み込み方は環境ごとに違うので、呼び出し側が各サブパスのモジュールを渡す。
- * 本物の Temporal がある環境では、Temporal のオブジェクトを入力にした確認も行う。
- * 合否とは別に、タイムゾーンの名前の扱いの記録（timeZones）を返す。呼び出し側は 1 行ずつ「TimeZone: 」を付けてログに出し、
- * 1 行もなければ失敗にする（黙って飛ばさない）。
+ * Written in standard JavaScript only, to run in any runtime (no node:test, node:assert or the like).
+ * Loading differs by environment, so the caller passes the modules of the subpaths.
+ * Where a real Temporal exists, checks with Temporal objects as input run too.
+ * Apart from pass or fail, it returns the record of how time zone names are handled (timeZones). The caller
+ * logs each line with the prefix "TimeZone: " and fails when there is none (never silently skipped).
  *
  * @param {{ root: any, jp: any, uk: any, sg: any, fr: any, diagnose: any, provider: any }} modules
  * @returns {{ results: { name: string, ok: boolean, error?: string }[], temporal: "native" | "absent", timeZones: string[] }}
@@ -32,8 +33,9 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     equal(jp.holidayOn("2026-09-22")?.kind, "citizens", "holidayOn");
   });
 
-  // オフセット付きの日時文字列（ECMAScript が解釈を定めるのは大文字の T・Z と 3 桁の小数秒だけ。0.31.0 までは Date.parse に任せ、
-  // Firefox・Safari は小文字の t・z を読めなかった）。実行環境ごとにどれが通るかを見られるよう、形ごとに分ける
+  // Date-time strings with an offset (ECMAScript defines the reading only for upper-case T and Z and 3 fraction
+  // digits. Up to 0.31.0 this was left to Date.parse, and Firefox and Safari could not read lower-case t and z).
+  // Split by form, to see which passes in each runtime
   check("日時文字列: 小文字の t・z", () => {
     equal(jp.isHoliday("2026-11-22t15:30:00z"), true, "lowercase t and z");
   });
@@ -174,8 +176,9 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     });
   }
 
-  // タイムゾーン: どの実行環境でも同じ結果になるものは、記録ではなく合否にする（decisions.md の 18 番。0.31.9 の CI の記録で
-  // 確かめた）。別名を 1 つの名前に直すか・Temporal の比較の結果は実行環境で違うので、記録のまま（timeZoneReport）
+  // Time zones: what gives the same result in every runtime is a pass-or-fail check, not a record (decisions.md
+  // #18; confirmed with the CI records of 0.31.9). Whether aliases become one name, and the result of Temporal's
+  // comparison, differ by runtime and stay a record (timeZoneReport)
   check("タイムゾーン: オフセット形式", () => {
     const instant = new Date("2026-11-22T15:30:00Z");
     for (const [written, timeZone, date] of [
@@ -201,9 +204,10 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
     );
     equal(combined.timeZone, "+09:00", "combine +09:00 and +0900");
   });
-  // タイムゾーンの書式の記憶（0.32.3 から。decisions.md の 16 番）は、大文字・小文字だけが違う綴りを 1 つのキーにまとめるので、
-  // 実行環境の Intl が、そうした綴りに同じ名前を返すことを前提にする（崩れると、先に渡した綴りで返す名前が変わる）。ライブラリの
-  // 記憶を通さずに Intl を直接確かめ、ライブラリが返す名前もそれと同じであることを確かめる
+  // The cache of time zone formatters (from 0.32.3. decisions.md #16) merges spellings that differ only in case
+  // into one key, so it assumes that the runtime's Intl returns the same name for such spellings (if that broke,
+  // the returned name would depend on which spelling was passed first). Intl is checked directly, without the
+  // library's cache, and the name the library returns must equal it
   check("タイムゾーン: 大文字・小文字だけが違う綴りに同じ名前", () => {
     const intlName = (timeZone) =>
       new Intl.DateTimeFormat("en-US", { timeZone }).resolvedOptions().timeZone;
@@ -221,8 +225,9 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
       );
     }
   });
-  // 別名どうしは、Temporal のある実行環境では Temporal の比較で同じタイムゾーンとする（0.32.0 から。Intl が別名を直さない
-  // 実行環境でも作れる）。Temporal のない実行環境では、Intl が返す名前で決まるので、記録だけにする
+  // Two aliases are the same time zone by Temporal's comparison in a runtime with Temporal (from 0.32.0; it
+  // works even where Intl does not canonicalize aliases). Without Temporal the name returned by Intl decides, so
+  // this stays a record only
   if (T !== undefined) {
     check("タイムゾーン: 別名どうしの合成（本物の Temporal）", () => {
       const of = (timeZone) => root.createCalendar({ timeZone });
@@ -242,9 +247,11 @@ export function smoke({ root, jp, uk, sg, fr, diagnose, provider }) {
 }
 
 /**
- * タイムゾーンの名前の扱いの記録（合否にしない。実行環境ごとの違いを CI のログで比べるため。decisions.md の 18 番）。
- * 1 行に 1 つの事実を書く: 別名を正規化するか（name）、別名どうしの合成が作れるか（combine）、Temporal の比較の結果
- * （temporal equals）、オフセット形式を受け付けるか（offset）。例外は「throws <code>」と書く
+ * The record of how time zone names are handled (not pass or fail; to compare the differences between runtimes
+ * in the CI logs. decisions.md #18).
+ * One fact per line: whether aliases are canonicalized (name), whether a combination of aliases can be created
+ * (combine), the result of Temporal's comparison (temporal equals), whether the offset form is accepted
+ * (offset). An error is written as "throws <code>"
  * @returns {string[]}
  */
 function timeZoneReport(root, jp) {

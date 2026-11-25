@@ -1,5 +1,6 @@
-// 必ず作る組み合わせ（生成範囲の検査が守る個々の特徴とは別に、危険の分かっている特徴の組み合わせを、呼び出し側ごとに
-// 1 回以上作ることを test/tools/generator-features.test.ts が確かめる）。過去の不具合と、オラクルが見つけた誤りの種類から選ぶ。
+// Combinations that must be produced (apart from the individual features protected by the check of the generated
+// range, test/tools/generator-features.test.ts checks that each caller produces combinations of features with
+// known risks at least once). Chosen from past defects and the kinds of mistakes the oracle found.
 
 type Obj = Record<string, unknown>;
 
@@ -9,16 +10,19 @@ const rules = (o: Obj): Obj[] =>
 const nonEmpty = (o: Obj, ...keys: string[]): boolean =>
   keys.some((k) => Array.isArray(o[k]) && (o[k] as unknown[]).length > 0);
 const hasRule = (o: Obj, test: (r: Obj) => boolean): boolean => rules(o).some(test);
-/** 個別の日付（カレンダーの閉じる・開く日付、スケジュールの日付） */
+/** Specific dates (closing and opening dates of calendars, dates of schedules) */
 const specificDates = (o: Obj): boolean => nonEmpty(o, "closedDates", "openDates", "dates");
-/** 自分の設定を基準に数える第 n 営業日の規則（カレンダーの規則。スケジュールの規則は calendar を基準に数える） */
+/**
+ * An nth-business-day rule counting on the own options (a rule of a calendar; rules of schedules count on
+ * `calendar`)
+ */
 const ownCounting = (o: Obj): boolean =>
   ["closedRecurringRules", "openRecurringRules"].some(
     (k) =>
       Array.isArray(o[k]) &&
       (o[k] as Obj[]).some((r) => "businessDayOfMonth" in r || "businessDayOfWeek" in r),
   );
-/** カレンダーの個別の日付の始まりと終わり */
+/** The starts and ends of the specific dates of a calendar */
 const calendarDateEnds = (o: Obj): { from: string; to: string }[] =>
   ["closedDates", "openDates"].flatMap((k) =>
     Array.isArray(o[k])
@@ -32,12 +36,15 @@ const calendarDateEnds = (o: Obj): { from: string; to: string }[] =>
         )
       : [],
   );
-/** 診断が規則どうしを調べる走査の範囲（提供元なし・"ignore" の提供元。decisions.md の 31 番） */
+/**
+ * The scan range in which the diagnostics examine rules against each other (no provider, or an "ignore"
+ * provider. decisions.md #31)
+ */
 const SCAN = { from: "2001-01-01", to: "2028-12-31" } as const;
 
 export interface Combination {
   readonly name: string;
-  /** その組み合わせを必ず作る理由（過去の不具合・オラクルの誤りの種類） */
+  /** Why the combination must be produced (a past defect, a kind of mistake found by the oracle) */
   readonly reason: string;
   matches(options: Obj): boolean;
 }
@@ -139,7 +146,7 @@ export const COMBINATIONS: readonly Combination[] = [
   },
 ];
 
-/** 呼び出し側で作れない組み合わせと、その理由（事実に限る） */
+/** Combinations a caller cannot produce, with the reason (facts only) */
 export const NOT_APPLICABLE: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   properties: {
     "和集合の提供元 × kinds": "properties の設定は日本の提供元だけで、和集合の提供元を作らない",

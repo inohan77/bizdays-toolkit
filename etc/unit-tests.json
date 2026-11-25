@@ -1,0 +1,104 @@
+{
+  "pending": {},
+  "exempt": {
+    "src/core/errors.ts#IssueCollector.add": "A private method: it can be called only through IssueCollector.warning and IssueCollector.info, whose unit tests execute every line of it."
+  },
+  "unreachable": {
+    "src/jp/rules.ts#computeJapaneseHolidays": [
+      {
+        "code": "} else if (isNational(day)) {",
+        "reason": "Up to 2006 a holiday on a Sunday had no substitute when the next day was a holiday (the else-if branch before this line). In the supported years no holiday on a Sunday from 1973-04-12 to 2006 is followed by a holiday of the holiday law or a special holiday (checked for every year), so the branch body is never entered. The rule stays in the code because it is the law of the time."
+      },
+      {
+        "code": "continue;",
+        "reason": "Up to 2006 a holiday on a Sunday had no substitute when the next day was a holiday (the else-if branch before this line). In the supported years no holiday on a Sunday from 1973-04-12 to 2006 is followed by a holiday of the holiday law or a special holiday (checked for every year), so the branch body is never entered. The rule stays in the code because it is the law of the time."
+      },
+      {
+        "code": "}",
+        "reason": "The closing brace of the branch body above."
+      },
+      {
+        "code": "...(h.key === undefined ? {} : { key: h.key }),",
+        "reason": "Only special holidays have no key, and no special holiday of the data falls on a Sunday (counted over 1955-2099: 0), so a holiday that gets a substitute holiday always has a key; the type allows a missing key"
+      },
+      {
+        "code": "if (extra.some((e) => e.date === day)) continue;",
+        "reason": "From 2007 no substitute holiday is followed by a national holiday (counted over 1955-2099: 0), so a day between two national holidays is never already a substitute holiday; before 2007 the line above handles it"
+      }
+    ],
+    "src/core/calendar.ts#adjustDate": [
+      {
+        "code": "default:",
+        "reason": "The default branch of the switch over the convention. The convention is checked against the list of the four conventions at the top of the function, and every one of them has a case, so no value reaches the default. It stays so that a convention added to the list without a case fails instead of returning undefined."
+      },
+      {
+        "code": "throw rangeError(\"invalid-argument\", `Unknown convention: ${String(convention)}`);",
+        "reason": "The default branch of the switch over the convention. The convention is checked against the list of the four conventions at the top of the function, and every one of them has a case, so no value reaches the default. It stays so that a convention added to the list without a case fails instead of returning undefined."
+      }
+    ],
+    "src/core/schedule.ts#matchPattern": [
+      {
+        "code": "return false;",
+        "reason": "The day itself is not on a weekday of skipWeekdays (checked before the loop) and the day 7 steps away is on the same weekday, so the loop returns at the 7th step at the latest; the limit of the loop is 31"
+      },
+      {
+        "code": "}",
+        "reason": "The day itself is not on a weekday of skipWeekdays (checked before the loop) and the day 7 steps away is on the same weekday, so the loop returns at the 7th step at the latest; the limit of the loop is 31"
+      }
+    ],
+    "src/core/diagnose.ts#canCover": [
+      {
+        "code": "default: {",
+        "reason": "holidayOverlapPolicy of a compiled rule is one of the three values of the cases (overlapPolicyOf rejects any other value at compilation); the default branch exists for the exhaustiveness check of the compiler"
+      },
+      {
+        "code": "const unreachable: never = later.holidayOverlapPolicy;",
+        "reason": "holidayOverlapPolicy of a compiled rule is one of the three values of the cases (overlapPolicyOf rejects any other value at compilation); the default branch exists for the exhaustiveness check of the compiler"
+      },
+      {
+        "code": "return unreachable;",
+        "reason": "holidayOverlapPolicy of a compiled rule is one of the three values of the cases (overlapPolicyOf rejects any other value at compilation); the default branch exists for the exhaustiveness check of the compiler"
+      },
+      {
+        "code": "}",
+        "reason": "holidayOverlapPolicy of a compiled rule is one of the three values of the cases (overlapPolicyOf rejects any other value at compilation); the default branch exists for the exhaustiveness check of the compiler"
+      }
+    ],
+    "src/core/calendar.ts#mergeHolidayLists": [
+      {
+        "code": "[...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),",
+        "reason": "The dates are the keys of one Map, so no two elements have the same date; the comparison returns 0 for equal dates because a comparison function must"
+      }
+    ],
+    "src/core/schedule.ts#createHolidayLookup": [
+      {
+        "code": "a.date < b.date ? -1 : a.date > b.date ? 1 : 0,",
+        "reason": "The dates are the keys of one Map, so no two elements have the same date; the comparison returns 0 for equal dates because a comparison function must"
+      }
+    ],
+    "src/core/migrate.ts#migrate": [
+      {
+        "code": "const at = written.get(list) ?? list;",
+        "reason": "Every key of the renamed object was recorded in the map of written keys (under its own name, or under the new name it was renamed to), so the lookup always finds it; Map.get is typed as possibly undefined"
+      },
+      {
+        "code": "written.get(policyValueKey) ?? policyValueKey,",
+        "reason": "Every key of the renamed object was recorded in the map of written keys (under its own name, or under the new name it was renamed to), so the lookup always finds it; Map.get is typed as possibly undefined"
+      }
+    ],
+    "src/core/diagnose.ts#reportRedundant": [
+      {
+        "code": "return decided?.get(rule) ?? new Set();",
+        "reason": "Annual dates and recurring rules are candidates only when the window exists, and the days a rule decides are computed for every candidate on first use; the guard exists because the type of the window and of Map.get allows undefined"
+      },
+      {
+        "code": "if (!window) return false;",
+        "reason": "Annual dates and recurring rules are candidates only when the window exists, and the days a rule decides are computed for every candidate on first use; the guard exists because the type of the window and of Map.get allows undefined"
+      },
+      {
+        "code": "throw internalError(\"redundant: the sequential removal did not converge\");",
+        "reason": "A pass continues only when the pass before removed a rule, and each rule is removed at most once, so the number of passes is at most the number of rules plus one; the throw guards against a defect"
+      }
+    ]
+  }
+}

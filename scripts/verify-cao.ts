@@ -1,24 +1,27 @@
 import "./strict-warnings.ts";
 /**
- * 内閣府「国民の祝日」CSV とライブラリの計算結果を、日付と名前で照合する（日本）。
+ * Verifies the library's results against the Cabinet Office CSV of national holidays, by date and name (Japan).
  *
- *   pnpm verify:cao                  … 内閣府のサイトから取得して照合
- *   pnpm verify:cao --file <path>    … 手元の CSV（Shift_JIS）で照合
- *   pnpm verify:cao --write          … 照合に成功したらテスト用フィクスチャ（test/fixtures/cao-dates.txt）を更新
- *   pnpm verify:cao --report <path>  … 結果を Markdown で書き出す（監視のワークフローが issue の本文に使う）
- *   pnpm verify:cao --simulate       … 取得した CSV に架空の祝日を 1 行足して照合する（--write とは併用できない）
+ *   pnpm verify:cao                  ... fetch from the Cabinet Office site and verify
+ *   pnpm verify:cao --file <path>    ... verify with a local CSV (Shift_JIS)
+ *   pnpm verify:cao --write          ... on success, update the test fixture (test/fixtures/cao-dates.txt)
+ *   pnpm verify:cao --report <path>  ... write the result as Markdown (the watch workflow uses it as issue body)
+ *   pnpm verify:cao --simulate       ... add one fictitious holiday row to the fetched CSV and verify (cannot be
+ *                                        combined with --write)
  *
- * 毎日の監視（.github/workflows/data-watch.yml）がほかの国の照合と同じ起動で実行し、差分・取得の失敗なら issue を立てる。
- * 「New years published」（CSV の最終年が CONFIRMED_THROUGH より後）は、RELEASING.md の毎年の作業の引き金で、
- * src/jp/rules.ts の CONFIRMED_THROUGH・DATA_VERSION を更新する。
+ * The daily watch (.github/workflows/data-watch.yml) runs it in the same start as the other countries'
+ * verifications and opens an issue on a difference or a failed fetch.
+ * "New years published" (the last year of the CSV is after CONFIRMED_THROUGH) triggers the yearly work of
+ * RELEASING.md: update CONFIRMED_THROUGH and DATA_VERSION of src/jp/rules.ts.
  *
- * 照合すること:
- * - CSV のすべての行の日付がライブラリの祝日にあり、名前が同じものを指しているか（「休日」は振替休日・国民の休日・特例の休日）
- * - ライブラリの祝日が CSV に余分にないか（CSV の範囲の年だけ）
- * - CSV に CONFIRMED_THROUGH より後の年が載っていないか
- * - フィクスチャ（test/fixtures/cao-dates.txt）の日付と CSV の日付が同じか
+ * Verified:
+ * - the date of every CSV row is a holiday of the library and the names mean the same (the CSV's generic
+ *   "holiday" name stands for substitute holidays, citizens' holidays and special holidays)
+ * - the library has no extra holiday missing in the CSV (only in the years of the CSV)
+ * - the CSV has no year after CONFIRMED_THROUGH
+ * - the dates of the fixture (test/fixtures/cao-dates.txt) equal the dates of the CSV
  *
- * 終了コード: 0 = 一致、1 = 差分あり、2 = 取得・解析の失敗（監視が機能していない）
+ * Exit code: 0 = equal, 1 = differences, 2 = failed fetch or parse (the watch is not working)
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -38,10 +41,13 @@ const report = option("--report");
 const write = args.includes("--write");
 const simulate = args.includes("--simulate");
 if (simulate && write) throw new Error("--simulate cannot be combined with --write");
-/** 今日の日付（日本時間。報告書・フィクスチャの「取得」の日付。issue のコメントの日付と同じ基準） */
+/**
+ * Today's date (Japan time; the "fetched" date of reports and fixtures, on the same basis as the dates of issue
+ * comments)
+ */
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
 
-/** 一時的な失敗で監視が issue を立てないよう、3 回まで試す */
+/** Tries up to 3 times, so that a temporary failure does not make the watch open an issue */
 async function fetchBytes(url: string): Promise<Uint8Array> {
   let last: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -80,10 +86,11 @@ function parse(bytes: Uint8Array): Row[] {
   return rows;
 }
 
-/** CSV の名前とライブラリの名前が同じものを指しているか */
+/** Whether the name in the CSV and the name in the library mean the same */
 function sameName(csvName: string, h: JpHoliday): boolean {
   if (csvName.startsWith("休日")) {
-    // 振替休日・国民の休日は「休日」、2019 年の特例は「休日（祝日扱い）」
+    // Substitute and citizens' holidays have the generic "holiday" name; the special days of 2019 have that name
+    // with a note that they are treated as national holidays
     return h.kind === "substitute" || h.kind === "citizens" || h.kind === "special";
   }
   const base = csvName.replace(/[（(].*[）)]$/, "");
@@ -110,7 +117,7 @@ async function main(): Promise<number> {
   for (let y = firstYear; y <= lastYear; y++)
     for (const h of holidaysInYear(y)) actual.set(h.date, h);
 
-  // 1. ライブラリの計算との照合
+  // 1. Verification against the library's calculation
   const mismatches: string[] = [];
   for (const [date, name] of expected) {
     const h = actual.get(date);
@@ -122,7 +129,7 @@ async function main(): Promise<number> {
     if (!expected.has(date)) mismatches.push(`extra    ${date} ${h.name}`);
   addSection("Library does not match the Cabinet Office CSV", mismatches);
 
-  // 2. 公表済みの年（翌年の春分・秋分の日は毎年 2 月ごろに公表される）
+  // 2. Published years (the equinox days of the next year are published around February every year)
   addSection(
     "New years published in the Cabinet Office CSV",
     lastYear > jp.confirmedThrough!
@@ -130,7 +137,7 @@ async function main(): Promise<number> {
       : [],
   );
 
-  // 3. フィクスチャとの照合
+  // 3. Verification against the fixture
   const fixtureDates = readFileSync(FIXTURE, "utf8")
     .split(/\r?\n/)
     .filter((line) => /^\d{4}-\d{2}-\d{2}$/.test(line));

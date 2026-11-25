@@ -1,27 +1,31 @@
 /**
- * 決定の番号の参照（「decisions.md の N 番」と、番号を並べた「decisions.md の M・N 番」「decisions.md の M 番・N 番」）の形と、
- * 参照を探すファイル。
- * （例文を数字で書くと、それ自身が参照として数えられるので、ここでは N・M で書く）
- * 文書の参照の実在の検査（scripts/check-package.ts の checkReferences）と、参照の表（scripts/check-claims.ts の c）が
- * 同じものを使う（2 つの検査の範囲と形がずれないように）。
+ * The forms of a reference to numbered decisions of decisions.md (the Japanese forms, with one number or several
+ * numbers in a row, and the English form with # before each number) and the files searched for references.
+ * (Examples with digits would themselves be counted as references, so none is written here.)
+ * The check that the references exist (checkReferences of scripts/check-package.ts) and the table of references
+ * (c of scripts/check-claims.ts) use the same definitions (so that the scope and form of the two do not diverge).
  */
 
 import { readdirSync, statSync } from "node:fs";
 import { releaseSections } from "./release-sections.ts";
 
 /**
- * 決定の番号の参照。番号は「・」「、」「,」で並べてよく、並べたそれぞれに「番」を付けてもよい（decisionNumbers で分ける）。
- * 「番目」は数えない
+ * A decision reference. In the Japanese form the numbers may be separated by a middle dot, an ideographic comma
+ * or a comma, each optionally followed by the counter word (decisionNumbers splits them); the ordinal form
+ * (counter word plus ordinal suffix) is not counted.
+ * In English comments the numbers are written with #, separated by commas, directly after the file name
  */
-export const DECISION_REFERENCE = /decisions\.md`? の ((?:\d+ ?番?[・、,] ?)*\d+) ?番(?!目)/g;
+export const DECISION_REFERENCE =
+  /decisions\.md`? (?:の )?((?:#?\d+ ?番?[・、,] ?)*#?\d+)(?: ?番(?!目)|(?<=#\d+))/g;
 
-/** 参照の番号の並び（"M・N"・"M 番・N"）を番号に分ける */
+/** Splits the list of numbers of a reference into numbers */
 export const decisionNumbers = (list: string): number[] =>
-  list.split(/[・、,]/).map((x) => Number(x.replace("番", "").trim()));
+  list.split(/[・、,]/).map((x) => Number(x.replace(/[番#]/g, "").trim()));
 
 /**
- * 今のバージョンのことを書くファイル（コメントのあるソース・道具・テスト・ワークフローと、履歴でない文書）。ファイルのパスの参照と、
- * 決定の番号の参照（今の番号）を確かめる。decisions.md 自身と移行ガイド（履歴）は含まない
+ * The files that describe the current version (source, tools, tests and workflows, which have comments, and the
+ * documents that are not history). Their file-path references and decision references (current numbers) are
+ * checked. decisions.md itself and the migration guide (history) are not included
  */
 export function currentFiles(): string[] {
   const walk = (dir: string): string[] =>
@@ -38,7 +42,8 @@ export function currentFiles(): string[] {
     "RELEASING.md",
     "SECURITY.md",
     ...readdirSync("docs")
-      // 履歴を書いたファイル（決定の文書・移行ガイド・開発の記録）は、改名・削除の前の名前を正しく含むので除く
+      // Files that record history (the decisions document, the migration guide, the development log) correctly
+      // contain names from before renames and removals, so they are left out
       .filter(
         (f) =>
           f.endsWith(".md") &&
@@ -51,13 +56,19 @@ export function currentFiles(): string[] {
   ];
 }
 
-/** 決定の番号の参照（今の番号）を探すファイル: 今のバージョンのことを書くファイルと、移行ガイド */
+/**
+ * The files searched for decision references (current numbers): the files that describe the current version,
+ * and the migration guide
+ */
 export const decisionReferenceFiles = (): string[] => [...currentFiles(), "docs/migration.md"];
 
-/** 決定の番号を振り直したバージョン。CHANGELOG のこのバージョンまでの節は、旧番号で書かれている（decisions.md の末尾の対応表） */
+/**
+ * The version after which the decisions were renumbered. The CHANGELOG sections up to this version use the old
+ * numbers (the correspondence table at the end of decisions.md)
+ */
 const RENUMBERED_AFTER = [0, 30, 2];
 
-/** CHANGELOG のバージョンの節と、その節の参照が旧番号か */
+/** The version sections of the CHANGELOG, and whether a section's references use the old numbers */
 export function changelogSections(): { version: string; text: string; oldNumbering: boolean }[] {
   const isOld = (version: string): boolean => {
     if (!/^\d+\.\d+\.\d+$/.test(version)) return false;
@@ -66,7 +77,8 @@ export function changelogSections(): { version: string; text: string; oldNumberi
       if (v[i] !== RENUMBERED_AFTER[i]) return v[i]! < RENUMBERED_AFTER[i]!;
     return true;
   };
-  // 0.31.0 から、開発の記録は docs/development-log.md にある。同じバージョンの節をつなげて、参照の数を移動の前後でそろえる
+  // From 0.31.0 the development log is docs/development-log.md. The sections of the same version are joined, so
+  // that the number of references is the same before and after the move
   const sections = releaseSections();
   return [...sections].map(([version, text]) => ({
     version,

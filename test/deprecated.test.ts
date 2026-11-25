@@ -1,4 +1,5 @@
-// 0.30.0 で改名した旧名（1.0.0 より前のバージョンでだけ受け付ける）。RELEASING.md の「1.0.0 で行う作業」で、旧名が invalid-option になることを確かめるテストに置き換える
+// The old names renamed in 0.30.0 (accepted only by earlier major versions). Work for 1.0.0 (RELEASING.md):
+// this file is replaced by a test that the old names are invalid-option
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -20,7 +21,8 @@ import {
 
 const FROM = "2026-01-01";
 
-// 旧名だけで書いた設定（型の上では旧名の一部を受けないので、実行時の入力として渡す）
+// Options written with old names only (the types do not accept some of the old names, so they are passed as
+// run-time input)
 const oldCalendar = {
   holidays: jp,
   outOfRange: "throw",
@@ -49,12 +51,14 @@ const newCalendar: CalendarOptions = {
   searchDayLimit: 100,
 };
 
-// 営業日カレンダー・スケジュールの設定の旧名が新しい名前と同じ結果になることは、変形しても結果が同じ（test/metamorphic.test.ts）
-// の変形 1（旧名）が、目録の設定で確かめる。ここでは、変形 1 が試さない旧名（メソッド・返す項目・関数と、合成・スケジュール
-// からのカレンダー・期日・振替の設定）と、診断の位置・両方を書いたときの扱いを確かめる
+// That the old names of the options of business calendars and schedules give the same results as the new names
+// is checked by transformation 1 (old names) of the metamorphic tests (test/metamorphic.test.ts) with the
+// catalog options. Here the old names transformation 1 does not try are checked (methods, returned properties,
+// functions, and the options of combinations, calendars from schedules, due dates and substitution), plus the
+// positions in diagnostics and what happens when both names are written
 
 test("旧名: 診断は deprecated-option で旧名の位置（利用者が書いた位置）と新しい名前を返す", () => {
-  // 診断は決定的（decisions.md の 30 番）なので、1 回だけ計算して使い回す
+  // The diagnostics are deterministic (decisions.md #30), so they are computed once and reused
   const diagnosed = diagnoseCalendar(oldCalendar);
   const list = diagnosed.filter((d) => d.code === "deprecated-option");
   assert.ok(list.every((d) => d.severity === "warning"));
@@ -71,8 +75,8 @@ test("旧名: 診断は deprecated-option で旧名の位置（利用者が書�
     ],
     "設定の直下",
   );
-  // 旧名の設定で作ったカレンダーの dayInfoOn の optionPath は新しい名前で返す（変形 1 は旧名の設定の結果の位置を pathToNew で
-  // 新しい名前に読み替えてから比べるので、この点を確かめられない）
+  // optionPath of dayInfoOn of a calendar created from old-name options uses the new names (transformation 1
+  // translates the positions of old-name results with pathToNew before comparing, so it cannot check this)
   assert.equal(
     createCalendar(oldCalendar).dayInfoOn("2026-12-31").optionPath,
     "closedAnnualDates[0]",
@@ -148,8 +152,8 @@ test("旧名: 変形 1 が試さない旧名（メソッド・返す項目・関
   );
   assert.deepEqual(calendar.getHoliday("2026-05-05"), calendar.holidayOn("2026-05-05"));
   assert.equal(calendar.outOfRange, calendar.outOfRangePolicy);
-  // 旧名 outOfRange で作ったカレンダーの outOfRangePolicy プロパティが値を持つ（変形 1 は判定の結果だけを比べ、カレンダーの
-  // プロパティを見ないので、この点を確かめられない）
+  // The property outOfRangePolicy of a calendar created with the old name outOfRange has the value
+  // (transformation 1 compares judgement results only, not the calendar's properties, so it cannot check this)
   assert.equal(createCalendar(oldCalendar).outOfRangePolicy, "throw");
   assert.equal(calendar.unconfirmedHolidays, calendar.unconfirmedHolidayPolicy);
   const day = calendar.dayInfoOn("2026-12-31");

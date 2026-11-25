@@ -4,7 +4,8 @@ import { test } from "node:test";
 import type { HolidayProvider } from "../src/index.ts";
 import { england, northernIreland, scotland, wales, type UkHolidayKind } from "../src/uk/index.ts";
 
-// 提供元の項目を使う（英国の提供元はどれも同じ値。モジュールの定数 confirmedThrough は非推奨）
+// The provider's property is used (the same value for every UK provider; the module constant confirmedThrough is
+// deprecated)
 const confirmedThrough = england.confirmedThrough!;
 
 interface Event {
@@ -32,8 +33,9 @@ const cases: [string, HolidayProvider<UkHolidayKind>, string][] = [
 ];
 
 /**
- * GOV.UK が「Substitute day」としているが、このライブラリでは振替ではなく移動（regular）とする日。
- * 2012 年の Spring bank holiday は布告で 6 月 4 日に移された（同じ年の Northern Ireland には注記がない）
+ * Days GOV.UK marks as "Substitute day" that this library treats as a move (regular), not a substitution.
+ * The Spring bank holiday of 2012 was moved to June 4 by proclamation (Northern Ireland has no such note for
+ * that year)
  */
 const MOVED_NOT_SUBSTITUTE = new Set(["england-and-wales 2012-06-04", "scotland 2012-06-04"]);
 

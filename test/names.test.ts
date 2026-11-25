@@ -5,7 +5,7 @@ import { createCalendar, type HolidayProvider } from "../src/index.ts";
 import { holidaysInYear, jp } from "../src/jp/index.ts";
 import { diagnoseCalendar } from "../src/diagnose/index.ts";
 
-/** 12 月 25 日だけを祝日にし、names を付ける提供元 */
+/** A provider whose only holiday is December 25, with `names` */
 const provider = (names: unknown): HolidayProvider => ({
   id: "XX",
   timeZone: "UTC",
@@ -31,7 +31,7 @@ test("names: 提供元が付けたほかの言語の名称を、複製・凍結�
   assert.ok(Object.isFrozen(holiday.names));
   source.ko = "changed";
   assert.equal(holiday.names?.["ko"], "크리스마스", "元のオブジェクトを書き換えても変わらない");
-  // 別の実行環境（vm）で作られた普通のオブジェクトも受け付ける
+  // A plain object created in another realm (vm) is accepted too
   const foreign = runInNewContext('({ "zh-Hant": "聖誕節" })') as unknown;
   assert.deepEqual(
     createCalendar({ holidayProvider: provider(foreign) }).holidayOn("2026-12-25")?.names,
@@ -52,7 +52,7 @@ test("names: 省略した祝日には項目自体がない（同梱の日本の�
 
 test("names: 誤りは invalid-provider-data（言語タグは正規の形で書く）", () => {
   const bad: unknown[] = [
-    { "zh-hant": "聖誕節" }, // 正規の形は zh-Hant
+    { "zh-hant": "聖誕節" }, // the canonical form is zh-Hant
     { "not a tag": "x" },
     { ko: "" },
     { ko: 1 },
@@ -69,7 +69,7 @@ test("names: 誤りは invalid-provider-data（言語タグは正規の形で書
       String(JSON.stringify(names)),
     );
   }
-  // 診断では、使っていない年も含めて error として見つかる
+  // The diagnostics find it as an error also in years that are not used
   assert.deepEqual(
     diagnoseCalendar({ holidayProvider: provider({ "zh-hant": "聖誕節" }) }).map((d) => d.code),
     ["invalid-provider-data"],

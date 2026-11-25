@@ -1,5 +1,6 @@
-// 診断の counting-basis の文（第 n 営業日の数える基準は繰り返しの規則を除く）。毎週の曜日の規則が開く規則か
-// 閉じる規則かで文を分けているので、両側の文を確かめる（src/core/diagnose.ts の weekly.value === true の分岐）
+// The texts of counting-basis of the diagnostics (the counting basis of nth business days leaves out recurring
+// rules). The text differs for an opening and a closing weekly weekday rule, so both are checked (the branch
+// weekly.value === true of src/core/diagnose.ts)
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { diagnoseCalendar } from "../src/diagnose/index.ts";
@@ -46,9 +47,11 @@ test("counting-basis: 週の第 n 営業日の規則（businessDayOfWeek）で�
   assert.equal(list[0]!.relatedPath, "closedRecurringRules[1]");
 });
 
-// 0.30.8: 有効期間が重なり、使われている曜日の規則ごとに 1 件（それ以外の曜日の規則は数え方に影響しない）。
-// 有効期間が重ならない 2 項目の組と件数はオラクル（test/diagnose-oracle.test.ts）が全件で確かめる。ここに残すのは、
-// オラクルが試さない形（outOfRangePolicy: "throw"、3 項目以上の並び）だけ
+// 0.30.8: one item per used weekday rule whose effective period overlaps (other weekday rules do not affect the
+// count).
+// Pairs of two items whose effective periods do not overlap, and the counts, are checked in full by the oracle
+// (test/diagnose-oracle.test.ts). What stays here are the forms the oracle does not try (outOfRangePolicy:
+// "throw", sequences of three or more items)
 const relatedOf = (options: Parameters<typeof diagnoseCalendar>[0]) =>
   countingBasis(options).map((d) => [d.path, d.relatedPath]);
 
@@ -56,7 +59,7 @@ test('counting-basis: 対応年の外で使われない曜日の規則では出�
   const options = {
     holidayProvider: jp,
     closedWeekdays: [0, 6],
-    closedRecurringRules: [{ weekday: 3, effectiveTo: "1950-12-31" }, { businessDayOfMonth: 1 }],
+    closedRecurringRules: [{ weekday: 3, effectiveTo: "2010-12-31" }, { businessDayOfMonth: 1 }],
   } as const;
   assert.deepEqual(relatedOf(options), []);
   assert.deepEqual(
@@ -113,7 +116,8 @@ test("counting-basis: 第 n 営業日の規則より後ろの曜日の規則が 
         d.relatedPath === "closedRecurringRules[1]",
     ),
   );
-  // 同じ規則を 2 つ書くと後が shadowed で、前は redundant にならない（逐次除去で、shadowed の規則を先に取り除くため。31 番）
+  // The same rule written twice makes the later one shadowed and the earlier one not redundant (the sequential
+  // removal removes shadowed rules first. decisions.md #31)
   assert.ok(!all.some((d) => d.code === "redundant" && d.path === "closedRecurringRules[1]"));
   assert.deepEqual(
     relatedOf({

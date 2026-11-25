@@ -1,13 +1,16 @@
 /**
- * 日本の祝日（「国民の祝日に関する法律」と特例法）の計算。
+ * Calculation of the holidays of Japan (the Act on National Holidays and the special acts).
  *
- * - 国民の祝日: 年ごとの規則で計算する（ハッピーマンデー・五輪特措法による移動を含む）
- * - 皇室行事による休日: 特例法ごとの日付をテーブルで持つ
- * - 振替休日: 1973-04-12 以降。2007 年からは「その日後で最も近い国民の祝日でない日」
- * - 国民の休日: 1985-12-27 以降。前日と翌日が国民の祝日である日
- * - 識別子（key）: 祝日法の各祝日に 1 つ（KnownJpHolidayKey）。振替休日は元の祝日の key、国民の休日・特例の休日は持たない
- * - 春分・秋分の日: 天文計算による近似式。官報公表済みの年（CONFIRMED_THROUGH）までは確定値と一致することを
- *   内閣府の CSV で検証している。それより後の年は confirmed: false
+ * - National holidays: computed from per-year rules (including Happy Monday and the moves under the Olympic
+ *   special measures act)
+ * - Holidays for imperial events: the dates of each special act are kept in a table
+ * - Substitute holidays: from 1973-04-12. From 2007, "the nearest day after it that is not a national holiday"
+ * - Citizens' holidays: from 1985-12-27. A day whose previous and next days are national holidays
+ * - Keys: one per holiday of the act (KnownJpHolidayKey). A substitute holiday has the key of its holiday;
+ *   citizens' holidays and special holidays have none
+ * - Equinox days: an approximation of the astronomical calculation. Up to the year published in the official
+ *   gazette (CONFIRMED_THROUGH) it is verified against the Cabinet Office CSV to equal the confirmed dates.
+ *   Later years are confirmed: false
  */
 
 import {
@@ -17,35 +20,37 @@ import {
   weekdayOf,
   type DateString,
 } from "../core/date.ts";
+import { createCalendar, type Calendar } from "../core/calendar.ts";
 import { describeValue, rangeError } from "../core/errors.ts";
-import type { Holiday } from "../core/types.ts";
+import type { Holiday, HolidayProvider } from "../core/types.ts";
 
 /**
- * 日本の祝日・休日の種別（既知の値）。
+ * Kinds of holidays of Japan (known values).
  * @public
  */
 export type KnownJpHolidayKind =
-  /** 国民の祝日 */
+  /** National holiday */
   | "regular"
-  /** 振替休日 */
+  /** Substitute holiday */
   | "substitute"
-  /** 国民の休日（祝日に挟まれた日） */
+  /** Citizens' holiday (a day between two holidays) */
   | "citizens"
-  /** 皇室行事などによる特例の休日 */
+  /** Special holiday for an imperial event or the like */
   | "special";
 
 /**
- * 日本の祝日・休日の種別。将来のバージョンで値が増えることがあるので、分岐では「その他」も扱うこと。
- * すべての値を網羅したことを型で確かめたい場合は KnownJpHolidayKind を使う。
+ * Kind of a holiday of Japan. Later versions may add values, so handle "anything else" when branching.
+ * Use KnownJpHolidayKind to check by type that every value is handled.
  * @public
  */
 export type JpHolidayKind = KnownJpHolidayKind | (string & {});
 
 /**
- * 日本の国民の祝日の識別子（Holiday.key。既知の値）。祝日法の各祝日に 1 つで、日付の移動や改名があっても同じ祝日なら同じ値
- * （天皇誕生日は 4/29・12/23・2/23 とも "emperors-birthday"、体育の日とスポーツの日は "sports"）。
- * 振替休日は元の祝日の key を持ち、国民の休日と特例の休日は key を持たない。
- * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * Keys of the national holidays of Japan (Holiday.key; known values). One per holiday of the act; the same
+ * holiday keeps its value when its date moves or it is renamed (the Emperor's Birthday is "emperors-birthday"
+ * on 4/29, 12/23 and 2/23; Health and Sports Day and Sports Day are "sports").
+ * A substitute holiday has the key of its holiday; citizens' holidays and special holidays have no key.
+ * Used for completion when writing `keys` of a rule (the type is open, so other strings pass too).
  * @namingSource holiday-key
  * @public
  */
@@ -67,11 +72,11 @@ export type KnownJpHolidayKey =
   | "culture"
   | "labor-thanksgiving";
 
-/** @internal 対応年 */
+/** @internal Supported years */
 export const SUPPORTED_YEARS = Object.freeze({ from: 1955, to: 2099 });
-/** @internal 春分・秋分の日が官報で確定している最後の年 */
+/** @internal The last year whose equinox days are confirmed by the official gazette */
 export const CONFIRMED_THROUGH = 2027;
-/** @internal 反映済みの官報の年月（2027 年の春分・秋分の日の公表） */
+/** @internal Year and month of the reflected official gazette (publication of the equinox days of 2027) */
 export const DATA_VERSION = "2026-02";
 
 const SUBSTITUTE_START = "1973-04-12";
@@ -83,13 +88,13 @@ interface Entry {
   readonly name: string;
   readonly nameEn: string;
   readonly kind: KnownJpHolidayKind;
-  /** 春分・秋分の日、またはそれに由来する休日 */
+  /** An equinox day, or a holiday derived from one */
   readonly equinox: boolean;
-  /** 観測している祝日の識別子（振替休日は元の祝日のもの。国民の休日・特例の休日は持たない） */
+  /** Key of the observed holiday (a substitute has its holiday's; citizens' and special holidays have none) */
   readonly key?: KnownJpHolidayKey;
 }
 
-/** 皇室行事などによる特例の休日（それぞれの特例法による） */
+/** Special holidays for imperial events and the like (each under its special act) */
 const SPECIAL_DAYS: readonly Omit<Entry, "kind" | "equinox">[] = [
   {
     date: "1959-04-10",
@@ -107,10 +112,15 @@ const SPECIAL_DAYS: readonly Omit<Entry, "kind" | "equinox">[] = [
   { date: "2019-10-22", name: "即位礼正殿の儀の行われる日", nameEn: "Enthronement Ceremony Day" },
 ];
 
-// 近似式の int() は 0 方向への切り捨て。1979 年以前は (year - 1983) / 4 が負になるため
-// Math.floor ではなく Math.trunc を使う（floor だと 1 日ずれる年がある）
+// int() of the approximation truncates toward zero. Up to 1979, (year - 1983) / 4 is negative, so Math.trunc is
+// used instead of Math.floor (floor is a day off in some years)
 
-/** @internal 春分日（3 月の日） */
+/**
+ * Day of March of the vernal equinox in Japan, by the standard approximation formula.
+ * @param year - Year (the formula is used for the supported years).
+ * @returns The day of the month (19-21 for the supported years).
+ * @internal
+ */
 export function vernalEquinoxDay(year: number): number {
   if (year <= 1979) {
     return Math.floor(20.8357 + 0.242194 * (year - 1980) - Math.trunc((year - 1983) / 4));
@@ -118,7 +128,12 @@ export function vernalEquinoxDay(year: number): number {
   return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
 }
 
-/** @internal 秋分日（9 月の日） */
+/**
+ * Day of September of the autumnal equinox in Japan, by the standard approximation formula.
+ * @param year - Year.
+ * @returns The day of the month (22-24 for the supported years).
+ * @internal
+ */
 export function autumnalEquinoxDay(year: number): number {
   if (year <= 1979) {
     return Math.floor(23.2588 + 0.242194 * (year - 1980) - Math.trunc((year - 1983) / 4));
@@ -126,8 +141,14 @@ export function autumnalEquinoxDay(year: number): number {
   return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
 }
 
-/** 国民の祝日と特例の休日（振替休日・国民の休日を除く） */
-function baseHolidays(y: number): Entry[] {
+/**
+ * The holidays of a year defined by the holiday law and by special acts, before substitute and citizens' holidays.
+ * @param y - A supported year.
+ * @returns Entries sorted by date, each with name, key, kind ("regular" or "special") and whether the date comes from
+ *   the equinox formula.
+ * @internal
+ */
+export function baseHolidays(y: number): Entry[] {
   const list: Entry[] = [];
   const add = (
     date: DateString,
@@ -153,17 +174,17 @@ function baseHolidays(y: number): Entry[] {
   if (y >= 2007) add(md(5, 4), "みどりの日", "Greenery Day", "greenery");
   add(md(5, 5), "こどもの日", "Children's Day", "childrens");
 
-  // 海の日（1996〜）。2020・2021 年は五輪特措法による移動
+  // Marine Day (1996-). Moved in 2020 and 2021 under the Olympic special measures act
   if (y === 2020) add(md(7, 23), "海の日", "Marine Day", "marine");
   else if (y === 2021) add(md(7, 22), "海の日", "Marine Day", "marine");
   else if (y >= 2003) add(monday(7, 3), "海の日", "Marine Day", "marine");
   else if (y >= 1996) add(md(7, 20), "海の日", "Marine Day", "marine");
 
-  // スポーツの日（2020〜）。2020・2021 年は五輪特措法による移動
+  // Sports Day (2020-). Moved in 2020 and 2021 under the Olympic special measures act
   if (y === 2020) add(md(7, 24), "スポーツの日", "Sports Day", "sports");
   else if (y === 2021) add(md(7, 23), "スポーツの日", "Sports Day", "sports");
 
-  // 山の日（2016〜）。2020・2021 年は五輪特措法による移動
+  // Mountain Day (2016-). Moved in 2020 and 2021 under the Olympic special measures act
   if (y === 2020) add(md(8, 10), "山の日", "Mountain Day", "mountain");
   else if (y === 2021) add(md(8, 8), "山の日", "Mountain Day", "mountain");
   else if (y >= 2016) add(md(8, 11), "山の日", "Mountain Day", "mountain");
@@ -189,9 +210,19 @@ function baseHolidays(y: number): Entry[] {
   return list.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-/** @internal その年の祝日・休日（日付順） */
+/**
+ * Computes the Japanese public holidays of a year: the base holidays, substitute holidays (a holiday on a Sunday;
+ * from April 12, 1973; since 2007 moved past consecutive holidays) and citizens' holidays (a day between two
+ * holidays; from December 27, 1985).
+ * @param year - Integer within SUPPORTED_YEARS.
+ * @returns New frozen holidays sorted by date. `confirmed` is false only for equinox-based days (and days derived
+ *   from them) in years after CONFIRMED_THROUGH.
+ * @throws RangeError `invalid-argument` when the year is not an integer; `out-of-range` outside the supported years.
+ * @internal
+ */
 export function computeJapaneseHolidays(year: number): Holiday<JpHolidayKind>[] {
-  // 整数でない年（文字列の "2026" など）は範囲の外ではなく引数の誤り（KnownErrorCode の説明）
+  // A year that is not an integer (the string "2026", ...) is a wrong argument, not out of range (see
+  // KnownErrorCode)
   if (!Number.isInteger(year))
     throw rangeError(
       "invalid-argument",
@@ -205,11 +236,11 @@ export function computeJapaneseHolidays(year: number): Holiday<JpHolidayKind>[] 
   }
   const base = baseHolidays(year);
   const byDate = new Map<DateString, Entry>(base.map((e) => [e.date, e]));
-  // 振替休日・国民の休日の判定に使う「国民の祝日」（特例の休日も祝日として扱われる）
+  // The "national holidays" used to decide substitute and citizens' holidays (special holidays count as holidays)
   const isNational = (date: DateString): boolean => byDate.has(date);
   const extra: Entry[] = [];
 
-  // 振替休日
+  // Substitute holidays
   for (const h of base) {
     if (h.date < SUBSTITUTE_START || weekdayOf(h.date) !== 0) continue;
     let day = addDays(h.date, 1);
@@ -228,12 +259,12 @@ export function computeJapaneseHolidays(year: number): Holiday<JpHolidayKind>[] 
     });
   }
 
-  // 国民の休日（前日と翌日が国民の祝日である日）
+  // Citizens' holidays (a day whose previous and next days are national holidays)
   for (const h of base) {
     const day = addDays(h.date, 1);
     const next = addDays(h.date, 2);
     if (day < CITIZENS_START || isNational(day) || !isNational(next)) continue;
-    // 2006 年までは日曜日と振替休日を除く
+    // Up to 2006, Sundays and substitute holidays are excluded
     if (day < SUBSTITUTE_2007 && (weekdayOf(day) === 0 || extra.some((e) => e.date === day)))
       continue;
     if (extra.some((e) => e.date === day)) continue;
@@ -260,3 +291,13 @@ export function computeJapaneseHolidays(year: number): Holiday<JpHolidayKind>[] 
       }),
     );
 }
+
+let defaultCalendar: Calendar<JpHolidayKind> | undefined;
+/**
+ * The shared calendar of the Japanese entry (src/jp/index.ts), created on first use and reused afterwards.
+ * @param provider - The Japanese provider; read on the first call only.
+ * @returns A calendar with `provider` and default options; the same object on every call.
+ * @internal
+ */
+export const sharedCalendar = (provider: HolidayProvider<JpHolidayKind>): Calendar<JpHolidayKind> =>
+  (defaultCalendar ??= createCalendar({ holidayProvider: provider }));

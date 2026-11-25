@@ -1,8 +1,10 @@
-// 乱数のテストの呼び出し側（test/properties.test.ts・test/diagnose-properties.test.ts）が使う設定の作り方と、
-// 3 つの呼び出し側（result-compare を含む）が作る設定の一覧。呼び出し側はここの関数で設定を作り、
-// 生成範囲の包含の検査（test/tools/generator-features.test.ts）は、同じ関数を同じ種と試行の数で呼んで特徴を数える
-// （3 つの呼び出し側とも、設定の並びまで呼び出し側と同じ）。
-// 提供元は名前（"jp"）か、自作の提供元のオブジェクトで持つ（呼び出し側が本物の提供元に置き換える）。
+// How the callers of the random tests (test/properties.test.ts, test/diagnose-properties.test.ts) build their
+// options, and the list of options the three callers (including result-compare) build. The callers build
+// options with the functions here, and the inclusion check of the generated range
+// (test/tools/generator-features.test.ts) calls the same functions with the same seeds and numbers of trials and
+// counts the features (for all three callers, even the order of the options equals the caller's).
+// Providers are kept as a name ("jp") or as a home-made provider object (the caller replaces a name by the real
+// provider).
 
 import {
   CONTEXTS,
@@ -18,16 +20,18 @@ import {
 import { scanFeatures, providerKey, diagnoseRangeOf } from "./features.ts";
 import { contextOf, fixedCases, generateCases } from "./result-cases.ts";
 import { SHORT_PROVIDER } from "./provider.ts";
+import { PROMISE_RANGE } from "./promise-days.ts";
 
 // ------------------------------------------------------------
-// test/properties.test.ts（日本の提供元）
+// test/properties.test.ts (the Japanese provider)
 // ------------------------------------------------------------
 
-/** 性質のテストの既定の種と試行の数 */
+/** The default seed and number of trials of the property tests */
 export const PROPERTY = { seed: 20261015, runs: 300 } as const;
 /**
- * 飛ばした試行の件数を上限と比べる（性質の前提を満たさない試行を飛ばすテストが使う）。上限を超えたら例外にする。
- * 件数の行（「飛ばした試行: n / N（理由）」）は呼び出し側がいつも出す
+ * Compares the number of skipped trials with a limit (used by tests that skip trials not meeting the premise of
+ * a property). Above the limit it throws.
+ * The caller always prints the count line (skipped trials, n of N, with the reason)
  */
 export function checkSkipped(skipped: number, runs: number, limit: number, reason: string): string {
   const line = `飛ばした試行: ${skipped} / ${runs}（${reason}）`;
@@ -36,10 +40,13 @@ export function checkSkipped(skipped: number, runs: number, limit: number, reaso
   return line;
 }
 
-/** 性質のテストが問い合わせる日付（日本の祝日の対応年に収め、端で探索が範囲を出ないよう余裕を取る） */
+/**
+ * The dates the property tests ask about (within the supported years of Japan's holidays, with a margin so that
+ * a search does not leave the range at the ends)
+ */
 export const PROPERTY_DATES = { from: "1960-01-01", days: 365 * 130 } as const;
 
-/** 性質のテストの乱数（日付を作る date を持つ） */
+/** The random generator of the property tests (it has `date`, which makes dates) */
 export interface PropertyGen {
   readonly rand: () => number;
   int(min: number, max: number): number;
@@ -57,7 +64,7 @@ export function propertyGen(rand: () => number): PropertyGen {
   };
 }
 
-/** 営業日カレンダーの設定（定休日は最大 5 曜日。繰り返しの規則は目録から作る） */
+/** Options of a business calendar (at most 5 closed weekdays; recurring rules come from the catalog) */
 export function propertyCalendarOptions(g: PropertyGen): Obj {
   const weekdays = [0, 1, 2, 3, 4, 5, 6].filter(() => g.int(0, 3) === 0).slice(0, 5);
   const closedDates = Array.from({ length: g.int(0, 5) }, () => {
@@ -80,7 +87,7 @@ export function propertyCalendarOptions(g: PropertyGen): Obj {
   };
 }
 
-/** 曜日ごとの営業の真偽値から、同じ規則の営業日カレンダーとスケジュールの設定を作る */
+/** From a boolean per weekday, builds options of a business calendar and of a schedule with the same rules */
 export function propertyWeeklyOptions(g: PropertyGen): { calendar: Obj; schedule: Obj } {
   const weekdays = [0, 1, 2, 3, 4, 5, 6].map(() => g.int(0, 2) > 0);
   const holidayValue = g.int(0, 1) === 1;
@@ -95,7 +102,7 @@ export function propertyWeeklyOptions(g: PropertyGen): { calendar: Obj; schedule
 
 const ON_HOLIDAY = ["under-holiday", "over-holiday", "after-holiday"] as const;
 
-/** 曜日・日付の繰り返しの規則（振替の性質のテスト用） */
+/** Recurring weekday and day-of-month rules (for the property tests of moves) */
 export function propertyRecurringRules(g: PropertyGen): Obj[] {
   return Array.from({ length: g.int(1, 3) }, (): Obj => {
     const holidayOverlapPolicy = g.pick(ON_HOLIDAY);
@@ -112,7 +119,7 @@ export function propertyRecurringRules(g: PropertyGen): Obj[] {
   });
 }
 
-/** 振替の性質: 規則をすべて "after-holiday" にした営業日カレンダー */
+/** The property of moves: a business calendar with every rule "after-holiday" */
 export function propertyShiftOptions(g: PropertyGen): Obj {
   const rules = propertyRecurringRules(g).map((r) => ({
     ...r,
@@ -121,7 +128,7 @@ export function propertyShiftOptions(g: PropertyGen): Obj {
   return { holidayPolicy: g.pick(["open", "closed"] as const), closedRecurringRules: rules };
 }
 
-/** 営業日の移動の性質: 閉じる規則と、ときどき開く規則 */
+/** The property of moving business days: closing rules and, sometimes, opening rules */
 export function propertyMoveOptions(g: PropertyGen): Obj {
   return {
     holidayPolicy: g.pick(["open", "closed", "ignore"] as const),
@@ -130,7 +137,7 @@ export function propertyMoveOptions(g: PropertyGen): Obj {
   };
 }
 
-/** カレンダーとスケジュールの一致の性質: 同じ規則の営業日カレンダーと真偽値のスケジュール */
+/** The property that calendar and schedule agree: a business calendar and a boolean schedule with the same rules */
 export function propertyPairOptions(g: PropertyGen): { calendar: Obj; schedule: Obj } {
   const open = g.int(0, 1) ? propertyRecurringRules(g) : [];
   const closed = propertyRecurringRules(g);
@@ -152,13 +159,14 @@ export function propertyPairOptions(g: PropertyGen): { calendar: Obj; schedule: 
   };
 }
 
-/** 性質のテストの設定の作り方の種類（性質ごとに 1 つ） */
+/** The kinds of how the property tests build options (one per property) */
 export type PropertyConfigKind = "calendar" | "weekly" | "shift" | "move" | "pair";
 
 /**
- * 設定を作る性質と、その設定の作り方。性質は、設定を作る乱数（性質の名前から決まる種の列）と、日付などを引く乱数を
- * 分けて持つので、siteTrials はこの一覧から、性質と同じ設定を同じ並びで作れる。test/properties.test.ts は、
- * 性質が実際に使った作り方がこの一覧と同じかを確かめる（一覧にない性質が設定を作ると失敗する）
+ * The properties that build options, and how. A property keeps the random generator for options (seeds derived
+ * from the property's name) apart from the one that draws dates and so on, so siteTrials can build from this
+ * list the same options in the same order as the property. test/properties.test.ts checks that the way a
+ * property really used equals this list (a property missing in the list that builds options fails)
  */
 export const PROPERTY_CONFIGS: Readonly<Record<string, PropertyConfigKind>> = {
   "休業日を起点にした addBusinessDays は、翌営業日を 1 と数える（diffBusinessDays は起点が営業日のときだけ逆算になる）":
@@ -173,7 +181,7 @@ export const PROPERTY_CONFIGS: Readonly<Record<string, PropertyConfigKind>> = {
   "dueDate は、末日に読み替えた日付を adjust したもの": "calendar",
 };
 
-/** 性質の設定を作る乱数の種（テストの種と性質の名前から決まる。FNV-1a） */
+/** The seed of the generator for a property's options (from the test's seed and the property's name; FNV-1a) */
 export function propertyConfigSeed(seed: number, name: string): number {
   let h = 0x811c9dc5;
   for (const ch of name) {
@@ -183,7 +191,7 @@ export function propertyConfigSeed(seed: number, name: string): number {
   return (h ^ seed) >>> 0;
 }
 
-/** 設定の作り方の種類ごとの、1 回分の設定（カレンダーとスケジュール。提供元は持たない） */
+/** The options of one trial per kind (calendar and schedule; without providers) */
 export function propertyConfig(
   kind: PropertyConfigKind,
   g: PropertyGen,
@@ -206,24 +214,35 @@ export function propertyConfig(
 // test/diagnose-properties.test.ts
 // ------------------------------------------------------------
 
-/** 診断の性質のテストの種と試行の数（全日を比べる・第 n 営業日を入れる・日本の提供元の全範囲を走査する） */
+/**
+ * Seeds and numbers of trials of the diagnostics property tests (comparing all days; with nth business days;
+ * scanning the whole range of the Japanese provider)
+ */
 export const DIAGNOSE_PROPERTY = {
   seed: 20261016,
   runs: 100,
   countingRuns: 30,
   fullRangeRuns: 6,
   /**
-   * pnpm check で確かめる試行の抜き出し（run をこの数で割った余りが 0 の試行だけ確かめる。設定は毎回作って乱数の列を変えない）。
-   * 全件は DIAGNOSE_PROPERTY_FULL=1（CI の diagnose-consistency ジョブ）。3 は 100・30・6 のどれでも抜き出しが 0 件にならない
+   * The sample of trials checked by pnpm check (only trials whose run number divided by this leaves 0; options
+   * are built every time, so the random sequence does not change).
+   * The full set runs with DIAGNOSE_PROPERTY_FULL=1 (the diagnose-consistency job of CI). With 3, the sample is
+   * not empty for any of 100, 30 and 6
    */
   sampleEvery: 3,
 } as const;
-/** 日本の提供元の全範囲（src/jp の対応年。test/tools/generator-features.test.ts が対応年と一致することを確かめる） */
+/**
+ * The whole range of the Japanese provider (the supported years of src/jp; test/tools/generator-features.test.ts
+ * checks that it equals them)
+ */
 export const JP_FULL_RANGE = { from: "1955-01-01", to: "2099-12-31" } as const;
-/** 対応年の短い自作の提供元の全日 */
+/** All days of the home-made provider with few supported years */
 export const SHORT_RANGE = { from: "2025-01-01", to: "2027-12-31" } as const;
 
-/** 診断の性質のテストの提供元: 対応年の短い自作の提供元・なし・日本（呼び出し側が本物に置き換える "jp"） */
+/**
+ * The providers of the diagnostics property tests: the home-made provider with few supported years, none, Japan
+ * ("jp", which the caller replaces by the real one)
+ */
 export type DiagnoseSource = "short" | "none" | "jp";
 
 const DIAGNOSE_CONTEXT: Record<DiagnoseSource, Context> = {
@@ -233,8 +252,10 @@ const DIAGNOSE_CONTEXT: Record<DiagnoseSource, Context> = {
 };
 
 /**
- * 目録から診断の性質のテストの設定を作る。判定の条件は診断にそろえる（outOfRangePolicy: "ignore"。31 番）。
- * 配列のキーは空でも書く（空の配列と省略を両方試すため、目録の設定で上書きされなかったものは空のまま残る）
+ * Builds options for the diagnostics property tests from the catalog. The conditions of the judgement follow
+ * the diagnostics (outOfRangePolicy: "ignore". decisions.md #31).
+ * Array keys are written even when empty (to try both an empty array and omission, those not overwritten by the
+ * catalog options stay empty)
  */
 export function diagnoseOptions(rand: () => number, source: DiagnoseSource): Obj {
   const options = randomCalendarOptions(picker(rand), DIAGNOSE_CONTEXT[source]);
@@ -251,7 +272,10 @@ export function diagnoseOptions(rand: () => number, source: DiagnoseSource): Obj
   };
 }
 
-/** 第 n 営業日の規則（月・週）と、それが当てはまりやすい月初・週の始まりの近くの個別の日付を足す */
+/**
+ * Adds an nth-business-day rule (month, week) and specific dates near the start of a month or week, where it
+ * easily matches
+ */
 export function withCountingRule(rand: () => number, options: Obj): Obj {
   const counting = [
     { businessDayOfMonth: [1, 2, -1][Math.floor(rand() * 3)]! },
@@ -269,21 +293,26 @@ export function withCountingRule(rand: () => number, options: Obj): Obj {
 }
 
 /**
- * 0.32.8 の診断の性質のテストの種と試行の数。全日（1901〜2099 年、"throw" では日本の提供元の対応年）を比べるので 1 件が重い
- * （0.2〜1 秒）。pnpm check は sampleEvery 件に 1 件の抜き出しで、全件は DIAGNOSE_PROPERTY_FULL=1（CI の diagnose-consistency）。
- * 数は、0.32.7 の src/core/diagnose.ts のまま全件を動かすと、範囲の外と長い日付の性質が失敗する数にした（開発の記録の 0.32.8）
+ * Seeds and numbers of trials of the diagnostics property tests of 0.32.8. They compare all days of the
+ * diagnostic range (test/support/promise-days.ts), so one trial is heavy (0.2-1 second). pnpm check runs
+ * a sample of 1 in sampleEvery; the full set runs with DIAGNOSE_PROPERTY_FULL=1 (diagnose-consistency of CI).
+ * The numbers were chosen so that, with src/core/diagnose.ts of 0.32.7, the full set fails the property of dates
+ * outside the range and long dates (the development log of 0.32.8)
  */
 export const DIAGNOSE_WIDE = {
   seed: 20261122,
-  /** 範囲の外と長い日付（自作の短い提供元・提供元なし） */
+  /** Dates outside the range and long dates (the home-made short provider, no provider) */
   runs: 240,
-  /** 日本の提供元で outOfRangePolicy: "throw" と unconfirmedHolidayPolicy: "throw"（カレンダー・スケジュール） */
+  /** The Japanese provider with outOfRangePolicy: "throw" and unconfirmedHolidayPolicy: "throw" (calendars, schedules) */
   throwRuns: 120,
-  /** 240 と 120 のどちらでも、抜き出しが 0 件にならない */
+  /** The sample is not empty for either 240 or 120 */
   sampleEvery: 20,
 } as const;
-/** 範囲の外と長い日付の性質で比べる期間（周期の規則も含めて約束が成り立つ範囲。decisions.md の 31 番の「限界」） */
-export const WIDE_RANGE = { from: "1901-01-01", to: "2099-12-31" } as const;
+/**
+ * The period compared by the property of dates outside the range and long dates: the diagnostic range, in which
+ * the promises hold (test/support/promise-days.ts)
+ */
+export const WIDE_RANGE = PROMISE_RANGE;
 
 const WIDE_CONTEXT: Record<"short" | "none", Context> = {
   short: CONTEXTS["diagnose-properties（範囲の外と長い日付）"],
@@ -291,8 +320,9 @@ const WIDE_CONTEXT: Record<"short" | "none", Context> = {
 };
 
 /**
- * 自分の設定を基準に数える第 n 営業日の規則（月・週。数え方の端に当たりやすい位置も）を 1 つ足し、半分の設定では、
- * 数える規則と同じ日を決めうる日・曜日の規則も前に足す（取り除いて比べる組を作るため）
+ * Adds one nth-business-day rule counting on the own options (month, week; also at positions that easily hit
+ * the ends of the count) and, in half of the options, a day or weekday rule before it that can decide the same
+ * day as the counting rule (to make pairs for removing and comparing)
  */
 export function withOwnCountingRule(rand: () => number, options: Obj): Obj {
   const p = picker(rand);
@@ -312,8 +342,9 @@ export function withOwnCountingRule(rand: () => number, options: Obj): Obj {
 }
 
 /**
- * 範囲の外と長い日付の性質の設定（自作の短い提供元か提供元なし。outOfRangePolicy: "ignore"。数える規則をいつも入れ、
- * 3 割は全曜日を閉じるか空にして、営業日の少ない設定（no-business-day の確かめ）も作る）
+ * Options for the property of dates outside the range and long dates (the home-made short provider or no
+ * provider; outOfRangePolicy: "ignore"; a counting rule is always included, and 30% close every weekday or none,
+ * to make options with few business days too (for checking no-business-day))
  */
 export function diagnoseWideOptions(rand: () => number, source: "short" | "none"): Obj {
   const p = picker(rand);
@@ -337,9 +368,12 @@ export function diagnoseWideOptions(rand: () => number, source: "short" | "none"
   };
 }
 
-/** 日本の提供元の "throw" の性質の設定の種類（outOfRangePolicy・unconfirmedHolidayPolicy のどちらを "throw" にするか） */
+/**
+ * The kinds of options of the "throw" properties with the Japanese provider (which of outOfRangePolicy and
+ * unconfirmedHolidayPolicy is "throw")
+ */
 export type ThrowKind = "out-of-range" | "unconfirmed";
-/** "throw" の性質の試行の種類（カレンダーの out-of-range・unconfirmed、スケジュールの unconfirmed を順に） */
+/** The kind of a trial of the "throw" properties (calendar out-of-range, calendar unconfirmed, schedule unconfirmed, in turn) */
 export const throwKindOf = (run: number): { kind: ThrowKind; schedule: boolean } =>
   [
     { kind: "out-of-range" as const, schedule: false },
@@ -348,9 +382,10 @@ export const throwKindOf = (run: number): { kind: ThrowKind; schedule: boolean }
   ][run % 3]!;
 
 /**
- * 日本の提供元の "throw" の性質の設定（提供元は名前 "jp"。呼び出し側が本物に置き換える）。カレンダーは半分に数える規則を
- * 入れる。unconfirmed は unconfirmedHolidayPolicy: "throw" と outOfRangePolicy: "ignore"、out-of-range は既定の "throw"。
- * スケジュールの第 n 営業日の規則の基準は CALENDAR_REF のまま（呼び出し側が置き換える）
+ * Options for the "throw" properties with the Japanese provider (the provider is the name "jp"; the caller
+ * replaces it by the real one). Half of the calendars get a counting rule. unconfirmed means
+ * unconfirmedHolidayPolicy: "throw" with outOfRangePolicy: "ignore"; out-of-range means the default "throw".
+ * The basis of an nth-business-day rule of a schedule stays CALENDAR_REF (the caller replaces it)
  */
 export function diagnoseThrowOptions(rand: () => number, run: number): Obj {
   const p = picker(rand);
@@ -365,10 +400,10 @@ export function diagnoseThrowOptions(rand: () => number, run: number): Obj {
   };
   const made = schedule ? randomScheduleOptions(p, ctx) : randomCalendarOptions(p, ctx);
   const options = !schedule && p.chance(0.5) ? withOwnCountingRule(rand, made) : made;
-  // unconfirmed の半分は、曜日の規則を前に、振替（"after-holiday"）の曜日の規則を後ろに足す（取り除いた規則の代わりに、
-  // 残りの規則が未確定の祝日を引く組を作るため）
+  // Half of the unconfirmed ones get a weekday rule first and a moving ("after-holiday") weekday rule after it (to
+  // make pairs in which the remaining rule looks up an unconfirmed holiday instead of the removed one)
   if (kind === "unconfirmed" && p.chance(0.5)) {
-    // スケジュールの前の規則は、土日（目録の weekdayValues の "closed"）を同じ値にする
+    // The earlier rule of a schedule gives weekends the same value ("closed" of the catalog's weekdayValues)
     options[schedule ? "recurringRules" : "closedRecurringRules"] = [
       schedule ? { weekday: p.pick([0, 6]), value: "closed" } : { weekday: p.int(0, 6) },
       ...((options[schedule ? "recurringRules" : "closedRecurringRules"] as unknown[]) ?? []),
@@ -382,23 +417,29 @@ export function diagnoseThrowOptions(rand: () => number, run: number): Obj {
   return { ...source, ...options };
 }
 
-/** 全日を比べるテストの提供元（4 件に 3 件は対応年の短い提供元、残りは提供元なし） */
+/**
+ * The provider of the tests that compare all days (3 of 4 trials the provider with few supported years, the rest
+ * no provider)
+ */
 export const diagnoseSourceOf = (run: number): DiagnoseSource => (run % 4 === 3 ? "none" : "short");
-/** 全範囲を走査するテストの提供元（日本と、提供元なしを交互に） */
+/** The provider of the tests that scan the whole range (Japan and no provider in turn) */
 export const fullRangeSourceOf = (run: number): DiagnoseSource => (run % 2 === 0 ? "jp" : "none");
 
 // ------------------------------------------------------------
-// 3 つの呼び出し側が作る設定（生成範囲の包含の検査）
+// The options the three callers build (the inclusion check of the generated range)
 // ------------------------------------------------------------
 
 export interface Trial {
   readonly kind: "calendar" | "schedule";
   readonly options: Obj;
-  /** その設定で問い合わせる日付の範囲。wide でなければ、試行ごとに範囲の中の一部の日付だけを問い合わせる */
+  /**
+   * The range of dates asked about with these options. Unless `wide`, each trial asks about only some dates of
+   * the range
+   */
   readonly scan?: { readonly from: string; readonly to: string; readonly wide: boolean };
 }
 
-/** 呼び出し側ごとの設定の一覧（呼び出し側と同じ関数・種・試行の数） */
+/** The list of options per caller (the same functions, seeds and numbers of trials as the caller) */
 export function siteTrials(site: string): Trial[] {
   const out: Trial[] = [];
   if (site === "properties") {
@@ -469,7 +510,7 @@ export function siteTrials(site: string): Trial[] {
   return out;
 }
 
-/** 設定の一覧の走査の特徴 */
+/** The scan features of a list entry */
 export function trialScanFeatures(t: Trial): Set<string> {
   if (t.scan === undefined) return new Set();
   const f = scanFeatures(
@@ -483,14 +524,14 @@ export function trialScanFeatures(t: Trial): Set<string> {
 }
 
 // ------------------------------------------------------------
-// 呼び出し側の文脈（生成器の到達性は、この一覧の文脈ごとに確かめる）
+// The contexts of the callers (the reachability of the generator is checked per context of this list)
 // ------------------------------------------------------------
 
 export interface ContextUse {
   readonly site: string;
   readonly name: string;
   readonly ctx: Context;
-  /** その文脈で作る設定の種類 */
+  /** The kinds of options made in the context */
   readonly kinds: readonly ("calendar" | "schedule")[];
 }
 
@@ -512,6 +553,12 @@ export const CONTEXT_USES: readonly ContextUse[] = [
     site: "diagnose-properties",
     name: "diagnose-properties（日本・throw）",
     ctx: CONTEXTS["diagnose-properties（日本・throw）"],
+    kinds: ["calendar", "schedule"],
+  },
+  {
+    site: "promise-inventory",
+    name: "promise-inventory",
+    ctx: CONTEXTS["promise-inventory"],
     kinds: ["calendar", "schedule"],
   },
   ...[true, false].flatMap((newShapes) =>

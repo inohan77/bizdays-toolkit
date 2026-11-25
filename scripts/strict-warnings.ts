@@ -1,9 +1,11 @@
 /**
- * Node.js の警告を失敗として扱う（RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+ * Treats warnings of Node.js as failures (RELEASING.md, reasons for the quality mechanisms, "runtimes that are
+ * checked").
  *
- * 自前のスクリプトは先頭でこのファイルを import し、テストは node --import で読み込む（--import は node --test が
- * 各テストファイルを動かす子プロセスにも引き継がれる）。
- * 警告が出たら終了コードを 1 にする。警告のイベントは非同期に届くので、process.emitWarning の呼び出しを記録する。
+ * The repository's scripts import this file first, and tests load it with node --import (--import is inherited
+ * by the child processes in which node --test runs each test file).
+ * A warning sets the exit code to 1. Warning events arrive asynchronously, so calls of process.emitWarning are
+ * recorded.
  */
 
 const warnings: string[] = [];

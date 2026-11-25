@@ -1,13 +1,13 @@
 /**
- * パッケージ（ビルド済みの dist）が同梱する祝日の提供元を、package.json の exports から集める。
- * 国のサブパスは、exports からルート・診断・提供元向けの道具・package.json を除いたもの。
+ * Collects the holiday providers bundled in the package (the built dist) from `exports` of package.json.
+ * The country subpaths are the exports without the root, the diagnostics, the provider tools and package.json.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-/** 比べる・照合するのに使う祝日の項目（提供元の契約の項目。decisions.md の 24・25 番） */
+/** The properties of a holiday used for comparison and verification (the provider contract. decisions.md #24, #25) */
 export interface BundledHoliday {
   readonly date: string;
   readonly name: string;
@@ -28,14 +28,14 @@ export interface BundledProvider {
 }
 
 export interface BundledEntry {
-  /** exports のサブパス（"./jp" など） */
+  /** Subpath of exports ("./jp", ...) */
   readonly subpath: string;
-  /** モジュールの export 名（"jp"・"england" など） */
+  /** Export name in the module ("jp", "england", ...) */
   readonly exportName: string;
   readonly provider: BundledProvider;
 }
 
-/** 国の提供元ではないサブパス */
+/** Subpaths that are not country providers */
 const NON_COUNTRY = new Set([".", "./diagnose", "./provider", "./package.json"]);
 
 function isProvider(value: unknown): value is BundledProvider {
@@ -53,7 +53,10 @@ function isProvider(value: unknown): value is BundledProvider {
   );
 }
 
-/** packageDir（package.json と dist のあるディレクトリ）の同梱の提供元を、サブパス・export 名の順に返す */
+/**
+ * The bundled providers of packageDir (the directory with package.json and dist), ordered by subpath and
+ * export name
+ */
 export async function loadBundledProviders(packageDir: string): Promise<BundledEntry[]> {
   const pkg = JSON.parse(readFileSync(resolve(packageDir, "package.json"), "utf8")) as {
     exports: Record<string, string | { default: string }>;

@@ -1,4 +1,5 @@
-// 検査のスクリプトの検査（scripts/tool-selftest.ts）の部品: 表のセル、例外の文、途中で止まった写しの一覧
+// The parts of the check of the checking scripts (scripts/tool-selftest.ts): table cells, the text of an error,
+// the list of copies when it stops part-way
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cell, copyEach, errorText } from "../../scripts/tool-selftest-parts.ts";

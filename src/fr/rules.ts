@@ -1,42 +1,44 @@
 /**
- * フランスの祝日（jours fériés。労働法典 L3133-1 の 11 日と、Alsace-Moselle の 2 日）の計算。
+ * Calculation of the public holidays of France (jours fériés: the 11 days of article L3133-1 of the Labour Code
+ * and the 2 days of Alsace-Moselle).
  *
- * - 固定日の祝日（1/1・5/1・5/8・7/14・8/15・11/1・11/11・12/25。Alsace-Moselle は 12/26 も）と、
- *   復活祭から決まる祝日（Lundi de Pâques = +1 日、Ascension = +39 日、Lundi de Pentecôte = +50 日。
- *   Alsace-Moselle は Vendredi saint = −2 日も）を規則で計算する。振替はない
- * - 2 つの祝日が同じ日に当たる年（復活祭が 3 月 23 日なら 5 月 1 日 = Ascension、3 月 30 日なら 5 月 8 日 = Ascension）は、
- *   復活祭から決まる祝日の名称・識別子で 1 件にする
- *   （data.gouv.fr の JSON と同じ扱い。提供元は 1 日に 1 件を返す契約のため）
- * - 名称は data.gouv.fr の表記（フランス語）。nameEn はライブラリの英訳
- * - 識別子（key）は英語名から 1 つずつ（KnownFrHolidayKey）
+ * - Fixed-date holidays (1/1, 5/1, 5/8, 7/14, 8/15, 11/1, 11/11, 12/25; also 12/26 in Alsace-Moselle) and
+ *   holidays tied to Easter (Lundi de Pâques = +1 day, Ascension = +39 days, Lundi de Pentecôte = +50 days; also
+ *   Vendredi saint = −2 days in Alsace-Moselle) are computed by rule. There is no substitution
+ * - In years in which two holidays fall on the same day (Easter on March 23: May 1 = Ascension; on March 30:
+ *   May 8 = Ascension), they become one entry with the name and key of the holiday tied to Easter (as in the JSON
+ *   of data.gouv.fr; a provider's contract is one entry per day)
+ * - Names follow data.gouv.fr (French). nameEn is the library's English translation
+ * - Keys: one per holiday, from the English name (KnownFrHolidayKey)
  *
- * 対応年のうち data.gouv.fr が公開している範囲（過去 20 年・未来 5 年）のすべての日付と名称が一致することを、
- * テスト用フィクスチャ（test/fixtures/datagouv-jours-feries.json）で検証している。祝日は法令で定まり年ごとの告示はないので、
- * 対応年はすべて confirmed: true（法改正があれば労働法典の改正として反映する）。
+ * A test fixture (test/fixtures/datagouv-jours-feries.json) verifies that every date and name agrees in the part
+ * of the supported years published by data.gouv.fr (20 years back, 5 years ahead). Holidays are set by law
+ * without yearly announcements, so all supported years are confirmed: true (a change in the law would be
+ * reflected as an amendment of the Labour Code).
  */
 
 import { addDays, easterSunday, formatDate, type DateString } from "../core/date.ts";
 import { describeValue, rangeError } from "../core/errors.ts";
-import type { Holiday } from "../core/types.ts";
+import type { Holiday, HolidayProvider } from "../core/types.ts";
 
 /**
- * フランスの祝日の種別（既知の値）。
+ * Kinds of holidays of France (known values).
  * @public
  */
 export type KnownFrHolidayKind =
-  /** 労働法典・地方法で定まる祝日（振替・臨時の祝日はない） */
+  /** Holiday set by the Labour Code or local law (there are no substitute or special holidays) */
   "regular";
 
 /**
- * フランスの祝日の種別。将来のバージョンで値が増えることがあるので、分岐では「その他」も扱うこと。
- * すべての値を網羅したことを型で確かめたい場合は KnownFrHolidayKind を使う。
+ * Kind of a holiday of France. Later versions may add values, so handle "anything else" when branching.
+ * Use KnownFrHolidayKind to check by type that every value is handled.
  * @public
  */
 export type FrHolidayKind = KnownFrHolidayKind | (string & {});
 
 /**
- * フランスの祝日の識別子（Holiday.key。既知の値）。英語名から 1 つずつ。
- * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * Keys of the holidays of France (Holiday.key; known values). One per holiday, from the English name.
+ * Used for completion when writing `keys` of a rule (the type is open, so other strings pass too).
  * @namingSource holiday-key
  * @public
  */
@@ -55,12 +57,12 @@ export type KnownFrHolidayKey =
   | "good-friday"
   | "saint-stephens";
 
-/** @internal 地域（data.gouv.fr のゾーン） */
+/** @internal Region (zone of data.gouv.fr) */
 export type FrZone = "metropole" | "alsace-moselle";
 
-/** @internal 対応年 */
+/** @internal Supported years */
 export const SUPPORTED_YEARS = Object.freeze({ from: 2000, to: 2099 });
-/** @internal 反映済みの data.gouv.fr のデータの年月（2006〜2031 年の公開） */
+/** @internal Year and month of the reflected data.gouv.fr data (publication of 2006-2031) */
 export const DATA_VERSION = "2026-10";
 
 interface Entry {
@@ -70,7 +72,7 @@ interface Entry {
   readonly key: KnownFrHolidayKey;
 }
 
-/** 固定日の祝日 [月, 日, 名称, 英語名, 識別子] */
+/** Fixed-date holidays [month, day, name, English name, key] */
 const FIXED: readonly (readonly [number, number, string, string, KnownFrHolidayKey])[] = [
   [1, 1, "1er janvier", "New Year’s Day", "new-year"],
   [5, 1, "1er mai", "Labour Day", "labour-day"],
@@ -89,7 +91,7 @@ const FIXED_ALSACE_MOSELLE: readonly (readonly [
   KnownFrHolidayKey,
 ])[] = [[12, 26, "2ème jour de Noël", "Saint Stephen’s Day", "saint-stephens"]];
 
-/** 復活祭から決まる祝日 [日数差, 名称, 英語名, 識別子] */
+/** Holidays tied to Easter [offset in days, name, English name, key] */
 const EASTER_BASED: readonly (readonly [number, string, string, KnownFrHolidayKey])[] = [
   [1, "Lundi de Pâques", "Easter Monday", "easter-monday"],
   [39, "Ascension", "Ascension Day", "ascension"],
@@ -102,9 +104,18 @@ const EASTER_BASED_ALSACE_MOSELLE: readonly (readonly [
   KnownFrHolidayKey,
 ])[] = [[-2, "Vendredi saint", "Good Friday", "good-friday"]];
 
-/** @internal その年・地域の祝日（日付順） */
+/**
+ * Computes the French public holidays of a year for a zone: fixed dates and days counted from Easter; Alsace-Moselle
+ * adds its two local holidays.
+ * @param zone - "metropole" or "alsace-moselle".
+ * @param year - Integer within SUPPORTED_YEARS.
+ * @returns New frozen holidays sorted by date, one per date, all of kind "regular" and confirmed.
+ * @throws RangeError `invalid-argument` when the year is not an integer; `out-of-range` outside the supported years.
+ * @internal
+ */
 export function computeFrHolidays(zone: FrZone, year: number): Holiday<FrHolidayKind>[] {
-  // 整数でない年（文字列の "2026" など）は範囲の外ではなく引数の誤り（KnownErrorCode の説明）
+  // A year that is not an integer (the string "2026", ...) is a wrong argument, not out of range (see
+  // KnownErrorCode)
   if (!Number.isInteger(year))
     throw rangeError(
       "invalid-argument",
@@ -128,7 +139,8 @@ export function computeFrHolidays(zone: FrZone, year: number): Holiday<FrHoliday
       key,
     });
   }
-  // 復活祭から決まる祝日が固定日と同じ日に当たる年は、復活祭の側で上書きする（data.gouv.fr の JSON と同じ）
+  // In a year in which a holiday tied to Easter falls on a fixed date, the Easter side overwrites it (as in the
+  // JSON of data.gouv.fr)
   const easter = easterSunday(year);
   for (const [offset, name, nameEn, key] of alsaceMoselle
     ? [...EASTER_BASED_ALSACE_MOSELLE, ...EASTER_BASED]
@@ -148,4 +160,36 @@ export function computeFrHolidays(zone: FrZone, year: number): Holiday<FrHoliday
         key: e.key,
       }),
     );
+}
+
+/**
+ * Creates a French provider for a zone.
+ * @param id - Provider ID.
+ * @param zone - "metropole" or "alsace-moselle".
+ * @returns A frozen HolidayProvider (time zone Europe/Paris) that caches each year.
+ * @internal
+ */
+export function createFrProvider(id: string, zone: FrZone): HolidayProvider<FrHolidayKind> {
+  const cache = new Map<number, readonly Holiday<FrHolidayKind>[]>();
+  return Object.freeze({
+    id,
+    timeZone: "Europe/Paris",
+    supportedYears: SUPPORTED_YEARS,
+    dataVersion: DATA_VERSION,
+    /**
+     * The holidays of a year, computed once and cached.
+     * @param year - A supported year.
+     * @returns A frozen array of frozen holidays sorted by date.
+     * @throws RangeError `invalid-argument` when the year is not an integer; `out-of-range` outside the supported
+     *   years.
+     */
+    holidaysInYear(year: number): readonly Holiday<FrHolidayKind>[] {
+      let list = cache.get(year);
+      if (!list) {
+        list = Object.freeze(computeFrHolidays(zone, year));
+        cache.set(year, list);
+      }
+      return list;
+    },
+  });
 }

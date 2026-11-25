@@ -26,7 +26,7 @@ test("skipWeekdays: 創立記念日（6 月 15 日。土日祝なら翌営業日
       },
     ],
   });
-  // 2030 年 6 月 15 日は土曜日 → 17 日（月）
+  // June 15, 2030 is a Saturday → the 17th (Mon)
   assert.deepEqual(company.dayInfoOn("2030-06-17"), {
     date: "2030-06-17",
     weekday: 1,
@@ -44,13 +44,14 @@ test("skipWeekdays: 創立記念日（6 月 15 日。土日祝なら翌営業日
     "本来の日には当てはめない",
   );
   assert.equal(company.dayInfoOn("2030-06-18").reason, "default");
-  // 2031 年は日曜日 → 16 日（月）
+  // In 2031 it is a Sunday → the 16th (Mon)
   assert.equal(company.dayInfoOn("2031-06-16").shiftedFrom, "2031-06-15");
-  // 平日なら当日（2026 年は月曜日）
+  // On a weekday, the day itself (a Monday in 2026)
   assert.equal(company.dayInfoOn("2026-06-15").reason, "closed-recurring");
   assert.equal(company.dayInfoOn("2026-06-15").shiftedFrom, undefined);
   assert.equal(company.isBusinessDay("2026-06-16"), true);
-  // 祝日と週末が続いても、最初の「祝日でも土日でもない日」へ（5 月 3 日が土曜日の 2025 年: 3・4・5・6 日が休み → 7 日）
+  // With holidays and a weekend in a row, it goes to the first day that is neither a holiday nor a weekend (2025,
+  // when May 3 is a Saturday: the 3rd to 6th are off → the 7th)
   const may = createCalendar({
     holidayProvider: jp,
     closedWeekdays: [0, 6],
@@ -75,7 +76,7 @@ test("skipWeekdays: 月曜定休で、月曜が祝日なら翌平日（土曜日
       { weekday: 1, name: "定休日", holidayOverlapPolicy: "after-holiday", skipWeekdays: [6] },
     ],
   });
-  // 2026-11-23（月）は勤労感謝の日 → 24 日（火）
+  // 2026-11-23 (Mon) is Labor Thanksgiving Day → the 24th (Tue)
   assert.equal(shop.dayInfoOn("2026-11-23").reason, "holiday");
   assert.deepEqual(shop.dayInfoOn("2026-11-24"), {
     date: "2026-11-24",
@@ -88,7 +89,8 @@ test("skipWeekdays: 月曜定休で、月曜が祝日なら翌平日（土曜日
     optionPath: "closedRecurringRules[0]",
     rulePath: "closedRecurringRules[0]",
   });
-  // 月曜から金曜まで祝日が続く週はない（土曜日に落ちるのを防ぐ設定が効くのは稀）ので、人工の提供元で確かめる
+  // No week has holidays from Monday to Friday (the option that prevents landing on a Saturday rarely matters),
+  // so it is checked with an artificial provider
   const fiveDays = {
     id: "XX",
     timeZone: "Asia/Tokyo",
@@ -111,7 +113,7 @@ test("skipWeekdays: 月曜定休で、月曜が祝日なら翌平日（土曜日
   });
   assert.equal(withSkip.isBusinessDay("2026-03-07"), true, "土曜日には落ちない");
   assert.equal(withSkip.isBusinessDay("2026-03-08"), true, "日曜日にも落ちない");
-  // 翌月曜日（9 日）は定休日そのものに当たるので、振替としてではなく通常の当てはまりになる
+  // The next Monday (the 9th) is the regular closed day itself, so it is an ordinary match, not a move
   assert.equal(withSkip.dayInfoOn("2026-03-09").reason, "closed-recurring");
   assert.equal(withSkip.dayInfoOn("2026-03-09").shiftedFrom, undefined);
   const withoutSkip = createCalendar({
@@ -163,7 +165,7 @@ test("skipWeekdays: 有効期間は本来の日で判定し、スケジュール
   assert.equal(hours.dayInfoOn("2026-08-03").shiftedFrom, "2026-08-01");
   assert.equal(hours.valueOn("2026-08-01"), "closed");
   assert.equal(hours.valueOn("2026-09-01"), "meeting", "火曜日なら当日");
-  // 振替先が別の規則の日と重なれば、配列で先に書いた規則が決める
+  // When the day moved to coincides with another rule's day, the rule written first in the array decides
   const ordered = createCalendar({
     holidayProvider: jp,
     closedWeekdays: [0, 6],

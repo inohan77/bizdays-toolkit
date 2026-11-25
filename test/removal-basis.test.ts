@@ -1,3 +1,4 @@
+import { DIAGNOSTIC_YEARS } from "../src/core/diagnose.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -17,17 +18,20 @@ import { sg } from "../src/sg/index.ts";
 import { random } from "./support/catalog.ts";
 import { withoutStackTraces } from "./support/stack.ts";
 
-// 第 n 営業日の規則の基準のカレンダーの中（有効期間・個別の日付・周期・提供元の対応年。合成・スケジュールから作ったもの・
-// 入れ子・作成関数で作っていないもの）が走査の範囲の外で変わっても、診断が出した項目をまとめて取り除いて、元の設定で値を
-// 返した日の結果が変わらないこと（decisions.md の 31 番）。比べる期間は、診断の走査の範囲から独立させる（1900〜2150 年。
-// test/removal.test.ts の乱数の 2 件と同じ考え方）。時間がかかるので、test/removal.test.ts と別のファイルにして並べて動かす
+// When the inside of the basis calendar of an nth-business-day rule (effective periods, specific dates, cycles,
+// providers' supported years; combined ones, ones made from a schedule, nested ones, ones not made by a creating
+// function) changes outside the scan range, removing the items the diagnostics report together still does not
+// change the result of a day on which the original options returned a value (decisions.md #31). The compared
+// period is the whole diagnostic range (DIAGNOSTIC_YEARS of src/core/diagnose.ts: the days the diagnostics speak
+// about), not the days the diagnostics happen to scan (the same idea as the two random tests of
+// test/removal.test.ts). It takes time, so it is a separate file from test/removal.test.ts and runs in parallel
 
 type Options = Record<string, unknown>;
 type Reported = { readonly severity: string; readonly code: string; readonly path: string };
-/** 取り除いても結果が変わらない・使われない、と診断が知らせる code */
+/** The codes with which the diagnostics say "removal changes no result / never used" */
 const REMOVABLE = new Set(["redundant", "shadowed", "never-matches"]);
 const brief = (list: readonly Reported[]) => list.map((d) => [d.severity, d.code, d.path]);
-/** 診断が取り除けると出した項目（設定の配列の要素）を、まとめて取り除いた設定 */
+/** The options without the items (elements of the options' arrays) the diagnostics reported as removable */
 function withoutReported(o: Options, list: readonly Reported[]): Options {
   const drop = new Map<string, Set<number>>();
   for (const d of list) {
@@ -43,17 +47,23 @@ function withoutReported(o: Options, list: readonly Reported[]): Options {
   return out;
 }
 
-/** 1900〜2150 年の 1 月と 9 月の全日（乱数の設定の規則は、1 月か 9 月の日だけを決める。ほかの月は取り除いても変わらない） */
+/**
+ * All days of January and September of the diagnostic range (the rules of the random options decide only days of January
+ * or September; removal changes nothing in other months)
+ */
 const JAN_SEP: readonly string[] = (() => {
   const out: string[] = [];
-  for (let y = 1900; y <= 2150; y++)
+  for (let y = DIAGNOSTIC_YEARS.from; y <= DIAGNOSTIC_YEARS.to; y++)
     for (const m of ["01", "09"]) {
       const last = m === "01" ? 31 : 30;
       for (let d = 1; d <= last; d++) out.push(`${y}-${m}-${String(d).padStart(2, "0")}`);
     }
   return out;
 })();
-/** 日の一覧の結果（例外は "E:" と code）。1 日ずつ呼ぶ繰り返しの間だけ、スタックの記録を止める（code だけを見るため） */
+/**
+ * The results for a list of days (an error is "E:" plus its code). Only during the loop that calls day by day,
+ * the recording of stacks is turned off (only the code is needed)
+ */
 function valuesOn(o: Options, days: readonly string[]): Map<string, string> {
   const schedule = createSchedule(o as never);
   const out = new Map<string, string>();
@@ -68,7 +78,10 @@ function valuesOn(o: Options, days: readonly string[]): Map<string, string> {
   return out;
 }
 
-/** 対応年 from〜to。1 月 1 日は毎年、1 月 2〜3 日は last 年まで祝日（基準の提供元の祝日が、年によって変わる。形 E） */
+/**
+ * Supported years from-to. January 1 is a holiday every year, January 2-3 until the year `last` (the holidays of
+ * the basis's provider change by year: form E)
+ */
 const changingProvider = (from: number, to: number, last: number): HolidayProvider => ({
   id: `changing-${from}-${to}-${last}`,
   timeZone: "UTC",
@@ -86,7 +99,7 @@ const changingProvider = (from: number, to: number, last: number): HolidayProvid
       })),
 });
 
-test("取り除いて比べる（基準のカレンダー）: 乱数で作った基準のカレンダーを持つスケジュールでも、診断が出した項目をまとめて取り除いて、1900〜2150 年の 1 月と 9 月の値を返した日の結果が変わらない（種は固定）", () => {
+test("取り除いて比べる（基準のカレンダー）: 乱数で作った基準のカレンダーを持つスケジュールでも、診断が出した項目をまとめて取り除いて、診断の範囲の 1 月と 9 月の値を返した日の結果が変わらない（種は固定）", () => {
   const next = random(20261119);
   const int = (min: number, max: number): number => min + Math.floor(next() * (max - min + 1));
   const pick = <T>(xs: readonly T[]): T => xs[int(0, xs.length - 1)]!;
@@ -101,7 +114,7 @@ test("取り除いて比べる（基準のカレンダー）: 乱数で作った
     const [a, b] = [day(1940, 2060), day(1960, 2100)];
     return a <= b ? { effectiveFrom: a, effectiveTo: b } : { effectiveFrom: b, effectiveTo: a };
   };
-  /** 基準のカレンダーの中の形（実際に現れた数を数える） */
+  /** The forms of the inside of a basis calendar (how often each really occurred is counted) */
   type Kind =
     | "有効期間"
     | "個別の日付"
@@ -187,7 +200,7 @@ test("取り除いて比べる（基準のカレンダー）: 乱数で作った
             }));
     }
     const calendar = createCalendar(o as CalendarOptions);
-    // 1 割は、作成関数で作っていないカレンダーの形のオブジェクト（スプレッドで写したもの）にする
+    // 10% become an object shaped like a calendar that was not made by a creating function (copied with spread)
     if (depth === 0 && next() < 0.1) {
       kinds.add("印なし");
       return { ...calendar };
@@ -231,8 +244,9 @@ test("取り除いて比べる（基準のカレンダー）: 乱数で作った
     );
     const removable = list.some((d) => REMOVABLE.has(d.code));
     if (removable) seen.set("取り除ける項目が出た", (seen.get("取り除ける項目が出た") ?? 0) + 1);
-    // 形が実際に現れた数: 診断が出さなかった毎年の月日のうち、取り除くと 2001〜2028 年（提供元のないスケジュールの、
-    // 基準の中を見ない走査の範囲）の外の日だけが変わるもの。基準の中を見なければ、取り除けると見える
+    // How often a form really occurred: annual dates the diagnostics did not report whose removal changes only
+    // days outside 2001-2028 (the scan range of a schedule without a provider when the inside of the basis is
+    // not examined). Without looking inside the basis they would seem removable
     const want = [...kinds].filter((k) => (seen.get(k) ?? 0) < COUNTED);
     if (!removable && want.length === 0) continue;
     compared++;

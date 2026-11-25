@@ -23,8 +23,9 @@ const fmt = (y: number, m: number, d: number): DateString =>
 const isWeekend = (d: DateString): boolean => weekdayOf(d) === 0 || weekdayOf(d) === 6;
 
 /**
- * 1971 年法 Schedule 1（1991-02-01 版。1976-12-08 の政府答弁が同じ内容を列挙）とコモン・ローの休日を、ライブラリとは別に書いたもの。
- * 週末に当たった日は（GOV.UK の一覧と同じく）載せない。
+ * Schedule 1 of the 1971 Act (as of 1991-02-01; the government answer of 1976-12-08 lists the same content) and
+ * the common-law holidays, written apart from the library.
+ * Days that fall on a weekend are not listed (as in the GOV.UK list).
  */
 function scheduleDays(year: number, division: string): Set<string> {
   const easter = easterSunday(year);
@@ -46,7 +47,7 @@ function scheduleDays(year: number, division: string): Set<string> {
       nthWeekdayOfMonth(year, 5, 1, -1) as DateString,
       nthWeekdayOfMonth(year, 8, 1, -1) as DateString,
     );
-    days.push(fmt(year, 12, 25)); // コモン・ローの休日
+    days.push(fmt(year, 12, 25)); // a common-law holiday
     const dec26 = fmt(year, 12, 26);
     if (!sunday(dec26)) days.push(dec26);
     if (sunday(fmt(year, 12, 25)) || sunday(dec26)) days.push(fmt(year, 12, 27));
@@ -77,7 +78,7 @@ test("英国 1974〜1999 年: すべての祝日が、Schedule 1 の日か、The
       }
       for (const u of fixture.unverified)
         if (u.division === division && u.date.startsWith(`${year}-`)) expected.add(u.date);
-      // 移動: 1977 年の England・Wales・NI の Spring（5 月 30 日 → 6 月 6 日）、1995 年の Early May（5 月 1 日 → 5 月 8 日）
+      // Moves: Spring of 1977 in England, Wales and NI (May 30 → June 6), Early May of 1995 (May 1 → May 8)
       if (division !== "scotland" && year === 1977) expected.delete("1977-05-30");
       if (division !== "scotland" && year === 1995) expected.delete("1995-05-01");
       const actual = provider.holidaysInYear(year).map((h) => h.date);
@@ -106,7 +107,7 @@ test("英国 1974〜1999 年: 毎年布告される日の始まり（Early May �
     "Scotland の 5 月第 1 月曜は附則",
   );
   assert.equal(england.holidaysInYear(1974).find((h) => h.key === "new-year")?.date, "1974-01-01");
-  // 1977 年の Silver Jubilee: England・Wales・NI は Spring を 6 月 6 日に移して 7 日を追加、Scotland は 6 日だけ
+  // Silver Jubilee of 1977: England, Wales and NI moved Spring to June 6 and added the 7th; Scotland only the 6th
   assert.deepEqual(
     england
       .holidaysInYear(1977)
@@ -124,7 +125,7 @@ test("英国 1974〜1999 年: 毎年布告される日の始まり（Early May �
       .map((h) => [h.date, h.kind]),
     [["1977-06-06", "special"]],
   );
-  // 1981 年の Royal Wedding と 1999 年のミレニアムは全地域
+  // The Royal Wedding of 1981 and the millennium of 1999 are in every region
   for (const p of [england, scotland, northernIreland]) {
     assert.equal(
       p.holidaysInYear(1981).find((h) => h.date === "1981-07-29")?.kind,
@@ -137,7 +138,8 @@ test("英国 1974〜1999 年: 毎年布告される日の始まり（Early May �
       p.id,
     );
   }
-  // 1995 年の VE Day 50 周年: England・Wales・NI は Early May が 5 月 8 日、Scotland は 5 月 1 日（附則）に 8 日が加わる
+  // 50th anniversary of VE Day in 1995: Early May is May 8 in England, Wales and NI; Scotland has May 1
+  // (schedule) plus the 8th
   assert.deepEqual(
     england
       .holidaysInYear(1995)
@@ -164,36 +166,38 @@ test("英国 1974〜1999 年: 毎年布告される日の始まり（Early May �
 test("英国 1974〜1999 年: 振替日の割り当て（布告と Hansard の文言どおり）", () => {
   const on = (p: typeof england, date: string) =>
     p.holidaysInYear(Number(date.slice(0, 4))).find((h) => h.date === date);
-  // 12 月 25 日が土曜日の年: 27 日が Boxing Day、28 日が Christmas Day の代わり
+  // Years with December 25 on a Saturday: the 27th is Boxing Day and the 28th is in lieu of Christmas Day
   for (const year of [1976, 1982, 1993, 1999]) {
     for (const p of [england, scotland, northernIreland]) {
       assert.equal(on(p, `${year}-12-27`)?.key, "boxing-day", `${p.id} ${year}`);
       assert.equal(on(p, `${year}-12-28`)?.key, "christmas", `${p.id} ${year}`);
     }
   }
-  // 1 月 1 日が土曜日の年の Scotland: 3 日が 2nd January（附則）、4 日が New Year’s Day の代わり
+  // Scotland in years with January 1 on a Saturday: the 3rd is 2nd January (schedule), the 4th in lieu of New
+  // Year’s Day
   for (const year of [1977, 1983, 1994]) {
     assert.equal(on(scotland, `${year}-01-03`)?.key, "2nd-january", String(year));
     assert.equal(on(scotland, `${year}-01-04`)?.key, "new-year", String(year));
   }
-  // 1 月 2 日が土曜日の年の Scotland: 4 日が 2nd January の代わり
+  // Scotland in years with January 2 on a Saturday: the 4th is in lieu of 2nd January
   for (const year of [1982, 1988, 1993, 1999]) {
     assert.equal(on(scotland, `${year}-01-04`)?.key, "2nd-january", String(year));
     assert.equal(on(scotland, `${year}-01-04`)?.kind, "substitute", String(year));
   }
-  // 12 月 25 日が日曜日の年の Scotland: 26 日が Christmas Day（附則）、27 日が Boxing Day（布告）
+  // Scotland in years with December 25 on a Sunday: the 26th is Christmas Day (schedule), the 27th Boxing Day
+  // (proclamation)
   for (const year of [1977, 1983, 1988, 1994]) {
     assert.equal(on(scotland, `${year}-12-26`)?.key, "christmas", String(year));
     assert.equal(on(scotland, `${year}-12-27`)?.key, "boxing-day", String(year));
     assert.equal(on(england, `${year}-12-26`)?.key, "boxing-day", String(year));
     assert.equal(on(england, `${year}-12-27`)?.key, "christmas", String(year));
   }
-  // 12 月 26 日が土曜日の年: 28 日が Boxing Day の代わり
+  // Years with December 26 on a Saturday: the 28th is in lieu of Boxing Day
   for (const year of [1981, 1987, 1992, 1998]) {
     for (const p of [england, scotland, northernIreland])
       assert.equal(on(p, `${year}-12-28`)?.key, "boxing-day", `${p.id} ${year}`);
   }
-  // NI の Order どおりの振替
+  // Substitutes as in the Orders of NI
   assert.equal(on(northernIreland, "1979-03-19")?.key, "st-patricks");
   assert.equal(on(northernIreland, "1984-03-19")?.key, "st-patricks");
   assert.equal(on(northernIreland, "1980-07-14")?.key, "battle-of-the-boyne");

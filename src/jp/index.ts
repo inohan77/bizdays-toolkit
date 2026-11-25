@@ -1,17 +1,16 @@
 /**
- * 日本の祝日。
+ * Holidays of Japan.
  *
  * @example
  * import { createCalendar } from "bizdays-toolkit";
  * import { jp } from "bizdays-toolkit/jp";
  * const calendar = createCalendar({ holidayProvider: jp });
  *
- * @example 祝日だけを調べるなら、このモジュールの関数をそのまま使える
+ * @example To look up holidays only, the functions of this module can be used directly
  * import { isHoliday } from "bizdays-toolkit/jp";
  * isHoliday("2026-11-23"); // true
  */
 
-import { createCalendar, type Calendar } from "../core/calendar.ts";
 import type { DateString } from "../core/date.ts";
 import type { CivilDateTimeParts, DateInput, DateTimeInput } from "../core/input.ts";
 import type { Holiday, HolidayProvider } from "../core/types.ts";
@@ -20,6 +19,7 @@ import {
   DATA_VERSION,
   SUPPORTED_YEARS,
   computeJapaneseHolidays,
+  sharedCalendar,
   type JpHolidayKind,
   type KnownJpHolidayKey,
   type KnownJpHolidayKind,
@@ -28,7 +28,7 @@ import {
 export type { JpHolidayKind, KnownJpHolidayKey, KnownJpHolidayKind } from "./rules.ts";
 
 /**
- * 日本の祝日。
+ * A holiday of Japan.
  * @public
  */
 export type JpHoliday = Holiday<JpHolidayKind>;
@@ -36,7 +36,7 @@ export type JpHoliday = Holiday<JpHolidayKind>;
 const cache = new Map<number, readonly JpHoliday[]>();
 
 /**
- * 日本の祝日の提供元（createCalendar・createSchedule の holidayProvider に渡す）。
+ * The holiday provider of Japan (pass it as holidayProvider of createCalendar / createSchedule).
  * @public
  */
 export const jp: HolidayProvider<JpHolidayKind> = Object.freeze({
@@ -45,6 +45,13 @@ export const jp: HolidayProvider<JpHolidayKind> = Object.freeze({
   supportedYears: SUPPORTED_YEARS,
   dataVersion: DATA_VERSION,
   confirmedThrough: CONFIRMED_THROUGH,
+  /**
+   * The holidays of a year, computed once and cached.
+   * @param year - A supported year.
+   * @returns A frozen array of frozen holidays sorted by date.
+   * @throws RangeError `invalid-argument` when the year is not an integer; `out-of-range` outside the supported
+   *   years.
+   */
   holidaysInYear(year: number): readonly JpHoliday[] {
     let list = cache.get(year);
     if (!list) {
@@ -55,110 +62,124 @@ export const jp: HolidayProvider<JpHolidayKind> = Object.freeze({
   },
 });
 
-let defaultCalendar: Calendar<JpHolidayKind> | undefined;
-const calendar = (): Calendar<JpHolidayKind> =>
-  (defaultCalendar ??= createCalendar({ holidayProvider: jp }));
-
 /**
- * 祝日か（Date などの瞬間は日本時間で判定する）。
+ * Whether a day is a Japanese public holiday.
+ * @param input - A date input; an instant (Date etc.) is read in Japan time.
+ * @returns true for a holiday.
+ * @throws RangeError `out-of-range` outside the supported years; the input errors of the date conversion.
  * @public
  */
 export function isHoliday(input: DateInput): boolean {
-  return calendar().isHoliday(input);
+  return sharedCalendar(jp).isHoliday(input);
 }
 
 /**
- * 祝日なら祝日を返す。
+ * The Japanese public holiday on a day.
+ * @param input - A date input; an instant is read in Japan time.
+ * @returns The holiday, or undefined.
+ * @throws As {@link isHoliday}.
  * @public
  */
 export function holidayOn(input: DateInput): JpHoliday | undefined {
-  return calendar().holidayOn(input);
+  return sharedCalendar(jp).holidayOn(input);
 }
 
 /**
- * その年の祝日。
+ * The Japanese public holidays of a year.
+ * @param year - Integer within the supported years.
+ * @returns A frozen array sorted by date.
+ * @throws RangeError `invalid-argument` when not an integer; `out-of-range` outside the supported years.
  * @public
  */
 export function holidaysInYear(year: number): readonly JpHoliday[] {
-  return calendar().holidaysInYear(year);
+  return sharedCalendar(jp).holidaysInYear(year);
 }
 
 /**
- * 期間内の祝日（両端を含む）。
+ * The Japanese public holidays of a period.
+ * @param from - First day.
+ * @param to - Last day (inclusive).
+ * @returns A frozen array sorted by date.
+ * @throws RangeError `invalid-range` when `from` is after `to`; `out-of-range` outside the supported years.
  * @public
  */
 export function holidaysBetween(from: DateInput, to: DateInput): readonly JpHoliday[] {
-  return calendar().holidaysBetween(from, to);
+  return sharedCalendar(jp).holidaysBetween(from, to);
 }
 
 /**
- * 日本時間での暦日。
- * @deprecated 0.10.0 で非推奨。ルートの toDateString(input, "Asia/Tokyo")、または営業日カレンダー・スケジュールの
- * dateOf(input) に移行する（同じ変換。docs/migration.md）。1.0.0 で削除する
+ * The calendar date in Japan time.
+ * @param input - A date input.
+ * @returns "YYYY-MM-DD".
+ * @deprecated Since 0.10.0. Use `toDateString(input, "Asia/Tokyo")` from the root, or `dateOf(input)` of a calendar
+ *   or schedule (same conversion; see docs/migration.md). Removed in 1.0.0.
  * @public
  */
 export function toJapanDate(input: DateInput): DateString {
-  return calendar().dateOf(input);
+  return sharedCalendar(jp).dateOf(input);
 }
 
 /**
- * 日本時間での暦日と時刻（"HH:mm"。暦日だけの入力では null）。
- * 時刻を必ず持つ入力（Date・Temporal.Instant など）では、time の型が string になる。
- * @deprecated 0.10.0 で非推奨。ルートの toDateTimeParts(input, "Asia/Tokyo")、または営業日カレンダー・スケジュールの
- * civilOf(input) に移行する（同じ変換・同じ型。docs/migration.md）。1.0.0 で削除する
+ * The calendar date and time ("HH:mm"; null for a date-only input) in Japan time.
+ * @param input - A date input.
+ * @returns A frozen `{ date, time }`.
+ * @deprecated Since 0.10.0. Use `toDateTimeParts(input, "Asia/Tokyo")` from the root, or `civilOf(input)` of a
+ *   calendar or schedule (same conversion and types; see docs/migration.md). Removed in 1.0.0.
  * @public
  */
 export function toJapanDateTime(input: DateTimeInput): CivilDateTimeParts<string>;
 /**
- * @deprecated 0.10.0 で非推奨。toDateTimeParts(input, "Asia/Tokyo") または civilOf(input) に移行する
+ * @deprecated Deprecated in 0.10.0. Use toDateTimeParts(input, "Asia/Tokyo") or civilOf(input)
  * @public
  */
 export function toJapanDateTime(input: DateInput): CivilDateTimeParts;
 export function toJapanDateTime(input: DateInput): CivilDateTimeParts {
-  return calendar().civilOf(input);
+  return sharedCalendar(jp).civilOf(input);
 }
 
 /**
- * 反映済みの官報の年月。
- * @deprecated 0.12.0 で非推奨。提供元の項目 jp.dataVersion（同じ値）に移行する（docs/migration.md）。1.0.0 で削除する
+ * Year and month of the reflected official gazette.
+ * @deprecated Deprecated in 0.12.0. Use the provider's property jp.dataVersion (same value; docs/migration.md).
+ *   Removed in 1.0.0
  * @public
  */
 export const dataVersion: string = DATA_VERSION;
 /**
- * 春分・秋分の日が官報で確定している最後の年。
- * @deprecated 0.12.0 で非推奨。提供元の項目 jp.confirmedThrough（同じ値）に移行する（docs/migration.md）。1.0.0 で削除する
+ * The last year whose equinox days are confirmed by the official gazette.
+ * @deprecated Deprecated in 0.12.0. Use the provider's property jp.confirmedThrough (same value;
+ *   docs/migration.md). Removed in 1.0.0
  * @public
  */
 export const confirmedThrough: number = CONFIRMED_THROUGH;
 
 /**
- * @deprecated 0.30.0 で holidayOn に改名した。1.0.0 で削除する
+ * @deprecated Renamed to `holidayOn` in 0.30.0 (same behaviour). Removed in 1.0.0.
  * @public
  */
 export function getHoliday(input: DateInput): JpHoliday | undefined {
-  return calendar().holidayOn(input);
+  return sharedCalendar(jp).holidayOn(input);
 }
 
 /**
- * @deprecated 0.30.0 で JpHoliday に改名した。1.0.0 で削除する
+ * @deprecated Renamed to JpHoliday in 0.30.0. Removed in 1.0.0
  * @public
  */
 export type JapaneseHoliday = JpHoliday;
 
 /**
- * @deprecated 0.30.0 で JpHolidayKind に改名した。1.0.0 で削除する
+ * @deprecated Renamed to JpHolidayKind in 0.30.0. Removed in 1.0.0
  * @public
  */
 export type JapaneseHolidayKind = JpHolidayKind;
 
 /**
- * @deprecated 0.30.0 で KnownJpHolidayKind に改名した（値 "national" は "regular"）。1.0.0 で削除する
+ * @deprecated Renamed to KnownJpHolidayKind in 0.30.0 (the value "national" is "regular"). Removed in 1.0.0
  * @public
  */
 export type KnownJapaneseHolidayKind = KnownJpHolidayKind;
 
 /**
- * @deprecated 0.30.0 で KnownJpHolidayKey に改名した。1.0.0 で削除する
+ * @deprecated Renamed to KnownJpHolidayKey in 0.30.0. Removed in 1.0.0
  * @public
  */
 export type KnownJapaneseHolidayKey = KnownJpHolidayKey;

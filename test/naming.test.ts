@@ -1,5 +1,7 @@
-// 名前が約束する意味（etc/naming.md の N2）を性質のテストで確かめる。区間の扱い・符号・含むかどうかは型では分からないため。
-// 対象は実行時に列挙して決めるので、名前の形に合うメソッド・関数を足せば自動で対象になる（削除予定の旧名は除く）
+// Checks with property tests the meaning that names promise (N2 of etc/naming.md): how ranges are treated, signs
+// and inclusion cannot be told from the types.
+// The targets are enumerated at run time, so a method or function matching a name form becomes a target
+// automatically (old names to be removed are left out)
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -11,7 +13,7 @@ import { intEnv } from "./support/env.ts";
 const SEED = intEnv("PROPERTY_SEED", 20261101);
 const RUNS = 150;
 
-/** mulberry32: 種から決まる、再現可能な乱数 */
+/** mulberry32: reproducible random numbers decided by a seed */
 function random(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -26,7 +28,7 @@ const rand = random(SEED);
 const int = (lo: number, hi: number): number => lo + Math.floor(rand() * (hi - lo + 1));
 const date = (): string => root.addDays("2024-01-01", int(0, 365 * 4));
 
-/** 削除予定の表（docs/migration.md）にある、型の項目・メソッドの名前 */
+/** The names of type properties and methods in the table of the API to be removed (docs/migration.md) */
 const deprecated = new Set(
   [...readFileSync("docs/migration.md", "utf8").matchAll(/`[A-Za-z]+\.([A-Za-z]+)`/g)].map(
     (m) => m[1]!,
@@ -78,10 +80,13 @@ test("T2 diff…(from, to): f(a, a) = 0、f(a, b) = −f(b, a)、f(a, b) + f(b, 
     list.map(([n]) => n),
     ["diffBusinessDays", "diffDays"],
   );
-  // b・c は、ほとんどの回で a の前後 60 日から選ぶ（4 年の幅ではほぼ必ず営業日があり、件数 0 の逆順を試さなかった）。
-  // 数え方は日ごとの判定の和なので幅によらず同じ経路を通るが、長い期間も試すよう、LONG_RUNS 回は前のバージョンと同じ 4 年の幅から選ぶ
-  // （整合 3 は 20 営業日まで、properties の件数の性質は 120 日までで、長い期間はここだけが試す）。期待値は 0 − f(b, a)
-  // （-f(b, a) は f(b, a) が 0 のとき自分で -0 を作り、-0 を返す誤りと一致してしまう）
+  // b and c are mostly chosen within 60 days around a (with a span of 4 years there is almost always a business
+  // day, and the reversed order with a count of 0 was not tried).
+  // The count is the sum of per-day judgements and takes the same path whatever the span, but to try long
+  // periods too, LONG_RUNS trials choose from the 4-year span of earlier versions (consistency 3 goes up to 20
+  // business days and the count property of properties up to 120 days, so only this tries long periods). The
+  // expected value is 0 − f(b, a) (-f(b, a) would itself produce -0 when f(b, a) is 0 and agree with the mistake
+  // of returning -0)
   const LONG_RUNS = 10;
   for (let run = 0; run < RUNS; run++) {
     const a = date();

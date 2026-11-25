@@ -79,7 +79,7 @@ test("key: 日本の祝日法の祝日は 1 つずつ key を持ち、振替休�
     }
   }
   assert.deepEqual([...seen].sort(), [...JP_KEYS].sort(), "既知の key はすべて現れる");
-  // 日付の移動・改名があっても同じ祝日なら同じ key
+  // The same holiday keeps its key when its date moves or it is renamed
   const keyOn = (date: string) =>
     jp.holidaysInYear(Number(date.slice(0, 4))).find((h) => h.date === date)?.key;
   assert.equal(keyOn("1988-04-29"), "emperors-birthday", "昭和の天皇誕生日");
@@ -89,10 +89,11 @@ test("key: 日本の祝日法の祝日は 1 つずつ key を持ち、振替休�
   assert.equal(keyOn("2026-10-12"), "sports", "スポーツの日");
   assert.equal(keyOn("2006-04-29"), "greenery", "4 月 29 日のみどりの日");
   assert.equal(keyOn("2026-05-04"), "greenery", "5 月 4 日のみどりの日");
-  // 振替休日は元の祝日の key（2020-02-24 は天皇誕生日の振替、2020-05-06 は憲法記念日の振替）
+  // A substitute holiday has the key of its holiday (2020-02-24 substitutes the Emperor's Birthday, 2020-05-06
+  // Constitution Memorial Day)
   assert.equal(keyOn("2020-02-24"), "emperors-birthday");
   assert.equal(keyOn("2020-05-06"), "constitution-memorial");
-  // 同じ年に同じ key が複数回現れることは正当（振替休日と元の祝日）
+  // The same key occurring more than once in a year is legitimate (a substitute holiday and its holiday)
   assert.equal(jp.holidaysInYear(2020).filter((h) => h.key === "emperors-birthday").length, 2);
 });
 
@@ -149,7 +150,7 @@ test("key: シンガポールの 11 の祝日は 1 つずつ key を持ち、振
 });
 
 test("key: 規則の keys で祝日を個別に指せる（kinds・weekdays・months との AND）", () => {
-  // 花屋: 祝日は定休だが、春分の日・秋分の日（彼岸の中日）だけは営業
+  // A florist: closed on holidays, but open on the equinox days only
   const florist = createCalendar({
     holidayProvider: jp,
     openRecurringRules: [
@@ -161,7 +162,7 @@ test("key: 規則の keys で祝日を個別に指せる（kinds・weekdays・mo
   assert.equal(florist.dayInfoOn("2026-05-04").reason, "holiday", "ほかの祝日は休業のまま");
   assert.equal(florist.dayInfoOn("2026-05-06").reason, "holiday", "振替休日も休業のまま");
 
-  // 英国のパブ: bank holiday は営業するが Good Friday と Easter Monday だけ休む
+  // A British pub: open on bank holidays, closed only on Good Friday and Easter Monday
   const pub = createCalendar({
     holidayProvider: england,
     holidayPolicy: "open",
@@ -173,13 +174,14 @@ test("key: 規則の keys で祝日を個別に指せる（kinds・weekdays・mo
   assert.equal(pub.isBusinessDay("2026-05-04"), true, "Early May bank holiday は営業");
   assert.equal(pub.isBusinessDay("2026-12-25"), false, "Christmas は毎年の月日で休業");
 
-  // 振替休日は元の祝日の key を持つので「成人の日とその振替」を 1 つの規則で指せる
+  // A substitute holiday has the key of its holiday, so one rule can point at "Coming of Age Day and its
+  // substitute"
   const both = createCalendar({
     holidayProvider: jp,
     openRecurringRules: [{ holiday: true, keys: ["sports"] }],
   });
   assert.equal(both.isBusinessDay("2020-07-24"), true, "スポーツの日（2020 年は移動）");
-  // 当日だけなら kinds を併せて指定する（2020-02-24 は天皇誕生日の振替休日）
+  // Add kinds for the day itself only (2020-02-24 is the substitute holiday of the Emperor's Birthday)
   const onlyDay = createCalendar({
     holidayProvider: jp,
     openRecurringRules: [{ holiday: true, keys: ["emperors-birthday"], kinds: ["regular"] }],
@@ -187,7 +189,7 @@ test("key: 規則の keys で祝日を個別に指せる（kinds・weekdays・mo
   assert.equal(onlyDay.isBusinessDay("2020-02-23"), true, "当日");
   assert.equal(onlyDay.isBusinessDay("2020-02-24"), false, "振替休日は対象外");
 
-  // スケジュール: 特定の祝日だけ値を変える
+  // Schedule: another value on specific holidays only
   const pool = createSchedule<string>({
     holidayProvider: jp,
     weekdayValues: ["regular", "regular", "regular", "regular", "regular", "regular", "regular"],
@@ -199,7 +201,7 @@ test("key: 規則の keys で祝日を個別に指せる（kinds・weekdays・mo
   assert.equal(pool.valueOn("2026-08-11"), "summer", "山の日");
   assert.equal(pool.valueOn("2026-11-03"), "regular", "文化の日は通常");
 
-  // key を持たない祝日（国民の休日）には当てはまらない（kinds で指す）
+  // A holiday without a key (citizens' holiday) does not match (point at it with kinds)
   const none = createCalendar({
     holidayProvider: jp,
     openRecurringRules: [{ holiday: true, keys: ["new-year"] }],
@@ -295,7 +297,7 @@ test("key: keys の検証（holiday 以外には付けられない・形式）�
     ],
     "対応年に現れない key は never-matches、key の集合の包含は shadowed（広い集合は覆われず、後の広い規則が同じ値なので先の規則は redundant）",
   );
-  // 広い規則が先なら、狭い規則が shadowed
+  // When the wide rule comes first, the narrow one is shadowed
   assert.deepEqual(
     brief({
       holidayProvider: jp,

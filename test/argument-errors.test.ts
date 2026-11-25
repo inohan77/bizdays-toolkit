@@ -1,7 +1,10 @@
-// 公開している関数・メソッドに誤った値を 1 つずつ渡し、例外がこのライブラリの例外（code 付き）であることを確かめる。
-// 例外のクラスは code で決まる（decisions.md の 3 番: invalid-input だけが TypeError）。出ることが分かっている code から見る
-// robustness の検査と逆向きに、入力から見るので、code を持たない例外（素の TypeError など）を見つけられる。
-// 対象は実行時に列挙して決める。関数・メソッドを足すと、正しい呼び出しの見本（SAMPLES）がないことで失敗する
+// Passes one wrong value at a time to the public functions and methods and checks that the error is one of this
+// library's errors (with a code).
+// The error class follows from the code (decisions.md #3: only invalid-input is a TypeError). Unlike the
+// robustness check, which starts from the codes known to occur, this starts from the inputs and can find errors
+// without a code (a bare TypeError, ...).
+// The targets are enumerated at run time. A new function or method fails for lack of a sample of a correct call
+// (SAMPLES)
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
@@ -16,7 +19,7 @@ import { metropole } from "../src/fr/index.ts";
 
 type Fn = (...args: unknown[]) => unknown;
 
-/** 誤った値（種類ごとに 1 つ） */
+/** Wrong values (one per kind) */
 const WRONG: readonly [string, () => unknown][] = [
   ["null", () => null],
   ["数", () => 0],
@@ -26,7 +29,8 @@ const WRONG: readonly [string, () => unknown][] = [
   ["関数", () => () => true],
   ["Symbol", () => Symbol("s")],
   ["BigInt", () => 1n],
-  // メッセージの組み立てで JSON.stringify が投げる値（errors.ts の describeValue の catch を通す）
+  // A value for which JSON.stringify throws while the message is built (goes through the catch of describeValue
+  // in errors.ts)
   ["JSON にできないオブジェクト", () => ({ n: 1n })],
 ];
 
@@ -40,15 +44,16 @@ const schedule = root.createSchedule({
 const fromSchedule = root.createCalendarFromSchedule(schedule, (v) => v === "o");
 const combined = root.combineCalendars([calendar, fromSchedule], { open: "all" });
 
-/** 正しい呼び出しの見本（省略可能な引数も、渡して確かめる位置まで書く） */
+/** Samples of correct calls (optional arguments are written too, up to the position that is checked) */
 const SAMPLES: Readonly<Record<string, () => unknown[]>> = {
-  // ルート
+  // Root
   addDays: () => [D, 1],
   diffDays: () => [D, "2026-11-30"],
   isValidDate: () => [D],
   weekdayOf: () => [D],
   monthOf: () => [D],
-  // ルートの closingMonth・closingPeriod と、カレンダーのメソッドは引数の形が違う（見本の名前を分ける）
+  // closingMonth and closingPeriod of the root and the calendar methods have different arguments (the sample
+  // names differ)
   closingMonth: () => [D, 20],
   closingPeriod: () => ["2026-11", 20],
   "calendar.closingMonth": () => [D, 20, { convention: "following" }],
@@ -88,7 +93,7 @@ const SAMPLES: Readonly<Record<string, () => unknown[]>> = {
   isHoliday: () => [D],
   toJapanDate: () => [DT],
   toJapanDateTime: () => [DT],
-  // カレンダー・スケジュールのメソッド
+  // Methods of calendars and schedules
   dateOf: () => [DT],
   civilOf: () => [DT],
   instantOf: () => [D, "10:00"],
@@ -116,7 +121,7 @@ const SAMPLES: Readonly<Record<string, () => unknown[]>> = {
   valueOn: () => [D],
 };
 
-/** 対象の関数・メソッド: [表示名, 見本の名前, 関数] */
+/** The target functions and methods: [display name, sample name, function] */
 function targets(): [string, string, Fn][] {
   const out: [string, string, Fn][] = [];
   const add = (owner: string, obj: object): void => {
@@ -146,7 +151,8 @@ const describeError = (e: unknown): string =>
 test("誤った引数: どの関数・メソッドも、このライブラリの例外（code 付き・クラスは code で決まる）だけを投げる", () => {
   const all = targets();
   const missing = [...new Set(all.map(([, name]) => name).filter((n) => !(n in SAMPLES)))];
-  // 見本の表の名前は、すべて実際の関数・メソッドに使われる（実在しない名前の見本が残らない）
+  // Every name in the sample table is used by a real function or method (no sample of a name that does not exist
+  // is left)
   const used = new Set(all.map(([, name]) => name));
   assert.deepEqual(
     Object.keys(SAMPLES).filter((n) => !used.has(n)),
@@ -158,7 +164,7 @@ test("誤った引数: どの関数・メソッドも、このライブラリの
   for (const [label, name, f] of all) {
     const sample = SAMPLES[name];
     if (sample === undefined) continue;
-    // 見本そのものは投げない（誤った値の位置以外の引数が正しいことの確かめ）
+    // The sample itself does not throw (checks that the arguments other than the wrong one are correct)
     try {
       f(...sample());
     } catch (e) {
@@ -191,16 +197,19 @@ const isCalendarOrSchedule = (v: unknown): boolean =>
   typeof v === "object" && v !== null && ("dayInfoOn" in v || "valueOn" in v);
 
 test("誤った引数: オブジェクトでないオプションを黙って通さず、設定は invalid-option、ほかは invalid-argument（decisions.md の 8 番）", () => {
-  // 位置と code は関数名の一覧で決めず、見本から決める（関数を足しても規則がそのまま当たる）。
-  // 見本の引数のうち普通のオブジェクト（カレンダー・スケジュールを除く）をオプションの位置とみなし、
-  // - 見本の戻り値が営業日カレンダーかスケジュールなら作る関数: その位置は設定で、invalid-option を投げる
-  // - bizdays-toolkit/diagnose の、配列（診断）を返す関数: 第 1 引数は診断する設定で、invalid-option を error の結果で返す
-  // - それ以外（メソッドのオプション、移行の関数、診断のオプションなど）: invalid-argument を投げる
+  // Position and code are not decided by a list of function names but from the samples (the rule keeps applying
+  // when functions are added).
+  // Among a sample's arguments the plain objects (other than calendars and schedules) are the options positions:
+  // - a creating function (the sample's return value is a business calendar or schedule): the position is the
+  //   options and throws invalid-option
+  // - a function of bizdays-toolkit/diagnose that returns an array (diagnostics): the first argument is the
+  //   options to diagnose and returns invalid-option as an error result
+  // - anything else (method options, migration functions, diagnostics options, ...): throws invalid-argument
   const wrongs: [string, () => unknown][] = [
-    // 普通のオブジェクト（空のオブジェクトなど）はオプションとして受ける
+    // A plain object (an empty object, ...) is accepted as options
     ...WRONG.filter(([, wrong]) => !isOptionsLike(wrong())),
     ["NaN", () => NaN],
-    // 普通のオブジェクトでないオブジェクト（decisions.md の 8 番。オブジェクトでないものとして扱う）
+    // Objects that are not plain objects (decisions.md #8; treated as not being an object)
     ["Date", () => new Date()],
     ["Map", () => new Map()],
     ["包んだ文字列", () => new String("x")],
@@ -209,7 +218,7 @@ test("誤った引数: オブジェクトでないオプションを黙って通
   const counts: Record<string, number> = { 設定: 0, 診断する設定: 0, 引数: 0 };
   for (const [label, name, f] of targets()) {
     const sample = SAMPLES[name];
-    if (sample === undefined) continue; // 見本のない関数は、最初のテストが失敗にする
+    if (sample === undefined) continue; // a function without a sample fails in the first test
     const ret = f(...sample());
     const creates = isCalendarOrSchedule(ret);
     sample().forEach((arg, at) => {
@@ -219,7 +228,8 @@ test("誤った引数: オブジェクトでないオプションを黙って通
         : diagnoseFns.has(f) && Array.isArray(ret) && at === 0
           ? "診断する設定"
           : "引数";
-      // 見本の項目をそのまま持たせた、普通のオブジェクトでないもの（項目を読むだけの検証では通ってしまう形）
+      // Something that is not a plain object but has the sample's properties (a form that validation by reading
+      // properties alone would let through)
       const shaped: [string, () => unknown][] = [
         ["項目を持つ配列", () => Object.assign([], arg)],
         ["項目を持つ関数", () => Object.assign(() => {}, arg)],
@@ -276,7 +286,7 @@ test("正しい引数: 設定・オプションは、プロトタイプのない
 });
 
 test("誤った引数: 数を受ける引数に数の文字列を渡すと、メッセージでは引用符付きで表す（数に見せない）", () => {
-  // 位置は見本から決める: 見本の引数のうち数の位置に、同じ数の文字列を渡す
+  // The position comes from the samples: a number position of a sample gets the same number as a string
   let checked = 0;
   for (const [label, name, f] of targets()) {
     const sample = SAMPLES[name];
@@ -292,7 +302,7 @@ test("誤った引数: 数を受ける引数に数の文字列を渡すと、メ
         if (!root.isBizdaysError(e)) throw e;
         message = e.message;
       }
-      if (message === undefined) return; // 数の文字列を受ける引数（日数の文字列は受けないが、年月の文字列などは受ける）
+      if (message === undefined) return; // an argument that accepts a numeric string (a year-month string, ...)
       checked++;
       assert.ok(
         message.includes(JSON.stringify(String(arg))),
@@ -301,7 +311,7 @@ test("誤った引数: 数を受ける引数に数の文字列を渡すと、メ
     });
   }
   assert.ok(checked > 0);
-  // 入れ子の数（dueDate の dayOfMonth）と、暦日の文字列でない値（toInstant の date）
+  // A nested number (dayOfMonth of dueDate) and a value that is not a date string (date of toInstant)
   assert.throws(
     () => calendar.dueDate("2026-11", { dayOfMonth: "23" as never, convention: "following" }),
     /: "23"$/,
@@ -313,7 +323,8 @@ test("誤った引数: 数を受ける引数に数の文字列を渡すと、メ
 });
 
 test("誤った引数: holidaysInYear の整数でない年は、どの経路でも invalid-argument（範囲の外の整数は out-of-range）", () => {
-  // 提供元のオブジェクト・bizdays-toolkit/jp の関数・カレンダーとスケジュールのメソッドのすべて（KnownErrorCode の説明）
+  // Provider objects, the functions of bizdays-toolkit/jp and all methods of calendars and schedules (see
+  // KnownErrorCode)
   const all = targets().filter(([, n]) => n === "holidaysInYear");
   assert.ok(all.length >= 9, all.map(([label]) => label).join(", "));
   for (const [label, , f] of all) {
@@ -361,7 +372,8 @@ test('holidaysInYear の 1000〜9999 の外の整数の年は、提供元のな�
         `${label}(${year})`,
       );
     }
-    // 範囲の中の年は今までどおり（提供元のない経路は空、"ignore" は対応年の外を祝日なし）
+    // A year inside the range behaves as before (empty on the path without a provider; "ignore" treats the
+    // outside of the supported years as without holidays)
     assert.deepEqual(f(1000), [], `${label}(1000)`);
     assert.deepEqual(f(9999), [], `${label}(9999)`);
   }
@@ -420,8 +432,8 @@ test("誤った引数: メッセージの値の表し方（数はそのまま、
     messageOf(() => root.addDays(D, 1n as never)),
     /: 1n$/,
   );
-  // オブジェクトでないオプション（Date・Map を含む）は、そのことをメッセージで伝える（code は前からのまま）
-  // Date・Map は種類で表す（JSON の形だと Date が文字列に、Map が {} に見える）
+  // Options that are not an object (including Date and Map) say so in the message (the code is as before).
+  // Date and Map are shown by their kind (as JSON a Date looks like a string and a Map like {})
   assert.match(
     messageOf(() => calendar.dueDate("2026-11", new Date(0) as never)),
     /: \[object Date\]$/,

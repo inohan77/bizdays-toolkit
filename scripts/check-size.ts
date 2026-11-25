@@ -1,15 +1,21 @@
 /**
- * 公開するエントリーごとのサイズ（gzip）を測り、size-limits.json の上限と比べる（pnpm check から実行）。
+ * Measures the size (gzip) of each published entry and compares it with the limit in size-limits.json (run by
+ * pnpm check).
  *
- * 各エントリーから読み込まれる dist のファイルを、import をたどって集め、連結して gzip で測る。
- * minify はしない（minify のための依存を足さないため）。README に書く minify 後のサイズは、公開前に別途測る。
+ * The dist files loaded from each entry are collected by following imports, concatenated and measured with
+ * gzip. No minification (to avoid a dependency for it). The minified sizes in the README are measured separately
+ * before publication.
  *
- * 上限を上げる（エントリーを足す）ときは、size-limits.json を手で直して、理由を開発の記録（docs/development-log.md。
- * 0.29.x 以前は CHANGELOG の「開発」）に「サイズの上限」という言葉を含めて書くこと。前のバージョンのタグの size-limits.json と比べて、
- * 上限が上がっているのに記載がなければ失敗する（checkLimitChanges）。上限を変えたバージョンでは、CHANGELOG の測定値（測定 N）も
- * 1 つ以上照合できなければ失敗する（checkChangelogFigures。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。
- * 上げる値は数値の決まりで決める（残りが 1% 未満になったら、測定 × 1.02 を 100 バイト単位に切り上げた値。raisedLimitFor）。
- * 上限を上げたバージョンでは、README（英日）のサイズの値の「測ったバージョン」が今のバージョンであることも求める（checkReadmeMeasured）。
+ * To raise a limit (or add an entry), edit size-limits.json by hand and write the reason in the development log
+ * (docs/development-log.md; up to 0.29.x, the development part of the CHANGELOG) with the phrase that
+ * checkLimitChanges searches for. When a limit is higher than in size-limits.json at the previous version's tag
+ * and nothing is written, the check fails (checkLimitChanges). In a version that changes a limit, at least one
+ * measured value in the CHANGELOG must also be matched (checkChangelogFigures; RELEASING.md, reasons for the
+ * quality mechanisms, "write a rule in one place").
+ * The new value follows a numeric rule (when the headroom falls below 1%: the measurement × 1.02 rounded up to
+ * 100 bytes; raisedLimitFor).
+ * In a version that raises a limit, the "measured for" version of the sizes in the README (English and
+ * Japanese) must also be the current version (checkReadmeMeasured).
  */
 
 import "./strict-warnings.ts";
@@ -28,7 +34,7 @@ interface Pkg {
 const pkg = JSON.parse(readFileSync("package.json", "utf8")) as Pkg;
 const limits = JSON.parse(readFileSync("size-limits.json", "utf8")) as Record<string, number>;
 
-/** エントリーから import・export ... from でたどれる dist の .js をすべて集める */
+/** Collects every .js of dist reachable from an entry through import and export ... from */
 function moduleGraph(entry: string): string[] {
   const seen = new Set<string>();
   const visit = (file: string): void => {
@@ -44,7 +50,7 @@ function moduleGraph(entry: string): string[] {
   return [...seen].sort();
 }
 
-/** git を実行して出力を返す（git やタグがなければ undefined） */
+/** Runs git and returns its output (undefined without git or without the tag) */
 function git(args: readonly string[]): string | undefined {
   try {
     return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
@@ -53,13 +59,13 @@ function git(args: readonly string[]): string | undefined {
   }
 }
 
-/** タグの時点の size-limits.json（読めなければ undefined） */
+/** size-limits.json at a tag (undefined when it cannot be read) */
 function limitsAt(tag: string): Record<string, number> | undefined {
   const text = git(["show", `${tag}:size-limits.json`]);
   return text === undefined ? undefined : (JSON.parse(text) as Record<string, number>);
 }
 
-/** タグが HEAD を指しているか（リリースのワークフローでタグを付けたコミットを検査しているか） */
+/** Whether a tag points at HEAD (the release workflow is checking the tagged commit) */
 function tagIsHead(tag: string): boolean {
   const head = git(["rev-parse", "HEAD"])?.trim();
   const tagged = git(["rev-parse", `${tag}^{commit}`])?.trim();
@@ -67,20 +73,24 @@ function tagIsHead(tag: string): boolean {
 }
 
 /**
- * 上限を上げる数値の決まり（RELEASING.md の品質の確認の表の「サイズの上限」）: 残りが上限の 1% 未満（測定 > 上限 × 0.99）に
- * なったら、上限を「測定 × 1.02 を 100 バイト単位に切り上げた値」にする。上げてよいのは、前のバージョンの上限で残りが 1% 未満の
- * エントリーだけで、上げた値はちょうどこの値にする（余裕を大きく取ると、次の意図しない増加を見つけられないため）
+ * The numeric rule for raising a limit (the size-limit row of the quality table of RELEASING.md): when the
+ * headroom falls below 1% of the limit (measurement > limit × 0.99), the limit becomes "the measurement × 1.02
+ * rounded up to 100 bytes". Only entries whose headroom is below 1% under the previous version's limit may be
+ * raised, and exactly to this value (a larger margin would hide the next unintended growth)
  */
 const HEADROOM = 0.01;
 const RAISE = 1.02;
 const raisedLimitFor = (size: number): number => Math.ceil((size * RAISE) / 100) * 100;
-/** 前のバージョンのタグの上限（読めなければ undefined） */
+/** The limits at the previous version's tag (undefined when they cannot be read) */
 let baseLimitsForRule: Record<string, number> | undefined;
 
 /**
- * 上限を上げたバージョンでは、README（英日）のサイズの値を測り直す（RELEASING.md の「README のサイズの値」）。
- * 測ったかどうかは README に書いた「測ったバージョン」で見分け、今のバージョン（package.json の version）と同じであることを求める。
- * 上限を上げた事実はタグと比べるこの検査だけが知っているので、ここで止める（check-package はマイナー系列だけを見る）
+ * A version that raises a limit re-measures the sizes in the README (English and Japanese) (RELEASING.md, the
+ * section on the sizes in the README).
+ * Whether they were measured is told by the "measured for" version written in the README, which must equal the
+ * current version (`version` of package.json).
+ * Only this check, which compares with the tag, knows that a limit was raised, so it stops here (check-package
+ * looks at the minor series only)
  */
 function checkReadmeMeasured(base: string): boolean {
   let ok = true;
@@ -101,19 +111,24 @@ function checkReadmeMeasured(base: string): boolean {
 }
 
 /**
- * 前のバージョンのタグと比べて上限が上がっていれば、CHANGELOG に理由の記載があるかを確かめる。
+ * When a limit is higher than at the previous version's tag, checks that the CHANGELOG states the reason.
  *
- * 比べるタグと、記載を探す節:
- * - 現在のバージョンのタグがあり、HEAD 以外を指す（公開後の開発中）: そのタグと比べ、[Unreleased] を探す
- * - それ以外（公開の準備中・リリースのワークフローでタグのコミットを検査中）: CHANGELOG で 1 つ前のバージョンのうち
- *   タグがある最新のものと比べ、[Unreleased] と現在のバージョンの節を探す
+ * The tag compared and the sections searched:
+ * - the current version's tag exists and points elsewhere than HEAD (development after publication): compare
+ *   with that tag and search [Unreleased]
+ * - otherwise (preparing a publication, or the release workflow checking the tagged commit): compare with the
+ *   latest earlier version in the CHANGELOG that has a tag, and search [Unreleased] and the current version's
+ *   section
  *
- * タグを読めないときは、手元では確認を飛ばし、CI（環境変数 CI が設定されている）では失敗する。
- * CI のワークフローは履歴とタグを取得する（fetch-depth: 0）ので、読めないのは設定の誤り。
- * changed は、上限が上がったか、探した節に「サイズの上限」があるか（測定値の記載が必須のバージョンか）
+ * When tags cannot be read, the check is skipped locally and fails in CI (the environment variable CI is set).
+ * The CI workflows fetch history and tags (fetch-depth: 0), so not being able to read them is a configuration
+ * error.
+ * `changed` tells whether a limit was raised or the searched sections contain the size-limit phrase (i.e.
+ * whether the version must state measured values)
  */
 function checkLimitChanges(): { ok: boolean; changed: boolean } {
-  // バージョンの一覧と記載の節は CHANGELOG.md と docs/development-log.md の両方から引く（scripts/release-sections.ts）
+  // The list of versions and the sections come from both CHANGELOG.md and docs/development-log.md
+  // (scripts/release-sections.ts)
   const sections = releaseSections();
   const versions = [...sections.keys()].filter((v) => v !== "Unreleased");
 
@@ -142,7 +157,7 @@ function checkLimitChanges(): { ok: boolean; changed: boolean } {
       );
       return { ok: false, changed: false };
     }
-    // 意図した飛ばし（test/support/skip.ts の no-release-tag。CI では上で失敗にする）
+    // An intended skip (no-release-tag of test/support/skip.ts; in CI it fails above)
     console.log(`SKIP limit changes: ${skipWhen("no-release-tag", true)}`);
     return { ok: true, changed: false };
   }
@@ -173,9 +188,12 @@ function checkLimitChanges(): { ok: boolean; changed: boolean } {
 }
 
 /**
- * CHANGELOG の今のバージョン（または [Unreleased]）の節に書いた測定値（「`<エントリー>` … 測定 N」。ルートは「ルート … 測定 N」）が、
- * 実際の測定と一致するかを確かめる。測り直し忘れを防ぐ（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」の納品の手順）。
- * required（上限を変えたバージョン）なのに照合できた測定値が 1 つもなければ失敗する（書き方が変わって照合が黙って外れるのを防ぐ）
+ * Checks that the measured values written in the CHANGELOG section of the current version (or [Unreleased])
+ * (an entry name followed by its measured value; see the regular expression below) equal the actual
+ * measurements. Prevents forgetting to re-measure (RELEASING.md, reasons for the quality mechanisms, "write a
+ * rule in one place", the delivery steps).
+ * When `required` (a version that changes a limit) and no measured value could be matched, the check fails (so
+ * that a changed wording does not silently drop the comparison)
  */
 function checkChangelogFigures(measured: ReadonlyMap<string, number>, required: boolean): boolean {
   const sections = releaseSections();
@@ -227,13 +245,15 @@ for (const [subpath, target] of Object.entries(pkg.exports)) {
   }
   const ok = size <= limit;
   if (!ok) failed = true;
-  // 数値の決まり。前のバージョンから上げたエントリーは、前のバージョンの上限で残りが 1% 未満で、上げた値がちょうど決まりの値であること。
-  // 上げていないエントリーは、残りが 1% 以上であること（1% 未満なら、決まりの値に上げるよう求める）
+  // The numeric rule. An entry raised since the previous version must have had less than 1% headroom under the
+  // previous limit and be raised exactly to the rule's value. An entry that was not raised must have 1% headroom
+  // or more (below 1%, the check asks to raise it to the rule's value)
   const before = baseLimitsForRule?.[subpath];
   const rule = raisedLimitFor(size);
   if (before !== undefined && limit > before) {
     if (size <= before * (1 - HEADROOM)) {
-      // 上げる理由のないエントリー。決まりの値は前のバージョンの上限より低いこともあるので示さない
+      // An entry with no reason to be raised. The rule's value can be lower than the previous limit, so it is
+      // not shown
       console.error(
         `${subpath}: the limit was raised ${before} -> ${limit}, but a limit may be raised only when the headroom under the previous limit is below 1% (gzip ${size} / previous limit ${before}); keep it at ${before}`,
       );

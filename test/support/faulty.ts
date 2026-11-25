@@ -1,5 +1,7 @@
-// 失敗を注入する祝日の提供元（テスト拡充案の T3）。対応年の短い自作の提供元（test/support/provider.ts）を包み、
-// 決まった年だけ、例外を投げる・不正なデータを返す・祝日を未確定にする。全日を調べる検査も速く回るよう、対応年は 2025〜2027 年。
+// Holiday providers into which failures are injected (T3 of the test expansion plan). They wrap the home-made
+// provider with few supported years (test/support/provider.ts) and, in a given year only, throw, return wrong
+// data or make the holidays unconfirmed. The supported years are 2025-2027, so that checks over all days stay
+// fast.
 import type { Holiday, HolidayProvider } from "../../src/index.ts";
 import { SHORT_PROVIDER } from "./provider.ts";
 
@@ -16,7 +18,7 @@ const wrap = (
   ...extra,
 });
 
-/** year の年を引くと例外（RangeError）を投げる */
+/** Throws (a RangeError) when the year `year` is looked up */
 export function throwingInYear(year: number): Provider {
   return wrap(`THROW-${year}`, (y) => {
     if (y === year) throw new RangeError(`injected failure for ${y}`);
@@ -24,10 +26,13 @@ export function throwingInYear(year: number): Provider {
   });
 }
 
-/** 不正なデータの種類: 日付の書式の誤り・同じ日の重複・オブジェクトでない項目・穴のある配列（穴は undefined の項目と同じ） */
+/**
+ * Kinds of wrong data: a wrong date format, a duplicate day, an entry that is not an object, an array with a hole
+ * (a hole equals an undefined entry)
+ */
 export type InvalidData = "format" | "duplicate" | "type" | "hole";
 
-/** year の年だけ、不正なデータ（種類は kind）を返す */
+/** Returns wrong data (of kind `kind`) for the year `year` only */
 export function invalidDataInYear(year: number, kind: InvalidData): Provider {
   return wrap(`BAD-${kind}-${year}`, (y) => {
     const list = base.holidaysInYear(y);
@@ -39,8 +44,8 @@ export function invalidDataInYear(year: number, kind: InvalidData): Provider {
       ];
     if (kind === "duplicate") return [...list, list[0]!];
     if (kind === "hole") {
-      // 正しい項目の手前に穴を 1 つ空ける（map・forEach は穴を飛ばすので、検証が穴を見落とさないか。穴の後ろの項目は
-      // 正しいので、穴を飛ばすと誤りに気付かない）
+      // Leaves one hole before the correct entries (map and forEach skip holes: does the validation miss the
+      // hole? The entries after the hole are correct, so skipping the hole would hide the mistake)
       const holed: Holiday<string>[] = [...list];
       holed[holed.length + 1] = {
         date: `${y}-12-30`,
@@ -56,7 +61,10 @@ export function invalidDataInYear(year: number, kind: InvalidData): Provider {
   });
 }
 
-/** year の年の祝日だけを未確定（confirmed: false）にする（前後の年は確定のまま。confirmedThrough は year の前の年） */
+/**
+ * Makes only the holidays of the year `year` unconfirmed (confirmed: false) (the years around stay confirmed;
+ * confirmedThrough is the year before `year`)
+ */
 export function unconfirmedInYear(year: number): Provider {
   return wrap(
     `UNCONFIRMED-${year}`,
@@ -66,9 +74,11 @@ export function unconfirmedInYear(year: number): Provider {
 }
 
 /**
- * 年ごとに、calls 回目の呼び出しまでは正しいデータを返し、その後は例外を投げる（year を渡せばその年だけ。code を渡せば
- * 例外に code を付ける）。提供元の約束（同じ年に同じ結果を返す）の外の提供元で、診断の最初の検査（対応年のすべての年を
- * 1 回ずつ引く）は通り、規則どうしの診断の途中で投げる。診断の catch 節に届くことを確かめるテスト（test/catch-paths.test.ts）で使う
+ * Per year, returns correct data up to the `calls`-th call and throws afterwards (with `year`, in that year
+ * only; with `code`, the error gets the code). A provider outside the provider contract (the same result for
+ * the same year): it passes the first check of the diagnostics (which looks up every supported year once) and
+ * throws during the diagnostics between rules. Used by the test that the catch clauses of the diagnostics are
+ * reached (test/catch-paths.test.ts)
  */
 export function throwingAfter(
   calls: number,
@@ -89,7 +99,7 @@ export function throwingAfter(
   });
 }
 
-/** 注入した年（2026 年）の日・祝日・前後の年の日 */
+/** Days of the injected year (2026), its holidays, and days of the years around */
 export const INJECTED_YEAR = 2026;
 export const DAY_IN_INJECTED_YEAR = "2026-03-03";
 export const HOLIDAY_IN_INJECTED_YEAR = "2026-05-04";

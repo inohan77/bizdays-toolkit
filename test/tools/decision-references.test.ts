@@ -1,9 +1,11 @@
-// 決定の番号の参照の形（scripts/decision-references.ts）: 並べた番号のそれぞれに「番」を付けた形も拾い、「番目」は拾わない
+// The forms of a decision reference (scripts/decision-references.ts): the form with the counter word after each
+// listed number is found, and the ordinal form is not
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DECISION_REFERENCE, decisionNumbers } from "../../scripts/decision-references.ts";
 
-// 例文は "decisions" と ".md" をつないで作る（ソースに参照の形のまま書くと、このファイル自身が参照として数えられる）
+// The examples are built by joining "decisions" and ".md" (written as a reference in the source, this file
+// itself would be counted as referring)
 const D = ["decisions", "md"].join(".");
 const numbersIn = (text: string): number[][] =>
   [...text.matchAll(DECISION_REFERENCE)].map((m) => decisionNumbers(m[1]!));
@@ -19,4 +21,12 @@ test("決定の参照: 1 つの番号、「・」「、」で並べた番号、�
 
 test("決定の参照: 「番目」は参照として拾わない", () => {
   assert.deepEqual(numbersIn(`${D} の 3 番目の箇条`), []);
+});
+
+test("決定の参照: 英語のコメントの形（番号に # を付けて並べる）を拾い、# のない数字は拾わない", () => {
+  assert.deepEqual(numbersIn(`@see ${D} #17`), [[17]]);
+  assert.deepEqual(numbersIn(`@see ${D} #16, #17, #31`), [[16, 17, 31]]);
+  assert.deepEqual(numbersIn(`(\`docs/${D}\` #8)`), [[8]]);
+  assert.deepEqual(numbersIn(`see ${D} 17`), []);
+  assert.deepEqual(numbersIn(`${D} #172.`), [[172]]);
 });

@@ -1,4 +1,4 @@
-// 週の第 n 営業日の規則 { businessDayOfWeek, weekStart }（0.30.0）
+// The nth-business-day-of-week rule { businessDayOfWeek, weekStart } (0.30.0)
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, createSchedule, type CalendarOptions } from "../src/index.ts";
@@ -29,10 +29,12 @@ test("週の第 n 営業日: weekStart で週の区切りが変わり、月を�
       closedWeekdays: [0, 6],
       closedRecurringRules: [{ businessDayOfWeek: 1, weekStart }],
     });
-  // 2026-09-28（月）〜10-04（日）の週。月曜始まりなら 9 月 28 日が週の最初の営業日
+  // The week of 2026-09-28 (Mon) to 10-04 (Sun). With weeks starting on Monday, September 28 is the first
+  // business day of the week
   assert.equal(first(1).isBusinessDay("2026-09-28"), false);
   assert.equal(first(1).isBusinessDay("2026-10-01"), true);
-  // 2026-11-23（月）は勤労感謝の日なので、月曜始まりの週の最初の営業日は 24 日（火）
+  // 2026-11-23 (Mon) is Labor Thanksgiving Day, so the first business day of the week starting on Monday is the
+  // 24th (Tue)
   assert.equal(first(1).isBusinessDay("2026-11-24"), false);
   assert.equal(first(0).isBusinessDay("2026-11-24"), false, "日曜始まりでも 24 日");
 });

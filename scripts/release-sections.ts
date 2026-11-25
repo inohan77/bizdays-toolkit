@@ -1,12 +1,14 @@
 /**
- * バージョンごとの記録の節（CHANGELOG.md と docs/development-log.md）を、バージョンの名前で引く。
- * 0.31.0 から、公開物の変わらない品質の仕組みの変更（「開発」）は docs/development-log.md に書く（RELEASING.md の「区分」）。
- * 0.29.x 以前の「開発」は CHANGELOG.md の各バージョンにあるので、両方の節をつなげて返す（サイズの上限・測定値・性能の退行の記載を探す）
+ * Looks up the record sections of a version (CHANGELOG.md and docs/development-log.md) by the version's name.
+ * From 0.31.0, changes of the quality mechanisms that do not change the published files (the development
+ * category) are written in docs/development-log.md (RELEASING.md, the categories).
+ * Up to 0.29.x the development category is in each version of CHANGELOG.md, so both sections are joined (to
+ * search for the notes on size limits, measured values and performance regressions)
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-/** 開発の記録のファイル（npm の公開物に含めない） */
+/** The file of the development log (not part of the npm package) */
 export const DEVELOPMENT_LOG = "docs/development-log.md";
 
 function sectionsOf(path: string): Map<string, string> {
@@ -17,7 +19,10 @@ function sectionsOf(path: string): Map<string, string> {
   return map;
 }
 
-/** バージョンの名前（"Unreleased" を含む）→ CHANGELOG.md の節と docs/development-log.md の節をつなげた本文 */
+/**
+ * Version name (including "Unreleased") → the section of CHANGELOG.md joined with the section of
+ * docs/development-log.md
+ */
 export function releaseSections(dir = "."): Map<string, string> {
   const changelog = sectionsOf(resolve(dir, "CHANGELOG.md"));
   const log = sectionsOf(resolve(dir, DEVELOPMENT_LOG));

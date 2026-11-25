@@ -1,13 +1,15 @@
 /**
- * 予期しない例外（uncaughtException・unhandledRejection）で、終了コード 2 で止める。読み込むだけで効く。
+ * Stops with exit code 2 on an unexpected error (uncaughtException, unhandledRejection). Importing it is enough.
  *
- * result-compare（scripts/result-compare.ts）の終了コードは、0 = 合格、1 = 許していない差分・意図せず作成に失敗した設定、
- * 2 = 引数・読み込みの誤り・予期しない例外。Node.js の既定の 1 は「許していない差分」と区別できないので、2 にそろえる。
- * 比較が終わらなかったこと（道具の故障）と、差分が出たことを、終了コードで見分けられるようにするため（CI の result-compare
- * ジョブ・手動の広い比較 .github/workflows/result-compare-wide.yml・手元のどれで動かしても、結果を読み違えない）。
+ * The exit codes of result-compare (scripts/result-compare.ts) are 0 = pass, 1 = a difference that is not
+ * allowed or options that unintentionally failed to be created, 2 = wrong arguments, a loading error or an
+ * unexpected error. The default 1 of Node.js cannot be told from "a difference that is not allowed", so it
+ * becomes 2. The exit code then tells "the comparison did not finish" (a broken tool) from "a difference was
+ * found" (wherever it runs - the result-compare job of CI, the manual wide comparison
+ * .github/workflows/result-compare-wide.yml, or locally - the result is not misread).
  *
- * ES モジュールでは、静的な import がすべて本体より先に評価される。そのため、この登録は読み込むスクリプトの最初の import に
- * 置く（ほかの import の評価の途中で投げた例外も、ここで受けるため）。
+ * In an ES module every static import is evaluated before the body. Therefore this registration is the first
+ * import of the script that loads it (so that an error thrown while evaluating another import is caught too).
  */
 for (const event of ["uncaughtException", "unhandledRejection"] as const) {
   process.on(event, (error: unknown) => {

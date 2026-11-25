@@ -1,6 +1,7 @@
-// 利用者の立場で、公開する型定義（dist の .d.ts）を型チェックする（scripts/check-consumer-types.ts が
-// moduleResolution を node16・nodenext・bundler に変えて tsc で確かめる。ライブラリの型定義の検査も有効にする）。
-// 実行の前に pnpm build が必要
+// Type-checks the published type definitions (.d.ts of dist) from a user's point of view
+// (scripts/check-consumer-types.ts checks with tsc under moduleResolution node16, nodenext and bundler; checking
+// of the library's type definitions is turned on too).
+// Needs pnpm build before running
 import {
   closingPeriod,
   combineCalendars,
@@ -137,18 +138,19 @@ const frHoliday: FrHoliday | undefined = metropole.holidaysInYear(2026)[0];
 void frHoliday;
 const holiday: JpHoliday | UkHoliday | undefined = jp.holidaysInYear(2026)[0];
 const issues: readonly Diagnostic[] = diagnoseCalendar({ holidayProvider: jp });
-// @ts-expect-error 存在しない設定の型は誤り
+// @ts-expect-error an option type that does not exist is wrong
 createCalendar({ closedWeekdays: ["sunday"] });
 
 export { days, values, providers, holiday, issues };
 
-// 祝日の提供元・作成済みのカレンダー・スケジュールをそのまま設定として渡す誤りは、型エラーになる（0.32.0 から。設定の型の
-// holidaysInYear が ?: never で、3 つともこの項目を持つ。型エラーにならなければ、下の @ts-expect-error が未使用のエラーになる）
+// Passing a holiday provider, a created calendar or a schedule as the options is a type error (from 0.32.0:
+// holidaysInYear of the option types is ?: never, and all three have this property. If it were no type error,
+// the @ts-expect-error below would be an unused-directive error)
 const passedAsOptions = createCalendar({ holidayProvider: jp });
 const scheduleAsOptions = createSchedule({ weekdayValues: [1, 1, 1, 1, 1, 1, 1] });
-// @ts-expect-error 提供元は holidayProvider に渡す
+// @ts-expect-error a provider goes in holidayProvider
 createCalendar(jp);
-// @ts-expect-error カレンダーは設定ではない
+// @ts-expect-error a calendar is not options
 createCalendar(passedAsOptions);
-// @ts-expect-error スケジュールは設定ではない
+// @ts-expect-error a schedule is not options
 createCalendar(scheduleAsOptions);

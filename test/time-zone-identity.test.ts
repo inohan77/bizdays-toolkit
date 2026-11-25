@@ -12,7 +12,7 @@ const codeOf = (fn: () => unknown): string | undefined => {
   }
 };
 
-/** Temporal を差し替えて fn を実行する（undefined なら Temporal のない実行環境） */
+/** Runs `fn` with Temporal replaced (undefined: a runtime without Temporal) */
 function withTemporal(fake: unknown, fn: () => void): void {
   const g = globalThis as { Temporal?: unknown };
   const had = "Temporal" in g;
@@ -27,7 +27,7 @@ function withTemporal(fake: unknown, fn: () => void): void {
   }
 }
 
-/** 名前の組を同じとみなす Temporal の代わり（equals が呼ばれたかも数える） */
+/** A stand-in for Temporal that treats pairs of names as the same (it also counts whether equals was called) */
 function fakeTemporal(same: (a: string, b: string) => boolean | never) {
   const calls = { equals: 0 };
   return {
@@ -48,7 +48,7 @@ function fakeTemporal(same: (a: string, b: string) => boolean | never) {
   };
 }
 
-// 実行環境が正規化しない名前の組（どの実行環境でも、Intl が返す名前が違う）
+// A pair of names the runtime does not canonicalize (in every runtime Intl returns different names)
 const paris = createCalendar({ timeZone: "Europe/Paris" });
 const berlin = createCalendar({ timeZone: "Europe/Berlin" });
 const provider = (id: string, timeZone: string) => ({
@@ -139,7 +139,7 @@ test("同じタイムゾーン: Temporal が投げる・真偽値でない値を
       );
     });
   }
-  // 形の違う Temporal（項目がない）でも、例外をそのまま出さない
+  // With a Temporal of another shape (missing members) too, the error is not let through as it is
   withTemporal({}, () => {
     assert.equal(
       codeOf(() => combineCalendars([paris, berlin], { open: "all" })),

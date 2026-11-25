@@ -1,6 +1,7 @@
-// 公開する dist を、ESM（import）で確かめる。確認の中身は smoke.mjs（ブラウザー・Cloudflare Workers と共通）。
-// パッケージ名での自己参照（package.json の exports）で読み込むので、利用者と同じ経路で確かめられる。
-// 実行の前に pnpm build が必要（CI の compat ジョブと pnpm check が行う）
+// Checks the published dist with ESM (import). The checks themselves are in smoke.mjs (shared with browsers and
+// Cloudflare Workers).
+// It loads by self-reference with the package name (`exports` of package.json), the same path as a user.
+// Needs pnpm build before running (done by the compat job of CI and by pnpm check)
 import { test } from "node:test";
 import * as root from "bizdays-toolkit";
 import * as diagnose from "bizdays-toolkit/diagnose";
@@ -12,12 +13,13 @@ import * as uk from "bizdays-toolkit/uk";
 import { smoke } from "./smoke.mjs";
 
 const { results, temporal, timeZones } = smoke({ root, jp, uk, sg, fr, diagnose, provider });
-// 本物の Temporal で確かめたかどうかを、黙って飛ばさずに必ず表示する
+// Whether a real Temporal was used is always printed, never silently skipped
 console.log(
   `Temporal: ${temporal === "native" ? "checked with the native Temporal" : "skipped (no Temporal in this runtime)"}`,
 );
 
-// タイムゾーンの名前の扱いの記録（中身は合否にしない）。1 行も出なければ、黙って飛ばさずに失敗にする
+// The record of how time zone names are handled (its content does not decide pass or fail). Without a single
+// line it fails instead of silently skipping
 for (const line of timeZones) console.log(`TimeZone: ${line}`);
 test("タイムゾーンの名前の扱いを記録した", () => {
   if (timeZones.length === 0) throw new Error("no time zone report");

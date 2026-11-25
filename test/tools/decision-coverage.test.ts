@@ -8,7 +8,8 @@ import {
   publicNamesOf,
 } from "../../scripts/decision-coverage.ts";
 
-// 決定の文書が公開の設定の項目と名前を決めているかの検査（scripts/decision-coverage.ts）を、小さな入力で確かめる
+// Checks, with small inputs, the check that the decisions document decides the public option keys and names
+// (scripts/decision-coverage.ts)
 
 const API = `### AOptions (@public)
 
@@ -49,8 +50,8 @@ export interface Calendar {
 export declare function addThings(a: number): number;
 \`\`\`
 `;
-// コメントの中の引用符の語（"throw"・"not-a-code"）は、code と数えない
-const ERRORS = `export type KnownErrorCode =\n  /** 説明の中の "throw" は code ではない */\n  | "no-thing"\n  // "not-a-code"\n  | "bad-thing";\n`;
+// Quoted words in comments ("throw", "not-a-code") are not counted as codes
+const ERRORS = `export type KnownErrorCode =\n  /** 説明の中の "throw" は code ではない; 「;」があっても型は切れない */\n  | "no-thing"\n  // "not-a-code"\n  | "bad-thing";\n`;
 const DECISIONS = `## 章
 
 ### 1. 上限
@@ -91,15 +92,15 @@ test("decision-coverage: 設定の項目は、型ごとに数え、入れ子の�
   assert.deepEqual(publicNamesOf(API, ERRORS), ["addThings", "bad-thing", "isOpen", "no-thing"]);
   assert.deepEqual([...decisionSections(DECISIONS).keys()], [1, 2]);
   assert.equal(mentions('`{ policy: "x" }` が既定', "policy"), true);
-  // バッククォートの外の語と、別の名前の一部は数えない
+  // A word outside backticks, and a part of another name, are not counted
   assert.equal(mentions("policy の既定", "policy"), false);
   assert.equal(mentions("`holidayPolicy` の既定", "policy"), false);
   assert.equal(mentions("`no-thing-else`", "no-thing"), false);
   assert.equal(mentions("`policy2`・`my_policy`", "policy"), false);
-  // 2 つのコード片の間にある、コード片の外の語は数えない
+  // A word outside code spans, between two code spans, is not counted
   assert.equal(mentions("`a` policy `b`", "policy"), false);
   assert.equal(mentions("`a` と `policy` と `b`", "policy"), true);
-  // 位置の書き方（`rules[0].policy`）の中の名前は数える
+  // A name inside a written position (`rules[0].policy`) is counted
   assert.equal(mentions("`rules[0].policy`", "policy"), true);
 });
 
@@ -107,31 +108,31 @@ test("decision-coverage: そろっていれば合格し、欠けた行・名前�
   assert.deepEqual(check(OPTIONS, {}), { failures: [], optionKeys: 5, names: 4, mentioned: 4 });
   const fails = (o: Record<string, unknown>, u: Record<string, unknown> = {}): string[] =>
     check(o, u).failures;
-  // 0.30.0 の旧名（maxSearchDays。同じ型に新しい名前がある）は数えない
-  // 一覧にない項目
+  // An old name of 0.30.0 (maxSearchDays; the same type has the new name) is not counted
+  // A property missing in the list
   const { "BOptions.policy": _dropped, ...withoutB } = OPTIONS;
   assert.match(fails(withoutB).join("\n"), /BOptions\.policy is not listed/);
-  // 指した決定に、項目の名前がない（searchDayLimit は 2 番に現れない）
+  // The decision pointed at does not mention the property's name (searchDayLimit does not occur in #2)
   assert.match(
     fails({ ...OPTIONS, "AOptions.searchDayLimit": 2 }).join("\n"),
     /AOptions\.searchDayLimit points to decision 2, but that decision does not mention `searchDayLimit`/,
   );
-  // ない番号
+  // A number that does not exist
   assert.match(
     fails({ ...OPTIONS, "AOptions.searchDayLimit": 9 }).join("\n"),
     /AOptions\.searchDayLimit points to 9, which is not a decision/,
   );
-  // 公開の型にない項目
+  // A property the public types lack
   assert.match(
     fails({ ...OPTIONS, "AOptions.gone": 1 }).join("\n"),
     /AOptions\.gone is listed, but it is not an option/,
   );
-  // 決定に現れる名前を、理由を書かない一覧に載せている
+  // A name that occurs in a decision is in the list of reasons for no decision
   assert.match(
     fails(OPTIONS, { addThings: "x" }).join("\n"),
     /addThings is listed, but a decision mentions it now/,
   );
-  // 公開の名前でないものを載せている
+  // Something that is not a public name is listed
   assert.match(fails(OPTIONS, { gone: "x" }).join("\n"), /gone is listed, but it is not a public/);
 });
 
@@ -180,7 +181,8 @@ export interface NewThing {
 \`\`\`
 `;
   const found = optionKeysOf(api);
-  // 提供元の契約は省略できる項目だけ、祝日の値はすべての項目。結果の型（DayInfo）の項目は数えない
+  // For the provider contract only the optional properties; for the holiday value every property. Properties of
+  // a result type (DayInfo) are not counted
   assert.deepEqual(
     found.keys.filter((k) => !k.startsWith("AOptions") && !k.startsWith("BOptions")),
     [

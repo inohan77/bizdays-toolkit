@@ -1,4 +1,4 @@
-// 隣の日を見る規則と対応年の端（0.30.0。docs/decisions.md の 17 番）
+// Rules that look at a neighbouring day, and the ends of the supported years (0.30.0. docs/decisions.md #17)
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, createSchedule } from "../src/index.ts";
@@ -20,7 +20,7 @@ test('outOfRangePolicy: "throw" なら、隣の日が対応年の外の祝前日
   assert.equal(make("throw").valueOn(`${last - 1}-12-31`), "9-13", "翌年の元日が対応年の中");
   assert.throws(() => make("throw").valueOn(`${last}-12-31`), isOutOfRange);
   assert.equal(make("ignore").valueOn(`${last}-12-31`), "9-18", "ignore では外は祝日なし");
-  // 祝日のない提供元（対応年は 2000 年から）。2000-01-01 の前日は対応年の外
+  // A provider without holidays (supported from 2000). The day before 2000-01-01 is outside the supported years
   const empty = {
     id: "XX",
     timeZone: "UTC",
@@ -62,7 +62,8 @@ test('週の第 n 営業日は、週が対応年の外にかかる日を outOfRa
       closedRecurringRules: [{ businessDayOfWeek: 1, weekStart: 1 }],
     });
   const first = sg.supportedYears.from;
-  // 最後の年の 12 月の最後の週（週が翌年にかかる）と、最初の年の最初の週（週が前年から始まる）
+  // The last week of December of the last year (the week reaches into the next year) and the first week of the
+  // first year (the week starts in the previous year)
   const lastWeek = [27, 28, 29, 30, 31].map((d) => `${last}-12-${d}`);
   for (const date of [...lastWeek, `${first}-01-02`]) {
     assert.throws(() => make("throw").dayInfoOn(date), isOutOfRange, date);

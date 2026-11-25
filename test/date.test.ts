@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import { addDays, diffDays, isValidDate, weekdayOf } from "../src/index.ts";
-// 第 n 曜日と解析は公開しない内部の関数なので、モジュールから直接読み込んで確かめる
+// The nth weekday and the parsing are internal functions that are not published, so they are loaded directly
+// from the module
 import { fromDayNumber, nthWeekdayOfMonth, parseDate, toDayNumber } from "../src/core/date.ts";
 
 test("日付の加減算と差", () => {
@@ -32,7 +33,7 @@ test("parseDate: 直前の 1 件を覚えても、結果は文字列だけで決
   const leapDay = { year: 2024, month: 2, day: 29 };
   assert.deepEqual(parseDate("2024-02-29"), leapDay);
   assert.deepEqual(parseDate("2024-02-29"), leapDay);
-  // 別の文字列・失敗した解析をはさんでも、前の結果が混ざらない
+  // With another string or a failed parse in between, the earlier result does not get mixed in
   assert.deepEqual(parseDate("2026-11-13"), { year: 2026, month: 11, day: 13 });
   assert.throws(() => parseDate("2026-02-30"), { code: "invalid-date" });
   assert.throws(() => parseDate("2026-02-30"), { code: "invalid-date" });
@@ -40,13 +41,14 @@ test("parseDate: 直前の 1 件を覚えても、結果は文字列だけで決
   assert.deepEqual(parseDate("2024-02-29"), leapDay);
   assert.deepEqual(parseDate("2000-01-01"), { year: 2000, month: 1, day: 1 });
   assert.deepEqual(parseDate("2024-02-29"), leapDay);
-  // 返すオブジェクトは覚えたものと同じなので、書き換えられない
+  // The returned object is the remembered one, so it cannot be changed
   assert.ok(Object.isFrozen(parseDate("2024-02-29")));
   assert.ok(Object.isFrozen(parseDate("2024-02-29")));
 });
 
 test("parseDate: プロセスで最初の呼び出しが文字列でない値でも invalid-date（覚える 1 件の初めの状態と一致しない）", () => {
-  // 同じプロセスのほかのテストが先に解析すると確かめられないので、新しいプロセスで最初に呼ぶ
+  // It cannot be checked once another test of the same process has parsed first, so it is called first in a new
+  // process
   const script = [
     `import { addDays, isBizdaysError } from ${JSON.stringify(new URL("../src/index.ts", import.meta.url).href)};`,
     "for (const value of [undefined, null, 20000101]) {",
@@ -65,8 +67,9 @@ test("parseDate: プロセスで最初の呼び出しが文字列でない値で
 });
 
 test("日数から作った暦日: 続けて解析すると、その日の年月日になる（解析し直さずに入れる記憶の値。月末・うるう日・年の端を含む）", () => {
-  // 日数から暦日を作るときは文字列を解析し直さず、作った年月日を解析の直前 1 件の記憶に入れる（decisions.md の 16 番）。
-  // 入れる値が古いと、続けて同じ文字列を解析した年月日が別の日になる
+  // Building a date from a day number does not parse the string again but puts the built year, month and day
+  // into the memo of the last parse (decisions.md #16).
+  // With a stale value there, parsing the same string next would give another day
   const days = [
     ...Array.from({ length: 800 }, (_, i) => toDayNumber("1999-12-01") + i),
     toDayNumber("1000-01-01"),
@@ -85,7 +88,8 @@ test("日数から作った暦日: 続けて解析すると、その日の年月
     assert.equal(toDayNumber(date), n, date);
     assert.ok(Object.isFrozen(parseDate(date)), date);
   }
-  // 範囲の外は、作る前に out-of-range（記憶は変えない。直前に解析した日は、そのまま正しく読める）
+  // Outside the range it is out-of-range before anything is built (the memo does not change; the last parsed
+  // day still reads correctly)
   const last = fromDayNumber(toDayNumber("2026-11-18"));
   for (const n of [toDayNumber("1000-01-01") - 1, toDayNumber("9999-12-31") + 1, Number.NaN])
     assert.throws(

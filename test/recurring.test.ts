@@ -67,7 +67,7 @@ test("パターン: 毎月の日・末日・その月にない日・月の絞り
 });
 
 test("祝日の下（under-holiday・既定）は、祝日の扱いに従う", () => {
-  const rule: RecurringRule = { weekday: 1, nth: 2, name: "第 2 月曜定休" }; // 2026-01-12 は成人の日
+  const rule: RecurringRule = { weekday: 1, nth: 2, name: "第 2 月曜定休" }; // 2026-01-12: Coming of Age Day
   assert.equal(
     closedOn([rule], { holidayPolicy: "open" }).isBusinessDay("2026-01-12"),
     true,
@@ -107,7 +107,7 @@ test("祝日の後（after-holiday）: 月曜休館・祝日の場合は次の�
       holidayPolicy: "open",
     },
   );
-  // 通常の月曜
+  // An ordinary Monday
   assert.deepEqual(
     { ...museum.dayInfoOn("2026-10-19"), holiday: undefined },
     {
@@ -122,13 +122,14 @@ test("祝日の後（after-holiday）: 月曜休館・祝日の場合は次の�
       rulePath: "closedRecurringRules[0]",
     },
   );
-  // スポーツの日（月）は開館し、翌日の火曜に休館
+  // Open on Sports Day (Mon) and closed on the Tuesday after it
   assert.equal(museum.isBusinessDay("2026-10-12"), true);
   const tue = museum.dayInfoOn("2026-10-13");
   assert.equal(tue.open, false);
   assert.equal(tue.reason, "closed-recurring");
   assert.equal(tue.shiftedFrom, "2026-10-12");
-  // 敬老の日（月）→ 国民の休日（火）→ 秋分の日（水）が続くので、木曜に振替
+  // Respect for the Aged Day (Mon) → citizens' holiday (Tue) → Autumnal Equinox Day (Wed) in a row, so it moves
+  // to Thursday
   assert.deepEqual(
     ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25"].map((d) =>
       museum.isBusinessDay(d),
@@ -136,9 +137,9 @@ test("祝日の後（after-holiday）: 月曜休館・祝日の場合は次の�
     [true, true, true, false, true],
   );
   assert.equal(museum.dayInfoOn("2026-09-24").shiftedFrom, "2026-09-21");
-  // GW: みどりの日（月）→ こどもの日（火）→ 振替休日（水）→ 木曜に振替
+  // Golden Week: Greenery Day (Mon) → Children's Day (Tue) → substitute holiday (Wed) → moves to Thursday
   assert.equal(museum.dayInfoOn("2026-05-07").shiftedFrom, "2026-05-04");
-  // 祝日の扱いを「休業」にしても、振替は祝日の扱いに関係なく行う
+  // With holidays "closed" too, the move happens whatever the holiday handling
   const closedHolidays = closedOn([{ weekday: 1, holidayOverlapPolicy: "after-holiday" }], {
     holidayPolicy: "closed",
   });
@@ -162,7 +163,7 @@ test("振替先の日に、より上位の規則があればそちらが優先",
       closedDates: [{ date: "2026-11-24", name: "臨時休業" }],
     },
   );
-  const day = cal.dayInfoOn("2026-11-24"); // 勤労感謝の日（11/23 月）の振替先
+  const day = cal.dayInfoOn("2026-11-24"); // where Labor Thanksgiving Day (11/23, Mon) moves the rule to
   assert.equal(day.reason, "closed-date");
   assert.equal(day.name, "臨時休業");
   assert.equal(day.shiftedFrom, undefined);
@@ -216,7 +217,7 @@ test("対応年の始まりでも、振替元をさかのぼって例外にな�
   const cal = closedOn([{ weekday: 6, holidayOverlapPolicy: "after-holiday" }], {
     holidayPolicy: "open",
   });
-  // 1955-01-01（土）は元日。その前日は祝日の対応年の外
+  // 1955-01-01 (Sat) is New Year's Day. The day before is outside the supported years of the holidays
   assert.equal(cal.isBusinessDay("1955-01-01"), true);
   assert.equal(cal.dayInfoOn("1955-01-02").shiftedFrom, "1955-01-01");
   assert.equal(cal.isBusinessDay("1955-01-08"), false);

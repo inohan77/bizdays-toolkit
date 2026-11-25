@@ -1,9 +1,15 @@
-// 規則と設定の目録（テスト拡充案の T2）。乱数のテスト・オラクル・result-compare の生成器は、ここから設定を作る。
-// 公開の型（etc/api.md）の設定のキー・規則の形・選択肢の値が、すべてここにあるか、理由付きで除外されていることを
-// test/tools/catalog.test.ts が確かめる。規則の形やキーを足したら、ここにも足す（足さないと pnpm check が止まる）。
-// 値の候補を狭めると、test/tools/generator-features.test.ts が「前のバージョンの生成器が作っていた特徴を作らない」で止める。
+// The catalog of rules and options (T2 of the test expansion plan). The random tests, the oracle and the
+// generator of result-compare build their options from here.
+// test/tools/catalog.test.ts checks that every option key, rule shape and choice value of the public types
+// (etc/api.md) is here or excluded with a reason. A new rule shape or key is added here too (otherwise pnpm check
+// stops).
+// Narrowing the candidate values makes test/tools/generator-features.test.ts stop with "does not produce a
+// feature the previous version's generator produced".
 
-/** mulberry32: 種から決まる、再現可能な乱数（新しい依存を足さない。RELEASING.md の「品質の仕組みの理由」の「依存を足さない」） */
+/**
+ * mulberry32: reproducible random numbers decided by a seed (no new dependency; RELEASING.md, reasons for the
+ * quality mechanisms, "add no dependency")
+ */
 export function random(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -17,13 +23,13 @@ export function random(seed: number): () => number {
 
 export type Obj = Record<string, unknown>;
 
-/** 乱数から値を選ぶ道具 */
+/** Tools for picking values with random numbers */
 export interface Picker {
   readonly rand: () => number;
   int(min: number, max: number): number;
   chance(p: number): boolean;
   pick<T>(items: readonly T[]): T;
-  /** 重複のない 1〜max 個 */
+  /** 1 to max distinct items */
   some<T>(items: readonly T[], max: number): T[];
 }
 
@@ -42,46 +48,58 @@ export function picker(rand: () => number): Picker {
   };
 }
 
-/** 生成の文脈（呼び出し側ごとの値は CONTEXTS） */
+/** The context of generation (the values per caller are in CONTEXTS) */
 export interface Context {
-  /** 祝日に従属する規則（祝日・祝日の翌日・祝前日）を作るか（提供元があるときだけ意味がある） */
+  /**
+   * Whether rules that depend on holidays are made (holiday, day after, day before) (meaningful only with a
+   * provider)
+   */
   readonly holidays: boolean;
-  /** 祝日の種別と識別子の候補（提供元に合わせる。提供元にない値も混ぜてよい） */
+  /** Candidate holiday kinds and keys (matching the provider; values the provider lacks may be mixed in) */
   readonly kinds: readonly string[];
   readonly keys: readonly string[];
-  /** 日付の候補（起点・個別の日付）を作る年の範囲 */
+  /** The range of years for candidate dates (anchors, specific dates) */
   readonly years: readonly [from: number, to: number];
-  /** 有効期間の始まりを作る年の範囲（終わりは始まりから 400 日まで） */
+  /** The range of years for the start of an effective period (the end is up to 400 days after the start) */
   readonly effectiveYears: readonly [from: number, to: number];
-  /** 0.30.0 で入った形（週の第 n 営業日）を作るか（改名の前のバージョンと比べるときは作らない） */
+  /**
+   * Whether the shape that came in 0.30.0 is made (nth business day of a week) (not when comparing with a
+   * version from before the rename)
+   */
   readonly newShapes: boolean;
-  /** 入力の誤りの規則（曜日に合わない起点・自分の曜日を含む飛ばす曜日）を混ぜるか（前のバージョンとエラーコードを比べる） */
+  /**
+   * Whether rules with a wrong input are mixed in (an anchor on another weekday, skipped weekdays that include
+   * the rule's own) (to compare error codes with the previous version)
+   */
   readonly invalid: boolean;
   /**
-   * 個別の日付を、21 日までの期間のほかに、数か月〜数十年の期間・200 年を超える期間・1000-01-01 からの期間・9999-12-31 までの
-   * 期間でも作るか（0.32.8。診断が規則どうしを調べる走査の範囲（提供元なしでは 2001〜2028 年）の外の日付と、範囲を覆う
-   * 長い日付を作るため。年は years から選ぶ）。省略は作らない（今までの文脈の乱数の並びを変えない）
+   * Whether specific dates are also made as periods of months to decades, periods of more than 200 years, periods
+   * from 1000-01-01 and periods to 9999-12-31, besides periods of up to 21 days (0.32.8; to make dates outside
+   * the scan range in which the diagnostics examine rules against each other (2001-2028 without a provider) and
+   * long dates covering the range; the years come from `years`). Omission makes none (the random sequence of
+   * the existing contexts does not change)
    */
   readonly wideDates?: boolean;
 }
 
 /**
- * 生成器が意図して入力の誤りにした規則（作成が invalid-option になる）の印。印は規則のオブジェクトに付け、設定のキーは
- * 変えない。result-compare は、印のある規則を含む設定の作成の失敗を「意図した入力の誤り」、印のない設定の作成の失敗を
- * 「意図せず作成に失敗した設定」として分ける（エラーコードでは分けない。意図しない失敗が同じコードでも見分けるため）
+ * The mark of a rule the generator made wrong on purpose (creation gives invalid-option). The mark is on the
+ * rule object; the option keys do not change. result-compare tells a failed creation of options with a marked
+ * rule ("an intended wrong input") from one without ("options that unintentionally failed to be created") (not
+ * by error code, so that an unintended failure with the same code is still recognised)
  */
 const INTENDED_INVALID = new WeakSet<object>();
 const markInvalid = (rule: Obj): Obj => {
   INTENDED_INVALID.add(rule);
   return rule;
 };
-/** 規則に、生成器が意図して入力の誤りにした印があるか */
+/** Whether a rule has the mark of an intended wrong input */
 export const isIntendedInvalid = (rule: unknown): boolean =>
   typeof rule === "object" && rule !== null && INTENDED_INVALID.has(rule);
 
-/** 呼び出し側の文脈。生成器の到達性（test/tools/catalog.test.ts）は、ここに載せた文脈ごとに確かめる */
+/** The contexts of the callers. The reachability of the generator (test/tools/catalog.test.ts) is checked per context listed here */
 export const CONTEXTS = {
-  /** test/properties.test.ts（日本の提供元） */
+  /** test/properties.test.ts (the Japanese provider) */
   properties: {
     holidays: true,
     kinds: ["regular", "substitute", "citizens"],
@@ -91,7 +109,7 @@ export const CONTEXTS = {
     newShapes: true,
     invalid: false,
   },
-  /** test/diagnose-properties.test.ts（対応年の短い自作の提供元。提供元にない種別も混ぜる） */
+  /** test/diagnose-properties.test.ts (a home-made provider with few supported years; kinds it lacks are mixed in) */
   "diagnose-properties": {
     holidays: true,
     kinds: ["regular", "substitute", "citizens", "x"],
@@ -101,7 +119,7 @@ export const CONTEXTS = {
     newShapes: true,
     invalid: false,
   },
-  /** test/diagnose-properties.test.ts（提供元なし） */
+  /** test/diagnose-properties.test.ts (no provider) */
   "diagnose-properties（提供元なし）": {
     holidays: false,
     kinds: [],
@@ -112,8 +130,9 @@ export const CONTEXTS = {
     invalid: false,
   },
   /**
-   * test/diagnose-properties.test.ts（0.32.8。走査の範囲（2001〜2028 年）の外と、範囲を覆う長い個別の日付・有効期間。
-   * 対応年の短い自作の提供元と、提供元なし（呼び出し側が holidays を外す））
+   * test/diagnose-properties.test.ts (0.32.8: long specific dates and effective periods outside the scan range
+   * (2001-2028) and covering it; a home-made provider with few supported years, and no provider (the caller
+   * removes holidays))
    */
   "diagnose-properties（範囲の外と長い日付）": {
     holidays: true,
@@ -126,8 +145,9 @@ export const CONTEXTS = {
     wideDates: true,
   },
   /**
-   * test/diagnose-properties.test.ts（0.32.8。日本の提供元で、outOfRangePolicy: "throw" と unconfirmedHolidayPolicy: "throw" を
-   * 試す。日付と有効期間は対応年（1955〜2099 年）の両端の近くと、未確定の年（confirmedThrough の後）にも作る）
+   * test/diagnose-properties.test.ts (0.32.8: the Japanese provider with outOfRangePolicy: "throw" and
+   * unconfirmedHolidayPolicy: "throw". Dates and effective periods are also made near both ends of the supported
+   * years (1955-2099) and in unconfirmed years (after confirmedThrough))
    */
   "diagnose-properties（日本・throw）": {
     holidays: true,
@@ -139,7 +159,7 @@ export const CONTEXTS = {
     invalid: false,
     wideDates: true,
   },
-  /** test/diagnose-properties.test.ts（日本の提供元の全範囲を走査する） */
+  /** test/diagnose-properties.test.ts (scans the whole range of the Japanese provider) */
   "diagnose-properties（日本の全範囲）": {
     holidays: true,
     kinds: ["regular", "substitute", "citizens", "x"],
@@ -149,7 +169,21 @@ export const CONTEXTS = {
     newShapes: true,
     invalid: false,
   },
-  /** scripts/result-compare.ts（前のバージョンとの比較。提供元あり） */
+  /**
+   * scripts/promise-inventory.ts (the promise inventory). The caller chooses the years of dates and effective
+   * periods per options (inside, across and outside the diagnostic range) and whether long dates are made; the
+   * years here are those of the reachability check of the generator
+   */
+  "promise-inventory": {
+    holidays: true,
+    kinds: ["regular", "substitute", "x"],
+    keys: ["new-year", "christmas-day"],
+    years: [1955, 2099],
+    effectiveYears: [1955, 2099],
+    newShapes: true,
+    invalid: false,
+  },
+  /** scripts/result-compare.ts (comparison with the previous version; with providers) */
   "result-compare": {
     holidays: true,
     kinds: ["national", "regular", "substitute", "citizens", "special"],
@@ -172,47 +206,50 @@ export const CONTEXTS = {
   },
 } as const satisfies Record<string, Context>;
 
-/** 文脈の変形（result-compare の提供元なし・改名の前のバージョンとの比較） */
+/** Variants of a context (no provider for result-compare; comparison with a version from before the rename) */
 export const withoutHolidays = (ctx: Context): Context => ({ ...ctx, holidays: false });
 export const beforeRename = (ctx: Context): Context => ({ ...ctx, newShapes: false });
 
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
 
-/** 規則の形（公開の型の名前ごと）。make は、その形が持てるキーを確率で付けた規則を作る */
+/** A rule shape (one per name of a public type). `make` builds a rule with the keys the shape can have, by chance */
 export interface Shape {
-  /** etc/api.md の型の名前 */
+  /** The type name in etc/api.md */
   readonly pattern: string;
-  /** 形を見分けるキー */
+  /** The key that identifies the shape */
   readonly discriminator: string;
-  /** この形の規則に付けるキー（公開の型の never でないキーと突き合わせる） */
+  /** The keys given to a rule of this shape (compared with the keys of the public type that are not never) */
   readonly keys: readonly string[];
-  /** スケジュールの規則でだけ付けるキー（数える基準のカレンダー） */
+  /** Keys given only in rules of schedules (the calendar used as counting basis) */
   readonly scheduleKeys?: readonly string[];
-  /** 祝日に従属する形か */
+  /** Whether the shape depends on holidays */
   readonly holiday?: boolean;
-  /** 0.30.0 で入った形か */
+  /** Whether the shape came in 0.30.0 */
   readonly sinceRename?: boolean;
   make(p: Picker, ctx: Context): Obj;
 }
 
-/** 祝日と重なったときの扱い（values はその形が受け付ける値） */
+/** What happens when the rule falls on a holiday (`values` are the values the shape accepts) */
 const overlap = (p: Picker, rule: Obj, values: readonly string[]): void => {
   if (p.chance(0.5)) rule["holidayOverlapPolicy"] = p.pick(values);
 };
-/** "after-holiday" のときの飛ばす曜日（own は曜日の規則のその曜日。含めると invalid-option になるので除く） */
+/**
+ * The skipped weekdays with "after-holiday" (`own` is the weekday of a weekday rule; including it would be
+ * invalid-option, so it is left out)
+ */
 const skipWeekdays = (p: Picker, own?: number): number[] => {
   const pool = [0, 6, 3].filter((d) => d !== own);
   return p.some(pool, 2);
 };
-/** 月の絞り込み（規則どうしが重なりやすいよう、よくある組み合わせも混ぜる） */
+/** The month filter (common combinations are mixed in, so that rules overlap easily) */
 const months = (p: Picker, rule: Obj): void => {
   if (p.chance(0.5))
     rule["months"] = p.chance(0.6)
       ? [...p.pick([[2], [1, 2], [4], [2, 4, 6, 9, 11]])]
       : p.some(MONTHS, 5);
 };
-/** 祝日の規則の曜日の絞り込み（平日・土曜・週末のよくある形も混ぜる） */
+/** The weekday filter of a holiday rule (the common forms weekdays, Saturday and weekend are mixed in) */
 const weekdays = (p: Picker): number[] =>
   p.chance(0.5) ? [...p.pick([[1, 2, 3, 4, 5], [6], [0, 6]])] : p.some(WEEKDAYS, 3);
 const holidayFilters = (p: Picker, rule: Obj, ctx: Context): void => {
@@ -222,7 +259,7 @@ const holidayFilters = (p: Picker, rule: Obj, ctx: Context): void => {
   months(p, rule);
 };
 const iso = (t: number): string => new Date(t).toISOString().slice(0, 10);
-/** 文脈の年の範囲の日付 */
+/** A date in the context's range of years */
 const date = (p: Picker, years: readonly [number, number]): string => {
   const from = Date.UTC(years[0], 0, 1);
   return iso(
@@ -251,7 +288,7 @@ export const SHAPES: readonly Shape[] = [
         rule["nth"] = p.chance(0.5) ? p.pick([1, 2, 3, 4, 5, -1]) : p.some([1, 2, 3, 4, 5, -1], 2);
       else if (p.chance(0.35)) {
         rule["interval"] = p.pick([2, 3, 4]);
-        // 起点は曜日に合わせる（誤りを混ぜる文脈では、合わない起点も作る）
+        // The anchor is on the rule's weekday (a context that mixes in mistakes also makes one that is not)
         const anchor = Date.parse(`${date(p, ctx.years)}T00:00:00Z`);
         const shift = ctx.invalid && p.chance(0.2) ? p.int(1, 6) : 0;
         const day = new Date(anchor).getUTCDay();
@@ -262,7 +299,7 @@ export const SHAPES: readonly Shape[] = [
       overlap(p, rule, ["under-holiday", "over-holiday", "after-holiday"]);
       if (rule["holidayOverlapPolicy"] === "after-holiday" && p.chance(0.4))
         rule["skipWeekdays"] = skipWeekdays(p, weekday);
-      // 誤りを混ぜる文脈では、自分の曜日を含む飛ばす曜日（invalid-option）も作る
+      // A context that mixes in mistakes also makes skipped weekdays that include the rule's own (invalid-option)
       if (ctx.invalid && p.chance(0.1)) {
         rule["holidayOverlapPolicy"] = "after-holiday";
         rule["skipWeekdays"] = [weekday, ...(p.chance(0.5) ? [weekday === 0 ? 6 : 0] : [])];
@@ -327,7 +364,7 @@ export const SHAPES: readonly Shape[] = [
       const rule: Obj = {
         cycle,
         anchor: date(p, ctx.years),
-        // 周期の最後の日（cycle）も含める
+        // The last day of the cycle (cycle) is included too
         positions: p.some(
           Array.from({ length: cycle }, (_, i) => i + 1),
           2,
@@ -375,19 +412,20 @@ export const SHAPES: readonly Shape[] = [
   },
 ];
 
-/** すべての形に付けるキー（有効期間・名前） */
+/** The keys given to every shape (effective period, name) */
 export const COMMON_RULE_KEYS = ["effectiveFrom", "effectiveTo", "name"] as const;
 
 /**
- * 公開の型にあるが生成器が作らないキー（"型.キー"）と、その理由。test/tools/catalog.test.ts は、ここに載っていないキーを漏れとして、
- * 載っているのに etc/api.md にないキー・生成器が実際に作っているキーを、食い違いとして止める
+ * Keys that the public types have but the generator does not make ("Type.key"), with the reason.
+ * test/tools/catalog.test.ts stops a key missing here as an omission, and a key listed here that is not in
+ * etc/api.md or that the generator really makes as a discrepancy
  */
 export const EXCLUDED_KEYS: Readonly<Record<string, string>> = {
   "CalendarOptions.searchDayLimit":
     "作らない。理由: 探索の上限で、判定の結果を変えない（上限の検査は探索の関数のテストで確かめる）",
 };
 
-/** 選択肢の値の目録（公開の型の文字列の合併） */
+/** The catalog of choice values (the string unions of the public types) */
 export const POLICY_VALUES: Readonly<Record<string, readonly string[]>> = {
   HolidayPolicy: ["closed", "open", "ignore"],
   HolidayOverlapPolicy: ["under-holiday", "over-holiday", "after-holiday"],
@@ -395,15 +433,18 @@ export const POLICY_VALUES: Readonly<Record<string, readonly string[]>> = {
   unconfirmedHolidayPolicy: ["accept", "throw"],
 };
 
-/** 規則の形を見分ける */
+/** Identifies the shape of a rule */
 export const shapeOf = (rule: Obj): Shape | undefined =>
   SHAPES.find((s) => s.discriminator in rule);
 
-/** 文脈で作る形 */
+/** The shapes made in a context */
 export const shapesIn = (ctx: Context): Shape[] =>
   SHAPES.filter((s) => (ctx.holidays || !s.holiday) && (ctx.newShapes || !s.sinceRename));
 
-/** 有効期間（始まりだけ・終わりだけ・両方。終わりは始まりから 400 日まで。年をまたぐ期間も作る） */
+/**
+ * An effective period (start only, end only, or both; the end up to 400 days after the start; periods across a
+ * year end are made too)
+ */
 function effective(p: Picker, ctx: Context, rule: Obj): void {
   const r = p.rand();
   if (r >= 0.4) return;
@@ -416,7 +457,7 @@ function effective(p: Picker, ctx: Context, rule: Obj): void {
   }
 }
 
-/** 繰り返しの規則を 1 つ作る */
+/** Makes one recurring rule */
 export function randomRule(p: Picker, ctx: Context): Obj {
   const rule = p.pick(shapesIn(ctx)).make(p, ctx);
   effective(p, ctx, rule);
@@ -425,7 +466,8 @@ export function randomRule(p: Picker, ctx: Context): Obj {
 }
 
 /**
- * 規則の並び。覆う関係（shadowed）や数え方の重なりを作るため、前の規則の写し（そのまま・月や種別を絞ったもの）も混ぜる
+ * A list of rules. To create covering relations (shadowed) and overlapping counts, copies of earlier rules are
+ * mixed in (as they are, or with months or kinds narrowed)
  */
 export function randomRules(p: Picker, ctx: Context, max: number): Obj[] {
   const out: Obj[] = [];
@@ -444,14 +486,14 @@ export function randomRules(p: Picker, ctx: Context, max: number): Obj[] {
         if (typeof made["effectiveTo"] === "string" && made["effectiveTo"] < from)
           delete made["effectiveTo"];
       }
-      // 写しは元の規則の誤りを引き継ぐ
+      // A copy inherits the mistake of its source rule
       out.push(isIntendedInvalid(source) ? markInvalid(made) : made);
     } else out.push(randomRule(p, ctx));
   }
   return out;
 }
 
-/** 毎年の月日の候補（うるう日・年をまたぐ期間・{ date } の形も混ぜる） */
+/** Candidate annual dates (a leap day, a period across the year end and the { date } form are mixed in) */
 const ANNUAL: readonly unknown[] = [
   "01-01",
   "01-02",
@@ -474,7 +516,7 @@ const annualDate = (p: Picker, ctx: Context): unknown => {
     withPeriod["effectiveTo"] = addDays(withPeriod["effectiveFrom"] as string, p.int(0, 400));
   return withPeriod;
 };
-/** 個別の日付（日付か、21 日までの期間。文脈の wideDates があれば、長い期間も） */
+/** A specific date (a date or a period of up to 21 days; with wideDates of the context, long periods too) */
 const specificDate = (p: Picker, ctx: Context): unknown => {
   const from = date(p, ctx.years);
   if (ctx.wideDates) return wideDate(p, from);
@@ -482,8 +524,8 @@ const specificDate = (p: Picker, ctx: Context): unknown => {
 };
 const YEAR_DAYS = 366;
 /**
- * 文脈の wideDates の個別の日付: 日付 3 割、45 日までの期間 2 割、46 日〜3 年 1 割、9〜40 年 1 割、200 年を超える期間 1 割、
- * 1000-01-01 から 1 割、9999-12-31 まで 1 割
+ * The specific dates for wideDates of a context: a date 30%, a period of up to 45 days 20%, 46 days to 3 years
+ * 10%, 9 to 40 years 10%, more than 200 years 10%, from 1000-01-01 10%, to 9999-12-31 10%
  */
 const wideDate = (p: Picker, from: string): unknown => {
   const r = p.rand();
@@ -496,10 +538,10 @@ const wideDate = (p: Picker, from: string): unknown => {
   return { from, to: "9999-12-31" };
 };
 
-/** 営業日カレンダーの設定（提供元とタイムゾーンは呼び出し側が足す） */
+/** Options of a business calendar (the caller adds providers and the time zone) */
 export function randomCalendarOptions(p: Picker, ctx: Context): Obj {
   const o: Obj = { holidayPolicy: p.pick(POLICY_VALUES["HolidayPolicy"]!) };
-  // 定休日は省略（既定の土日）・空・どの曜日の組み合わせも作る
+  // Closed weekdays: omitted (the default: no closed weekday), empty, or any combination of weekdays
   if (p.chance(0.85)) o["closedWeekdays"] = WEEKDAYS.filter(() => p.chance(0.25));
   if (p.chance(0.8)) o["closedRecurringRules"] = randomRules(p, ctx, 4);
   if (p.chance(0.4)) o["openRecurringRules"] = randomRules(p, ctx, 2);
@@ -513,9 +555,11 @@ export function randomCalendarOptions(p: Picker, ctx: Context): Obj {
 }
 
 /**
- * スケジュールの設定（提供元とタイムゾーンは呼び出し側が足す）。値は "A"・"B"・"C"・"closed"。
- * 第 n 営業日の規則には、数える基準のカレンダーとして calendar に CALENDAR_REF を置く（呼び出し側が本物のカレンダーに置き換える）。
- * 誤りを混ぜる文脈では、calendar のない第 n 営業日の規則（invalid-option）も作る
+ * Options of a schedule (the caller adds providers and the time zone). The values are "A", "B", "C" and
+ * "closed".
+ * An nth-business-day rule gets CALENDAR_REF as `calendar`, the counting basis (the caller replaces it by a real
+ * calendar).
+ * A context that mixes in mistakes also makes an nth-business-day rule without calendar (invalid-option)
  */
 export function randomScheduleOptions(p: Picker, ctx: Context): Obj {
   const values = ["A", "B", "C", "closed"];
@@ -542,8 +586,9 @@ export function randomScheduleOptions(p: Picker, ctx: Context): Obj {
 }
 
 /**
- * スケジュールの個別の日付。半分ほどを期間（{ from, to }。同じ年の中の 2〜7 日）にする。期間にするかと長さは、日付から
- * 決める別の乱数で選ぶ（呼び出し側の乱数の流れを変えないため。変えると、ほかのテストが試す設定がすべて変わる）
+ * A specific date of a schedule. About half become a period ({ from, to }; 2-7 days within the same year).
+ * Whether it is a period and its length are chosen by a separate random generator decided by the date (so that
+ * the caller's random sequence does not change; changing it would change every option the other tests try)
  */
 function scheduleDate(d: string): Obj {
   let seed = 0;
@@ -555,16 +600,17 @@ function scheduleDate(d: string): Obj {
 }
 
 /**
- * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印。呼び出し側が、同じ提供元のカレンダーに置き換える（整合の検査と
- * 変形のテストは土日休み、result-compare は設定ごとに basisClosedWeekdays で選んだ定休日）
+ * The mark for the basis calendar of an nth-business-day rule of a schedule. The caller replaces it by a
+ * calendar with the same providers (closed weekends in the consistency checks and the metamorphic tests; in
+ * result-compare the closed weekdays chosen per options by basisClosedWeekdays)
  */
 export const CALENDAR_REF: Readonly<Obj> = Object.freeze({ calendarRef: "weekends-and-holidays" });
 
-/** "YYYY-MM-DD" に日数を足す */
+/** Adds days to "YYYY-MM-DD" */
 export const addDays = (d: string, n: number): string =>
   iso(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000);
 
-/** 生成した設定に現れた規則の形と、形ごとのキー（生成器の到達性の検査に使う） */
+/** The rule shapes that occur in generated options, and the keys per shape (for the reachability check of the generator) */
 export function shapeKeysIn(options: Obj): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   for (const k of ["closedRecurringRules", "openRecurringRules", "recurringRules"]) {

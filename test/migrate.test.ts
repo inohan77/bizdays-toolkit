@@ -1,4 +1,4 @@
-// 保存済みの設定の書き換え migrateCalendarOptions・migrateScheduleOptions（0.30.0）
+// Rewriting saved options: migrateCalendarOptions, migrateScheduleOptions (0.30.0)
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runInNewContext, runInThisContext } from "node:vm";
@@ -46,14 +46,14 @@ test("migrateCalendarOptions: 旧名のキーと値を書き換え、位置は�
     diagnoseCalendar(options).filter((d) => d.code === "deprecated-option"),
     [],
   );
-  // 書き換えた設定は、旧名の設定と同じ結果になる
+  // The rewritten options give the same results as the old-name options
   const before = createCalendar(stored as never);
   const after = createCalendar(options);
   assert.deepEqual(
     after.daysBetween("2026-01-01", "2026-12-31"),
     before.daysBetween("2026-01-01", "2026-12-31"),
   );
-  // 何度当てても同じ（新しい名前だけの設定では changes が空）
+  // Applying it again changes nothing (options with new names only have empty changes)
   const again = migrateCalendarOptions(options);
   assert.deepEqual(again.changes, []);
   assert.deepEqual(again.options, options);
@@ -101,7 +101,8 @@ test("移行: 旧名と新しい名前のどちらかが明示的な undefined �
       [{ path: "closedAnnual", from: "closedAnnual", to: "closedAnnualDates" }],
       label,
     );
-    // 作成と同じ読み方: 書き換えた設定の結果は元の設定と同じで、旧名の診断も残らない
+    // Read like creation: the results of the rewritten options equal the original ones and no old-name
+    // diagnostic is left
     assert.equal(
       createCalendar(out).isBusinessDay("2026-12-31"),
       createCalendar(options as never).isBusinessDay("2026-12-31"),
@@ -113,7 +114,7 @@ test("移行: 旧名と新しい名前のどちらかが明示的な undefined �
       label,
     );
   }
-  // 両方に値があれば、今までどおり衝突（書き換えない）
+  // With a value on both sides it is a conflict as before (not rewritten)
   const conflict = migrateCalendarOptions({
     closedAnnual: ["12-31"],
     closedAnnualDates: ["12-30"],
@@ -123,7 +124,7 @@ test("移行: 旧名と新しい名前のどちらかが明示的な undefined �
     [{ path: "closedAnnual", from: "closedAnnual", to: "closedAnnualDates", conflicting: true }],
   );
   assert.deepEqual(Object.keys(conflict.options), ["closedAnnual", "closedAnnualDates"]);
-  // changes の配列と要素は凍結する（options は保存し直すためのもので凍結しない）
+  // The array and elements of changes are frozen (options is meant to be saved again and is not)
   for (const result of [
     migrateCalendarOptions({ closedAnnual: [], maxSearchDays: 10 } as never),
     migrateScheduleOptions({ weekdayValues: [1, 1, 1, 1, 1, 1, 1], holiday: "weekday" } as never),
@@ -154,7 +155,7 @@ test('migrateScheduleOptions: holiday の "weekday" は holidayPolicy の "ignor
 });
 
 test("移行: 別の実行環境で作った設定も、入れ子の規則まで同じ実行環境の設定と同じに書き換え、入力の規則を共有しない（decisions.md の 8 番）", () => {
-  // [名前, 関数, 設定の式, 書き換えた後の規則の一覧のキー, 旧名の規則の一覧のキー]
+  // [name, function, expression of the options, key of the rule list after rewriting, key of the old-name rule list]
   const cases: [
     string,
     (o: object) => { options: object; changes: unknown },
@@ -178,7 +179,7 @@ test("移行: 別の実行環境で作った設定も、入れ子の規則まで
     ],
   ];
   for (const [name, migrate, source, to, from] of cases) {
-    // 同じ式を、この実行環境と別の実行環境で評価する
+    // The same expression is evaluated in this realm and in another one
     const local = runInThisContext(source) as Record<string, unknown>;
     const foreign = runInNewContext(source) as Record<string, unknown>;
     const a = migrate(local);
@@ -204,7 +205,7 @@ const nationalAfter = (options: Record<string, unknown>): unknown =>
 test('移行の kinds の "national" の書き換えは、作成と同じく、holidayProvider の null を旧名の holidays に読み替えない（decisions.md の 6 番）', () => {
   assert.deepEqual(nationalAfter({ holidayProvider: jp }), ["regular"]);
   assert.deepEqual(nationalAfter({ holidays: jp }), ["regular"]);
-  // null は「日本の提供元だけ」と読まない（作成の時点で例外になる誤った設定）
+  // null is not read as "only the Japanese provider" (wrong options that throw at creation)
   assert.deepEqual(nationalAfter({ holidayProvider: null, holidays: jp }), ["national"]);
 });
 

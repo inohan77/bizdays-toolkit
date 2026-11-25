@@ -33,7 +33,7 @@ test("toInstant: 暦日と時刻からタイムゾーンでの瞬間（Date）�
 });
 
 test("toInstant: 夏時間の飛びは後ろへ、重複は先のほう（Temporal の compatible と同じ）", () => {
-  // 英国: 2026-03-29 01:00 GMT → 02:00 BST（01:00〜01:59 は存在しない）
+  // UK: 2026-03-29 01:00 GMT → 02:00 BST (01:00-01:59 does not exist)
   assert.equal(
     toInstant("2026-03-29", "01:30", "Europe/London").toISOString(),
     "2026-03-29T01:30:00.000Z",
@@ -47,7 +47,7 @@ test("toInstant: 夏時間の飛びは後ろへ、重複は先のほう（Tempor
     toInstant("2026-03-29", "02:00", "Europe/London").toISOString(),
     "2026-03-29T01:00:00.000Z",
   );
-  // 英国: 2026-10-25 02:00 BST → 01:00 GMT（01:00〜01:59 が 2 回ある）
+  // UK: 2026-10-25 02:00 BST → 01:00 GMT (01:00-01:59 occurs twice)
   assert.equal(
     toInstant("2026-10-25", "01:30", "Europe/London").toISOString(),
     "2026-10-25T00:30:00.000Z",
@@ -61,7 +61,7 @@ test("toInstant: 夏時間の飛びは後ろへ、重複は先のほう（Tempor
     toInstant("2026-10-25", "02:00", "Europe/London").toISOString(),
     "2026-10-25T02:00:00.000Z",
   );
-  // オフセットの差が 30 分のゾーン（ロード・ハウ島: +10:30 ↔ +11:00）
+  // A zone whose offsets differ by 30 minutes (Lord Howe Island: +10:30 ↔ +11:00)
   assert.equal(
     toInstant("2026-10-04", "02:15", "Australia/Lord_Howe").toISOString(),
     "2026-10-03T15:45:00.000Z",
@@ -72,7 +72,7 @@ test("toInstant: 夏時間の飛びは後ろへ、重複は先のほう（Tempor
     "2026-04-04T14:45:00.000Z",
     "2 回ある。先のほう（+11:00）",
   );
-  // 南半球（ニュージーランド: 9 月に +12 → +13、4 月に戻る）
+  // The southern hemisphere (New Zealand: +12 → +13 in September, back in April)
   assert.equal(
     toInstant("2026-09-27", "02:30", "Pacific/Auckland").toISOString(),
     "2026-09-26T14:30:00.000Z",
@@ -104,7 +104,7 @@ test("toInstant: 夏時間のないゾーンと存在する時刻では、暦日
       const instant = toInstant(date, time, zone);
       const back = toDateTimeParts(instant, zone);
       if (back.date === date && back.time === time) continue;
-      // 存在しない時刻（飛び）だけが一致しない。そのときは、時刻が飛んだ分だけ後ろにずれている
+      // Only times that do not exist (a gap) differ; then the result is later by the length of the gap
       const wall = Date.UTC(
         Number(date.slice(0, 4)),
         Number(date.slice(5, 7)) - 1,
@@ -145,7 +145,7 @@ test("toInstant・instantOf: 入力の誤り", () => {
       `${date} ${time} ${zone}`,
     );
   }
-  // 暦日の文字列以外（Date・日時の文字列）は受け付けない
+  // Anything but a date string (a Date, a date-time string) is not accepted
   assert.throws(
     () => toInstant(new Date() as never, "10:00", "Asia/Tokyo"),
     (e: unknown) => isBizdaysError(e) && e.code === "invalid-date",
@@ -163,7 +163,7 @@ test("instantOf: カレンダー・スケジュールのタイムゾーンで。
     holidayProvider: jp,
     weekdayValues: [null, "09:00", "09:00", "09:00", "09:00", "09:00", null],
   });
-  // 次に開く瞬間
+  // The instant of the next opening
   const next = store.instantOf(addDays("2026-11-21", 2), store.valueOn("2026-11-24")!);
   assert.equal(next.toISOString(), "2026-11-23T00:00:00.000Z");
   const utc = createCalendar({ timeZone: "UTC" });
@@ -171,13 +171,14 @@ test("instantOf: カレンダー・スケジュールのタイムゾーンで。
 });
 
 test("瞬間の入力は、カレンダーのタイムゾーンで暦日・時刻になる（壁時計の日時と、それを +09:00 の瞬間にしたものが同じ）", () => {
-  // 0.31.3 で test/properties.test.ts の性質から移した（タイムゾーンを変えた再実行の対象をこのファイルに絞るため）。
-  // 乱数の 300 件の代わりに、1970 年より前（エポックからの値が負になる瞬間）、年の境目・月末・うるう日と、
-  // タイムゾーンを変えた再実行（scripts/test-tz.ts）の 2 つの
-  // タイムゾーンの夏時間の切り替え日（America/Los_Angeles の 2026-03-08・2026-11-01、Pacific/Chatham の 2026-04-05・
-  // 2026-09-27）を含む日の、1 日のすべての 7 分おきの時刻を確かめる
+  // Moved in 0.31.3 from a property of test/properties.test.ts (to limit the reruns with another time zone to
+  // this file).
+  // Instead of 300 random cases, every time at 7-minute steps of days that include: before 1970 (instants with a
+  // negative value from the epoch), year ends, month ends, a leap day, and the daylight-saving switch dates of
+  // the two time zones of the reruns (scripts/test-tz.ts): America/Los_Angeles 2026-03-08 and 2026-11-01,
+  // Pacific/Chatham 2026-04-05 and 2026-09-27
   const calendar = createCalendar({ holidayProvider: jp });
-  // 日本の夏時間（1948〜1951 年）の日は、壁時計の日時が +09:00 にならないので入れない
+  // Days of Japan's daylight saving time (1948-1951) are left out: their wall-clock date-time is not +09:00
   const days = [
     "1960-01-01",
     "1969-12-31",

@@ -1,8 +1,11 @@
-// 変形しても結果が同じ（テスト拡充案の T4）。文書で同じ意味だと約束している書き換えで、全日の結果と、位置を読み替えた
-// 診断が変わらないことを、目録の生成器（test/support/catalog.ts）の設定で確かめる。設定は、対応年の短い自作の提供元
-// （2025〜2027 年）・その提供元と別の自作の提供元の和集合・提供元なしを含む。
-// pnpm check は決まった抜き出しだけ（METAMORPHIC_FULL=1 で件数を増やせる）。どの関係も暦日だけで決まるので、タイムゾーンを
-// 変えた実行では飛ばす。関係ごとに試した設定の数を出し、0 件なら失敗にする。
+// The result stays the same under a transformation (T4 of the test expansion plan). For rewrites the documents
+// promise to mean the same, checks with the options of the catalog generator (test/support/catalog.ts) that the
+// results of all days, and the diagnostics with positions translated back, do not change. The options include a
+// home-made provider with few supported years (2025-2027), the union of that provider with another home-made
+// one, and no provider.
+// pnpm check runs a fixed sample only (METAMORPHIC_FULL=1 raises the numbers). Every relation follows from
+// calendar dates alone, so runs with another time zone skip them. The number of options tried is printed per
+// relation, and 0 fails.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -36,12 +39,15 @@ import { flagEnv } from "./support/env.ts";
 import { OLD_RULE_LISTS, RULE_LISTS, renamedTo, toOld } from "./support/old-names.ts";
 import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 
-/** 関係ごと・種類ごとの設定の数（期間の分割と並べ替えは、当てはまる設定が少なく軽いので 4 倍） */
+/**
+ * Number of options per relation and kind (splitting periods and reordering apply to few options and are light,
+ * so 4 times as many)
+ */
 const RUNS = flagEnv("METAMORPHIC_FULL") ? 40 : 5;
 const RUNS_LIGHT = RUNS * 4;
 type Kind = "calendar" | "schedule";
 
-/** 和集合に使う 2 つ目の自作の提供元（対応年は同じ。8 月 15 日と 11 月 3 日を祝日にする） */
+/** The second home-made provider for the union (the same supported years; August 15 and November 3 are holidays) */
 const SECOND_PROVIDER: HolidayProvider<string> = {
   id: "YY",
   timeZone: "UTC",
@@ -61,7 +67,7 @@ const SECOND_PROVIDER: HolidayProvider<string> = {
     })),
 };
 const SHORT_CTX: Context = CONTEXTS["diagnose-properties"];
-/** 提供元の組み合わせ（自作の提供元・和集合・提供元なし） */
+/** The combinations of providers (the home-made provider, the union, no provider) */
 const SOURCES: readonly (readonly HolidayProvider<string>[] | undefined)[] = [
   [SHORT_PROVIDER],
   [SHORT_PROVIDER, SECOND_PROVIDER],
@@ -75,7 +81,10 @@ const sourceOf = (providers: readonly HolidayProvider<string>[] | undefined): Ob
         timeZone: "UTC",
       };
 
-/** 目録の設定（提供元は run で回す。スケジュールの第 n 営業日の規則は、同じ提供元の土日休みのカレンダーで数える） */
+/**
+ * Options of the catalog (the providers rotate with `run`; nth-business-day rules of schedules count on a calendar
+ * with the same providers and closed weekends)
+ */
 function optionsOf(
   kind: Kind,
   rand: () => number,
@@ -83,7 +92,7 @@ function optionsOf(
   sources: readonly (readonly HolidayProvider<string>[] | undefined)[] = SOURCES,
 ): Obj {
   const providers = sources[run % sources.length];
-  // 日本の提供元は、日本の種別とキーの文脈で作る
+  // The Japanese provider is generated in the context of Japan's kinds and keys
   const ctx =
     providers === undefined
       ? withoutHolidays(SHORT_CTX)
@@ -108,7 +117,7 @@ function optionsOf(
 }
 
 type Made = { dayInfoOn(d: string): unknown; isBusinessDay?(d: string): boolean };
-/** 作成（設定の誤りで作成できなければ、エラーコードの文字列） */
+/** Creation (the error code as a string when the options are wrong and cannot be created) */
 function make(kind: Kind, options: Obj): Made | string {
   try {
     return kind === "calendar"
@@ -119,12 +128,15 @@ function make(kind: Kind, options: Obj): Made | string {
     return `error ${e.code}`;
   }
 }
-/** 結果と診断の読み替え（変形した側の位置と祝日の種別を、元の設定の位置と種別にする） */
+/** Translation of results and diagnostics (positions and holiday kinds of the transformed side back to the original's) */
 interface Mapping {
   readonly mapPath?: (path: string) => string;
   readonly fixKind?: (k: string) => string;
 }
-/** 1 日の結果（dayInfoOn の結果。合成の decidedBy・decidedByPath は除き、位置と祝日の種別は読み替える。投げればエラーコード） */
+/**
+ * The result of one day (the result of dayInfoOn; decidedBy and decidedByPath of a combination are left out, and
+ * positions and holiday kinds are translated back; the error code when it throws)
+ */
 function dayOf(made: Made, day: string, mapping: Mapping): string {
   try {
     const info = made.dayInfoOn(day) as Obj;
@@ -141,15 +153,16 @@ function dayOf(made: Made, day: string, mapping: Mapping): string {
     return `error ${e.code}`;
   }
 }
-/** 対応年の全日の結果 */
+/** The results of all days of the supported years */
 function resultsOf(made: Made | string, mapping: Mapping = {}): string[] {
   if (typeof made === "string") return [made];
   return SHORT_DAYS.map((d) => dayOf(made, d, mapping));
 }
 
 /**
- * 診断の要点（重さ・コード・読み替えた位置と、関わる項目の位置 relatedPath）。旧名の deprecated-option は除く（旧名で
- * 書いたことだけを知らせる）。relatedPath にも、位置と同じ読み替えを当てる
+ * The essentials of the diagnostics (severity, code, translated position and the position of the related item,
+ * relatedPath). deprecated-option of old names is left out (it only reports the use of an old name). relatedPath
+ * gets the same translation as the position
  */
 function diagnosticsOf(kind: Kind, options: Obj, mapPath: (path: string) => string = (p) => p) {
   const issues = kind === "calendar" ? diagnoseCalendar(options) : diagnoseSchedule(options);
@@ -166,7 +179,7 @@ function diagnosticsOf(kind: Kind, options: Obj, mapPath: (path: string) => stri
   ].sort();
 }
 
-/** 元の設定の結果と診断（同じ設定を複数の変形と比べるので、1 回だけ求める） */
+/** The results and diagnostics of the original options (compared with several transformations, so computed once) */
 const baselines = new WeakMap<Obj, { results: string[]; diagnostics: string[] }>();
 function baselineOf(kind: Kind, original: Obj): { results: string[]; diagnostics: string[] } {
   let b = baselines.get(original);
@@ -180,7 +193,10 @@ function baselineOf(kind: Kind, original: Obj): { results: string[]; diagnostics
   return b;
 }
 
-/** 変形した設定の結果と、位置を読み替えた診断が、元の設定と同じことを確かめる */
+/**
+ * Checks that the results of the transformed options, and their diagnostics with positions translated back, equal
+ * those of the original options
+ */
 function assertSame(
   kind: Kind,
   context: string,
@@ -202,7 +218,7 @@ function assertSame(
 }
 
 const tried: Record<string, number> = {};
-/** 件数の行を出し、0 件なら失敗にする（unit は数えたもの） */
+/** Prints the line with the count and fails on 0 (`unit` is what was counted) */
 const report = (relation: string, unit = "設定"): void => {
   console.log(`# ${relation}: 試した${unit} ${tried[relation] ?? 0} 件`);
   assert.ok((tried[relation] ?? 0) > 0, `${relation}: 試した${unit}が 0 件（空振り）`);
@@ -211,7 +227,7 @@ const count = (relation: string): void => {
   tried[relation] = (tried[relation] ?? 0) + 1;
 };
 
-/** 関係ごとに、カレンダーとスケジュールの目録の設定で試す */
+/** Tries a relation with the catalog options of calendars and schedules */
 function eachOptions(
   seed: number,
   kinds: readonly Kind[],
@@ -226,12 +242,14 @@ function eachOptions(
 }
 
 // ------------------------------------------------------------
-// 1. 旧名と新しい名前
+// 1. Old names and new names
 // ------------------------------------------------------------
 
 /**
- * 診断の位置の旧名を新しい名前にする。位置の各段を、その段の場所の旧名で引く: 先頭は設定の場所（source と、カレンダー・
- * スケジュール）、繰り返しの規則の一覧の要素の直下は規則の場所。ほかの段（毎年の日付の中など）は読み替えない
+ * Turns the old names in a diagnostic position into the new ones. Each segment of the position is looked up among
+ * the old names of its place: the first segment in the place of the options (source, and calendar or schedule),
+ * a segment directly under an element of a list of recurring rules in the place of rules. Other segments (inside
+ * an annual date, ...) are not translated
  */
 function pathToNew(kind: Kind): (path: string) => string {
   return (path) => {
@@ -261,29 +279,36 @@ test("変形 1 の位置の読み替え: 位置の各段を、その段の場所
   assert.equal(cal("openRecurring[2].onHolidayRule"), "openRecurringRules[2].holidayOverlapPolicy");
   assert.equal(cal("closedAnnual[1]"), "closedAnnualDates[1]");
   assert.equal(cal("holidays"), "holidayProvider");
-  // 規則の場所の旧名（day・onHolidayRule）は、規則の一覧の要素の直下でだけ読み替える
+  // The old names of the rule place (day, onHolidayRule) are translated only directly under an element of a list
+  // of rules
   assert.equal(cal("closedAnnualDates[0].day"), "closedAnnualDates[0].day");
   assert.equal(cal("closedDates[0].day"), "closedDates[0].day");
   assert.equal(cal("closedRecurringRules[0].kinds[0].day"), "closedRecurringRules[0].kinds[0].day");
-  // スケジュールの旧名 holiday は先頭でだけ読み替え、規則の holiday（祝日の規則）は読み替えない
+  // The old name `holiday` of schedules is translated only as the first segment; `holiday` of a rule (a holiday
+  // rule) is not
   assert.equal(sch("holiday"), "holidayPolicy");
   assert.equal(sch("recurring[1].holiday"), "recurringRules[1].holiday");
   assert.equal(sch("annual[0].day"), "annualDates[0].day");
-  // カレンダーの旧名はスケジュールでは読み替えない（逆も）
+  // Old names of calendars are not translated in schedules (and vice versa)
   assert.equal(sch("closedRecurring[0]"), "closedRecurring[0]");
   assert.equal(cal("weekly"), "weekly");
 });
 
-/** 関係 1 で使う提供元の組み合わせ（日本の提供元だけの設定を加える。kinds の旧い値 "national" を試すため） */
+/**
+ * The combinations of providers for relation 1 (options with only the Japanese provider are added, to try the
+ * old value "national" of kinds)
+ */
 const SOURCES_WITH_JAPAN: readonly (readonly HolidayProvider<string>[] | undefined)[] = [
   ...SOURCES,
   [jp as HolidayProvider<string>],
 ];
 
 /**
- * 関係 1 の決まった設定（日本の提供元だけ。規則の kinds に "regular" を持ち、毎回旧い値 "national" を試す）。
- * どちらも、祝日の種別が "regular" の日にだけ当たる規則なので、"regular" を誤った値に変えると結果が変わる
- * （変形 1 のテストの中で、"regular" を "substitute" に変えた結果と比べて確かめる）。スケジュールは holidayPolicy の "ignore"（旧い値 "weekday"）も試す
+ * Fixed options for relation 1 (only the Japanese provider; the rules have "regular" in kinds, so the old value
+ * "national" is tried every time).
+ * Both rules match only days whose holiday kind is "regular", so changing "regular" to a wrong value changes
+ * the result (checked inside the test of transformation 1 by comparing with the result of "regular" changed to
+ * "substitute"). The schedule also tries "ignore" of holidayPolicy (old value "weekday")
  */
 const JAPAN_FIXED: readonly { kind: Kind; options: Obj }[] = [
   {
@@ -307,7 +332,7 @@ const JAPAN_FIXED: readonly { kind: Kind; options: Obj }[] = [
     },
   },
 ];
-/** 規則の kinds の "regular" を、別の値に変える（決まった設定が "regular" に頼っていることを確かめるため） */
+/** Changes "regular" in kinds of the rules to another value (to check that the fixed options rely on "regular") */
 function withKind(options: Obj, kind: string): Obj {
   const out: Obj = { ...options };
   for (const list of RULE_LISTS)
@@ -323,7 +348,7 @@ function withKind(options: Obj, kind: string): Obj {
 test("変形 1: 旧名・旧い値で書いた設定は、新しい名前の設定と結果・診断が同じ（和集合を含む）", () => {
   const check = (kind: Kind, o: Obj, context: string): void => {
     const { options: old, oldValues } = toOld(o, kind);
-    // 旧名・旧い値に書き換わる項目のない設定は数えない
+    // Options without a property that is rewritten to an old name or old value are not counted
     if (JSON.stringify(old) === JSON.stringify(o)) return;
     assertSame(kind, context, o, old, { mapPath: pathToNew(kind) });
     count("変形 1（旧名）");
@@ -331,7 +356,8 @@ test("変形 1: 旧名・旧い値で書いた設定は、新しい名前の設�
   };
   JAPAN_FIXED.forEach(({ kind, options }, i) => {
     const context = `fixed=${i} ${kind}`;
-    // "regular" を誤った値（"substitute"）に変えると結果が変わる（旧い値の戻し方の誤りを見逃さない設定であること）
+    // Changing "regular" to a wrong value ("substitute") changes the result (the options are such that a wrong
+    // way of turning the old value back would not go unnoticed)
     assert.notDeepEqual(
       resultsOf(make(kind, withKind(options, "substitute"))),
       baselineOf(kind, options).results,
@@ -347,10 +373,10 @@ test("変形 1: 旧名・旧い値で書いた設定は、新しい名前の設�
 });
 
 // ------------------------------------------------------------
-// 2. 同じ id で包み直した提供元・種別を付け替えた提供元
+// 2. Providers wrapped again under the same id, and providers with replaced kinds
 // ------------------------------------------------------------
 
-/** 提供元を包み直す（同じ id。holidaysInYear は元の結果を写し、kind を付け替える） */
+/** Wraps a provider again (the same id; holidaysInYear copies the original result and replaces `kind`) */
 function wrapProvider(
   p: HolidayProvider<string>,
   kindOf: (k: string) => string = (k) => k,
@@ -364,7 +390,10 @@ function wrapProvider(
       p.holidaysInYear(year).map((h): Holiday<string> => ({ ...h, kind: kindOf(h.kind) })),
   };
 }
-/** 設定の提供元（スケジュールの第 n 営業日の規則の基準のカレンダーも）を包み直し、規則の kinds も付け替える */
+/**
+ * Wraps the providers of the options again (also those of the basis calendar of a schedule's nth-business-day
+ * rule) and replaces kinds of the rules too
+ */
 function rewrap(options: Obj, kindOf?: (k: string) => string): Obj {
   const providers = options["holidayProvider"];
   if (providers === undefined) return options;
@@ -395,7 +424,7 @@ test("変形 2: 同じ id で包み直した提供元と、種別を付け替え
   const back = (k: string): string => k.replace(/^renamed-/, "");
   eachOptions(20261122, ["calendar", "schedule"], (kind, o, context, run) => {
     if (o["holidayProvider"] === undefined) return;
-    // 1 つの設定に 2 つの変形を試すと重いので、試行ごとに交互に試す
+    // Two transformations per options are heavy, so they alternate by trial
     if (run % 2 === 0) {
       assertSame(kind, `${context} 包み直し`, o, rewrap(o));
       count("変形 2（包み直し）");
@@ -409,20 +438,26 @@ test("変形 2: 同じ id で包み直した提供元と、種別を付け替え
 });
 
 // ------------------------------------------------------------
-// 3. 期間の個別の日付と、それを分けた複数の日付
+// 3. A specific date with a period, and the dates it is split into
 // ------------------------------------------------------------
 
-/** 期間を持てる個別の日付の一覧（カレンダーの closedDates・openDates と、スケジュールの dates） */
+/** The lists of specific dates that can have a period (closedDates and openDates of calendars, dates of schedules) */
 const DATE_LISTS = ["closedDates", "openDates", "dates"];
 
-/** 期間を分けた結果: 分けた後の設定、分けた後の位置 → 元の位置の表、分けた期間の元の位置 → 分けた 2 つの位置 */
+/**
+ * The result of splitting periods: the options after the split, the table from positions after the split to
+ * original positions, and from the original position of a split period to its two positions
+ */
 interface Split {
   readonly options: Obj;
   readonly origin: Record<string, number[]>;
   readonly pieces: Map<string, [string, string]>;
 }
 
-/** 期間の個別の日付（from と to が違うもの）を、真ん中で 2 つに分ける（only を渡したら、その位置の期間だけを分ける） */
+/**
+ * Splits the specific dates with a period (from differs from to) in the middle into two (with `only`, only the
+ * periods at those positions)
+ */
 function splitPeriods(options: Obj, only?: ReadonlySet<string>): Split | undefined {
   const out: Obj = { ...options };
   const origin: Record<string, number[]> = {};
@@ -460,13 +495,16 @@ function splitPeriods(options: Obj, only?: ReadonlySet<string>): Split | undefin
 }
 
 /**
- * 分けた期間の元の診断が、分けた 2 つにどう出るか（コードごとの向きと、分けた後にどのコードとして出てよいか）。
- * - redundant: 元の期間が取り除けるなら、その一部も取り除けるので、両方に出る。ただし片方が同じ一覧のほかの期間に
- *   含まれると、その片方には redundant の代わりに shadowed が出る（取り除けることを、覆う項目まで示して言う診断）
- * - expired: どちらも元の終わり以前に終わるので、両方に出る
- * - out-of-range: 元の期間の一部が対応年の外にあるので、その部分を含む少なくとも一方に出る
- * - shadowed: 元の期間がほかの期間に含まれるなら、その一部も含まれるので、両方に出る。ただし覆っていた期間も分けると、
- *   片方がどちらにもすっかりは含まれなくなり、shadowed の代わりに redundant が出る（取り除けることは変わらない）
+ * How the original diagnostics of a split period appear on its two parts (the direction per code, and as which
+ * code it may appear after the split).
+ * - redundant: when the original period can be removed, so can a part of it: on both. But when one part is
+ *   contained in another period of the same list, that part gets shadowed instead of redundant (the diagnostic
+ *   that says it can be removed and names the covering item)
+ * - expired: both end on or before the original end: on both
+ * - out-of-range: part of the original period is outside the supported years: on at least the one containing it
+ * - shadowed: when the original period is contained in another period, so is a part of it: on both. But when the
+ *   covering period is split too, one part may no longer be contained completely in either, and redundant
+ *   appears instead of shadowed (that it can be removed does not change)
  */
 const ORIGINAL_SPREAD: Readonly<
   Record<string, { readonly spread: "both" | "either"; readonly as: readonly string[] }>
@@ -477,9 +515,10 @@ const ORIGINAL_SPREAD: Readonly<
   shadowed: { spread: "both", as: ["shadowed", "redundant"] },
 };
 /**
- * relatedPath を比べない場合と理由。元の診断が、分けた後に ORIGINAL_SPREAD の別のコードとして出たとき（元の redundant が
- * shadowed として出る、元の shadowed が redundant として出る）は、関わる項目があるかどうかがコードで決まるので、
- * relatedPath は比べない（件数の行「コードが変わり relatedPath を比べない項目」）
+ * When relatedPath is not compared, and why. When an original diagnostic appears after the split as another code
+ * of ORIGINAL_SPREAD (an original redundant as shadowed, an original shadowed as redundant), whether there is a
+ * related item depends on the code, so relatedPath is not compared (the count line for items whose code changed
+ * and whose relatedPath is not compared)
  */
 const RELATED_NOT_COMPARED = {
   label: "変形 3（コードが変わり relatedPath を比べない項目）",
@@ -487,7 +526,7 @@ const RELATED_NOT_COMPARED = {
     "診断のコードが変わると、関わる項目（relatedPath）があるかどうかも変わる（shadowed は覆う項目を指し、redundant は指さない）",
 } as const;
 
-/** 分けた後に、元の期間になかった診断が新しく出てよいコードと理由 */
+/** Codes that may newly appear after the split although the original period did not have them, with the reason */
 const NEW_AFTER_SPLIT: Readonly<Record<string, string>> = {
   redundant: "分けた片方だけが、ほかの設定（定休日など）で休業日の日だけからなり、取り除ける",
   "out-of-range":
@@ -503,16 +542,17 @@ const issuesOf = (kind: Kind, options: Obj): Issue[] =>
     .map((d) => ({ severity: d.severity, code: d.code, path: d.path, relatedPath: d.relatedPath }));
 const line = (d: Issue): string =>
   `${d.severity} ${d.code} ${d.path}` + (d.relatedPath === undefined ? "" : ` -> ${d.relatedPath}`);
-/** 診断の位置の先頭の項目（closedDates[3] など）と、その下の位置 */
+/** The first item of a diagnostic position (closedDates[3], ...) and the position below it */
 const headOf = (path: string): { head: string; rest: string } => {
   const m = /^([A-Za-z]+\[\d+\])(.*)$/.exec(path);
   return m ? { head: m[1]!, rest: m[2]! } : { head: path, rest: "" };
 };
 
 /**
- * 分けた期間のほかの位置で、診断が変わってよい場合と理由。元の診断が、分けた期間を覆う側として指す shadowed
- * （relatedPath が分けた期間）なら、分けた後は redundant になってよい。覆っていた期間が分かれると、どちらの片方にも
- * すっかりは含まれなくなることがあるが、取り除けることは変わらないため
+ * When a diagnostic at another position than the split period may change, and why. An original shadowed that
+ * points at the split period as the covering one (relatedPath is the split period) may become redundant after
+ * the split: once the covering period is split, the other may no longer be contained completely in either part,
+ * but that it can be removed does not change
  */
 const OTHERS_MAY_CHANGE = {
   from: "shadowed",
@@ -522,18 +562,20 @@ const OTHERS_MAY_CHANGE = {
 } as const;
 
 /**
- * 決まった設定（定休日の土日と、期間の個別の日付）。分けた片方だけ・両方が取り除ける場合、対応年の外の場合、
- * 分けた期間に覆われていたほかの期間がある場合と、スケジュールの期間（目録の生成器はスケジュールの期間を作らない）を必ず含める
+ * Fixed options (closed weekends and specific dates with periods). They always include the cases where only one
+ * part or both parts can be removed, a period outside the supported years, another period that was covered by
+ * the split period, and a period of a schedule (the catalog generator makes no periods for schedules)
  */
 const SPLIT_FIXED: readonly { kind: Kind; options: Obj; only?: ReadonlySet<string> }[] = [
   ...[
-    // 土日だけの期間（元が redundant → 分けた両方が redundant）
+    // A period of a weekend only (the original is redundant → both parts are redundant)
     { closedDates: [{ from: "2025-03-01", to: "2025-03-02" }] },
-    // 土曜日〜火曜日（元は取り除けない → 分けた前半の土日だけが新しく redundant）
+    // Saturday to Tuesday (the original cannot be removed → only the first part, the weekend, is newly redundant)
     { closedDates: [{ from: "2025-03-01", to: "2025-03-04" }] },
-    // 対応年の終わりをまたぐ期間（元が out-of-range → 後半だけに out-of-range）
+    // A period across the end of the supported years (the original is out-of-range → only the second part is)
     { closedDates: [{ from: "2027-12-29", to: "2028-01-03" }] },
-    // 2 つ目の期間は 1 つ目に含まれ（shadowed）、1 つ目の真ん中（03-05 と 03-06 の間）をまたぐ
+    // The second period is contained in the first (shadowed) and spans the middle of the first (between 03-05
+    // and 03-06)
     {
       closedDates: [
         { from: "2025-03-03", to: "2025-03-07" },
@@ -549,7 +591,8 @@ const SPLIT_FIXED: readonly { kind: Kind; options: Obj; only?: ReadonlySet<strin
       ...o,
     } as Obj,
   })),
-  // 上の 2 つの期間で、1 つ目だけを分ける（分けていない 2 つ目は、shadowed から redundant になる。OTHERS_MAY_CHANGE）
+  // Of the two periods above only the first is split (the second, not split, turns from shadowed to redundant.
+  // OTHERS_MAY_CHANGE)
   {
     kind: "calendar",
     options: {
@@ -563,7 +606,8 @@ const SPLIT_FIXED: readonly { kind: Kind; options: Obj; only?: ReadonlySet<strin
     },
     only: new Set(["closedDates[0]"]),
   },
-  // 分けた期間の後ろにある、分けていない期間どうしの shadowed（分けると番号がずれるので、relatedPath も読み替えて比べる）
+  // shadowed between periods that are not split and come after the split period (the split shifts the numbers, so
+  // relatedPath is translated before comparing)
   {
     kind: "calendar",
     options: {
@@ -579,9 +623,9 @@ const SPLIT_FIXED: readonly { kind: Kind; options: Obj; only?: ReadonlySet<strin
     only: new Set(["closedDates[0]"]),
   },
   ...[
-    // スケジュールの土日だけの期間（元が redundant → 分けた両方が redundant）
+    // A weekend-only period of a schedule (the original is redundant → both parts are redundant)
     [{ from: "2025-03-01", to: "2025-03-02", value: "closed" }],
-    // スケジュールの土曜日〜火曜日（分けた前半の土日だけが新しく redundant）
+    // Saturday to Tuesday of a schedule (only the first part, the weekend, is newly redundant)
     [{ from: "2025-03-01", to: "2025-03-04", value: "closed" }],
   ].map((dates) => ({
     kind: "schedule" as Kind,
@@ -616,13 +660,14 @@ test("変形 3: 期間の個別の日付を分けても結果が同じで、診�
       pieceOf.set(a, original);
       pieceOf.set(b, original);
     }
-    // 分けた期間のほかの位置の診断は、完全に同じ（全日の結果が同じなので、変わる理由がない）。ただし、分けた期間を
-    // 覆う側として指していた shadowed は、分けた後に redundant になってよい（OTHERS_MAY_CHANGE）
+    // The diagnostics at positions other than the split period are exactly the same (the results of all days are
+    // the same, so there is no reason to change). But a shadowed that pointed at the split period as the covering
+    // one may become redundant after the split (OTHERS_MAY_CHANGE)
     const othersBefore = before
       .filter((d) => !split.pieces.has(headOf(d.path).head))
       .map(line)
       .sort();
-    // 変わってよい項目の位置と、元の診断（戻すときは元の重さを使う）
+    // The positions of the items that may change, with the original diagnostic (its severity is used when turning back)
     const mayChange = new Map(
       before
         .filter(
@@ -654,10 +699,10 @@ test("変形 3: 期間の個別の日付を分けても結果が同じで、診�
       othersBefore,
       `${context}: 分けた期間のほかの位置の診断が変わった`,
     );
-    // 分けた期間の診断は、コードごとの向きに従う
+    // The diagnostics of a split period follow the direction per code
     for (const [original, [a, b]] of split.pieces) {
-      // 分けた期間の診断は、コードと、その項目の下の位置と、relatedPath（分けた側は読み替える）で比べる
-      // （shadowed と redundant は重さが違うので、重さは見ない）
+      // The diagnostics of a split period are compared by code, the position below the item and relatedPath
+      // (translated on the split side) (shadowed and redundant differ in severity, so severity is not compared)
       type Entry = { code: string; rest: string; rel: string };
       const at = (list: Issue[], head: string, mapped: boolean): Entry[] =>
         list
@@ -675,7 +720,8 @@ test("変形 3: 期間の個別の日付を分けても結果が同じで、診�
       for (const d of orig) {
         const rule = ORIGINAL_SPREAD[d.code];
         assert.ok(rule !== undefined, `${context}: ${original} の ${d.code} の向きを決めていない`);
-        // 同じコードなら relatedPath まで同じ。別のコードとして出た（RELATED_NOT_COMPARED）なら relatedPath は比べない
+        // With the same code, relatedPath is the same too. When it appeared as another code
+        // (RELATED_NOT_COMPARED), relatedPath is not compared
         const matches = (e: Entry): boolean =>
           e.rest === d.rest && (e.code === d.code ? e.rel === d.rel : rule.as.includes(e.code));
         const inA = first.filter(matches);
@@ -719,12 +765,12 @@ test("変形 3: 期間の個別の日付を分けても結果が同じで、診�
 });
 
 // ------------------------------------------------------------
-// 4. 順番が意味を持たない配列の並べ替え
+// 4. Reordering arrays whose order has no meaning
 // ------------------------------------------------------------
 
 const UNORDERED = ["closedWeekdays", "kinds", "keys", "weekdays"];
 
-/** closedWeekdays と、規則の kinds・keys・weekdays を逆順にする（並びが変わった配列があれば返す） */
+/** Reverses closedWeekdays and kinds, keys and weekdays of the rules (returned when an array's order changed) */
 function reverseUnordered(options: Obj): Obj | undefined {
   let changed = false;
   const reverse = (o: Obj): Obj => {
@@ -743,7 +789,7 @@ function reverseUnordered(options: Obj): Obj | undefined {
     if (Array.isArray(out[list])) out[list] = (out[list] as Obj[]).map(reverse);
   return changed ? out : undefined;
 }
-/** 並べ替えた配列の中の位置は数えない（closedWeekdays[2] → closedWeekdays[]） */
+/** Positions inside a reordered array are not counted (closedWeekdays[2] → closedWeekdays[]) */
 const withoutInnerIndex = (path: string): string =>
   path.replace(new RegExp(`\\b(${UNORDERED.join("|")})\\[\\d+\\]`, "g"), "$1[]");
 
@@ -772,10 +818,13 @@ test("変形 4: 順番が意味を持たない配列（closedWeekdays・kinds・
 });
 
 // ------------------------------------------------------------
-// 5. 設定の JSON での往復
+// 5. A round trip of the options through JSON
 // ------------------------------------------------------------
 
-/** 設定を JSON にして読み戻す（JSON にできない提供元と基準のカレンダーは、保存する利用者と同じく読み戻した後に付け直す） */
+/**
+ * Turns the options into JSON and reads them back (providers and basis calendars, which cannot become JSON, are
+ * attached again after reading back, as a user who saves options does)
+ */
 function viaJson(options: Obj): Obj {
   const { holidayProvider, ...rest } = options;
   const calendars: unknown[] = [];
@@ -804,13 +853,16 @@ test("変形 5: 設定を JSON で往復しても（提供元と基準のカレ�
 });
 
 // ------------------------------------------------------------
-// 7. 省略と明示的な undefined
+// 7. Omission and an explicit undefined
 // ------------------------------------------------------------
 
 const DATE_ENTRY_KEYS = ["date", "from", "to", "name"];
 const ANNUAL_LISTS = ["closedAnnualDates", "annualDates"];
 
-/** 書いていない既知の項目（旧名は除く）を、すべて明示的な undefined で足す（設定・規則・個別の日付・毎年の月日） */
+/**
+ * Adds every known property that is not written (old names left out) as an explicit undefined (options, rules,
+ * specific dates, annual dates)
+ */
 function withExplicitUndefined(kind: Kind, options: Obj): Obj {
   const fill = (o: Obj, keys: readonly string[]): Obj => {
     const out: Obj = { ...o };
@@ -844,7 +896,10 @@ test("変形 7: 書いていない項目を明示的な undefined で書いて�
   report("変形 7（明示的な undefined）");
 });
 
-/** スケジュールの値の位置（曜日・祝日・個別の日付・毎年の月日・繰り返しの規則）で、値 target を undefined にした設定 */
+/**
+ * The options with the value `target` turned into undefined at the value positions of a schedule (weekday,
+ * holiday, specific dates, annual dates, recurring rules)
+ */
 function withUndefinedValue(options: Obj, target: string): Obj {
   const swap = (v: unknown): unknown => (v === target ? undefined : v);
   const o: Obj = { ...options };
@@ -858,7 +913,7 @@ function withUndefinedValue(options: Obj, target: string): Obj {
   return o;
 }
 
-/** スケジュールに現れる文字列の値（曜日・祝日・規則の value） */
+/** The string values that occur in a schedule (weekday, holiday, `value` of rules) */
 function valuesIn(options: Obj): Set<string> {
   const out = new Set<string>();
   const add = (v: unknown): void => void (typeof v === "string" && out.add(v));
@@ -908,7 +963,7 @@ test("変形 8: スケジュールの値の 1 つを、書いたすべての位�
 });
 
 // ------------------------------------------------------------
-// 6. 同じ設定から作ったカレンダーの合成と元のカレンダー
+// 6. The combination of calendars made from the same options, and the original calendar
 // ------------------------------------------------------------
 
 test("変形 6: 同じ設定から作った 2 つのカレンダーの合成は、元のカレンダーと結果が同じ（decidedBy・decidedByPath を除く）", () => {
@@ -917,9 +972,10 @@ test("変形 6: 同じ設定から作った 2 つのカレンダーの合成は�
     const twin = make("calendar", o);
     if (typeof calendar === "string" || typeof twin === "string") return;
     for (const open of ["all", "any"] as const) {
-      // 合成は 2 つ以上の別のカレンダーを受ける（1 つだけ・同じオブジェクトの 2 つは invalid-argument）ので、
-      // 同じ設定から作った 2 つのカレンダーを合成する。比べる dayInfoOn の結果からは、合成したカレンダーにしかない
-      // decidedBy・decidedByPath だけを外す（dayOf）。holiday は、同じ提供元のオブジェクトを 1 つに数えるので同じになり、比べる
+      // A combination takes two or more distinct calendars (one alone, or the same object twice, is
+      // invalid-argument), so two calendars made from the same options are combined. From the compared results
+      // of dayInfoOn only decidedBy and decidedByPath, which only a combined calendar has, are left out (dayOf).
+      // `holiday` is the same because the same provider object counts once, and is compared
       const combined = combineCalendars([calendar as never, twin as never], {
         open,
       }) as unknown as Made;

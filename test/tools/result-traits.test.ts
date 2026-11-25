@@ -1,6 +1,9 @@
-// result-compare（scripts/result-compare.ts）が使う test/support/result-cases.ts の部品: 意図した差分を許す単位にする設定の特徴（traitsOfCase）と、
-// スケジュールの基準のカレンダーの作り方（withCalendars・basisClosedWeekdays。前のバージョンと今回のバージョンを同じ作り方で比べるので、result-compare では
-// 壊れても差分にならず、基準の定休日の特徴は生成範囲の記録（0.30.3）にないので、生成範囲の検査でも見張れない。そのため、ここで直接確かめる）。
+// The parts of test/support/result-cases.ts used by result-compare (scripts/result-compare.ts): the features of
+// options that are the unit for allowing intended differences (traitsOfCase), and how the basis calendar of a
+// schedule is built (withCalendars, basisClosedWeekdays). The previous and the current version are compared
+// built the same way, so a break would be no difference in result-compare; and the features of the basis's
+// closed weekdays are not in the record of the generated range (0.30.3), so that check cannot watch them either.
+// Therefore they are checked here directly.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, isBizdaysError } from "../../src/index.ts";
@@ -33,10 +36,11 @@ const NARROW = "schedule-counting-basis-narrower-than-scan";
 test("schedule-counting-basis-narrower-than-scan: 対応年が走査の範囲を覆わない基準のカレンダーが投げる設定にだけ付く", () => {
   assert.ok(traitsOfCase(schedule(["sg"])).includes(NARROW));
   assert.ok(traitsOfCase(schedule(["sg"], { outOfRangePolicy: "throw" })).includes(NARROW));
-  // 基準のカレンダーはスケジュールの outOfRangePolicy を受け継ぐ。"ignore" の基準は投げないので付けない
+  // The basis calendar inherits the schedule's outOfRangePolicy. An "ignore" basis does not throw, so the trait
+  // is not assigned
   assert.equal(basisOutOfRangePolicy(schedule(["sg"], { outOfRangePolicy: "ignore" })), "ignore");
   assert.ok(!traitsOfCase(schedule(["sg"], { outOfRangePolicy: "ignore" })).includes(NARROW));
-  // 対応年が走査の範囲を覆う提供元・基準のカレンダーのない設定には付けない
+  // Not assigned to a provider whose supported years cover the scan range, or to options without a basis calendar
   assert.ok(!traitsOfCase(schedule(["jp"])).includes(NARROW));
   assert.ok(
     !traitsOfCase({ ...schedule(["sg"]), options: { weekdayValues: [] } }).includes(NARROW),
@@ -44,12 +48,13 @@ test("schedule-counting-basis-narrower-than-scan: 対応年が走査の範囲を
 });
 
 test("withCalendars: 基準のカレンダーは、スケジュールの outOfRangePolicy を受け継ぐ（新しい名前と旧名の両方）", () => {
-  // 今の src をバージョンの部品として渡す（result-compare は前のバージョンと今回のバージョンの dist を渡す）
+  // The current src is passed as the parts of a version (result-compare passes the dist of the previous and of
+  // the current version)
   const lib = {
     createCalendar: (options: Record<string, unknown>) => createCalendar(options),
     providers: new Map<string, unknown>([["sg", sg]]),
   };
-  /** 基準のカレンダーで、シンガポールの対応年（2020〜2027 年）の外の日を問う（投げたらエラーコード） */
+  /** Asks the basis calendar about a day outside Singapore's supported years (2020-2027) (the error code when it throws) */
   const outside = (c: Case, naming: "new" | "old"): string => {
     const key = naming === "old" ? "recurring" : "recurringRules";
     const options = naming === "old" ? { [key]: c.options["recurringRules"] } : c.options;
@@ -76,7 +81,7 @@ test("withCalendars: 基準のカレンダーは、スケジュールの outOfRa
   }
 });
 
-/** 基準のカレンダーの定休日を問う（今の src をバージョンの部品として渡す） */
+/** Asks about the closed weekdays of the basis calendar (the current src is passed as the parts of a version) */
 const basisOf = (c: Case, naming: "new" | "old"): { isBusinessDay(d: string): boolean } => {
   const lib = {
     createCalendar: (options: Record<string, unknown>) => createCalendar(options),
@@ -87,7 +92,10 @@ const basisOf = (c: Case, naming: "new" | "old"): { isBusinessDay(d: string): bo
   const made = withCalendars(lib, c, naming, options);
   return (made[key] as { calendar: { isBusinessDay(d: string): boolean } }[])[0]!.calendar;
 };
-/** basisClosedWeekdays が want を返す id の設定（見つからなければ undefined。選び方が壊れて、その形を返さなくなったとき） */
+/**
+ * The options with an id for which basisClosedWeekdays returns `want` (undefined when none is found: the choice
+ * broke and no longer returns that form)
+ */
 const caseWithBasis = (want: string): Case | undefined => {
   for (let i = 0; i < 200; i++) {
     const c = { ...schedule(["sg"]), id: `basis-${i}` };
@@ -103,7 +111,7 @@ test("withCalendars: 基準のカレンダーは basisClosedWeekdays の定休�
   assert.ok(weekend !== undefined, "basisClosedWeekdays が土日を返す設定がない");
   assert.ok(none !== undefined, "basisClosedWeekdays が定休日を書かない設定がない");
   for (const naming of ["new", "old"] as const) {
-    // 2026-01-03 は土曜（シンガポールの祝日ではない）
+    // 2026-01-03 is a Saturday (not a holiday in Singapore)
     assert.equal(
       basisOf(weekend, naming).isBusinessDay("2026-01-03"),
       false,
@@ -150,7 +158,7 @@ test("0.32.8 の特徴: 数える規則と長い・範囲の外の日付、uncon
   });
   const counting = { closedRecurringRules: [{ businessDayOfMonth: 1 }] };
   const LONG = "counting-rules-with-long-or-outside-dates";
-  // 走査の範囲（2001〜2028 年）の端の月・外にかかる日付と、28 日を超える日付
+  // Dates touching an edge month of the scan range (2001-2028) or outside it, and dates longer than 28 days
   for (const d of [
     "2029-01-05",
     "2000-12-31",
@@ -162,7 +170,7 @@ test("0.32.8 の特徴: 数える規則と長い・範囲の外の日付、uncon
       traitsOfCase(calendar({ ...counting, closedDates: [d] })).includes(LONG),
       JSON.stringify(d),
     );
-  // 範囲の中の短い日付、数える規則のない設定、スケジュールには付けない
+  // Not assigned to short dates inside the range, options without a counting rule, or schedules
   for (const d of ["2001-02-01", "2028-11-30", { from: "2026-01-01", to: "2026-01-28" }])
     assert.ok(
       !traitsOfCase(calendar({ ...counting, openDates: [d] })).includes(LONG),
@@ -175,7 +183,7 @@ test("0.32.8 の特徴: 数える規則と長い・範囲の外の日付、uncon
       options: { ...schedule([]).options, dates: [{ date: "2029-01-05", value: "X" }] },
     }).includes(LONG),
   );
-  // unconfirmedHolidayPolicy: "throw" だけ
+  // Only unconfirmedHolidayPolicy: "throw"
   assert.ok(
     traitsOfCase(schedule(["jp"], { unconfirmedHolidayPolicy: "throw" })).includes(
       "unconfirmed-holidays-throw",
@@ -186,7 +194,7 @@ test("0.32.8 の特徴: 数える規則と長い・範囲の外の日付、uncon
       "unconfirmed-holidays-throw",
     ),
   );
-  // 定休日（省略は土日）と同じ扱いの毎週の曜日の規則だけ
+  // Only a weekly weekday rule that treats the weekday like the closed weekdays (omitted: weekends)
   const K6 = "counting-rule-with-weekly-rule-as-closed-weekdays";
   assert.ok(
     traitsOfCase(
@@ -216,7 +224,7 @@ test("0.32.8 の特徴: 数える規則と長い・範囲の外の日付、uncon
       calendar({ closedRecurringRules: [{ weekday: 6, nth: 1 }, { businessDayOfMonth: 1 }] }),
     ).includes(K6),
   );
-  // 固定の設定のうち 0.32.8 の形は、それぞれの特徴を持つ
+  // Of the fixed options, the forms of 0.32.8 have their respective traits
   const fixed = new Map(fixedCases().map((c) => [c.id, traitsOfCase(c)]));
   assert.ok(
     fixed.get("fixed-counting-closed-date-business-day")!.includes("counting-rules-with-dates"),

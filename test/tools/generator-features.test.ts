@@ -1,14 +1,19 @@
-// 生成範囲を減らさない。3 つの呼び出し側が今作る設定の特徴が、0.30.3 の呼び出し側が実際に作った設定の特徴
-// （test/fixtures/generator-features-0.30.3/。作り方は scripts/record-generator-features.ts）を、呼び出し側ごとに
-// すべて含むことを確かめる。比べ方は test/support/features-compare.ts の 1 か所で、スクリプトの --check と同じ。
-// 呼び出し側の設定は test/support/sites.ts の関数で、呼び出し側と同じ種と試行の数で作り、3 つの呼び出し側とも設定の並びまで
-// 呼び出し側と同じ（properties は、設定を作る乱数を性質の名前から決まる種の列に分けている）。実際の呼び出し側が
-// その関数を同じ文脈で呼んでいることは、CI の generator-features ジョブ（スクリプトの --worktree --check）で確かめる。
-// 拾える特徴の数は、properties（414 件）と diagnose-properties（425 件）はテストとスクリプトで同じ。result-compare
-// （テスト 487 件・スクリプト 563 件、0.30.5 で調べた差 76 件）は、
-// 差がすべて問い合わせた日付の特徴（scan[…]）で、スクリプトだけが、スケジュールの第 n 営業日の規則の基準のカレンダー
-// （result-compare が作る提供元だけのカレンダー）にライブラリが問い合わせた日付（提供元の対応年に広がる）を拾うため。
-// 設定だけを作るこのテストには、その問い合わせが出ない。設定の特徴（scan 以外）は両方で同じ。
+// The generated range must not shrink. Checks that the features of the options the three callers build now
+// include, per caller, every feature of the options the callers of 0.30.3 really built
+// (test/fixtures/generator-features-0.30.3/; made by scripts/record-generator-features.ts). The comparison is in
+// one place, test/support/features-compare.ts, the same as --check of the script.
+// The callers' options are built with the functions of test/support/sites.ts, with the same seeds and numbers of
+// trials as the callers, and for all three callers even the order of the options equals the caller's (properties
+// separates the random generator for options into sequences seeded by the property's name). That the real
+// callers call those functions in the same context is checked by the generator-features job of CI (--worktree
+// --check of the script).
+// The number of features found is the same in test and script for properties (414) and diagnose-properties
+// (425). For result-compare (487 in the test, 563 in the script; the difference of 76 examined in 0.30.5), the
+// difference consists only of features of the dates asked about (scan[...]): only the script sees the dates the
+// library asks of the basis calendar of an nth-business-day rule of a schedule (a calendar with only the
+// providers, built by result-compare), which spread over the providers' supported years.
+// This test only builds options, so those questions do not occur. The features of the options (other than scan)
+// are the same in both.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { jp } from "../../src/jp/index.ts";

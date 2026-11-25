@@ -11,7 +11,7 @@ import { jp } from "../src/jp/index.ts";
 import { england } from "../src/uk/index.ts";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 
-// jp.confirmedThrough より後の年の春分の日・秋分の日は予測（confirmed: false）
+// The equinox days of years after jp.confirmedThrough are predictions (confirmed: false)
 const year = jp.confirmedThrough! + 1;
 const equinox = jp.holidaysInYear(year).find((h) => !h.confirmed)!.date;
 const throwsUnconfirmed = (fn: () => unknown, label?: string): void =>
@@ -39,7 +39,7 @@ test("unconfirmedHolidayPolicy: throw は、評価した日が未確定の祝日
     unconfirmedHolidayPolicy: "throw",
   });
   assert.equal(calendar.unconfirmedHolidayPolicy, "throw");
-  // 確定している年はこれまでどおり
+  // Confirmed years behave as before
   assert.equal(calendar.isBusinessDay(`${jp.confirmedThrough}-01-01`), false);
   throwsUnconfirmed(() => calendar.dayInfoOn(equinox), "dayInfoOn");
   throwsUnconfirmed(() => calendar.isBusinessDay(equinox), "isBusinessDay");
@@ -53,7 +53,7 @@ test("unconfirmedHolidayPolicy: throw は、評価した日が未確定の祝日
       }),
     "dueDate",
   );
-  // 探索が途中で通る日（結果の日が未確定でなくても止まる）
+  // A day a search passes on the way (it stops even when the resulting day is not unconfirmed)
   const dayBefore = new Date(`${equinox}T00:00:00Z`);
   dayBefore.setUTCDate(dayBefore.getUTCDate() - 3);
   throwsUnconfirmed(
@@ -64,7 +64,8 @@ test("unconfirmedHolidayPolicy: throw は、評価した日が未確定の祝日
     () => calendar.diffBusinessDays(`${year}-01-01`, `${year}-12-31`),
     "diffBusinessDays",
   );
-  // 祝前日・祝日の翌日の規則は隣の日の祝日を引くので、その日自身が祝日でなくても止まる
+  // Day-before and day-after-holiday rules look up the holiday of the neighbouring day, so it stops even when
+  // the day itself is not a holiday
   const eve = createCalendar({
     holidayProvider: jp,
     closedRecurringRules: [{ dayBeforeHoliday: true }],
@@ -174,7 +175,7 @@ test("unconfirmedHolidayPolicy: 設定の値の誤りと、判定に祝日を使
   ] as const) {
     assert.deepEqual(brief(diagnoseCalendar(options)), [], JSON.stringify(options));
   }
-  // 診断は "throw" でも例外を投げず、未確定の祝日を含む年の規則も評価する
+  // The diagnostics do not throw with "throw" either and evaluate the rules of years with unconfirmed holidays too
   assert.deepEqual(
     brief(
       diagnoseCalendar({
@@ -189,7 +190,8 @@ test("unconfirmedHolidayPolicy: 設定の値の誤りと、判定に祝日を使
 
 test("modified の調整は当月の中を先に探し、結果に関係しない月の外の日を評価しない（月がすべて休業日のときだけ月をまたぐ。decisions.md の 17 番・21 番）", () => {
   const code = (c: string) => (e: unknown) => isBizdaysError(e) && e.code === c;
-  // 英国の 2029 年の元日は予測。2028-12-30（土）の翌営業日は 1 月なので、答えは前営業日の 12 月 29 日
+  // New Year's Day 2029 of the UK is a prediction. The next business day after 2028-12-30 (Sat) is in January,
+  // so the answer is the previous business day, December 29
   const englandStrict = createCalendar({
     holidayProvider: england,
     closedWeekdays: [0, 6],
@@ -199,7 +201,7 @@ test("modified の調整は当月の中を先に探し、結果に関係しな�
     englandStrict.adjust("2028-12-30", { convention: "modified-following" }),
     "2028-12-29",
   );
-  // 日本の対応年の最後の月。翌月（2100 年）は対応年の外
+  // The last month of Japan's supported years. The next month (in 2100) is outside them
   const jpYearEnd = createCalendar({
     holidayProvider: jp,
     closedWeekdays: [0, 6],
@@ -210,9 +212,10 @@ test("modified の調整は当月の中を先に探し、結果に関係しな�
     jpYearEnd.dueDate("2099-12", { dayOfMonth: -1, convention: "modified-following" }),
     "2099-12-28",
   );
-  // 対応年の最初の月の modified-preceding（前月は 1954 年で対応年の外）
+  // modified-preceding in the first month of the supported years (the month before is in 1954, outside them)
   assert.equal(jpYearEnd.adjust("1955-01-02", { convention: "modified-preceding" }), "1955-01-04");
-  // 探索の上限は当月の中でも数える。月の外へ出る前に上限に達したら、前と同じ no-business-day
+  // The search limit counts within the month too. Reaching the limit before leaving the month is
+  // no-business-day as before
   const limited = createCalendar({
     closedWeekdays: [0, 6],
     searchDayLimit: 10,
@@ -227,7 +230,7 @@ test("modified の調整は当月の中を先に探し、結果に関係しな�
       }).adjust("2026-10-05", { convention: "modified-following" }),
     code("no-business-day"),
   );
-  // 月がすべて休業日なら、元の向きに月をまたぐ（21 番）
+  // When the whole month is closed, the search crosses the month in the original direction (decisions.md #21)
   const closedMonth = createCalendar({ closedDates: [{ from: "2026-11-01", to: "2026-11-30" }] });
   assert.equal(
     closedMonth.adjust("2026-11-15", { convention: "modified-following" }),
@@ -237,11 +240,12 @@ test("modified の調整は当月の中を先に探し、結果に関係しな�
     closedMonth.adjust("2026-11-15", { convention: "modified-preceding" }),
     "2026-10-31",
   );
-  // following・preceding は前と同じく、当月に営業日があっても月をまたぐ
+  // following and preceding cross the month as before, even when the month has a business day
   assert.equal(englandStrict.adjust("2028-12-30", { convention: "preceding" }), "2028-12-29");
   assert.equal(closedMonth.adjust("2026-11-15", { convention: "following" }), "2026-12-01");
   assert.equal(closedMonth.adjust("2026-11-15", { convention: "preceding" }), "2026-10-31");
-  // following は月をまたいで探すので、前と同じく探索の上限で no-business-day（modified-following は上で 10-30 を返す）
+  // following searches across the month, so it is no-business-day at the search limit as before
+  // (modified-following returns 10-30 above)
   assert.throws(
     () => limited.adjust("2026-10-31", { convention: "following" }),
     code("no-business-day"),
@@ -259,7 +263,7 @@ test("同じ提供元のオブジェクトは 1 回だけ数え、診断は書�
     timeZone: "Asia/Tokyo",
     supportedYears: { from: 2025, to: 2026 },
     dataVersion: "1",
-    // 別の年の日付を返す誤ったデータ
+    // Wrong data that returns a date of another year
     holidaysInYear: (year: number) => [
       { date: `${year + 1}-01-01`, name: "x", nameEn: "x", kind: "regular", confirmed: true },
     ],

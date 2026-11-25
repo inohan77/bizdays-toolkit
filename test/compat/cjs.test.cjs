@@ -1,6 +1,8 @@
-// 公開する dist を、CommonJS の require() で確かめる（README の「Node.js 22.12 以降は require() で読み込める」の裏付け）。
-// Node.js 22.12 では、ESM を require() で読み込むと実験的な機能の警告が出ることがあるが、利用者の環境での動作の確認なので警告は問わない。
-// 実行の前に pnpm build が必要（CI の compat ジョブと pnpm check が行う）
+// Checks the published dist with require() of CommonJS (backs the README's statement that Node.js 22.12 and
+// later can load it with require()).
+// In Node.js 22.12, require() of an ES module can print an experimental warning; this checks behaviour in a
+// user's environment, so warnings are not judged.
+// Needs pnpm build before running (done by the compat job of CI and by pnpm check)
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 

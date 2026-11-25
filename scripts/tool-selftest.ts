@@ -1,21 +1,28 @@
 import "./strict-warnings.ts";
 /**
- * 検査のスクリプトそのものの検査（テスト拡充案の T3。CI の tool-selftest ジョブ。pnpm check には入れない）。
+ * The check of the checking scripts themselves (T3 of the test expansion plan; the tool-selftest job of CI; not
+ * part of pnpm check).
  *
- * リポジトリの写しを一時ディレクトリに作り、検査のスクリプトを写した先で動かす。まず誤りを入れずに動かして合格することを
- * 確かめ（対照の実行。失敗が環境によるものでないことを示す。SKIP の行が出ても失敗にする）、次に誤りを 1 つずつ入れて、終了コード 0 以外で終わり、
- * 入れた誤りを指す文（検査が誤りの理由として出す文の一部。別の理由の失敗では合格にしない）を出すことを確かめる。誤りは 1 つ確かめる
- * ごとに元に戻す。写し・ビルドの途中で例外が出ても、そこまでの表と後始末の問題を出してから失敗で終わる。
+ * Makes a copy of the repository in a temporary directory and runs the checking scripts there. First they run
+ * without a mistake and must pass (the control run, which shows that a failure does not come from the
+ * environment; a SKIP line fails too); then one mistake at a time is injected, and the script must end with a
+ * non-zero exit code and print the text that points at the injected mistake (part of the text the check prints
+ * as the reason; a failure for another reason does not pass). Each mistake is undone after it is checked. When
+ * an error occurs while copying or building, the table so far and the cleanup problems are printed before
+ * ending with a failure.
  *
- * 写し方: `git worktree add --detach` で HEAD の作業ツリーを作り、取り込み中の変更（git status の変更・追加・削除）を写す。
- * 作業ツリーなら、git の履歴とタグを元のリポジトリと共有するので、前のバージョンのタグを読む検査（check-size）も写した先でそのまま動く。
- * node_modules は写さず、ジャンクション（Windows）・シンボリックリンクでつなぐ。dist は写した先でビルドする。
- * 一時ディレクトリの場所は環境変数 TOOL_SELFTEST_DIR で指定できる（Windows のパスの長さの上限に当たらないよう短いパスに。
- * 指定がなければ os.tmpdir()）。終わったら（失敗しても）リンクを先に外してから作業ツリーとディレクトリを消す。リンクを外せなければ
- * （まだ作っていない ENOENT のほかは）、リンクの先まで消えないよう何も消さずに残し、場所を出して失敗にする。最後に、リポジトリの
- * node_modules が残っていることを確かめる。
+ * How the copy is made: `git worktree add --detach` creates a work tree of HEAD, and the changes being taken in
+ * (modified, added and deleted files of git status) are copied. A work tree shares the git history and tags with
+ * the original repository, so a check that reads the previous version's tag (check-size) works in the copy as
+ * it is. node_modules is not copied but linked with a junction (Windows) or a symbolic link. dist is built in
+ * the copy.
+ * The place of the temporary directory can be given with the environment variable TOOL_SELFTEST_DIR (a short
+ * path, to stay under the path length limit of Windows; os.tmpdir() by default). At the end (also after a
+ * failure) the link is removed first, then the work tree and the directory. When the link cannot be removed
+ * (other than ENOENT, not created yet), nothing is deleted, so that the target of the link survives; the place
+ * is printed and the run fails. Finally it checks that node_modules of the repository still exists.
  *
- * 使い方: node scripts/tool-selftest.ts
+ * Usage: node scripts/tool-selftest.ts
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
@@ -56,7 +63,7 @@ const node = (args: readonly string[], cwd = copy): Run => {
   return { status: r.status, output: `${r.stdout}\n${r.stderr}` };
 };
 
-/** 写した先のファイルを書き換える（元に戻すために、元の中身を覚えておく） */
+/** Rewrites a file of the copy (the original content is remembered for undoing) */
 const saved = new Map<string, string>();
 function edit(file: string, change: (text: string) => string): void {
   const path = join(copy, file);
@@ -71,9 +78,12 @@ function restore(): void {
   for (const [path, text] of saved) writeFileSync(path, text);
   saved.clear();
 }
-/** 最初の一致だけを置き換える（一致しなければ edit が失敗にする） */
+/** Replaces the first match only (edit fails when nothing matches) */
 const replaceOnce = (from: string | RegExp, to: string) => (text: string) => text.replace(from, to);
-/** CHANGELOG の [Unreleased] と今のバージョン（その次の節）の利用者向けの区分の見出しを、区分でない見出しに変える */
+/**
+ * Turns the user-facing category headings of [Unreleased] and the current version (the next section) of the
+ * CHANGELOG into headings that are not categories
+ */
 const withoutUserFacingSections = (text: string): string => {
   const start = text.indexOf("## [Unreleased]");
   const end = text.indexOf("\n## [", text.indexOf("\n## [", start + 1) + 1);
@@ -87,19 +97,19 @@ const withoutUserFacingSections = (text: string): string => {
 };
 
 interface Case {
-  /** 検査のスクリプト */
+  /** The checking script */
   readonly tool: string;
-  /** 入れる誤り */
+  /** The mistake injected */
   readonly name: string;
   readonly args: readonly string[];
   readonly inject: () => void;
-  /** 失敗の出力に含まれるべき文（検査が実際に出す文の一部） */
+  /** The text the failure output must contain (part of the text the check really prints) */
   readonly expect: string;
 }
 
 /**
- * 誤りとして入れる文字列。このファイル自身も検査の対象（check-package・check-names は scripts/ も読む）なので、
- * 対照の実行で誤りとして見つからないよう、文字列をつないで作る
+ * Strings injected as mistakes. This file itself is examined (check-package and check-names read scripts/ too),
+ * so the strings are built by joining parts, so that the control run does not find them as mistakes
  */
 const DECISIONS = ["decisions", "md"].join(".");
 const MISSING_PATH = ["scripts", "no-such-file.ts"].join("/");
@@ -107,14 +117,17 @@ const OLD_KEY = ["closed", "Annual"].join("");
 const OLD_SERIES = ["0", "29", "x"].join(".");
 const OLD_SERIES_V = ["v0", "29", "X"].join(".");
 const OLD_SERIES_MAJOR = ["1", "2", "x"].join(".");
-/** 移行ガイドの検索の案内にある、振替の旧名の項目（旧名をそのまま書くと check-names が旧名の残りとして止める） */
+/**
+ * The old-name property of substitution in the search guidance of the migration guide (written as it is,
+ * check-names would stop it as an old name left behind)
+ */
 const SEARCH_ORIGINAL = ["・`origin", "al:`"].join("");
 
 const benchControl = () => {
   writeFileSync(join(work, "bench-base.json"), JSON.stringify({ isBusinessDay: 100 }));
   writeFileSync(join(work, "bench-head.json"), JSON.stringify({ isBusinessDay: 110 }));
 };
-/** 比率が上限を超える計測（3 倍）を入れ、開発の記録の [Unreleased] に 1 行を足す */
+/** Injects a measurement whose ratio exceeds the limit (3x) and adds one line to [Unreleased] of the development log */
 const benchExceededWith = (line: string) => () => {
   writeFileSync(join(work, "bench-head.json"), JSON.stringify({ isBusinessDay: 300 }));
   edit("docs/development-log.md", replaceOnce("## [Unreleased]\n", `## [Unreleased]\n\n${line}\n`));
@@ -129,7 +142,7 @@ const compareArgs = (script: string): string[] => [
   "selftest",
 ];
 
-/** 誤りを入れずに動かす検査（対照の実行）。どれも合格すること */
+/** The checks run without a mistake (the control run). All must pass */
 const TOOLS: Readonly<Record<string, readonly string[]>> = {
   "check-package": ["scripts/check-package.ts"],
   "check-size": ["scripts/check-size.ts"],
@@ -146,7 +159,21 @@ const TOOLS: Readonly<Record<string, readonly string[]>> = {
   ],
   "result-compare": [...compareArgs("result-compare.ts"), "--scale", "0.05"],
   "data-compare": compareArgs("data-compare.ts"),
+  "check-unit-tests": ["scripts/check-unit-tests.ts"],
+  "promise-dimensions": ["scripts/promise-inventory.ts", "--dimensions"],
+  "check-unverified": ["scripts/check-unverified.ts"],
 };
+
+/** The first line of a function of src that has a unit test, and its unit test file (targets of injections) */
+const UNIT_TESTED_HEAD = "export function editDistance(a: string, b: string): number {\n";
+const UNIT_TEST_FILE = "test/unit/core/diagnose-compare.test.ts";
+/** Rewrites the table of the unit tests */
+const editUnitTable = (change: (table: Record<string, Record<string, unknown>>) => void): void =>
+  edit("etc/unit-tests.json", (t) => {
+    const table = JSON.parse(t) as Record<string, Record<string, unknown>>;
+    change(table);
+    return JSON.stringify(table, null, 2);
+  });
 
 const CASES: readonly Case[] = [
   {
@@ -227,7 +254,8 @@ const CASES: readonly Case[] = [
     tool: "check-size",
     name: "開発の記録の測定値の不一致",
     args: TOOLS["check-size"]!,
-    // 0.31.0 から、測定値は開発の記録（docs/development-log.md）に書く（scripts/release-sections.ts）
+    // From 0.31.0 the measured values are written in the development log (docs/development-log.md;
+    // scripts/release-sections.ts)
     inject: () =>
       edit(
         "docs/development-log.md",
@@ -246,10 +274,12 @@ const CASES: readonly Case[] = [
     tool: "check-size",
     name: "上限を上げたのに「サイズの上限」の記載がない",
     args: TOOLS["check-size"]!,
-    // このバージョンの CHANGELOG に「サイズの上限」の記載がすでにある（上限を正しく上げたバージョン）ときも誤りになるよう、その記載も消す
+    // The note on the size limit is removed too, so that this is a mistake even when the CHANGELOG of this
+    // version already has one (a version that raised a limit correctly)
     inject: () => {
       edit("size-limits.json", replaceOnce(/(?<key>"\.\/uk"\s*:\s*)\d+/, "$<key>9999"));
-      // このバージョンの節（[Unreleased] の次の、最初のバージョンの見出しから次の見出しの前まで）。CHANGELOG と開発の記録の両方
+      // The section of this version (from the first version heading after [Unreleased] to before the next
+      // heading), in both the CHANGELOG and the development log
       for (const file of ["CHANGELOG.md", "docs/development-log.md"]) {
         const text = readFileSync(join(copy, file), "utf8");
         const start = text.indexOf("\n## [", text.indexOf("\n## [") + 1);
@@ -270,7 +300,8 @@ const CASES: readonly Case[] = [
     tool: "check-size",
     name: "上限を上げたのに README のサイズの値を測り直していない",
     args: TOOLS["check-size"]!,
-    // README の「測ったバージョン」を前のバージョンにする（0.31.5 と 0.32.5〜0.32.7 で、上限を上げて測り直さなかった形）
+    // Sets the "measured for" version of the README to the previous version (the form of 0.31.5 and
+    // 0.32.5-0.32.7, which raised a limit without re-measuring)
     inject: () => {
       edit("size-limits.json", replaceOnce(/(?<key>"\.\/uk"\s*:\s*)\d+/, "$<key>9999"));
       edit("README.md", replaceOnce(/measured for \d+\.\d+\.\d+/, "measured for 0.1.0"));
@@ -358,7 +389,8 @@ const CASES: readonly Case[] = [
     name: "バージョンを上げたのに、dist の .js が変わり、CHANGELOG の今のバージョンと [Unreleased] に利用者向けの区分がない（リリースの時の形）",
     args: TOOLS["check-claims"]!,
     inject: () => {
-      // 比べる相手は写しの元のバージョンのままなので、今のバージョンの節も数える側を通る
+      // The version compared stays the one the copy was made from, so the section of the current version goes
+      // through the counting side too
       edit("package.json", replaceOnce(/"version": "[^"]+"/, '"version": "99.0.0"'));
       edit("dist/core/month.js", (t) => `${t}\n// injected\n`);
       edit("CHANGELOG.md", withoutUserFacingSections);
@@ -387,6 +419,14 @@ const CASES: readonly Case[] = [
     args: TOOLS["check-claims"]!,
     inject: () =>
       edit("scripts/check-size.ts", (t) => `${t}\n// injected: この検査は 1.0.0 で外す\n`),
+    expect: "work for 1.0.0 that does not point to RELEASING.md",
+  },
+  {
+    tool: "check-claims",
+    name: "RELEASING.md の「1.0.0 で行う作業」を指さない、1.0.0 の作業のコメント（英語）",
+    args: TOOLS["check-claims"]!,
+    inject: () =>
+      edit("scripts/check-size.ts", (t) => `${t}\n// injected: this check is removed in 1.0.0.\n`),
     expect: "work for 1.0.0 that does not point to RELEASING.md",
   },
   {
@@ -441,7 +481,8 @@ const CASES: readonly Case[] = [
     inject: () =>
       edit(
         "dist/core/schedule.js",
-        // 判定の曜日の行（0.32.7 から、日数の記憶を通す weekdayOfDate）
+        // The line of the weekday of the judgement (from 0.32.7, weekdayOfDate, which goes through the day-number
+        // memo)
         replaceOnce(
           "const weekday = weekdayOfDate(date);",
           "const weekday = (weekdayOfDate(date) + 1) % 7;",
@@ -504,26 +545,149 @@ const CASES: readonly Case[] = [
       ),
     expect: "addBusinessDays is listed, but a decision mentions it now",
   },
+  {
+    tool: "check-unit-tests",
+    name: "単体テストのない関数を足した（表にもない）",
+    args: TOOLS["check-unit-tests"]!,
+    inject: () =>
+      edit(
+        "src/core/diagnose.ts",
+        (t) => `${t}\nexport function injected(a: number): number {\n  return a + 1;\n}\n`,
+      ),
+    expect: "injected has no unit test and is not listed",
+  },
+  {
+    tool: "check-unit-tests",
+    name: "describe の名前が関数の名前と違う",
+    args: TOOLS["check-unit-tests"]!,
+    inject: () =>
+      edit(UNIT_TEST_FILE, replaceOnce('describe("editDistance"', 'describe("editDistanceX"')),
+    expect: 'describe("editDistanceX") names no function imported from src',
+  },
+  {
+    tool: "check-unit-tests",
+    name: "条件の後ろの文が実行されない（中かっこのない if の次の行）",
+    args: TOOLS["check-unit-tests"]!,
+    inject: () =>
+      edit(
+        "src/core/diagnose.ts",
+        replaceOnce(
+          UNIT_TESTED_HEAD,
+          `${UNIT_TESTED_HEAD}  if (a === "never-given")\n    return -1;\n`,
+        ),
+      ),
+    expect: "editDistance: lines not executed by the unit tests",
+  },
+  {
+    tool: "check-unit-tests",
+    name: "行の一部（?? の右）が実行されない",
+    args: TOOLS["check-unit-tests"]!,
+    inject: () =>
+      edit(
+        "src/core/diagnose.ts",
+        replaceOnce(UNIT_TESTED_HEAD, `${UNIT_TESTED_HEAD}  void (a ?? "never-given");\n`),
+      ),
+    expect: "only in part; not executed: ??",
+  },
+  {
+    tool: "check-unit-tests",
+    name: "届かない行の表に、実行される行がある",
+    args: TOOLS["check-unit-tests"]!,
+    inject: () =>
+      editUnitTable((table) => {
+        table["unreachable"]!["src/core/diagnose.ts#editDistance"] = [
+          { code: "return d[a.length]![b.length]!;", reason: "injected" },
+        ];
+      }),
+    expect: "is executed or does not exist: return d[a.length]![b.length]!;",
+  },
+  {
+    tool: "check-unit-tests",
+    name: "単体テストのある関数が「これから書く」の表に残っている",
+    args: TOOLS["check-unit-tests"]!,
+    inject: () =>
+      editUnitTable((table) => {
+        table["pending"]!["src/core/diagnose.ts"] = ["editDistance"];
+      }),
+    expect: "editDistance is listed but has a unit test",
+  },
+  {
+    tool: "check-unit-tests",
+    name: "単体テストが失敗する",
+    args: TOOLS["check-unit-tests"]!,
+    inject: () =>
+      edit(
+        UNIT_TEST_FILE,
+        replaceOnce(
+          'assert.equal(editDistance("", ""), 0);',
+          'assert.equal(editDistance("", ""), 1);',
+        ),
+      ),
+    expect: "did not pass",
+  },
+  {
+    tool: "promise-dimensions",
+    name: "棚卸しの生成器から、対応年が診断の範囲の外の提供元を外した",
+    args: TOOLS["promise-dimensions"]!,
+    inject: () =>
+      edit(
+        "scripts/promise-inventory.ts",
+        replaceOnce(
+          '  ["custom 2200-2300", () => custom("O", 2200, 2300), { from: 2200, to: 2300 }],\n',
+          "",
+        ),
+      ),
+    expect: "no options were made for the cell: calendar | outside",
+  },
+  {
+    tool: "promise-dimensions",
+    name: "次元の表で外した組を、生成器が作っている",
+    args: TOOLS["promise-dimensions"]!,
+    inject: () =>
+      edit(
+        "etc/promise-dimensions.json",
+        replaceOnce(
+          '"excluded": {}',
+          '"excluded": { "calendar | none | - | counting rule | inside": "injected" }',
+        ),
+      ),
+    expect: "excluded cell was made",
+  },
+  {
+    tool: "check-unverified",
+    name: "確かめていないことの表に、状態が open の行がある",
+    args: TOOLS["check-unverified"]!,
+    inject: () =>
+      edit("etc/unverified.json", replaceOnce('"state": "verified"', '"state": "open"')),
+    expect: "U1: OPEN",
+  },
 ];
 
 const git = (args: readonly string[], cwd = repo): string =>
   execFileSync("git", args, { cwd, encoding: "utf8" });
 let failed = false;
 const rows: string[] = [];
-/** 写した取り込み中の変更（写すたびに足す。途中で例外が出ても、そこまでに写したものを表の後に出す） */
+/**
+ * The copied changes being taken in (added as each is copied; when an error occurs on the way, those copied so
+ * far are printed after the table)
+ */
 const copied: string[] = [];
-/** 写しを始めたか（始めていなければ、写した変更の行を出さない） */
+/** Whether copying started (if not, the line of copied changes is not printed) */
 let copyStarted = false;
-/** 後始末の問題（リンクを外せない・作業ツリーを外せない・リポジトリの node_modules が消えた） */
+/**
+ * Cleanup problems (the link cannot be removed, the work tree cannot be removed, node_modules of the repository
+ * disappeared)
+ */
 const cleanupProblems: string[] = [];
-/** 作ったもの（後始末で外すもの） */
+/** What was created (removed by the cleanup) */
 let worktreeAdded = false;
 let linked = false;
 try {
-  // 1. 写しを作る（HEAD の作業ツリー + 取り込み中の変更）
+  // 1. Make the copy (a work tree of HEAD plus the changes being taken in)
   git(["worktree", "add", "--detach", "--quiet", copy, "HEAD"]);
   worktreeAdded = true;
-  // -z で読む（日本語やスペースを含むパスが引用符付き・エスケープ付きで出ず、そのまま読める。項目は NUL で区切られる）
+  // Read with -z (paths with Japanese characters or spaces come unquoted and unescaped; entries are separated
+  // by NUL)
   const changed = git(["status", "--porcelain=v1", "-z", "-uall", "--no-renames"])
     .split("\0")
     .filter(Boolean)
@@ -544,24 +708,25 @@ try {
   );
   symlinkSync(join(repo, "node_modules"), join(copy, "node_modules"), "junction");
   linked = true;
-  // 2. 写した先でビルドする（package.json の build と同じ）
+  // 2. Build in the copy (as `build` of package.json)
   const tsc = join(copy, "node_modules/typescript/bin/tsc");
   for (const extra of [["--removeComments"], ["--emitDeclarationOnly"]]) {
     const r = node([tsc, "-p", "tsconfig.build.json", ...extra]);
     if (r.status !== 0) throw new Error(`build failed in the copy:\n${r.output.slice(-2000)}`);
   }
-  // 比べる相手のバージョン（result-compare・data-compare）は、誤りを入れる前の写しのビルド
+  // The version compared with (result-compare, data-compare) is the build of the copy before any mistake
   mkdirSync(base);
   cpSync(join(copy, "dist"), join(base, "dist"), { recursive: true });
   cpSync(join(copy, "package.json"), join(base, "package.json"));
   benchControl();
 
-  // 3. 対照の実行（誤りを入れずに、すべて合格する）
+  // 3. The control run (everything passes without a mistake)
   for (const [tool, args] of Object.entries(TOOLS)) {
     const started = Date.now();
     const r = node(args);
-    // 対照は、どの検査も飛ばさずに合格することを確かめる（SKIP の行が出れば失敗）。2 つ目の形（skipped に括弧が続く行）は、
-    // 今の 9 つの検査は出さないが、将来、対照にブラウザー・workerd の検査（飛ばした検査をこの形で出す）を加えたときのために見る
+    // The control run checks that every check passes without skipping (a SKIP line fails). The second form (a
+    // line with "skipped" followed by a parenthesis) is not printed by the current checks; it is examined
+    // for the day the browser and workerd checks, which print skipped checks in this form, join the control run
     const skipped = r.output.split("\n").filter((l) => /\bSKIP\b|skipped \(/.test(l));
     const ok = r.status === 0 && skipped.length === 0;
     if (!ok) failed = true;
@@ -574,7 +739,7 @@ try {
     );
   }
 
-  // 4. 誤りを 1 つずつ入れて、失敗することと、入れた誤りを指す文を確かめる
+  // 4. Inject one mistake at a time and check the failure and the text pointing at the mistake
   for (const c of CASES) {
     const started = Date.now();
     let ok = false;
@@ -598,14 +763,16 @@ try {
     );
   }
 } catch (error) {
-  // 写し・ビルドなどの途中の例外でも、そこまでの表と後始末の問題を出してから失敗で終わる
+  // Also after an error while copying, building or the like, the table so far and the cleanup problems are
+  // printed before ending with a failure
   failed = true;
   rows.push(
     `| （途中の例外） | — | — | **失敗**: ${cell(errorText(error).split("\n").slice(0, 3).join(" / ").slice(0, 300))} | — |`,
   );
 } finally {
-  // リンクを先に外す（ジャンクションの先の node_modules を消さないため）。外せなかったら（まだ作っていない ENOENT のほかは）、
-  // 作業ツリーと一時ディレクトリを消さずに残し、場所を出して失敗にする（消すとリンクの先まで消えるおそれがある）
+  // The link is removed first (so that node_modules behind the junction is not deleted). When it cannot be
+  // removed (other than ENOENT, not created yet), the work tree and the temporary directory are left, the place
+  // is printed and the run fails (deleting could delete the target of the link)
   if (linked) {
     try {
       unlinkSync(join(copy, "node_modules"));
@@ -629,7 +796,7 @@ try {
       git(["worktree", "prune"]);
     }
   }
-  // リポジトリの node_modules が残っている（リンクの先を消していない）
+  // node_modules of the repository still exists (the target of the link was not deleted)
   if (!existsSync(join(repo, "node_modules/typescript/bin/tsc")))
     cleanupProblems.push(
       "リポジトリの node_modules/typescript/bin/tsc がない（リンクの先が消えた。pnpm install で戻す）",

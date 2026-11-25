@@ -25,7 +25,7 @@ test("第 n 営業日: 月末最終営業日・第 n 営業日を、定休日・
       { businessDayOfMonth: [1, 5], months: [1, 4, 7, 10], name: "四半期初の第 1・第 5 営業日" },
     ],
   });
-  // 10 月 31 日は土曜日なので 30 日が最終営業日
+  // October 31 is a Saturday, so the 30th is the last business day
   assert.deepEqual(branch.dayInfoOn("2026-10-30"), {
     date: "2026-10-30",
     weekday: 5,
@@ -37,15 +37,17 @@ test("第 n 営業日: 月末最終営業日・第 n 営業日を、定休日・
     rulePath: "closedRecurringRules[0]",
   });
   assert.equal(branch.isBusinessDay("2026-10-29"), true);
-  // 12 月 31 日から休業なので 30 日が最終営業日（毎年の休業日は数えに入らない）
+  // Closed from December 31, so the 30th is the last business day (annual closed days are not counted)
   assert.equal(branch.dayInfoOn("2026-12-30").reason, "closed-recurring");
   assert.equal(branch.isBusinessDay("2026-12-29"), true);
-  // 四半期初: 2027 年 1 月は 4 日が第 1 営業日（1〜3 日は休業）、8 日が第 5 営業日
+  // Start of a quarter: in January 2027 the 4th is the first business day (the 1st-3rd are closed) and the 8th
+  // the fifth
   assert.equal(branch.dayInfoOn("2027-01-04").name, "四半期初の第 1・第 5 営業日");
   assert.equal(branch.dayInfoOn("2027-01-08").name, "四半期初の第 1・第 5 営業日");
   assert.equal(branch.isBusinessDay("2027-01-07"), true);
   assert.equal(branch.isBusinessDay("2026-02-02"), true, "months の外の第 1 営業日は営業");
-  // 祝日は数えに入らない: 2026 年 5 月は 1 日（金）が第 1 営業日、7 日（木）が第 2 営業日（3〜6 日は祝日・振替）
+  // Holidays are not counted: in May 2026 the 1st (Fri) is the first business day and the 7th (Thu) the second
+  // (the 3rd-6th are holidays and a substitute)
   const may = createCalendar({
     holidayProvider: jp,
     closedWeekdays: [0, 6],
@@ -53,10 +55,11 @@ test("第 n 営業日: 月末最終営業日・第 n 営業日を、定休日・
   });
   assert.equal(may.isBusinessDay("2026-05-07"), false);
   assert.equal(may.isBusinessDay("2026-05-01"), true);
-  // メソッドは規則を適用した後の実際の営業日を返す
+  // The methods return the actual business days after the rule is applied
   assert.equal(branch.lastBusinessDayOfMonth("2026-10"), "2026-10-29");
   assert.equal(branch.firstBusinessDayOfMonth("2027-01"), "2027-01-05");
-  // -2 はその前、31 日ある月の末日が月曜日なら最終営業日は暦の末日
+  // -2 is the one before; when the last day of a 31-day month is a Monday, the last business day is the last
+  // calendar day
   const prev = createCalendar({
     closedWeekdays: [0, 6],
     closedRecurringRules: [{ businessDayOfMonth: -2 }],
@@ -70,7 +73,8 @@ test("第 n 営業日: 月末最終営業日・第 n 営業日を、定休日・
 });
 
 test("第 n 営業日: 数える基準は繰り返しの規則を除いた判定（自分自身・ほかの繰り返しの規則・臨時休業日の扱い）", () => {
-  // 定休日を closedRecurringRules の曜日の規則で書くと、その曜日も営業日として数える（限界。診断で知らせる）
+  // Closed days written as weekday rules in closedRecurringRules are counted as business days (a limit; the
+  // diagnostics report it)
   const byRule = createCalendar({
     closedRecurringRules: [
       { businessDayOfMonth: -1, name: "最終" },
@@ -81,7 +85,7 @@ test("第 n 営業日: 数える基準は繰り返しの規則を除いた判定
   assert.equal(byRule.dayInfoOn("2026-10-31").name, "最終", "土曜日の 31 日が基準の最終営業日");
   assert.equal(byRule.dayInfoOn("2026-10-31").reason, "closed-recurring");
   assert.equal(byRule.dayInfoOn("2026-10-30").reason, "default");
-  // 臨時休業日（closedDates）は数えに入らない。個別の日付は規則より優先される
+  // Extra closed days (closedDates) are not counted. Specific dates take priority over rules
   const closed = createCalendar({
     closedWeekdays: [0, 6],
     closedDates: ["2026-10-30"],
@@ -89,7 +93,7 @@ test("第 n 営業日: 数える基準は繰り返しの規則を除いた判定
   });
   assert.equal(closed.dayInfoOn("2026-10-29").name, "最終");
   assert.equal(closed.dayInfoOn("2026-10-30").reason, "closed-date");
-  // 臨時営業日（openDates）は数えに入る
+  // Extra business days (openDates) are counted
   const open = createCalendar({
     closedWeekdays: [0, 6],
     openDates: ["2026-10-31"],
@@ -97,8 +101,9 @@ test("第 n 営業日: 数える基準は繰り返しの規則を除いた判定
   });
   assert.equal(open.dayInfoOn("2026-10-31").reason, "open-date", "個別の日付が優先");
   assert.equal(open.dayInfoOn("2026-10-30").reason, "default", "基準では 31 日が最終営業日");
-  // holidayPolicy: "open" なら祝日も営業日として数える（第 n 営業日が祝日になりうる）
-  // 祝日自身の扱いは祝日の段階（holidayPolicy）が決め、この規則は当てはまらない（例外は祝日の規則で書く）
+  // With holidayPolicy: "open" holidays count as business days (an nth business day can be a holiday).
+  // The holiday itself is handled by the holiday stage (holidayPolicy) and this rule does not apply (write
+  // exceptions as holiday rules)
   const openHolidays = createCalendar({
     holidayProvider: jp,
     holidayPolicy: "open",
@@ -113,7 +118,8 @@ test("第 n 営業日: 数える基準は繰り返しの規則を除いた判定
   assert.equal(openHolidays.isBusinessDay("2026-01-01"), true);
   assert.equal(openHolidays.dayInfoOn("2026-01-02").name, "第 1・2 営業日", "2 日が第 2 営業日");
   assert.equal(openHolidays.isBusinessDay("2026-01-05"), true, "5 日は第 3 営業日");
-  // 「第 1 営業日は祝日でも休業」は "over-holiday" で書く（祝日の段階より先に判定する）
+  // "The first business day is closed even on a holiday" is written with "over-holiday" (judged before the
+  // holiday stage)
   const over = createCalendar({
     holidayProvider: jp,
     holidayPolicy: "open",
@@ -125,7 +131,7 @@ test("第 n 営業日: 数える基準は繰り返しの規則を除いた判定
   assert.equal(over.dayInfoOn("2026-01-01").name, "棚卸");
   assert.equal(over.dayInfoOn("2026-01-01").holiday?.key, "new-year", "holiday は付く");
   assert.equal(over.dayInfoOn("2026-02-02").name, "棚卸", "祝日でない月も同じ");
-  // holidayPolicy: "ignore" なら祝日は曜日どおりで、この規則も当てはまる
+  // With holidayPolicy: "ignore" holidays follow the weekday and this rule applies too
   const ignore = createCalendar({
     holidayProvider: jp,
     holidayPolicy: "ignore",
@@ -133,7 +139,7 @@ test("第 n 営業日: 数える基準は繰り返しの規則を除いた判定
     closedRecurringRules: [{ businessDayOfMonth: 1, name: "第 1 営業日" }],
   });
   assert.equal(ignore.dayInfoOn("2026-01-01").name, "第 1 営業日");
-  // 有効期間・配列の順番（先に書いた規則が優先）
+  // Effective periods and array order (the rule written first wins)
   const ordered = createCalendar({
     closedWeekdays: [0, 6],
     openRecurringRules: [
@@ -169,7 +175,7 @@ test("第 n 営業日: スケジュールでは基準のカレンダーを calen
     rulePath: "recurringRules[0]",
   });
   assert.equal(hours.valueOn("2026-10-29"), "full");
-  // 基準はカレンダーの実際の営業日（カレンダーの規則を適用した後）
+  // The basis is the actual business days of the calendar (after its rules are applied)
   const withRule = createCalendar({
     closedWeekdays: [0, 6],
     closedRecurringRules: [{ businessDayOfMonth: -1 }],
@@ -180,11 +186,11 @@ test("第 n 営業日: スケジュールでは基準のカレンダーを calen
   });
   assert.equal(s2.valueOn("2026-10-29"), 9, "カレンダーでは 30 日が休業なので 29 日が最終営業日");
   assert.equal(s2.valueOn("2026-10-30"), 1);
-  // スケジュールから作ったカレンダーの基準に、別のカレンダーを参照できる（循環しない）
+  // The basis of a calendar made from a schedule may refer to another calendar (no cycle)
   const fromSchedule = createCalendarFromSchedule(hours, (v) => v !== "closed");
   assert.equal(fromSchedule.isBusinessDay("2026-10-30"), true);
   assert.equal(fromSchedule.dayInfoOn("2026-10-30").name, "月末最終営業日は締め作業で短縮");
-  // 合成にも使える
+  // It can be used in a combination too
   const combined = combineCalendars(
     [
       createCalendar({
@@ -255,7 +261,7 @@ test("第 n 営業日: 入力の誤り", () => {
       JSON.stringify(entry),
     );
   }
-  // スケジュール: calendar は必須で、作成済みのカレンダーであること、タイムゾーンが同じであること
+  // Schedule: calendar is required, must be a created calendar and must have the same time zone
   assert.throws(
     () =>
       createSchedule({
@@ -289,7 +295,7 @@ test("第 n 営業日: 入力の誤り", () => {
       e.code === "time-zone-conflict" &&
       /recurringRules\[0\]\.calendar/.test(e.message),
   );
-  // 診断でも同じ誤りが error で返る
+  // The diagnostics return the same mistakes as errors
   assert.deepEqual(
     brief(diagnoseCalendar({ closedRecurringRules: [{ businessDayOfMonth: 0 }] })).map((x) =>
       x.slice(0, 3),
@@ -299,7 +305,7 @@ test("第 n 営業日: 入力の誤り", () => {
 });
 
 test("第 n 営業日: 診断（never-matches・counting-basis・shadowed・redundant）", () => {
-  // 23 営業日ある月は存在しない（土日休みでは最大 23 日）
+  // No month has more than 23 business days (23 is the maximum with closed weekends), so the rule never matches
   assert.deepEqual(
     brief(
       diagnoseCalendar({
@@ -320,7 +326,7 @@ test("第 n 営業日: 診断（never-matches・counting-basis・shadowed・redu
     [],
     "提供元がなくても判定する（2026 年 12 月は 23 営業日）",
   );
-  // 定休日を曜日の規則で書いた設定は counting-basis（info）
+  // Options with closed days written as weekday rules get counting-basis (info)
   assert.deepEqual(
     brief(diagnoseCalendar({ closedRecurringRules: [{ weekday: 0 }, { businessDayOfMonth: -1 }] })),
     [["info", "counting-basis", "closedRecurringRules[1]", "closedRecurringRules[0]"]],
@@ -335,7 +341,7 @@ test("第 n 営業日: 診断（never-matches・counting-basis・shadowed・redu
     [],
     "第 n 曜日の規則は定休日ではないので知らせない",
   );
-  // holidayPolicy: "closed" では "over-holiday" は結果を変えない（info）
+  // With holidayPolicy: "closed", "over-holiday" does not change the result (info)
   assert.deepEqual(
     brief(
       diagnoseCalendar({
@@ -355,7 +361,7 @@ test("第 n 営業日: 診断（never-matches・counting-basis・shadowed・redu
     ),
     [],
   );
-  // 同じ形の規則どうしの shadowed（n・months の包含）
+  // shadowed between rules of the same shape (containment of n and months)
   assert.deepEqual(
     brief(
       diagnoseCalendar({
@@ -369,7 +375,7 @@ test("第 n 営業日: 診断（never-matches・counting-basis・shadowed・redu
     ),
     [["warning", "shadowed", "closedRecurringRules[1]", "closedRecurringRules[0]"]],
   );
-  // 種類をまたぐ重なりは redundant（最終営業日が常に末日になる設定はない）
+  // An overlap across kinds is redundant (no options make the last business day always the last calendar day)
   assert.deepEqual(
     brief(
       diagnoseCalendar({
@@ -379,7 +385,7 @@ test("第 n 営業日: 診断（never-matches・counting-basis・shadowed・redu
     ),
     [],
   );
-  // スケジュール: 基準のカレンダーが違えば覆わない
+  // Schedule: a different basis calendar does not cover
   const a = createCalendar({ closedWeekdays: [0, 6] });
   const b = createCalendar({ closedWeekdays: [0] });
   assert.deepEqual(

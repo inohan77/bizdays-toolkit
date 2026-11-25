@@ -1,28 +1,34 @@
 /**
- * 月（"YYYY-MM"）の計算。締め日の月（closingMonth）や、n か月後の月（monthOf）。
+ * Month ("YYYY-MM") arithmetic: the closing month (closingMonth), the month n months later (monthOf).
  *
- * 営業日を考えない暦の計算なので、カレンダーなしで使える。営業日を考えた月の計算
- * （月の第 n 営業日・期日）は営業日カレンダーのメソッドにある。
+ * Pure calendar arithmetic without business days, so it works without a calendar. Month calculations that
+ * consider business days (nth business day of a month, due dates) are methods of the business calendar.
  */
 
 import { addDays, lengthOfMonth, formatDate, parseDate, type DateString } from "./date.ts";
 import { describeValue, rangeError } from "./errors.ts";
 
 /**
- * 月を表す "YYYY-MM" 文字列。
+ * A month as a "YYYY-MM" string.
  * @public
  */
 export type MonthString = string;
 
 const MONTH_RE = /^(\d{4})-(\d{2})$/;
 
-/** @internal 年と月 */
+/** @internal Year and month */
 export interface YearMonth {
   readonly year: number;
   readonly month: number;
 }
 
-/** @internal "YYYY-MM" を年と月に分解する（誤りは code: "invalid-month"） */
+/**
+ * Splits a month string into year and month.
+ * @param value - "YYYY-MM" with a year of 1000 or later and a month 01-12.
+ * @returns `{ year, month }`.
+ * @throws RangeError `invalid-month` for any other value, including non-strings.
+ * @internal
+ */
 export function parseMonth(value: unknown): YearMonth {
   const m = typeof value === "string" ? MONTH_RE.exec(value) : null;
   const year = Number(m?.[1]);
@@ -33,7 +39,13 @@ export function parseMonth(value: unknown): YearMonth {
   return { year, month };
 }
 
-/** @internal 年と月を "YYYY-MM" にする（年が 1000〜9999 の外なら code: "out-of-range"） */
+/**
+ * Builds "YYYY-MM" from a year and a month.
+ * @param ym - Year and month (the month is not validated).
+ * @returns The month string.
+ * @throws RangeError `out-of-range` when the year is outside 1000-9999.
+ * @internal
+ */
 export function formatMonth({ year, month }: YearMonth): MonthString {
   if (year < 1000 || year > 9999) {
     throw rangeError("out-of-range", `Year out of range (1000-9999): ${year}`);
@@ -41,51 +53,78 @@ export function formatMonth({ year, month }: YearMonth): MonthString {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
-/** @internal n か月後（負なら前）の年と月 */
+/**
+ * The year and month `offset` months later (earlier when negative).
+ * @param ym - Year and month.
+ * @param offset - Integer number of months.
+ * @returns A new `{ year, month }`; the year is not range-checked.
+ * @internal
+ */
 export function shiftMonth({ year, month }: YearMonth, offset: number): YearMonth {
   const index = year * 12 + (month - 1) + offset;
   return { year: Math.floor(index / 12), month: (index % 12) + 1 };
 }
 
-/** @internal その月の d 日（その月にない日・-1 は末日に読み替える） */
+/**
+ * A day of a month as a date, with "last day" handling.
+ * @param ym - Year and month.
+ * @param day - 1-31, or -1 for the last day. A day beyond the end of the month reads as the last day.
+ * @returns "YYYY-MM-DD".
+ * @throws RangeError `invalid-date` for a day below 1 other than -1; `out-of-range` for a year outside 1000-9999.
+ * @internal
+ */
 export function dayOfMonth({ year, month }: YearMonth, day: number): DateString {
   const last = lengthOfMonth(year, month);
   return formatDate(year, month, day === -1 || day > last ? last : day);
 }
 
-/** @internal 月の日（1〜31、-1 は末日）として正しいか */
+/**
+ * Whether a value is a valid day-of-month setting: an integer 1-31, or -1 (last day).
+ * @internal
+ */
 export const isDayOfMonthValue = (v: unknown): v is number =>
   v === -1 || (Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 31);
 
 /**
- * 日付または月の、offset か月後（負なら前）の月 "YYYY-MM"。
+ * The month `offset` months after the month of a date or a month.
  *
  * @example
  * monthOf("2026-10-16"); // "2026-10"
  * monthOf("2026-10-16", 1); // "2026-11"
  * monthOf("2026-01", -1); // "2025-12"
+ * @param input - "YYYY-MM-DD" or "YYYY-MM". A string with three or more hyphen-separated parts is read as a date.
+ * @param offset - Integer number of months; default 0.
+ * @returns "YYYY-MM".
+ * @throws RangeError `invalid-argument` when offset is not an integer; `invalid-date` or `invalid-month` for an
+ *   invalid input; `out-of-range` when the result is outside the years 1000-9999.
  * @public
+ * @see decisions.md #8
  */
 export function monthOf(input: DateString | MonthString, offset = 0): MonthString {
   if (!Number.isInteger(offset)) {
     throw rangeError("invalid-argument", `offset must be an integer: ${describeValue(offset)}`);
   }
-  // closingPeriod と同じ読み分け（ハイフンで区切った部分が 3 つ以上なら暦日。decisions.md の 8 番）
+  // Read like closingPeriod (three or more hyphen-separated parts mean a calendar date. decisions.md #8)
   const base: YearMonth =
     typeof input === "string" && readsAsDate(input) ? parseDate(input) : parseMonth(input);
   return formatMonth(shiftMonth(base, offset));
 }
 
 /**
- * 締め日で区切ったときに、日付が属する月 "YYYY-MM"。
- *
- * 締め日の翌日から次の締め日までを、次の締め日の月とする（例: 20 日締めなら 10 月 21 日〜11 月 20 日が 11 月分）。
- * closingDayOfMonth が -1 またはその月の日数以上なら、締め日はその月の末日（例: 31 日締めの 2 月は 28 日か 29 日締め）。
+ * The month a date belongs to when months are cut at a closing day: the day after a closing day up to the next
+ * closing day belongs to the month of that next closing day (closing on the 20th: October 21 to November 20 is
+ * November).
  *
  * @example
  * closingMonth("2026-10-20", 20); // "2026-10"
  * closingMonth("2026-10-21", 20); // "2026-11"
- * closingMonth("2026-10-31", -1); // "2026-10"（末日締め）
+ * closingMonth("2026-10-31", -1); // "2026-10" (closing on the last day)
+ * @param date - "YYYY-MM-DD".
+ * @param closingDayOfMonth - 1-31, or -1 for the last day. A day beyond the end of a month reads as its last day (31
+ *   in February: the 28th or 29th).
+ * @returns "YYYY-MM".
+ * @throws RangeError `invalid-argument` for an invalid closing day; `invalid-date` for an invalid date;
+ *   `out-of-range` when the result is outside the years 1000-9999.
  * @public
  */
 export function closingMonth(date: DateString, closingDayOfMonth: number): MonthString {
@@ -96,7 +135,12 @@ export function closingMonth(date: DateString, closingDayOfMonth: number): Month
   );
 }
 
-/** @internal 締め日の検証（closingMonth・closingPeriod・営業日カレンダーの締め日で共用） */
+/**
+ * Validates a closing day.
+ * @param closingDayOfMonth - Expected: an integer 1-31, or -1.
+ * @throws RangeError `invalid-argument` otherwise.
+ * @internal
+ */
 export function checkClosingDay(closingDayOfMonth: number): void {
   if (!isDayOfMonthValue(closingDayOfMonth)) {
     throw rangeError(
@@ -106,29 +150,42 @@ export function checkClosingDay(closingDayOfMonth: number): void {
   }
 }
 
-/** @internal その月の締め日（日）。-1 またはその月の日数以上なら末日（decisions.md の 23 番の読み替えはここだけで行う） */
+/**
+ * The closing day (day of the month) in a given month.
+ * @param ym - Year and month.
+ * @param closingDayOfMonth - A valid closing day (1-31 or -1).
+ * @returns The last day of the month for -1 or a day beyond its end; otherwise `closingDayOfMonth`.
+ * @internal
+ * @see decisions.md #23
+ */
 export function closingDayIn({ year, month }: YearMonth, closingDayOfMonth: number): number {
   const last = lengthOfMonth(year, month);
   return closingDayOfMonth === -1 || closingDayOfMonth > last ? last : closingDayOfMonth;
 }
 
 /**
- * @internal 月と暦日の両方を受ける引数で、文字列を暦日（日時）として読むか。ハイフンで区切った部分が 3 つ以上なら暦日、
- * それ以外は月として読む（形の崩れた文字列の code を、関数とメソッドでそろえる。decisions.md の 8 番）
+ * Whether an argument that accepts both a month and a date is read as a date: true when the string has three or more
+ * hyphen-separated parts.
+ * @internal
+ * @see decisions.md #8
  */
 export const readsAsDate = (input: string): boolean => input.split("-").length >= 3;
 
 /**
- * 締め日で区切ったときの、その月分の期間（両端を含む暦日）。closingMonth の逆算。
- *
- * 前月の締め日の翌日から、その月の締め日まで。月の代わりに暦日を渡すと、その日が属する期間（closingMonth で求めた月の期間）。
- * 返す値は変更できず、name は付かない（DateRange の形なので、そのまま closedDates などに渡せる）。
+ * The period (both ends inclusive) of a month cut at a closing day: from the day after the previous month's closing
+ * day to the month's closing day. Inverse of {@link closingMonth}.
  *
  * @example
  * closingPeriod("2026-11", 20); // { from: "2026-10-21", to: "2026-11-20" }
- * closingPeriod("2026-10", -1); // { from: "2026-10-01", to: "2026-10-31" }（末日締め）
- * closingPeriod("2026-03", 31); // { from: "2026-03-01", to: "2026-03-31" }（2 月の 31 日締めは 2 月末日）
- * closingPeriod("2026-11-05", 20); // { from: "2026-10-21", to: "2026-11-20" }（この日が属する期間）
+ * closingPeriod("2026-10", -1); // { from: "2026-10-01", to: "2026-10-31" } (closing on the last day)
+ * closingPeriod("2026-03", 31); // { from: "2026-03-01", to: "2026-03-31" } (February closes on its last day)
+ * closingPeriod("2026-11-05", 20); // { from: "2026-10-21", to: "2026-11-20" } (the period this day belongs to)
+ * @param input - "YYYY-MM", or a date "YYYY-MM-DD" meaning the period that day belongs to. A non-string is reported
+ *   as an invalid month.
+ * @param closingDayOfMonth - 1-31, or -1 for the last day.
+ * @returns A frozen `{ from, to }` of date strings (the shape of a DateRange, without `name`).
+ * @throws RangeError `invalid-argument` for an invalid closing day; `invalid-month` or `invalid-date` for an invalid
+ *   input; `out-of-range` when a date is outside the years 1000-9999.
  * @public
  */
 export function closingPeriod(
@@ -136,7 +193,7 @@ export function closingPeriod(
   closingDayOfMonth: number,
 ): { readonly from: DateString; readonly to: DateString } {
   checkClosingDay(closingDayOfMonth);
-  // 文字列でない値は月の誤り（invalid-month）として読む（引数の型は文字列だけ）
+  // A value that is not a string is read as a wrong month (invalid-month); the parameter type is string only
   const month =
     typeof input === "string" && readsAsDate(input)
       ? parseMonth(closingMonth(input as DateString, closingDayOfMonth))

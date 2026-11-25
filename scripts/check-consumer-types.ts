@@ -1,13 +1,15 @@
 import "./strict-warnings.ts";
 /**
- * 利用者の立場で、公開する型定義を型チェックする（pnpm check から実行。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+ * Type-checks the published type definitions from a user's point of view (run by pnpm check; RELEASING.md,
+ * reasons for the quality mechanisms, "runtimes that are checked").
  *
- * test/consumer/consumer.mts を、moduleResolution を node16・nodenext・bundler に変えて tsc で確かめ、
- * わざと型エラーを含む test/consumer/consumer-error.mts が失敗することも確かめる。pnpm build の後に実行する。
+ * Checks test/consumer/consumer.mts with tsc under moduleResolution node16, nodenext and bundler, and checks
+ * that test/consumer/consumer-error.mts, which contains an intended type error, fails. Run after pnpm build.
  *
- * 引数:
- *   --tsc <path>   使う tsc（既定は開発用の依存の typescript/bin/tsc。CI の consumer-types ジョブは別のバージョンを渡す）
- *   --label <text> 結果の表示に添える名前（例: "TypeScript <バージョン>"）
+ * Arguments:
+ *   --tsc <path>   The tsc to use (default: typescript/bin/tsc of the dev dependencies; the consumer-types job
+ *                  of CI passes other versions)
+ *   --label <text> Name added to the output (e.g. "TypeScript <version>")
  */
 
 import { execFileSync } from "node:child_process";
@@ -26,7 +28,7 @@ const tsc = tscArg ? resolve(tscArg) : createRequire(import.meta.url).resolve("t
 const label = argValue("--label") ?? "";
 const version = execFileSync(process.execPath, [tsc, "--version"], { encoding: "utf8" }).trim();
 const major = Number(/(\d+)\./.exec(version)?.[1] ?? 0);
-// --ignoreConfig（tsconfig.json を読まない）は 6.0 からのオプション。それより前はファイルを指定すれば読まない
+// --ignoreConfig (do not read tsconfig.json) exists from 6.0. Before that, naming a file is enough not to read it
 const ignoreConfig = major >= 6 ? ["--ignoreConfig"] : [];
 
 const emptyTypeRoots = mkdtempSync(join(tmpdir(), "bizdays-types-"));
@@ -43,7 +45,8 @@ function run(
 ): { ok: boolean; output: string } {
   const tscArgs = [
     ...ignoreConfig,
-    // リポジトリの @types（node など）を読まない。利用者の型チェックに要らず、古い TypeScript では読めない型を含むため
+    // Do not read the repository's @types (node, ...): a user's type check does not need them, and they contain
+    // types that old TypeScript versions cannot read
     "--typeRoots",
     emptyTypeRoots,
     "--noEmit",
@@ -76,7 +79,7 @@ const failures: string[] = [];
 for (const [moduleResolution, module] of settings) {
   const good = run("test/consumer/consumer.mts", moduleResolution, module);
   if (!good.ok) failures.push(`moduleResolution ${moduleResolution}:\n${good.output}`);
-  // 検査が機能していることの確認: 型エラーを含む入力は失敗し、その出力にエラーの位置が含まれる
+  // Check that the check works: an input with a type error fails and its output contains the error position
   const bad = run("test/consumer/consumer-error.mts", moduleResolution, module);
   if (bad.ok || !bad.output.includes("consumer-error.mts")) {
     failures.push(

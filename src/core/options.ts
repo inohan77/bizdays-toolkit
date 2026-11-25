@@ -1,11 +1,14 @@
 /**
- * 設定・オプションの引数として受けるオブジェクトの判定（docs/decisions.md の 8 番）。設定・オプションを受ける関数がすべて
- * この判定を使う（国の提供元は使わないので、errors.ts とは分ける）。
+ * Test for an object received as options (docs/decisions.md #8). Every function that takes options uses it.
+ * Kept apart from errors.ts because the country providers do not use it.
  */
 
 /**
- * @internal 設定・オプションの引数として受けるオブジェクトか。Date・Map・Set・RegExp・配列・関数・包んだプリミティブなどは
- * 受けない。別の実行環境のオブジェクトも受けるよう、プロトタイプではなく種類で見る
+ * Whether a value is accepted as an options object: a non-null, non-array object whose Object.prototype.toString tag
+ * is "[object Object]" (so Date, Map, Set, RegExp, functions and boxed primitives are rejected, and objects from
+ * another realm are accepted).
+ * @internal
+ * @see decisions.md #8
  */
 export const isOptionsObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" &&

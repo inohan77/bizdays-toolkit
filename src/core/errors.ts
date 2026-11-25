@@ -1,76 +1,88 @@
 /**
- * コード付きの例外と、入力の問題を集める仕組み。
+ * Errors with a code, and the collector of problems in the input.
  *
- * 例外のクラスと code の対応、メッセージの扱いは decisions.md の 3 番、どの誤りがどの code になるかは 8 番。
- * 到達しない箇所の例外（作りの誤り）だけは code を持たない InternalError（internalError で作る）。
- * 問題を集める仕組み（IssueCollector）は、作成時のチェックと規則の診断（diagnose）で共通。
+ * Error classes, their codes and the handling of messages: decisions.md #3. Which mistake gets which code:
+ * decisions.md #8. Only errors at unreachable places (defects) are an InternalError without a code (created
+ * with internalError). The collector (IssueCollector) is shared by the checks at creation and the diagnostics.
  */
 
 /**
- * 既知のエラーコード（増えることがある）。
+ * Known error codes (more may be added).
  * @public
  */
 export type KnownErrorCode =
-  /** 日付の形式・値の誤り（"YYYY-MM-DD" の文字列と、Temporal の形の年月日。年が 1000〜9999 の外も含む。decisions.md の 1 番） */
+  /**
+   * Wrong format or value of a date (a "YYYY-MM-DD" string or a Temporal-shaped year, month and day; includes a
+   * year outside 1000-9999. decisions.md #1)
+   */
   | "invalid-date"
-  /** 月 "YYYY-MM" の形式・値の誤り */
+  /** Wrong format or value of a month "YYYY-MM" */
   | "invalid-month"
-  /** 毎年の月日 "MM-DD" の形式・値の誤り */
+  /** Wrong format or value of an annual month-day "MM-DD" */
   | "invalid-annual-date"
-  /** 時刻・日時の形式・値の誤り */
+  /** Wrong format or value of a time or date-time */
   | "invalid-time"
-  /** 受け付けない種類の入力 */
+  /** An input of a kind that is not accepted */
   | "invalid-input"
-  /** IANA タイムゾーン名の誤り */
+  /** Wrong IANA time zone name */
   | "invalid-time-zone"
-  /** 期間の開始が終了より後 */
+  /** The start of a range is after its end */
   | "invalid-range"
-  /** 曜日の番号（0〜6）の誤り */
+  /** Wrong weekday number (0-6) */
   | "invalid-weekday"
-  /** 設定以外の引数の誤り（メソッドのオプションの誤り、整数でない日数など） */
+  /** A wrong argument other than options (wrong method options, a number of days that is not an integer, ...) */
   | "invalid-argument"
-  /** 設定の誤り。設定は営業日カレンダー・スケジュールを作る関数が検証するオブジェクトで、オブジェクトでないことも含む（decisions.md の 8 番） */
+  /**
+   * Wrong options. Options are the object validated by the functions that create a business calendar or
+   * schedule; a value that is not an object is included (decisions.md #8)
+   */
   | "invalid-option"
   /**
-   * 同じタイムゾーンでなければならないものが食い違う（1 つの設定の祝日の提供元どうしで、timeZone の指定がない。
-   * 合成するカレンダーどうし。スケジュールと、第 n 営業日の規則の数える基準のカレンダー）。実行環境の Intl が返す名前が
-   * 同じなら同じとし、違えば、実行環境に Temporal があれば Temporal の比較で決める（decisions.md の 18 番）。Temporal がなく、
-   * 別名を同じ名前に直さない実行環境では、別名どうし（"UTC" と "Etc/UTC" など）は食い違いになる
+   * Things that must share a time zone differ (the holiday providers of one set of options without `timeZone`;
+   * calendars being combined; a schedule and the basis calendar of an nth-business-day rule). Zones are the same
+   * when the runtime's Intl returns the same name; otherwise, when the runtime has Temporal, Temporal's
+   * comparison decides (decisions.md #18). Without Temporal, in a runtime that does not canonicalize aliases,
+   * two aliases ("UTC" and "Etc/UTC", ...) conflict
    */
   | "time-zone-conflict"
   /**
-   * 対応している年の範囲の外（提供元の対応年、日付の計算や瞬間の変換が 1000〜9999 年の外に出た、祝日の一覧に渡した年が
-   * 1000〜9999 の外）。bizdays-toolkit/provider の関数の年の引数の誤りは invalid-argument
+   * Outside the supported range (a provider's supported years; a date calculation or the conversion of an
+   * instant left the years 1000-9999; a year outside 1000-9999 passed to a holiday list). A wrong year argument
+   * of the functions of bizdays-toolkit/provider is invalid-argument
    */
   | "out-of-range"
-  /** 判定が未確定の祝日（confirmed: false）に触れた（unconfirmedHolidayPolicy: "throw"） */
+  /** The judgement touched an unconfirmed holiday (confirmed: false) with unconfirmedHolidayPolicy: "throw" */
   | "unconfirmed-holiday"
-  /** 祝日の提供元の形式の誤り */
+  /** Wrong shape of a holiday provider */
   | "invalid-provider"
-  /** 祝日の提供元が返したデータの誤り */
+  /** Wrong data returned by a holiday provider */
   | "invalid-provider-data"
   /**
-   * 祝日の連続が長すぎて、"after-holiday" の規則の日を連続が明けた日に振り替えられない（連続が 31 日を超えて届かない、
-   * または 367 日を超えて続き振替元を確かめられない）。その日の判定と、その日を通る探索・その日を含む期間の計算が投げる。
-   * 長い休業は祝日ではなく closedDates・closedAnnualDates で書く
+   * A run of holidays is too long to move the day of an "after-holiday" rule to the day after the run (the run
+   * is longer than 31 days and out of reach, or lasts more than 367 days so the original day cannot be checked).
+   * Thrown by the judgement of that day, by searches that pass it and by calculations over a period containing
+   * it. Write a long closure with closedDates / closedAnnualDates, not as holidays
    */
   | "holiday-run-too-long"
   /**
-   * 営業日が見つからない（探索が searchDayLimit 日を超えた、月の営業日が第 n 営業日の n に足りない、カレンダーの締めの月に
-   * 固有の期間がない）
+   * No business day was found (the search exceeded searchDayLimit days; a month has fewer business days than
+   * the n of an nth business day; a closing month of the calendar has no days of its own)
    */
   | "no-business-day"
-  /** searchDayLimit の日数のうちに休業日が見つからない（nextClosedDay・previousClosedDay） */
+  /** No closed day within searchDayLimit days (nextClosedDay, previousClosedDay) */
   | "no-closed-day";
 
 /**
- * エラーコード。将来のバージョンで値が増えることがある。
+ * Error code. Later versions may add values.
  * @public
  */
 export type ErrorCode = KnownErrorCode | (string & {});
 
 /**
- * このライブラリが投げた例外（code 付き）か。
+ * Whether a value is an error thrown by this library with a `code`.
+ * @param error - Any caught value.
+ * @returns true for an Error with a string `code` created by this library; false for other errors, including the
+ *   library's InternalError.
  * @public
  */
 export function isBizdaysError(error: unknown): error is Error & { readonly code: ErrorCode } {
@@ -81,7 +93,14 @@ export function isBizdaysError(error: unknown): error is Error & { readonly code
   );
 }
 
-function withCode<E extends Error>(
+/**
+ * Marks an error as thrown by this library.
+ * @param error - The error to mark (mutated).
+ * @param code - Error code; set as an enumerable `code` property. A non-enumerable `bizdays: true` is set too.
+ * @returns The same error.
+ * @internal
+ */
+export function withCode<E extends Error>(
   error: E,
   code: KnownErrorCode,
 ): E & { readonly code: ErrorCode } {
@@ -90,89 +109,134 @@ function withCode<E extends Error>(
   return error as E & { readonly code: ErrorCode };
 }
 
-/** @internal */
+/**
+ * Creates a RangeError with a code.
+ * @param code - Error code.
+ * @param message - Message.
+ * @returns The error (not thrown).
+ * @internal
+ */
 export function rangeError(code: KnownErrorCode, message: string): RangeError {
   return withCode(new RangeError(message), code);
 }
 
 /**
- * @internal 作りの誤り（到達しないはずの箇所・保証が破れたとき）の例外。code を持たず（isBizdaysError は false）、
- * 診断は提供元の誤りとして報告せずにそのまま投げる。設定や入力の誤りには使わない
+ * @internal Error for a defect (a place that should be unreachable, a broken guarantee). It has no code
+ * (isBizdaysError is false); the diagnostics rethrow it instead of reporting a provider error. Not used for
+ * wrong options or input
  */
 export class InternalError extends Error {
   override readonly name = "InternalError";
 }
 
-/** @internal 作りの誤りの例外を作る（到達しない箇所の例外は、すべてこの形にする） */
+/**
+ * Creates the error for a defect of the library itself (an unreachable branch or a broken guarantee).
+ * @param message - Description; prefixed with "bizdays-toolkit internal error: ".
+ * @returns An InternalError: it has no `code`, so {@link isBizdaysError} is false. Never used for invalid options or
+ *   input.
+ * @internal
+ */
 export function internalError(message: string): InternalError {
   return new InternalError(`bizdays-toolkit internal error: ${message}`);
 }
 
 /**
- * @internal 例外のメッセージに値を埋め込むときの表し方。Symbol・BigInt でもメッセージを組み立てられる（テンプレート文字列と
- * JSON.stringify は、これらで TypeError を投げるか undefined を返す）。数は String の形（NaN・Infinity を JSON の null にしない）、
- * 文字列は引用符付き（空文字列や空白を見分けられる）、Date・Map などは種類（"[object Date]"）、ほかの値は JSON の形
+ * Text form of any value for error messages. Never throws.
+ * @param value - Any value.
+ * @returns Numbers and symbols by String(); bigint with an `n` suffix; "a function" for functions; the
+ *   Object.prototype.toString tag (e.g. "[object Date]") for objects other than plain objects and arrays, and for
+ *   objects JSON cannot serialize; otherwise the JSON form (strings are quoted), or String() when JSON has none
+ *   (undefined).
+ * @internal
  */
 export function describeValue(value: unknown): string {
   if (typeof value === "number" || typeof value === "symbol") return String(value);
   if (typeof value === "bigint") return `${value}n`;
   if (typeof value === "function") return "a function";
-  // Date・Map などは種類で表す（JSON の形だと、Date が文字列に、Map が {} に見える）
+  // Date, Map and the like are shown by their kind (as JSON a Date looks like a string and a Map like {})
   const tag = Object.prototype.toString.call(value);
   if (value && typeof value === "object" && !/^\[object (Object|Array)\]$/.test(tag)) return tag;
   try {
-    // 前のバージョンと同じ表し方（JSON の形）。undefined などの JSON にならない値は String の形
+    // The same form as earlier versions (JSON). Values without a JSON form, such as undefined, use String
     return JSON.stringify(value) ?? String(value);
   } catch {
-    // JSON にできないオブジェクト（循環・BigInt を含むもの・読むと投げるもの）
+    // An object without a JSON form (circular, containing a BigInt, throwing when read)
     return tag;
   }
 }
 
-/** @internal */
+/**
+ * Creates a TypeError with a code.
+ * @param code - Error code.
+ * @param message - Message.
+ * @returns The error (not thrown).
+ * @internal
+ */
 export function typeError(code: KnownErrorCode, message: string): TypeError {
   return withCode(new TypeError(message), code);
 }
 
 // ------------------------------------------------------------
-// 問題を集める仕組み（作成時のチェックと、規則の診断で共通）
+// Collecting problems (shared by the checks at creation and the diagnostics)
 // ------------------------------------------------------------
 
-/** @internal 問題の重さ */
+/** @internal Severity of a problem */
 export type IssueSeverity = "error" | "warning" | "info";
 
-/** @internal 設定の問題 1 件 */
+/** @internal One problem in the options */
 export interface Issue {
   readonly severity: IssueSeverity;
   readonly code: string;
-  /** 設定の中の位置（例: "dates[1].from"）。設定全体なら "" */
+  /** Position in the options (e.g. "dates[1].from"); "" for the options as a whole */
   readonly path: string;
   readonly message: string;
-  /** 関係する別の位置（例: 覆っている先の規則） */
+  /** Another related position (e.g. the rule that covers this one) */
   readonly relatedPath?: string;
-  /** unknown-option の知らないキーと既知のキー（診断で候補を挙げるため。結果には出さない） */
+  /** The unknown key and the known keys of unknown-option (for suggestions in the diagnostics; not in results) */
   readonly unknownKey?: string;
   readonly knownKeys?: readonly string[];
-  /** 和集合の設定の kinds の "national"（診断で、当てている祝日と 1.0.0 での扱いを添えるため。結果には出さない） */
+  /**
+   * "national" in kinds of options with a union of providers (the diagnostics add the matched holidays and the
+   * handling in 1.0.0; not in results)
+   */
   readonly nationalInUnion?: true;
 }
 
-/** @internal 問題を集める */
+/** @internal Collects problems */
 export class IssueCollector {
   readonly issues: Issue[] = [];
 
+  /**
+   * Records an error.
+   * @param code - Error code.
+   * @param path - Position in the options ("" for the whole options).
+   * @param message - Message.
+   */
   error(code: KnownErrorCode, path: string, message: string): void {
     this.issues.push({ severity: "error", code, path, message });
   }
 
+  /**
+   * Records a warning.
+   * @param code - Diagnostic code.
+   * @param path - Position in the options.
+   * @param message - Message.
+   * @param relatedPath - Related position; the property is omitted when undefined.
+   */
   warning(code: string, path: string, message: string, relatedPath?: string): void {
     this.add("warning", code, path, message, relatedPath);
   }
 
+  /**
+   * Records an info item. Parameters as {@link IssueCollector.warning}.
+   */
   info(code: string, path: string, message: string, relatedPath?: string): void {
     this.add("info", code, path, message, relatedPath);
   }
 
+  /**
+   * Appends an issue; `relatedPath` is omitted from the issue when undefined.
+   */
   private add(
     severity: IssueSeverity,
     code: string,
@@ -187,11 +251,17 @@ export class IssueCollector {
     );
   }
 
+  /**
+   * Whether any recorded issue has severity "error".
+   */
   get hasErrors(): boolean {
     return this.issues.some((i) => i.severity === "error");
   }
 
-  /** 最初の誤りを例外にして投げる（誤りがなければ何もしない） */
+  /**
+   * Throws the first recorded error as a RangeError with its code and the message "path: message" (just the message
+   * when the path is empty). Does nothing without errors.
+   */
   throwFirstError(): void {
     const first = this.issues.find((i) => i.severity === "error");
     if (!first) return;
@@ -201,13 +271,16 @@ export class IssueCollector {
 }
 
 /**
- * @internal 値が undefined の項目を除いた複製（なければ元のオブジェクト）。設定の明示的な undefined は省略と同じ
- * （decisions.md の 6 番）。知らないキーの検査（checkUnknownKeys）は除く前のオブジェクトに対して行う。
- * スケジュールの value は undefined も値として持てるので除かない
+ * Copy of an options object without the properties whose value is undefined (an explicit undefined means "omitted").
+ * @param value - Options object; not changed.
+ * @param keys - When given, only these keys are dropped.
+ * @returns A new object. The key `value` is never dropped (a schedule value may be undefined).
+ * @internal
+ * @see decisions.md #6
  */
 export function withoutUndefined(
   value: Record<string, unknown>,
-  /** 除く項目を限るとき、その項目 */
+  /** The properties to omit, when limited */
   keys?: readonly string[],
 ): Record<string, unknown> {
   const out = { ...value };
@@ -219,8 +292,12 @@ export function withoutUndefined(
 }
 
 /**
- * @internal 設定のオブジェクトに、知らないキーがあれば警告として記録する。
- * 近い既知のキーを候補に挙げるのは規則の診断で行う（作成時は警告を使わないので、ここでは既知のキーを渡すだけ）
+ * Records an `unknown-option` warning for every own enumerable key of `value` that is not in `known`.
+ * @param collector - Receives the warnings (with the unknown key and the known keys, used later for suggestions).
+ * @param path - Position of `value` in the options ("" for the top level).
+ * @param value - The object to check.
+ * @param known - Valid keys at that position.
+ * @internal
  */
 export function checkUnknownKeys(
   collector: IssueCollector,

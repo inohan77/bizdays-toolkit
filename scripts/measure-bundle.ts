@@ -1,10 +1,12 @@
 /**
- * README の minify + gzip のサイズを測る（手で実行する。RELEASING.md の「README のサイズの値」）。
+ * Measures the minified + gzip sizes for the README (run by hand; RELEASING.md, the section on the sizes in the
+ * README).
  *
- * ルートのすべてと、国の提供元（サブパスごとに、その提供元の export だけ）を読み込む入口を esbuild で
- * bundle・minify し、gzip（レベル 9）で測る。1 KB は 1,000 バイト。先に pnpm build で dist を作っておくこと。
+ * Entries that load everything of the root, and each country provider (per subpath, only that provider's
+ * exports), are bundled and minified with esbuild and measured with gzip (level 9). 1 KB is 1,000 bytes. Build
+ * dist with pnpm build first.
  *
- * 使い方: node scripts/measure-bundle.ts --esbuild <dir>/node_modules/esbuild
+ * Usage: node scripts/measure-bundle.ts --esbuild <dir>/node_modules/esbuild
  */
 
 import "./strict-warnings.ts";

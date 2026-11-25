@@ -1,6 +1,9 @@
-// 失敗を注入した祝日の提供元で、判定・診断・合成の結果が文書（docs/guide.ja.md の「対応年の外」「未確定の祝日」「エラー」
-// 「設定の診断」、docs/providers.ja.md の「提供元の約束と誤りの扱い」）のとおりになることを確かめる（テスト拡充案の T3）。
-// 途中から例外を投げる提供元（同じ年に同じ結果を返す約束の外）は、ここでは確かめない（診断の catch 節に届くことは test/catch-paths.test.ts が確かめる）。
+// With holiday providers into which failures are injected, checks that the results of judgement, diagnostics and
+// combination are as documented (the sections of docs/guide.ja.md on the outside of the supported years,
+// unconfirmed holidays, errors and option diagnostics, and of docs/providers.ja.md on the provider contract and
+// the handling of mistakes) (T3 of the test expansion plan).
+// A provider that starts throwing part-way (outside the contract of the same result for the same year) is not
+// checked here (test/catch-paths.test.ts checks that the catch clauses of the diagnostics are reached).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -29,7 +32,7 @@ import { SHORT_DAYS, SHORT_PROVIDER } from "./support/provider.ts";
 import { diagnoseOptions } from "./support/sites.ts";
 import { flagEnv } from "./support/env.ts";
 
-/** f が code の例外を投げる */
+/** f throws an error with the code */
 const throwsCode = (f: () => unknown, code: string, context: string): void => {
   assert.throws(
     f,
@@ -50,21 +53,23 @@ const strictCalendar = () =>
 const plainCalendar = (holidayPolicy: "closed" | "open" = "closed") =>
   createCalendar({ holidayProvider: SHORT_PROVIDER, closedWeekdays: [0, 6], holidayPolicy });
 
-/** 提供元が投げた例外をそのまま投げる（code を持たない注入の例外） */
+/** The error thrown by the provider is rethrown as it is (an injected error without a code) */
 const isInjected = (e: unknown): boolean =>
   e instanceof RangeError &&
   e.message === `injected failure for ${INJECTED_YEAR}` &&
   (e as { code?: unknown }).code === undefined;
 
-// 確かめる約束ごとに 1 つの test にまとめ、注入の種類（不正なデータ 3 種・途中の年を未確定・特定の年で例外を投げる）は中で回す。
-// 失敗した組み合わせは「注入: 確かめること: メッセージ」で集め、まとめて報告する（1 つ目で止めない）
+// One test per promise checked; the kinds of injection (3 kinds of wrong data, an unconfirmed year in the
+// middle, throwing in a given year) are looped inside.
+// Failed combinations are collected as "injection: what is checked: message" and reported together (not
+// stopping at the first)
 
 interface Case {
   readonly injection: string;
   readonly check: string;
   readonly run: () => void;
 }
-/** すべての組み合わせを動かし、失敗を集める（試した組み合わせが 0 件なら失敗。空振りしない） */
+/** Runs every combination and collects the failures (0 combinations tried fails: not an empty run) */
 function runCases(cases: readonly Case[]): void {
   assert.ok(cases.length > 0, "試した組み合わせが 0 件");
   const failures: string[] = [];
@@ -80,7 +85,7 @@ function runCases(cases: readonly Case[]): void {
   assert.deepEqual(failures, []);
 }
 
-/** 注入した提供元（種類の名前 → 提供元） */
+/** The injected providers (kind name → provider) */
 const INJECTIONS: readonly (readonly [string, NonNullable<CalendarOptions["holidayProvider"]>])[] =
   [
     ...KINDS.map(
@@ -116,7 +121,7 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
       check: `判定: 作成は通り、使った年の判定だけが invalid-provider-data になる`,
       run: () => {
         const provider = invalidDataInYear(INJECTED_YEAR, kind);
-        // 作成時は使った年だけを調べる（設定の診断の表の invalid-provider-data）
+        // Creation examines only the years used (invalid-provider-data in the table of option diagnostics)
         const calendar = createCalendar({ holidayProvider: provider, closedWeekdays: [0, 6] });
         assert.equal(calendar.isBusinessDay(DAY_BEFORE), true);
         throwsCode(
@@ -129,7 +134,7 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
           "invalid-provider-data",
           "dayInfoOn",
         );
-        // 探索が注入した年に入れば、その年を使う
+        // Once a search enters the injected year, it uses that year
         throwsCode(
           () => calendar.addBusinessDays("2025-12-30", 5),
           "invalid-provider-data",
@@ -157,15 +162,15 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
           "unconfirmed-holiday",
           "isBusinessDay",
         );
-        // 探索が途中で通る日も「引いた判定」に入る
+        // The days a search passes on the way are part of "a judgement that looked it up" too
         throwsCode(
           () => strict.addBusinessDays("2026-05-01", 1),
           "unconfirmed-holiday",
           "addBusinessDays",
         );
-        // 確定している年の祝日は投げない
+        // A holiday of a confirmed year does not throw
         assert.equal(strict.isBusinessDay(HOLIDAY_AFTER), false);
-        // 一覧は投げない（例外を受けたあとに影響する日を列挙する逃げ道）
+        // The list does not throw (the way out for listing the affected days after catching the error)
         assert.ok(strict.holidaysInYear(INJECTED_YEAR).every((h) => h.confirmed === false));
         assert.ok(strict.holidaysBetween("2026-01-01", "2026-12-31").length > 0);
       },
@@ -175,7 +180,8 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
       check:
         '判定: "ignore" で祝日に依存しない設定は、判定・第 n 営業日の数え方・探索で投げず、dayInfoOn は投げる',
       run: () => {
-        // 第 n 営業日の規則がある設定も入れる（数える基準の営業日も祝日に依存しない）
+        // Options with an nth-business-day rule are included too (the business days of the counting basis do
+        // not depend on holidays either)
         for (const rules of [
           [],
           [{ businessDayOfMonth: 1 }],
@@ -194,7 +200,7 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
             unconfirmedHolidayPolicy: "accept",
           } as CalendarOptions);
           const context = JSON.stringify(rules);
-          // 結果は未確定の祝日を気にしない設定（accept）と同じで、投げない
+          // The result equals options that do not care about unconfirmed holidays (accept), and nothing throws
           assert.equal(
             strict.isBusinessDay(HOLIDAY_IN_INJECTED_YEAR),
             plain.isBusinessDay(HOLIDAY_IN_INJECTED_YEAR),
@@ -215,7 +221,7 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
             plain.businessDatesBetween("2026-05-01", "2026-05-31"),
             context,
           );
-          // その日の情報は holiday を付けるので投げる
+          // The information of that day carries `holiday`, so it throws
           throwsCode(
             () => strict.dayInfoOn(HOLIDAY_IN_INJECTED_YEAR),
             "unconfirmed-holiday",
@@ -227,7 +233,7 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
             `daysBetween ${context}`,
           );
         }
-        // スケジュールも同じ
+        // The same for a schedule
         const schedule = createSchedule({
           holidayProvider: unconfirmedInYear(INJECTED_YEAR),
           weekdayValues: ["closed", "open", "open", "open", "open", "open", "closed"],
@@ -255,7 +261,8 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
           openRecurringRules: [{ weekday: 1 }],
           unconfirmedHolidayPolicy: "throw",
         });
-        // 2026-05-04 は月曜の祝日。祝日なら閉じる規則が先、祝日でなければ開く規則が先なので、祝日が結果を変える
+        // 2026-05-04 is a holiday Monday. On a holiday the closing rule comes first, otherwise the opening rule,
+        // so the holiday changes the result
         throwsCode(
           () => strict.isBusinessDay(HOLIDAY_IN_INJECTED_YEAR),
           "unconfirmed-holiday",
@@ -272,9 +279,10 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
           holidayProvider: unconfirmedInYear(INJECTED_YEAR),
           weekdayValues: ["closed", "open", "open", "open", "open", "open", "closed"],
           holidayPolicy: "ignore",
-          // スケジュールの第 n 営業日の規則は、数える基準のカレンダー（calendar）が必須（スケジュールの値は営業日・休業日では
-          // ないので、既定の基準を作れない。calendar がなければ invalid-option）。既定の基準（createBasis）を通るのはカレンダーの
-          // 規則だけで、それは "ignore" のカレンダーのテスト（第 n 営業日の規則を含む）が確かめる
+          // An nth-business-day rule of a schedule requires the calendar used as counting basis (`calendar`)
+          // (a schedule's values are not business days or closed days, so no default basis can be built;
+          // without calendar it is invalid-option). Only the rules of calendars go through the default basis
+          // (createBasis), which the test of the "ignore" calendar (with an nth-business-day rule) checks
           recurringRules: [{ businessDayOfMonth: 1, value: "closed", calendar: plainCalendar() }],
           unconfirmedHolidayPolicy: "throw",
         });
@@ -291,7 +299,7 @@ test("約束: 使った年だけ投げる（判定は、注入した年を使う
           "unconfirmed-holiday",
           "fromSchedule daysBetween",
         );
-        // "ignore" でない設定は、営業日の判定でも投げる
+        // Options that are not "ignore" throw in the business-day judgement too
         const strict = createCalendarFromSchedule(
           createSchedule({
             holidayProvider: unconfirmedInYear(INJECTED_YEAR),
@@ -401,7 +409,8 @@ test("約束: 診断は全年を調べる（診断は例外を投げず、提供
       check:
         "診断: どの設定でも error の invalid-provider-data を返し、例外を祝日なしとして受け止めたまま error のない結果を返さない",
       run: () => {
-        // 例外を投げる年（対応年の最初・途中・最後）と、目録の設定（診断の性質のテストと同じ作り方）の組み合わせ
+        // Combinations of the year that throws (the first, a middle and the last supported year) with catalog
+        // options (built as in the diagnostics property tests)
         let checked = 0;
         for (const year of [2025, 2026, 2027]) {
           const rand = random(20261103 + year);
@@ -435,7 +444,8 @@ test("約束: 合成は投げる側に従う（合成したカレンダーは、
       injection: "途中の年を未確定",
       check: "合成: 投げるカレンダーが先でも後でも、合成したカレンダーも投げる",
       run: () => {
-        // 後に置いた場合は、先のカレンダーで結果が決まる日（"all" で休業・"any" で営業）を選ぶ。0.30.8 までは後のカレンダーを判定しなかった
+        // Placed second, a day whose result the first calendar decides is chosen (closed with "all", open with
+        // "any"). Up to 0.30.8 the later calendar was not judged
         for (const [open, other] of [
           ["all", () => plainCalendar("closed")],
           ["any", () => plainCalendar("open")],
@@ -455,7 +465,8 @@ test("約束: 合成は投げる側に従う（合成したカレンダーは、
               "unconfirmed-holiday",
               `${label} dayInfoOn`,
             );
-            // 探索も、途中で通る日にすべてのカレンダーを判定する（前日から戻ると最初に通るのが予測の祝日）
+            // A search judges every calendar on the days it passes too (going back from the day before, the
+            // first day passed is the predicted holiday)
             throwsCode(
               () => combined.previousBusinessDay(addDays(HOLIDAY_IN_INJECTED_YEAR, 1)),
               "unconfirmed-holiday",
@@ -488,12 +499,16 @@ test("約束: 合成は投げる側に従う（合成したカレンダーは、
   ]);
 });
 
-/** 診断と判定の一致のテストの設定の数（診断が時間を食うので pnpm check では 12 件。全件の 150 件は CONSISTENCY_FULL=1 で、CI の diagnose-consistency ジョブ） */
+/**
+ * The number of options of the test that diagnostics and judgement agree (diagnostics take time, so 12 in pnpm
+ * check; the full 150 run with CONSISTENCY_FULL=1 in the diagnose-consistency job of CI)
+ */
 const CONSISTENCY_RUNS = flagEnv("CONSISTENCY_FULL") ? 150 : 12;
 
 test('診断と判定の一致（オラクル）: 診断が unconfirmedHolidayPolicy を redundant と出した設定は、"throw" を "accept" に変えても全日の判定（例外の有無を含む）が変わらない', () => {
-  // 目録の設定（祝日に従属する形のない文脈）を、祝日の扱い "ignore" と未確定の年を含む提供元で作る。"over-holiday"・
-  // "after-holiday" の規則の有無で、redundant と出る設定と出ない設定の両方ができる
+  // Catalog options (the context without shapes that depend on holidays) built with holiday handling "ignore"
+  // and a provider that has an unconfirmed year. With and without "over-holiday" / "after-holiday" rules, both
+  // options reported as redundant and options not reported occur
   const rand = random(20261104);
   const days = SHORT_DAYS;
   const outcome = (calendar: ReturnType<typeof createCalendar>, day: string): string => {
@@ -503,7 +518,10 @@ test('診断と判定の一致（オラクル）: 診断が unconfirmedHolidayPo
       return `throw:${isBizdaysError(e) ? e.code : String(e)}`;
     }
   };
-  /** 群ごとの件数: 診断の結果（redundant と出たか）・作成に失敗したか・全日を比べたか・違いのあった設定 */
+  /**
+   * Counts per group: the diagnostics result (reported as redundant or not), failed creation, all days compared,
+   * and options with a difference
+   */
   const groups = {
     redundant: { configs: 0, failed: 0, compared: 0, differed: 0 },
     other: { configs: 0, failed: 0, compared: 0, differed: 0 },
@@ -535,7 +553,8 @@ test('診断と判定の一致（オラクル）: 診断が unconfirmedHolidayPo
     group.compared++;
     const context = `run=${run} ${JSON.stringify({ ...options, holidayProvider: "UNCONFIRMED-2026" })}`;
     if (days.some((day) => outcome(strict, day) !== outcome(plain, day))) group.differed++;
-    // redundant と出た設定は、どの日も同じ（出なかった設定は、違ってよいので数えるだけ）
+    // Options reported as redundant are the same on every day (options not reported may differ and are only
+    // counted)
     if (flagged)
       for (const day of days)
         assert.equal(outcome(strict, day), outcome(plain, day), `${context} ${day}`);
@@ -545,7 +564,7 @@ test('診断と判定の一致（オラクル）: 診断が unconfirmedHolidayPo
   console.log(
     `# redundant と出た設定 ${line(groups.redundant)}、出なかった設定 ${line(groups.other)}`,
   );
-  // どちらの群も、全日を比べた設定が 1 件以上ある（空振りしていない）
+  // Both groups have at least one options whose days were all compared (not an empty run)
   assert.ok(
     groups.redundant.compared > 0 && groups.other.compared > 0,
     `比べた設定が足りない（空振り）: ${JSON.stringify(groups)}`,

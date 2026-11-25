@@ -1,27 +1,37 @@
 /**
- * 性能の退行の許可（scripts/bench-compare.ts が使う）。開発の記録（docs/development-log.md）の今のバージョン（または [Unreleased]）に、
- * 計測ごとに次の形の行を書くと、その計測が上限を超えても、書いた倍率までは受け入れる。
+ * Allowance for a performance regression (used by scripts/bench-compare.ts). A line in the development log
+ * (docs/development-log.md) of the current version (or [Unreleased]), one per measurement, in the form
  *
- *   - 性能の退行: <計測の名前> は <数>x まで受け入れる（<理由>）
+ *   <ALLOWANCE_PREFIX><measurement name> <particle> <number>x <accepting phrase> <(reason, full-width parentheses)>
  *
- * 「性能の退行」という言葉があるだけの行と、理由（括弧の中）のない行は、許可にならない（0.31.9 で、速くなったことを書いた行の見出しにこの言葉を使い、上限を
- * 超えても合格になる状態で公開の直前まで進んだ。tool-selftest が見つけた）。どの計測を何倍まで受け入れるかを書かせるのは、
- * 受け入れたつもりより大きい退行を止めるためでもある（RELEASING.md の「品質の確認」の表の「性能の退行」の行）
+ * (see ALLOWANCE_PREFIX and the regular expression in allowedRatio) accepts that measurement up to the written
+ * ratio even when it exceeds the limit.
+ *
+ * A line that merely contains the prefix words, or a line without a reason in parentheses, is not an allowance
+ * (in 0.31.9 a line about a speed-up used these words as its heading, and the work went on until just before
+ * publication in a state that would pass over the limit; tool-selftest found it). Writing which measurement and
+ * up to what ratio also stops a regression larger than the one meant to be accepted (the "performance
+ * regression" row of the quality table of RELEASING.md)
  */
 
-/** 許可の行の頭。この後に、計測の名前・「 は 」・倍率・「x まで受け入れる」が続く */
+/**
+ * Head of an allowance line. The measurement name, a particle, the ratio and the accepting phrase follow (the line is
+ * written in Japanese, the language of the development log)
+ */
 export const ALLOWANCE_PREFIX = "- 性能の退行: ";
 
 /**
- * 記録の節の本文から、その計測に許した倍率を読む。許可の行がなければ undefined。
- * 計測の名前は全角の括弧を含むので（「createCalendar（店舗の設定）」）、正規表現で読み分けず、行の頭との完全一致で探す
+ * Reads the ratio allowed for a measurement from the bodies of the log sections; undefined without an allowance
+ * line. Measurement names contain full-width parentheses, so the line is not parsed by a regular expression
+ * but found by an exact match of its head
  */
 export function allowedRatio(sections: readonly string[], name: string): number | undefined {
   const head = `${ALLOWANCE_PREFIX}${name} は `;
   for (const section of sections) {
     for (const line of section.split("\n")) {
       if (!line.startsWith(head)) continue;
-      // 理由（全角の括弧の中に 1 文字以上）まで書いた行だけを許可にする（理由のない許可を残さない）
+      // Only a line with a reason (one or more characters in full-width parentheses) is an allowance (no
+      // allowance without a reason)
       const m = /^(\d+(?:\.\d+)?)x まで受け入れる（.+）/.exec(line.slice(head.length));
       if (m) return Number(m[1]);
     }

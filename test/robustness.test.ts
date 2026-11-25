@@ -24,7 +24,7 @@ import {
 import { IssueCollector } from "../src/core/errors.ts";
 import { compileCalendarOptions } from "../src/core/calendar.ts";
 
-/** 例外が code を持ち、表のクラス（classOf）のインスタンスであることを確かめる */
+/** Checks that an error has a code and is an instance of the class of the table (classOf) */
 function throwsCode(
   fn: () => unknown,
   code: string,
@@ -47,8 +47,9 @@ function throwsCode(
 }
 
 /**
- * code ごとの例外のクラスの表（docs/decisions.md の 3 番・src/core/errors.ts の冒頭）。invalid-input だけが TypeError で、
- * ほかのすべての code は RangeError。code ごとに、引数の型の誤りと値の誤りの両方の経路（あれば）で投げさせる
+ * The table of error classes per code (docs/decisions.md #3 and the beginning of src/core/errors.ts). Only
+ * invalid-input is a TypeError; every other code is a RangeError. Per code, both the path of a wrong argument
+ * type and of a wrong value (when they exist) are made to throw
  */
 const classOf = (code: string): ErrorConstructor =>
   code === "invalid-input" ? TypeError : RangeError;
@@ -74,9 +75,9 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
   ],
   "invalid-input": [
     () => isHoliday(20261123 as unknown as string),
-    // ISO 以外の暦の Temporal の形（受け付けない種類の入力の、もう 1 つの経路）
+    // A Temporal shape with a calendar other than ISO (the other path of an input of a kind that is not accepted)
     () => isHoliday({ year: 2026, month: 11, day: 23, calendarId: "japanese" } as never),
-    // 文字列でない calendarId（メッセージを組み立てるところで落ちていた）
+    // A calendarId that is not a string (it used to fail where the message is built)
     () => isHoliday({ year: 2026, month: 11, day: 23, calendarId: Symbol("x") } as never),
   ],
   "invalid-time-zone": [() => createCalendar({ timeZone: "Asia/Nowhere" })],
@@ -102,7 +103,8 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
   ],
   "out-of-range": [
     () => holidaysInYear(2100),
-    // Date が表せる範囲（±8.64e15 ミリ秒）を超える瞬間（年を読めずに Intl の整形で落ちていた）
+    // An instant beyond the range a Date can represent (±8.64e15 ms) (the year could not be read and Intl's
+    // formatting failed)
     () => isHoliday({ epochMilliseconds: 1e20 } as never),
     () => isHoliday({ epochMilliseconds: -1e20 } as never),
   ],
@@ -117,7 +119,8 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
     () => createCalendar({ holidayProvider: badDataProvider }).isBusinessDay("2026-01-01"),
   ],
   "holiday-run-too-long": [
-    // 2026-07-01 から 40 日続く祝日。7 月 1 日の規則の日は、明けた 8 月 10 日に振り替えられない（test/lost-shift.test.ts）
+    // Holidays lasting 40 days from 2026-07-01. The rule day of July 1 cannot be moved to August 10, the day
+    // after the run (test/lost-shift.test.ts)
     () =>
       createCalendar({
         holidayProvider: holidayRun(40),
@@ -137,8 +140,13 @@ const TRIGGERS: Readonly<Record<string, readonly (() => unknown)[]>> = {
 };
 
 test("例外のクラスは code ごとの表のとおり（invalid-input だけが TypeError、ほかは RangeError）で、すべての code を確かめる", () => {
-  // 確かめる code は、src/core/errors.ts の KnownErrorCode のすべて（表に漏れがあれば失敗）
-  const source = readFileSync(new URL("../src/core/errors.ts", import.meta.url), "utf8");
+  // The codes checked are all of KnownErrorCode of src/core/errors.ts (a gap in the table fails).
+  // Comments are removed before looking for the ";" that ends the type (a ";" inside a comment must not cut the
+  // type short)
+  const source = readFileSync(new URL("../src/core/errors.ts", import.meta.url), "utf8").replace(
+    /\/\*[\s\S]*?\*\//g,
+    "",
+  );
   const union = /export type KnownErrorCode =([\s\S]*?);/.exec(source)![1]!;
   const codes = [...union.matchAll(/\| "([a-z-]+)"/g)].map((m) => m[1]!);
   assert.deepEqual(Object.keys(TRIGGERS).sort(), [...codes].sort(), "表の code と KnownErrorCode");
@@ -147,7 +155,8 @@ test("例外のクラスは code ごとの表のとおり（invalid-input だけ
 });
 
 test("曜日の番号の誤り: 曜日を受けるすべての項目で、要素の値の誤りは invalid-weekday（作成も診断も。decisions.md の 8 番）。空の配列・書き忘れは invalid-option", () => {
-  // 各項目の値の誤りが報告される設定の中の位置（ガイドの「メッセージに設定の中の位置が入る」）
+  // The position in the options at which a wrong value of each property is reported (the guide: messages contain
+  // the position in the options)
   const paths: Record<string, string> = {
     closedWeekdays: "closedWeekdays[0]",
     weekday: "closedRecurringRules[0].weekday",
@@ -156,7 +165,7 @@ test("曜日の番号の誤り: 曜日を受けるすべての項目で、要素
     skipWeekdays: "closedRecurringRules[0].skipWeekdays",
     sameAs: "holidayPolicy.sameAs",
   };
-  // 曜日を受ける項目と、その項目に誤った値 v を書いた設定（ほかの項目は正しい）
+  // The properties that take weekdays, and options with the wrong value v written there (the rest is correct)
   const places: Record<
     string,
     (v: unknown) => [kind: "calendar" | "schedule", options: Record<string, unknown>]
@@ -180,14 +189,16 @@ test("曜日の番号の誤り: 曜日を受けるすべての項目で、要素
       { weekdayValues: [1, 1, 1, 1, 1, 1, 1], holidayProvider: jp, holidayPolicy: { sameAs: v } },
     ],
   };
-  // 表とソースの突き合わせ: isWeekday で曜日を確かめる箇所が読む項目が、表の項目とそろっていること
+  // Comparison of the table with the source: the properties read where isWeekday checks a weekday equal the
+  // properties of the table
   const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
   const sites = [read("../src/core/calendar.ts"), read("../src/core/schedule.ts")].flatMap(
     (text) => {
       const lines = text.split("\n");
       return lines.flatMap((line, i) => {
         const near = lines.slice(Math.max(0, i - 4), i + 1).join("\n");
-        // 呼び出し（isWeekday(…)）と、checkSet に渡す引数（isWeekday,）。import の行と定義は除く
+        // Calls (isWeekday(...)) and the argument passed to checkSet (isWeekday,). The import line and the
+        // definition are left out
         const call = /\bisWeekday\(/.test(line) && !/export const isWeekday/.test(line);
         const passed = line.trim() === "isWeekday," && /checkSet\(/.test(near);
         if (!call && !passed) return [];
@@ -227,7 +238,7 @@ test("曜日の番号の誤り: 曜日を受けるすべての項目で、要素
       );
     }
   }
-  // 値の種類の誤りでないもの（空の配列・必須の項目の書き忘れ）は invalid-option のまま
+  // What is not a wrong kind of value (an empty array, a missing required property) stays invalid-option
   for (const options of [
     { holidayProvider: jp, closedRecurringRules: [{ holiday: true, weekdays: [] }] },
     { holidayProvider: jp, closedRecurringRules: [{ dayAfterHoliday: true, skipWeekdays: [] }] },
@@ -372,7 +383,7 @@ test("提供元が返した祝日は、契約の項目だけを持つ変更で�
   const h = calendar.holidayOn("2026-05-01");
   assert.deepEqual(h, ok("2026-05-01"));
   assert.ok(Object.isFrozen(h));
-  // 順序の乱れた提供元でも、一覧は日付順になる
+  // With a provider out of order, the list is still in date order
   const unordered = createCalendar({
     holidayProvider: provider(() => [ok("2026-12-01"), ok("2026-01-01")]),
   });

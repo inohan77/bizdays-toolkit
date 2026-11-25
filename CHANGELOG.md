@@ -6,6 +6,18 @@ Entries from 0.31.0 are in English. Earlier entries remain in Japanese (their **
 
 ## [Unreleased]
 
+## [0.32.9] - 2026-11-25
+
+### Fixed
+
+- The option diagnostics examine a fixed range of years, the diagnostic range (1955–2099), and what they report is about the days of that range. Earlier versions widened the examined years to follow the options, and reported wrongly where they widened: `redundant` for a rule that takes effect only on holidays of a provider with 200 supported years or more (also when the provider belongs to the calendar a schedule counts on), and an internal error from `diagnoseSchedule` for a specific date outside the supported years of the holiday provider of the calendar a rule counts on (0.32.6 to 0.32.8), or in the first or last month of the years 1000–9999 when the calendar it counts on has a week-counting rule.
+- A specific date, or a rule with an effective period, without a day in the diagnostic range is not examined and is reported as `out-of-range` (usually a mistyped year). Reports decided from the days of the diagnostic range alone for a rule or date that also has days outside it end with the years checked.
+- When the calendar a schedule counts on cannot be read (not made by this library) or its rules repeat over more than the diagnostic range, every day of the diagnostic range is examined; earlier versions reported no `redundant` and `never-matches` for such options.
+- The check of a holiday provider's data (`invalid-provider-data`) examines the supported years in the diagnostic range (earlier: every supported year, or 1900–2099 for a provider with more than 200 supported years).
+- A schedule value whose reading throws (a getter or a proxy that throws) counts as different from other values in the diagnostics, as values nested too deeply to compare do; earlier versions reported `invalid-provider-data` for such options, also without a holiday provider.
+- When the calendar a schedule counts on throws while a month is counted, the diagnostics treat the month as one they cannot judge, whatever is thrown, and report nothing they cannot decide for the rule (as for a month outside the calendar's supported years). Earlier versions reported `invalid-provider-data` at `holidayProvider` when an object shaped like a calendar threw another error.
+- The diagnostics keep, for one diagnosis, the first outcome of each month of the calendar a schedule counts on. Earlier versions could throw an internal error from `diagnoseSchedule` when an object shaped like a calendar changed how it threw between calls.
+
 ## [0.32.8] - 2026-11-23
 
 ### Fixed
@@ -1064,7 +1076,8 @@ This version rebuilds the `redundant` diagnostic so that the reported rules can 
 
 - 日本: 2026 年 2 月の官報（2027 年の春分・秋分の日）まで反映（`dataVersion: "2026-02"`、`confirmedThrough: 2027`）
 
-[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.8...HEAD
+[Unreleased]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.9...HEAD
+[0.32.9]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.8...v0.32.9
 [0.32.8]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.7...v0.32.8
 [0.32.7]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.6...v0.32.7
 [0.32.6]: https://github.com/inohan77/bizdays-toolkit/compare/v0.32.5...v0.32.6

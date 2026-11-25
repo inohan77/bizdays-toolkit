@@ -1,5 +1,6 @@
 /**
- * CHANGELOG.md から指定したバージョンの節を取り出して標準出力に書く（GitHub Release の本文に使う）。
+ * Writes the section of a given version of CHANGELOG.md to standard output (used as the body of the GitHub
+ * Release).
  *
  *   node scripts/release-notes.ts <version>
  */

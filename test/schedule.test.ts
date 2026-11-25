@@ -8,7 +8,10 @@ type Hours = { open: string; close: string } | null;
 const weekday: Hours = { open: "10:00", close: "21:00" };
 const sunday: Hours = { open: "10:00", close: "19:00" };
 
-/** 店舗の営業時間の例: 火曜定休、祝日は日曜の営業時間、元日は休業、大晦日は短縮営業 */
+/**
+ * Example opening hours of a shop: closed on Tuesdays, Sunday hours on holidays, closed on New Year's Day,
+ * shorter hours on New Year's Eve
+ */
 const storeHours = createSchedule<Hours>({
   holidayProvider: jp,
   weekdayValues: [sunday, weekday, null, weekday, weekday, weekday, weekday],
@@ -18,13 +21,13 @@ const storeHours = createSchedule<Hours>({
 });
 
 test("曜日ごとの値", () => {
-  assert.deepEqual(storeHours.valueOn("2026-10-14"), weekday); // 水曜
-  assert.equal(storeHours.valueOn("2026-10-13"), null); // 火曜（定休）
+  assert.deepEqual(storeHours.valueOn("2026-10-14"), weekday); // a Wednesday
+  assert.equal(storeHours.valueOn("2026-10-13"), null); // a Tuesday (closed)
   assert.deepEqual(storeHours.valueOn("2026-10-18"), sunday);
 });
 
 test("祝日は指定した曜日の値（sameAs）", () => {
-  const day = storeHours.dayInfoOn("2026-11-03"); // 文化の日（火曜 = 定休日だが祝日は日曜の営業時間）
+  const day = storeHours.dayInfoOn("2026-11-03"); // Culture Day (a closed Tuesday, but holidays get Sunday hours)
   assert.deepEqual(day.value, sunday);
   assert.equal(day.reason, "holiday");
   assert.equal(day.name, "文化の日");
@@ -32,7 +35,7 @@ test("祝日は指定した曜日の値（sameAs）", () => {
 });
 
 test("優先順位: 個別の日付 > 毎年の月日 > 祝日 > 曜日", () => {
-  const newYear = storeHours.dayInfoOn("2027-01-01"); // 元日（祝日）より毎年の月日が優先
+  const newYear = storeHours.dayInfoOn("2027-01-01"); // the annual date wins over New Year's Day (a holiday)
   assert.equal(newYear.value, null);
   assert.equal(newYear.reason, "annual");
   assert.equal(newYear.name, "元日休業");
@@ -56,7 +59,7 @@ test("祝日の規則（weekday / sameAs / value）", () => {
       weekdayValues: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
       holidayPolicy: holiday,
     });
-  const culture = "2026-11-03"; // 火曜の祝日
+  const culture = "2026-11-03"; // a holiday on a Tuesday
   assert.equal(make("ignore").valueOn(culture), "tue");
   assert.equal(make("ignore").dayInfoOn(culture).reason, "weekday");
   assert.equal(make({ sameAs: 0 }).valueOn(culture), "sun");
@@ -87,8 +90,9 @@ test("期間の指定と、先に書いた規則の優先", () => {
 });
 
 test("重なる個別の日付は、始まりの早い日付ではなく、配列で先に書いた日付が決める", () => {
-  // 始まりの順に並べると書いた順と逆になる組を 2 つ入れる。重なる日付があるので、判定は書いた順に調べる
-  // （重ならないときだけ始まりの順に並べて二分探索で引く。0.32.7。decisions.md の 16 番）
+  // Two pairs whose order by start is the reverse of the written order. There are overlapping dates, so the
+  // judgement examines them in the written order (only without overlap are they sorted by start and looked up by
+  // binary search. 0.32.7. decisions.md #16)
   const s = createSchedule<number>({
     weekdayValues: [0, 0, 0, 0, 0, 0, 0],
     dates: [
@@ -120,7 +124,7 @@ test("重なる個別の日付は、始まりの早い日付ではなく、配�
 
 test("接する期間（重ならない）と、1 日だけ重なる期間", () => {
   const weekdayValues = [0, 0, 0, 0, 0, 0, 0] as const;
-  // 接する: 重ならないので、始まりの順に並べて引く（書いた順と逆）
+  // Touching: no overlap, so they are sorted by start and looked up (the reverse of the written order)
   const touch = createSchedule<number>({
     weekdayValues,
     dates: [
@@ -128,8 +132,9 @@ test("接する期間（重ならない）と、1 日だけ重なる期間", () 
       { from: "2026-06-01", to: "2026-06-10", value: 1, name: "前" },
     ],
   });
-  // 1 日だけ重なる: 書いた順に調べ、重なる 6/10 は先に書いた「前」が決める（重ならないと誤って見なして始まりの順で引くと、
-  // 6/10 に始まる「後」になる）
+  // Overlapping by one day: examined in the written order, and the overlapping 6/10 is decided by the one
+  // written first (wrongly treating them as not overlapping and looking up by start would give the later one,
+  // which starts on 6/10)
   const overlap = createSchedule<number>({
     weekdayValues,
     dates: [
@@ -152,12 +157,14 @@ test("接する期間（重ならない）と、1 日だけ重なる期間", () 
 });
 
 test("乱数の個別の日付（重なる・接する・離れる）でも、日を決めるのは配列で先に書いた日付（種を固定）", () => {
-  // ガイドの約束（同じ種類の規則が重なるときは、配列で先に書いたものが優先）を、重なる並びと重ならない並びの両方で確かめる。
-  // 狭い窓に日付を詰め、暦日の範囲の端の窓も混ぜる。始まりの日が同じ日付の組もできる
+  // The guide's promise (when rules of the same kind overlap, the one written first in the array wins) is
+  // checked for both overlapping and non-overlapping sequences.
+  // Dates are packed into narrow windows, with windows at the ends of the calendar range mixed in. Pairs of
+  // dates with the same start day occur too
   const rand = random(32_707);
   const DAY = 86_400_000;
   const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
-  // 1970-01-01（日数が 0）をまたぐ窓を含める
+  // Includes a window across 1970-01-01 (day number 0)
   const windows = [
     Date.UTC(2026, 0, 1),
     Date.UTC(9999, 10, 20),
@@ -198,13 +205,13 @@ test("乱数の個別の日付（重なる・接する・離れる）でも、�
       );
     }
   }
-  // 重なる並びと、重ならない並びの両方を通り、始まりの日が同じ日付の組も含んだこと
+  // Both overlapping and non-overlapping sequences occurred, including pairs of dates with the same start day
   assert.ok(overlapping > 50 && overlapping < 250, `重なる並び ${overlapping}`);
   assert.ok(sameStart > 100, `始まりの日が同じ組を含む並び ${sameStart}`);
 });
 
 test("瞬間は祝日の提供元のタイムゾーンで暦日にする", () => {
-  // UTC では 11/2、日本時間では 11/3（文化の日）
+  // 11/2 in UTC, 11/3 (Culture Day) in Japan time
   assert.deepEqual(storeHours.valueOn(new Date("2026-11-02T15:30:00Z")), sunday);
 });
 
@@ -244,7 +251,7 @@ test("civilOf: カレンダーのタイムゾーンでの暦日と時刻", () =>
   assert.deepEqual(storeHours.civilOf(instant), { date: "2026-10-14", time: "16:30" });
   assert.deepEqual(storeHours.civilOf("2026-10-14"), { date: "2026-10-14", time: null });
   assert.deepEqual(storeHours.civilOf("2026-10-14T09:05"), { date: "2026-10-14", time: "09:05" });
-  // 日付をまたぐ瞬間
+  // An instant across the change of date
   assert.deepEqual(storeHours.civilOf("2026-10-14T15:30:00Z"), {
     date: "2026-10-15",
     time: "00:30",
@@ -268,7 +275,7 @@ test("「今、営業時間内か」はアプリ側で 1 行で書ける", () =>
   assert.equal(isOpenAt(new Date("2026-10-14T01:00:00Z")), true); // 10:00 JST
   assert.equal(isOpenAt(new Date("2026-10-14T11:59:00Z")), true); // 20:59 JST
   assert.equal(isOpenAt(new Date("2026-10-14T12:00:00Z")), false); // 21:00 JST
-  assert.equal(isOpenAt(new Date("2026-10-13T03:00:00Z")), false); // 火曜（定休）
+  assert.equal(isOpenAt(new Date("2026-10-13T03:00:00Z")), false); // a Tuesday (closed)
 });
 
 test("返す値は変更できない", () => {
@@ -290,8 +297,8 @@ test("value: undefined は値: 曜日・祝日・個別の日付・毎年の月�
     ["2026-10-01", "date", "dates[0]"],
     ["2026-10-02", "annual", "annualDates[0]"],
     ["2026-10-05", "recurring", "recurringRules[0]"],
-    ["2026-10-12", "holiday", undefined], // スポーツの日（月曜日）
-    ["2026-10-03", "weekday", undefined], // 土曜日
+    ["2026-10-12", "holiday", undefined], // Sports Day (a Monday)
+    ["2026-10-03", "weekday", undefined], // a Saturday
   ];
   for (const [date, reason, optionPath] of cases) {
     const info = schedule.dayInfoOn(date);
@@ -301,7 +308,7 @@ test("value: undefined は値: 曜日・祝日・個別の日付・毎年の月�
     assert.equal(info.optionPath, optionPath, date);
   }
   assert.equal(schedule.valueOn("2026-10-06"), "w");
-  // value のキーがない規則は、今までどおり invalid-option（明示的な undefined と区別する）
+  // A rule without the key `value` is invalid-option as before (told apart from an explicit undefined)
   const without: [string, unknown][] = [
     ["dates", [{ date: "2026-10-01" }]],
     ["annualDates", [{ date: "10-02" }]],
@@ -330,12 +337,12 @@ test("holidayPolicy の sameAs と value を両方書いた設定は invalid-opt
       return (e as { code?: unknown }).code;
     }
   };
-  // 2026-11-23（勤労感謝の日、月曜日）
+  // 2026-11-23 (Labor Thanksgiving Day, a Monday)
   assert.equal(code({ sameAs: 0, value: 99 }), "invalid-option");
   assert.equal(code({ sameAs: 0, value: undefined }), "invalid-option");
   assert.equal(make({ sameAs: undefined, value: 9 }).valueOn("2026-11-23"), 9);
   assert.equal(make({ value: undefined }).valueOn("2026-11-23"), undefined);
   assert.equal(make({ sameAs: 0 }).valueOn("2026-11-23"), 1);
-  assert.equal(code({ sameAs: undefined }), "invalid-option"); // {} と同じ
+  assert.equal(code({ sameAs: undefined }), "invalid-option"); // the same as {}
   assert.equal(code({ sameAs: 7 }), "invalid-weekday");
 });

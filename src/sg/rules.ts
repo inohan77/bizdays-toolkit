@@ -1,15 +1,19 @@
 /**
- * シンガポールの祝日（public holidays）の表と振替の規則。
+ * Table of the public holidays of Singapore, and the substitution rule.
  *
- * 旧正月・Hari Raya・Vesak Day・Deepavali は太陰暦・イスラム暦・ヒンドゥー暦で決まり、規則では計算できない。
- * 規則で計算する国と違い、年ごとに MOM（Ministry of Manpower）が官報で告示した日付を正として表で持つ。
- * 振替だけは Holidays Act（1998 年版）第 4 条の規則「日曜日に当たる祝日は、その翌日のうちそれ自体が祝日でない
- * 最初の日を祝日とする」で計算し、表には書かない。土曜日に当たる祝日は振替にならない（雇用主が休みか手当を与える）。
+ * Chinese New Year, Hari Raya, Vesak Day and Deepavali follow the lunar, Islamic and Hindu calendars and cannot
+ * be computed by rule. Unlike the countries computed by rule, the dates gazetted per year by MOM (Ministry of
+ * Manpower) are the authority and are kept in a table.
+ * Only substitution is computed, by section 4 of the Holidays Act (1998 edition) - when a holiday falls on a
+ * Sunday, the first following day that is not itself a holiday is a holiday - and is not in the table. A holiday
+ * on a Saturday is not substituted (the employer gives a day off or pay).
  *
- * 識別子（key）は毎年の祝日に 1 つずつ（KnownSgHolidayKey。旧正月の 2 日は同じ key）。振替日は元の祝日の key、Polling Day は持たない。
- * 名称は MOM の報道発表の綴り（アポストロフィは ’）。data.gov.sg のコレクション 691（MOM）のデータで
- * 全日照合している（test/fixtures/datagovsg-public-holidays.json）。data.gov.sg の 2022 年分は MOM の改定後の告示と
- * 食い違う（scripts/verify-datagovsg.ts の KNOWN_DIFFERENCES）ため、告示を正としている。
+ * Keys: one per annual holiday (KnownSgHolidayKey; the two days of Chinese New Year share a key). A substitute
+ * day has the key of its holiday; Polling Day has none.
+ * Names follow the spelling of MOM's press releases (the apostrophe is ’). All days are verified against the
+ * data of collection 691 (MOM) of data.gov.sg (test/fixtures/datagovsg-public-holidays.json). The 2022 data of
+ * data.gov.sg differs from MOM's revised gazette (KNOWN_DIFFERENCES in scripts/verify-datagovsg.ts), so the
+ * gazette is the authority.
  */
 
 import { addDays, formatDate, weekdayOf, type DateString } from "../core/date.ts";
@@ -17,28 +21,29 @@ import { describeValue, rangeError } from "../core/errors.ts";
 import type { Holiday } from "../core/types.ts";
 
 /**
- * シンガポールの祝日の種別（既知の値）。
+ * Kinds of holidays of Singapore (known values).
  * @public
  */
 export type KnownSgHolidayKind =
-  /** 毎年の祝日（Holidays Act の別表と、年ごとに告示される日付） */
+  /** Annual holiday (the schedule to the Holidays Act and the dates gazetted per year) */
   | "regular"
-  /** 日曜日に当たった祝日の振替（Holidays Act 第 4 条） */
+  /** Substitute for a holiday on a Sunday (section 4 of the Holidays Act) */
   | "substitute"
-  /** 告示による臨時の祝日（Polling Day など） */
+  /** Special holiday by gazette (Polling Day, ...) */
   | "special";
 
 /**
- * シンガポールの祝日の種別。将来のバージョンで値が増えることがあるので、分岐では「その他」も扱うこと。
- * すべての値を網羅したことを型で確かめたい場合は KnownSgHolidayKind を使う。
+ * Kind of a holiday of Singapore. Later versions may add values, so handle "anything else" when branching.
+ * Use KnownSgHolidayKind to check by type that every value is handled.
  * @public
  */
 export type SgHolidayKind = KnownSgHolidayKind | (string & {});
 
 /**
- * シンガポールの毎年の祝日の識別子（Holiday.key。既知の値）。毎年の祝日に 1 つずつ（旧正月の 2 日は同じ key）。
- * 振替日は元の祝日の key を持ち、臨時の祝日（Polling Day）は key を持たない。
- * 規則の keys に書くときの補完に使う（型は開いているので他の文字列も通る）。
+ * Keys of the annual holidays of Singapore (Holiday.key; known values). One per annual holiday (the two days of
+ * Chinese New Year share a key).
+ * A substitute day has the key of its holiday; a special holiday (Polling Day) has no key.
+ * Used for completion when writing `keys` of a rule (the type is open, so other strings pass too).
  * @namingSource holiday-key
  * @public
  */
@@ -54,11 +59,14 @@ export type KnownSgHolidayKey =
   | "deepavali"
   | "christmas";
 
-/** @internal 対応年（表のある年。それより後は予測できないので out-of-range） */
+/** @internal Supported years (the years in the table; later years cannot be predicted and are out-of-range) */
 export const SUPPORTED_YEARS = Object.freeze({ from: 2020, to: 2027 });
-/** @internal MOM が日付を告示している最後の年（対応年の終わりと同じ。表の年はすべて確定） */
+/**
+ * @internal The last year whose dates MOM has gazetted (equal to the end of the supported years; every year in
+ * the table is confirmed)
+ */
 export const CONFIRMED_THROUGH = 2027;
-/** @internal 反映済みの data.gov.sg のコレクション 691 の更新年月（2027 年分の公開） */
+/** @internal Year and month of the reflected update of collection 691 of data.gov.sg (publication of 2027) */
 export const DATA_VERSION = "2026-07";
 
 const NEW_YEAR = "New Year’s Day";
@@ -73,7 +81,7 @@ const DEEPAVALI = "Deepavali";
 const CHRISTMAS = "Christmas Day";
 const POLLING = "Polling Day";
 
-/** 名称から識別子へ（Polling Day は持たない） */
+/** From name to key (Polling Day has none) */
 const KEY_OF: Readonly<Record<string, KnownSgHolidayKey>> = {
   [NEW_YEAR]: "new-year",
   [CNY]: "chinese-new-year",
@@ -87,7 +95,10 @@ const KEY_OF: Readonly<Record<string, KnownSgHolidayKey>> = {
   [CHRISTMAS]: "christmas",
 };
 
-/** 年ごとに動く祝日（月日と名前）。固定日の祝日（1/1・5/1・8/9・12/25）は表に書かず、下で足す */
+/**
+ * Holidays that move by year (month-day and name). Fixed-date holidays (1/1, 5/1, 8/9, 12/25) are not in the
+ * table and are added below
+ */
 const MOVABLE: Readonly<Record<number, readonly (readonly [string, string])[]>> = {
   2020: [
     ["01-25", CNY],
@@ -107,7 +118,8 @@ const MOVABLE: Readonly<Record<number, readonly (readonly [string, string])[]>> 
     ["07-20", HAJI],
     ["11-04", DEEPAVALI],
   ],
-  // 2022 年の Hari Raya Puasa・Haji は 2021-10-21 の MOM の報道発表で 5/3・7/10 に改定された（data.gov.sg は改定前の形）
+  // Hari Raya Puasa and Haji of 2022 were revised to 5/3 and 7/10 by MOM's press release of 2021-10-21
+  // (data.gov.sg has the form before the revision)
   2022: [
     ["02-01", CNY],
     ["02-02", CNY],
@@ -164,7 +176,7 @@ const MOVABLE: Readonly<Record<number, readonly (readonly [string, string])[]>> 
   ],
 };
 
-/** 告示による臨時の祝日（総選挙・大統領選挙の投票日） */
+/** Special holidays by gazette (polling days of general and presidential elections) */
 const SPECIAL_DAYS: readonly (readonly [DateString, string])[] = [
   ["2020-07-10", POLLING],
   ["2023-09-01", POLLING],
@@ -184,9 +196,17 @@ interface Entry {
   readonly kind: KnownSgHolidayKind;
 }
 
-/** @internal その年の祝日（表と振替の規則から。日付順） */
+/**
+ * Computes the Singapore public holidays of a year: fixed dates, the listed movable dates of that year, special days,
+ * and for each holiday on a Sunday the next day that is not a holiday (kind "substitute").
+ * @param year - Integer; a year present in the MOVABLE table.
+ * @returns New frozen holidays sorted by date, all confirmed; `nameEn` equals `name`.
+ * @throws RangeError `invalid-argument` when the year is not an integer; `out-of-range` for a year without data.
+ * @internal
+ */
 export function computeSgHolidays(year: number): Holiday<SgHolidayKind>[] {
-  // 整数でない年（文字列の "2026" など）は範囲の外ではなく引数の誤り（KnownErrorCode の説明）
+  // A year that is not an integer (the string "2026", ...) is a wrong argument, not out of range (see
+  // KnownErrorCode)
   if (!Number.isInteger(year))
     throw rangeError(
       "invalid-argument",
@@ -216,7 +236,8 @@ export function computeSgHolidays(year: number): Holiday<SgHolidayKind>[] {
       kind: "special" as const,
     })),
   ].sort((a, b) => (a.date < b.date ? -1 : 1));
-  // 日曜日に当たる祝日を日付順に振り替える（振替先は、それ自体が祝日でない翌日以降の最初の日）
+  // Holidays on a Sunday are substituted in date order (the substitute is the first following day that is not
+  // itself a holiday)
   const taken = new Set<DateString>(entries.map((e) => e.date));
   const sundays = entries.filter((e) => weekdayOf(e.date) === 0);
   for (const e of sundays) {

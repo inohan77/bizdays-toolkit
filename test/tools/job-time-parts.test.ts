@@ -1,4 +1,5 @@
-// CI のジョブの時間を直近の main の実行と比べる部品（scripts/job-time-parts.ts）: 中央値、1.5 倍の注意、比べられないときの出力
+// The parts that compare the time of a CI job with recent runs on main (scripts/job-time-parts.ts): the median,
+// the notice at 1.5 times, and the output when no comparison is possible
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -37,7 +38,7 @@ test("ジョブの時間: 直近 3 回の中央値の 1.5 倍を超えたら注�
   const within = judge("oracle (0/4)", 300, [200, 100, 300]);
   assert.equal(within.notice, false);
   assert.ok(within.lines.some((l) => l.includes("中央値 200 秒、1.50 倍")));
-  // 4 回目以降の値は使わない
+  // Values from the fourth on are not used
   assert.equal(judge("x", 301, [200, 200, 200, 10]).notice, true);
 });
 
@@ -48,7 +49,7 @@ test("ジョブの時間: 比べる値が 3 回に満たなければ、比べら
 });
 
 test("ジョブの時間: GitHub の API の 5xx と通信の失敗は待って 1 回だけ再試行し、2 回目の結果を使う。4xx（429 を含む）は再試行しない", async () => {
-  // 状態の代わりに "network" を渡すと、その回の取得は通信の失敗（status 0）、"throw" なら取得が例外を投げる
+  // "network" instead of a status makes that fetch a network failure (status 0); "throw" makes the fetch throw
   const run = async (statuses: (number | "network" | "throw")[]) => {
     const calls: number[] = [];
     const waits: number[] = [];
@@ -71,21 +72,21 @@ test("ジョブの時間: GitHub の API の 5xx と通信の失敗は待って 
     );
     return { result, calls, waits };
   };
-  // 成功は 1 回で、待たない
+  // A success takes one call and no wait
   assert.deepEqual(await run([200]), { result: { body: { ok: true } }, calls: [200], waits: [] });
-  // 5xx の後に成功すれば、その本文を返す（待つのは 1 回）
+  // A success after a 5xx returns that body (one wait)
   assert.deepEqual(await run([502, 200]), {
     result: { body: { ok: true } },
     calls: [502, 200],
     waits: [RETRY_WAIT_MS],
   });
-  // 2 回とも 5xx なら、2 回目の状態で失敗する（3 回目はない）
+  // Two 5xx fail with the second status (there is no third call)
   assert.deepEqual(await run([502, 503, 200]), {
     result: { error: "GET /x: HTTP 503" },
     calls: [502, 503],
     waits: [RETRY_WAIT_MS],
   });
-  // 4xx は再試行しない（429 も、10 秒待っても直らないので同じ）
+  // A 4xx is not retried (429 neither: waiting 10 seconds does not fix it)
   assert.deepEqual(await run([404, 200]), {
     result: { error: "GET /x: HTTP 404" },
     calls: [404],
@@ -96,19 +97,19 @@ test("ジョブの時間: GitHub の API の 5xx と通信の失敗は待って 
     calls: [429],
     waits: [],
   });
-  // 通信の失敗の後に成功すれば、その本文を返す
+  // A success after a network failure returns that body
   assert.deepEqual(await run(["network", 200]), {
     result: { body: { ok: true } },
     calls: [0, 200],
     waits: [RETRY_WAIT_MS],
   });
-  // 2 回とも通信の失敗なら、2 回目の理由で失敗する
+  // Two network failures fail with the second reason
   assert.deepEqual(await run(["network", "network"]), {
     result: { error: "GET /x: fetch failed" },
     calls: [0, 0],
     waits: [RETRY_WAIT_MS],
   });
-  // 取得が投げた例外（設定の誤りなど）は、一時的な失敗ではないので再試行しない
+  // An error thrown by the fetch (a configuration mistake, ...) is not a temporary failure and is not retried
   assert.deepEqual(await run(["throw", 200]), {
     result: { error: "GITHUB_TOKEN is not set" },
     calls: [-1],

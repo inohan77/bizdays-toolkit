@@ -1,20 +1,20 @@
 /**
- * 暦日（タイムゾーンを持たない日付）の計算。
+ * Calendar-date arithmetic (dates without a time zone).
  *
- * 日付は常に "YYYY-MM-DD" 文字列で扱い、内部では 1970-01-01 からの日数（day number）に
- * 変換して計算する。Date オブジェクトのローカル時刻は使わない。
+ * A date is always a "YYYY-MM-DD" string; calculations convert it to the number of days since 1970-01-01
+ * (the day number). The local time of Date objects is never used.
  */
 
 import { describeValue, rangeError } from "./errors.ts";
 
 /**
- * 暦日を表す "YYYY-MM-DD" 文字列。
+ * A calendar date as a "YYYY-MM-DD" string.
  * @public
  */
 export type DateString = string;
 
 /**
- * 曜日（0 = 日曜日 … 6 = 土曜日。Date#getDay と同じ）。
+ * Day of the week (0 = Sunday ... 6 = Saturday, as Date#getDay).
  * @public
  */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -23,20 +23,29 @@ const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MS_PER_DAY = 86_400_000;
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
 
-// 直前に解析した 1 件（1 日の判定の中で、同じ暦日の文字列を何度も解析するため。判定の結果ではなく解析の結果だけを覚える。
-// decisions.md の 16 番）。初めから正しい 1 件を入れておく（空の状態を作ると、文字列でない値がそれと一致してしまう）
+// The last parsed value (one judgement parses the same date string many times; only the parse result is kept,
+// never a judgement result. decisions.md #16). It starts with a valid entry: an empty state would equal a
+// value that is not a string.
 let lastValue = "2000-01-01";
 let lastParts: { readonly year: number; readonly month: number; readonly day: number } =
   Object.freeze({ year: 2000, month: 1, day: 1 });
 
-/** 年月日に分解する。形式または暦として不正なら RangeError。返すオブジェクトは変更できない */
+/**
+ * Splits a calendar date string into year, month and day.
+ * @param value - "YYYY-MM-DD" with a 4-digit year from 1000 to 9999.
+ * @returns A frozen `{ year, month, day }`. The last parsed string is cached, so the same object may be returned
+ *   again.
+ * @throws RangeError `invalid-date` when the value is not a string, not in that form, has a year below 1000, or is
+ *   not a day that exists.
+ * @see decisions.md #16
+ */
 export function parseDate(value: string): {
   readonly year: number;
   readonly month: number;
   readonly day: number;
 } {
   if (value === lastValue) return lastParts;
-  // 文字列でない値は正規表現に渡さない（Symbol は文字列にできず TypeError になる）
+  // A value that is not a string is not passed to the regular expression (a Symbol cannot become a string: TypeError)
   const m = typeof value === "string" ? DATE_RE.exec(value) : null;
   if (!m) {
     throw rangeError(
@@ -55,7 +64,9 @@ export function parseDate(value: string): {
 }
 
 /**
- * "YYYY-MM-DD" として正しい暦日か。
+ * Whether the input is a valid calendar date string "YYYY-MM-DD" (year 1000-9999, an existing day).
+ * @param input - Any value.
+ * @returns true only for such a string; never throws.
  * @public
  */
 export function isValidDate(input: unknown): input is DateString {
@@ -69,8 +80,16 @@ export function isValidDate(input: unknown): input is DateString {
 }
 
 /**
- * 年月日から "YYYY-MM-DD" を作る（範囲外なら RangeError）。exists なら、実在する年月日として解析し直さず、parseDate の
- * 直前 1 件の記憶に入れる（続けて同じ文字列を解析するため。decisions.md の 16 番）
+ * Builds "YYYY-MM-DD" from year, month and day.
+ * @param year - Integer from 1000 to 9999.
+ * @param month - 1-12.
+ * @param day - Day of the month.
+ * @param exists - true when the caller guarantees the day exists: month and day are then not validated and the result
+ *   is stored in the cache of {@link parseDate}.
+ * @returns The date string.
+ * @throws RangeError `out-of-range` when the year is not an integer from 1000 to 9999; `invalid-date` when the day
+ *   does not exist (only without `exists`).
+ * @see decisions.md #16
  */
 export function formatDate(year: number, month: number, day: number, exists?: boolean): DateString {
   if (!Number.isInteger(year) || year < 1000 || year > 9999) {
@@ -82,12 +101,22 @@ export function formatDate(year: number, month: number, day: number, exists?: bo
   return s;
 }
 
-/** うるう年か */
+/**
+ * Whether a year is a leap year in the Gregorian calendar.
+ * @param year - Year.
+ * @returns true for a leap year.
+ */
 export function isLeapYear(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
-/** その月の日数 */
+/**
+ * Number of days in a month.
+ * @param year - Year (only used for February).
+ * @param month - 1-12.
+ * @returns 28 to 31.
+ * @throws RangeError `invalid-date` when the month is not 1-12.
+ */
 export function lengthOfMonth(year: number, month: number): number {
   if (month === 2) return isLeapYear(year) ? 29 : 28;
   const days = MONTH_DAYS[month - 1];
@@ -96,15 +125,22 @@ export function lengthOfMonth(year: number, month: number): number {
   return days;
 }
 
-/** 1970-01-01 からの日数 */
+/**
+ * Day number of a date: days since 1970-01-01 (negative before it).
+ * @param date - "YYYY-MM-DD".
+ * @returns An integer.
+ * @throws RangeError `invalid-date` for an invalid date string.
+ */
 export function toDayNumber(date: DateString): number {
   const { year, month, day } = parseDate(date);
   return Date.UTC(year, month - 1, day) / MS_PER_DAY;
 }
 
 /**
- * 1970-01-01 からの日数を "YYYY-MM-DD" に戻す。日数から作る年月日は必ず実在するので、文字列を解析し直して検証しない
- * （年の範囲だけを確かめる。探索・期間の数え上げ・診断の走査が 1 日ごとに呼ぶ）
+ * Date string of a day number. Inverse of {@link toDayNumber}.
+ * @param dayNumber - Integer number of days since 1970-01-01. Not validated to be an integer.
+ * @returns "YYYY-MM-DD".
+ * @throws RangeError `out-of-range` when the year is outside 1000-9999.
  */
 export function fromDayNumber(dayNumber: number): DateString {
   const d = new Date(dayNumber * MS_PER_DAY);
@@ -112,7 +148,12 @@ export function fromDayNumber(dayNumber: number): DateString {
 }
 
 /**
- * n 日後（負なら前）の日付。
+ * The date n days after a date (before it when n is negative).
+ * @param date - "YYYY-MM-DD".
+ * @param n - Integer number of days.
+ * @returns "YYYY-MM-DD".
+ * @throws RangeError `invalid-argument` when n is not an integer; `invalid-date` for an invalid date; `out-of-range`
+ *   when the result is outside the years 1000-9999.
  * @public
  */
 export function addDays(date: DateString, n: number): DateString {
@@ -123,7 +164,11 @@ export function addDays(date: DateString, n: number): DateString {
 }
 
 /**
- * from から to までの日数（to が後なら正）。
+ * Number of days from one date to another.
+ * @param from - "YYYY-MM-DD".
+ * @param to - "YYYY-MM-DD".
+ * @returns `to` minus `from` in days (positive when `to` is later).
+ * @throws RangeError `invalid-date` for an invalid date.
  * @public
  */
 export function diffDays(from: DateString, to: DateString): number {
@@ -131,15 +176,27 @@ export function diffDays(from: DateString, to: DateString): number {
 }
 
 /**
- * 曜日（0 = 日曜日）。
+ * Day of the week of a date.
+ * @param date - "YYYY-MM-DD".
+ * @returns 0 (Sunday) to 6 (Saturday), as Date#getDay.
+ * @throws RangeError `invalid-date` for an invalid date.
  * @public
  */
 export function weekdayOf(date: DateString): Weekday {
-  // 1970-01-01 は木曜日（4）
+  // 1970-01-01 is a Thursday (4)
   return ((((toDayNumber(date) + 4) % 7) + 7) % 7) as Weekday;
 }
 
-/** その月の第 n 何曜日（n は 1 始まり） */
+/**
+ * The n-th given weekday of a month.
+ * @param year - Year, 1000-9999.
+ * @param month - 1-12.
+ * @param weekday - 0 (Sunday) to 6.
+ * @param n - 1 for the first, 2 for the second, ...
+ * @returns "YYYY-MM-DD".
+ * @throws RangeError `invalid-date` when the month has no n-th such weekday; `out-of-range` for a year outside
+ *   1000-9999.
+ */
 export function nthWeekdayOfMonth(
   year: number,
   month: number,
@@ -151,8 +208,10 @@ export function nthWeekdayOfMonth(
 }
 
 /**
- * 復活祭の日曜日（グレゴリオ暦。Anonymous Gregorian algorithm）。復活祭から日数で決まる祝日の計算に使い、提供元の実装者向けに
- * bizdays-toolkit/provider からも公開する（入力の検証はそちらで行う）
+ * Easter Sunday of a year in the Gregorian calendar (anonymous Gregorian algorithm).
+ * @param year - Year; not validated here (the public entry in bizdays-toolkit/provider validates it).
+ * @returns "YYYY-MM-DD".
+ * @throws RangeError `out-of-range` for a year outside 1000-9999.
  */
 export function easterSunday(year: number): DateString {
   const a = year % 19;

@@ -1,19 +1,24 @@
 /**
- * 全日の結果を並べて比べるための補助（テストどうしで同じ処理を別々に持たないための置き場）。
+ * Helpers for laying out and comparing the results of all days (a place so that tests do not each keep the same
+ * processing).
  *
- * - daysOf: 期間の全日（"YYYY-MM-DD"。両端を含む）
- * - dayLine: 1 日の結果を 1 行の文字列にする（open だけか、理由・名前・振替元まで）
- * - linesOf: カレンダーの期間の全日を dayLine で並べる（投げた日は "E:<code>"）
- * - removeItem: "closedRecurringRules[2]" のような位置の項目を設定から取り除く
- * - shiftDays・weekdayOfDay: 日付に日数を足す・曜日を求める（テストが Date を直接書かずに済むように）
+ * - daysOf: all days of a period ("YYYY-MM-DD", both ends included)
+ * - dayLine: the result of one day as one line (only `open`, or also reason, name and the original day of a move)
+ * - linesOf: all days of a period of a calendar as dayLine lines (a day that throws is "E:<code>")
+ * - removeItem: removes the item at a position such as "closedRecurringRules[2]" from options
+ * - shiftDays, weekdayOfDay: add days to a date, the weekday of a date (so that tests need not write Date)
  *
- * 比べる定義（open だけか、理由まで見るか）は呼ぶ側が full で選ぶ。変形のテスト（test/metamorphic.test.ts）の全項目の比較、
- * 整合のテスト（test/consistency.test.ts）の valueOn の結果の比較、失敗の注入のテスト（test/faulty-provider.test.ts）の
- * isBusinessDay と例外の有無の比較は、比べる約束が違うので、この補助には寄せない
+ * The caller chooses the definition of the comparison (only `open`, or reasons too) with `full`. The comparison
+ * of all properties in the metamorphic tests (test/metamorphic.test.ts), of the results of valueOn in the
+ * consistency tests (test/consistency.test.ts) and of isBusinessDay and thrown-or-not in the fault-injection
+ * tests (test/faulty-provider.test.ts) keep other promises and are not moved into these helpers
  */
 import type { Obj } from "./catalog.ts";
 
-/** 期間の全日（両端を含む）。日付の文字列から Date.UTC で数えるので、実行環境のタイムゾーンに依存しない */
+/**
+ * All days of a period (both ends included). Counted with Date.UTC from the date strings, so independent of the
+ * runtime's time zone
+ */
 export function daysOf(from: string, to: string): string[] {
   const out: string[] = [];
   for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000)
@@ -21,14 +26,14 @@ export function daysOf(from: string, to: string): string[] {
   return out;
 }
 
-/** 日付に日数を足す（"YYYY-MM-DD"。Date.UTC で数えるので、実行環境のタイムゾーンに依存しない） */
+/** Adds days to a date ("YYYY-MM-DD"; counted with Date.UTC, so independent of the runtime's time zone) */
 export const shiftDays = (d: string, n: number): string =>
   new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
-/** 日付の曜日（0 が日曜。UTC で求めるので、実行環境のタイムゾーンに依存しない） */
+/** The weekday of a date (0 is Sunday; computed in UTC, so independent of the runtime's time zone) */
 export const weekdayOfDay = (d: string): number => new Date(`${d}T00:00:00Z`).getUTCDay();
 
-/** dayInfoOn の結果のうち、比べる項目 */
+/** The properties of a dayInfoOn result that are compared */
 export interface DayLike {
   readonly open: boolean;
   readonly reason: string;
@@ -36,11 +41,14 @@ export interface DayLike {
   readonly shiftedFrom?: string | undefined;
 }
 
-/** 1 日の結果（full なら理由・名前・振替元まで。位置は項目を取り除くとずれるので含めない） */
+/**
+ * The result of one day (with `full`, also reason, name and the original day of a move; the position is not
+ * included because it shifts when an item is removed)
+ */
 export const dayLine = (d: DayLike, full: boolean): string =>
   full ? `${d.open}|${d.reason}|${d.name ?? ""}|${d.shiftedFrom ?? ""}` : String(d.open);
 
-/** 期間の全日の結果。投げた日は "E:<code>"（対応年の外などを比べられるように） */
+/** The results of all days of a period. A day that throws is "E:<code>" (so that e.g. outside the supported years can be compared) */
 export function linesOf(
   calendar: { dayInfoOn(day: string): DayLike },
   days: readonly string[],
@@ -55,7 +63,7 @@ export function linesOf(
   });
 }
 
-/** "closedRecurringRules[2]" の位置の項目を取り除いた設定（配列の要素の位置だけを受け付ける） */
+/** The options without the item at the position "closedRecurringRules[2]" (only positions of array elements are accepted) */
 export function removeItem(options: Obj, path: string): Obj {
   const m = /^(\w+)\[(\d+)\]$/.exec(path);
   if (!m) throw new Error(`unexpected path ${path}`);

@@ -1,37 +1,51 @@
 import "./strict-warnings.ts";
 /**
- * 文章の主張のうち、機械で確かめられるものの検査（テスト拡充案の T7）。
+ * Checks those claims of the prose that a machine can verify (T7 of the test expansion plan).
  *
- *   node scripts/check-claims.ts                 … a・b を確かめる（pnpm check）
- *   node scripts/check-claims.ts --decisions --since v<前のバージョン>
- *                                                … 加えて、c の決定の番号の参照の表を出し、前のタグから変わった行の参照に
- *                                                  印（★）を付ける（リリースの前に人が読む。RELEASING.md の公開の手順）
- *   node scripts/check-claims.ts --base <dir>    … 加えて、d の公開物の変化を、公開済みのバージョンのパッケージ（<dir>）と比べる
+ *   node scripts/check-claims.ts                 ... checks a and b (pnpm check)
+ *   node scripts/check-claims.ts --decisions --since v<previous version>
+ *                                                ... also prints the table of decision references of c and marks
+ *                                                  the references on lines changed since the previous tag (a
+ *                                                  person reads it before a release; the publication steps of
+ *                                                  RELEASING.md)
+ *   node scripts/check-claims.ts --base <dir>    ... also compares the published files of d with the package of
+ *                                                  a published version (<dir>)
  *
- * a. バージョンの範囲の語: リポジトリの Markdown のうち履歴でないもの（HISTORY_TEXTS に理由付きで挙げたもののほかすべて）とソース（src）に、
- *    今のバージョンより前の系列を指す語（「0.29.x」「v0.29.x」「0.29.X」「0.29 系」「0.29 series」、1.0.0 の後は「1.2.x」なども）があれば
- *    失敗する
- * b. 改名の表と移行ガイドの対応: src/core/renamed.ts の旧名のうち、診断の対象外の場所（合成・スケジュールから作るカレンダー・
- *    期日・振替）の旧名が、移行ガイドの「検索して書き換えてください」の案内に載っていなければ失敗する（0.30.1 の name: の漏れ）
- * c. 決定の番号の参照（半自動）: 「decisions.md の N 番」（「M・N 番」のように並べた形も）を、参照先の見出しと並べた表にする。
- *    範囲と形は、文書の参照の実在の検査（check-package）と同じ（scripts/decision-references.ts）。CHANGELOG は今の番号の節だけ。
- *    見出しのない番号は表に「（見出しなし）」と出す（失敗にはしない）。参照の実在は check-package が確かめるので、人が読むのは
- *    そのバージョンで足した・変えた参照だけ。--since <タグ> で、そのタグから変わった行（git diff -U0。コミットしていない変更も含む）の
- *    参照と、CHANGELOG の今のバージョンの節の参照に印を付け、別の表にも並べる
- * d. 公開物の変化: 公開済みのバージョンと比べて変わった dist の .js と .d.ts（型も利用者に見える公開物）を一覧にし、変わったのに
- *    CHANGELOG の今のバージョンか [Unreleased] に利用者向けの区分（Added・Changed・Fixed・Deprecated・Removed・Data・Security）がなければ失敗する。.d.ts は
- *    コメント（JSDoc）を除いて比べる（説明の直しだけでは失敗にしない。.js はビルドでコメントを除いている）
- * e. 1.0.0 で行う作業と約束の置き場: 保守する人の作業は RELEASING.md の「1.0.0 で行う作業」、利用者への約束は移行ガイドの
- *    「1.0.0 で削除する予定の API」だけに書く。1 つの文（「。」で区切る）に「1.0.0」と、その後に外す・消す・削除・置き換え・
- *    invalid-option のどれか（または「外れたら（1.0.0）」の形）があり、その文が置き場を指していなければ失敗する。作業の側は
- *    RELEASING.md（その節を除く）と、scripts・test・.github のコメントと src の TSDoc でないコメント。約束の側は src の TSDoc
- *    のうち @deprecated の付いていないもの（@deprecated の文は check-names が移行ガイドの表と突き合わせる）
- * f. 「版」の語: 「バージョン」にそろえる（0.31.2）。リポジトリの Markdown・src・scripts・test・.github・etc のファイルに
- *    「版」があれば失敗する。刊行物・法令の版（docs/sources/ と test/fixtures/ のデータ、言語ごとの版（日本語版など）、
- *    「1998 年版」「1991-02-01 版」のような法令の版）は除く。この検査自身のファイルは規則を書いているので除く
+ * a. Words for a range of versions: fails when a Markdown file of the repository that is not history (everything
+ *    except those listed with a reason in HISTORY_TEXTS) or the source (src) has a word pointing at a series
+ *    older than the current version ("0.29.x", "v0.29.x", "0.29.X", "0.29 series" and the Japanese form; after
+ *    1.0.0 also "1.2.x")
+ * b. The rename table and the migration guide: fails when an old name of src/core/renamed.ts in a place the
+ *    diagnostics do not cover (combining, calendars made from schedules, due dates, substitution) is missing
+ *    from the search-and-rewrite guidance of the migration guide (the omission of `name:` in 0.30.1)
+ * c. Decision references (semi-automatic): tabulates the references to numbered decisions of decisions.md (also
+ *    several numbers in one reference) next to the headings they point to. Scope and form equal the check that
+ *    the references exist (check-package; scripts/decision-references.ts). For the CHANGELOG only the sections
+ *    written with the current numbers. A number without a heading is shown as such in the table (not a
+ *    failure). check-package verifies that references exist, so a person reads only the references added or
+ *    changed in the version. With --since <tag>, the references on lines changed since that tag (git diff -U0,
+ *    including uncommitted changes) and those in the CHANGELOG section of the current version are marked and
+ *    listed in a second table
+ * d. Changes of the published files: lists the .js and .d.ts of dist that differ from the published version
+ *    (types are published and visible to users too) and fails when something changed but the CHANGELOG section
+ *    of the current version or [Unreleased] has no user-facing category (Added, Changed, Fixed, Deprecated,
+ *    Removed, Data, Security). .d.ts files are compared without comments (JSDoc) (a correction of a description
+ *    alone does not fail; the build strips comments from .js)
+ * e. Where the work and the promises for 1.0.0 are written: the maintainers' work only in the section of
+ *    RELEASING.md on the work for 1.0.0, the promises to users only in the migration guide's section on the API
+ *    to be removed in 1.0.0. Fails when one sentence has "1.0.0" together with a word for removing, deleting,
+ *    dropping, replacing or invalid-option (ONE_ZERO_WORK for Japanese, ONE_ZERO_WORK_EN for English) and does
+ *    not point to that section. The work side: RELEASING.md (outside that section), the comments of scripts,
+ *    test and .github, and the comments of src that are not TSDoc. The promise side: the TSDoc of src without
+ *    @deprecated (the @deprecated texts are compared with the migration guide's table by check-names)
+ * f. The character for "edition": versions are called by one word (0.31.2). Fails when the character HAN is in a
+ *    Markdown file of the repository or a file of src, scripts, test, .github or etc. Editions of publications
+ *    and statutes are excepted (the data of docs/sources/ and test/fixtures/, language editions, statute
+ *    editions with a year or date). This file itself is excepted because it writes the rule
  *
- * git の作業ツリーの外（git が「not a git repository」で止まるとき。ZIP を展開しただけのフォルダー）では、a の Markdown の
- * 分類と f の Markdown を飛ばして SKIP の行を出す（意図した飛ばし no-git。CI では失敗にする）。git のほかの失敗は飛ばさずに止まる
+ * Outside a git work tree (git stops with "not a git repository": a folder that is only an unpacked ZIP), the
+ * classification of Markdown files of a and the Markdown files of f are skipped with a SKIP line (the intended
+ * skip no-git; a failure in CI). Any other git failure stops without skipping
  */
 
 import { execFileSync } from "node:child_process";
@@ -59,7 +73,7 @@ const argValue = (name: string): string | undefined => {
   }
   return value;
 };
-/** ディレクトリの下のファイル（相対パス。/ 区切り） */
+/** Files under a directory (relative paths, / separated) */
 function filesUnder(dir: string, ext: RegExp): string[] {
   if (!existsSync(dir)) return [];
   const out: string[] = [];
@@ -72,18 +86,19 @@ function filesUnder(dir: string, ext: RegExp): string[] {
 }
 
 const failures: string[] = [];
-/** Job Summary に出す Markdown（--decisions・--base のとき） */
+/** Markdown for the Job Summary (with --decisions or --base) */
 const report: string[] = [];
 const version = (JSON.parse(read("package.json")) as { version: string }).version;
 const [major, minor] = version.split(".").map(Number) as [number, number];
 
 // ---------------------------------------------------------------------------
-// a. バージョンの範囲の語
+// a. Words for a range of versions
 // ---------------------------------------------------------------------------
 
 /**
- * リポジトリの Markdown のうち、バージョンの範囲の語を探すもの（今のバージョンの挙動・決まりを書く文書）。docs/sources/ の下は、祝日の
- * 出典の記録（今のバージョンのデータの根拠）なので、まとめて探す
+ * The Markdown files of the repository searched for range-of-version words (documents that describe the
+ * behaviour and rules of the current version). Everything under docs/sources/ is searched: the records of the
+ * holiday sources are the grounds of the current version's data
  */
 const CURRENT_MARKDOWN = [
   "README.md",
@@ -97,8 +112,8 @@ const CURRENT_MARKDOWN = [
 ];
 const CURRENT_MARKDOWN_DIRS = ["docs/sources/"];
 /**
- * リポジトリの Markdown のうち、バージョンの範囲の語を探さないものと理由。新しい Markdown を足したら、探すもの（上）か、ここかに
- * 理由とともに分ける。どちらにも分けていなければ失敗にする
+ * The Markdown files of the repository that are not searched for range-of-version words, with the reason. A new
+ * Markdown file goes either into the searched ones (above) or here with a reason; one in neither fails
  */
 const HISTORY_TEXTS: Readonly<Record<string, string>> = {
   "CHANGELOG.md": "バージョンごとの変更の履歴",
@@ -108,13 +123,16 @@ const HISTORY_TEXTS: Readonly<Record<string, string>> = {
   "RELEASING.md": "バージョンの区分の説明で、前のバージョンの系列を例に書く",
   "etc/api.md": "公開 API の記録（scripts/api-report.ts が書く生成物で、文章ではない）",
 };
-/** リポジトリの Markdown（追跡しているものと、無視していない未追跡のもの。取り込み中の新しい文書も数える） */
+/**
+ * The Markdown files of the repository (tracked ones and untracked ones that are not ignored; new documents
+ * being taken in count too)
+ */
 const markdown = ((): string[] | undefined => {
   try {
     return execFileSync(
       "git",
       ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*.md"],
-      // git のメッセージを英語にそろえる（下の「not a git repository」の判定のため）
+      // Make git's messages English (for the "not a git repository" test below)
       {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
@@ -125,7 +143,8 @@ const markdown = ((): string[] | undefined => {
       .filter((f) => f !== "" && !f.startsWith("node_modules/"))
       .sort();
   } catch (error) {
-    // git の作業ツリーの外だけを飛ばす（意図した飛ばし no-git。CI では skipWhen が失敗にする）。git がない・ほかの失敗は止まる
+    // Only outside a git work tree is it passed over (the intended skip no-git; skipWhen fails in CI). Without git, or
+    // on any other failure, it stops
     const stderr = String((error as { stderr?: unknown }).stderr ?? "");
     if (!stderr.includes("not a git repository")) throw error;
     console.log(`SKIP markdown files (classification, term check): ${skipWhen("no-git", true)}`);
@@ -142,11 +161,12 @@ for (const file of markdown ?? [])
     failures.push(
       `${file}: not classified for the version series check (add it to CURRENT_MARKDOWN, or to HISTORY_TEXTS with a reason, in scripts/check-claims.ts)`,
     );
-/** バージョンの範囲の語を探す文書（履歴でないもの）とソース */
+/** The documents (not history) and the source searched for range-of-version words */
 const CURRENT_TEXTS = [...(markdown ?? []).filter(isCurrent), ...filesUnder("src", /\.ts$/)];
 /**
- * バージョンの範囲の語（`0.29.x`・`v0.29.x`・`0.29.X`・`0.29 系`・`0.29 series`、1.0.0 の後は `1.2.x` なども）。今のバージョンの
- * 「メジャー.マイナー」より前の系列だけを失敗にする。前に英数字・点があるもの（`10.29.x` など）は除く
+ * Words for a range of versions (`0.29.x`, `v0.29.x`, `0.29.X`, `0.29 series` and the Japanese form; after 1.0.0
+ * also `1.2.x`). Only a series before the current "major.minor" fails. A form preceded by a letter, digit or
+ * dot (`10.29.x`, ...) is excepted
  */
 const SERIES = /(?<![\w.])v?(\d+)\.(\d+)(?:\.[xX](?!\w)|\s*系|\s+series\b)/g;
 const before = (maj: number, min: number): boolean => maj < major || (maj === major && min < minor);
@@ -166,10 +186,13 @@ for (const file of CURRENT_TEXTS) {
 }
 
 // ---------------------------------------------------------------------------
-// b. 改名の表と移行ガイドの対応
+// b. The rename table and the migration guide
 // ---------------------------------------------------------------------------
 
-/** 診断（deprecated-option）が旧名を知らせる場所。ほかの場所の旧名は、移行ガイドの検索の案内に載せる */
+/**
+ * Places where the diagnostics (deprecated-option) report an old name. Old names of other places are listed in
+ * the search guidance of the migration guide
+ */
 const DIAGNOSED: readonly RenamedPlace[] = ["source", "calendar", "schedule", "rule"];
 const NOT_DIAGNOSED: readonly RenamedPlace[] = ["combine", "fromSchedule", "dueDate", "substitute"];
 const migration = read("docs/migration.md");
@@ -198,7 +221,7 @@ for (const from of searchNeeded) {
 }
 
 // ---------------------------------------------------------------------------
-// c. 決定の番号の参照（半自動）
+// c. Decision references (semi-automatic)
 // ---------------------------------------------------------------------------
 
 if (process.argv.includes("--decisions")) {
@@ -207,8 +230,8 @@ if (process.argv.includes("--decisions")) {
   for (const m of read("docs/decisions.md").matchAll(/^### (\d+)\. (.+)$/gm))
     headings.set(Number(m[1]), m[2]!.trim());
   /**
-   * --since のタグから変わった行（ファイル → 今の行番号の集合。タグにないファイルは、すべての行が変わったとみなす null）。
-   * 作業ツリーと比べる（取り込み中のコミットしていない変更も数える）
+   * Lines changed since the tag of --since (file → set of current line numbers; null, meaning every line, for a
+   * file missing at the tag). Compared with the work tree (uncommitted changes being taken in count too)
    */
   const changedLines = (file: string): Set<number> | null => {
     const inTag =
@@ -231,7 +254,8 @@ if (process.argv.includes("--decisions")) {
     for (const n of decisionNumbers(list))
       refs.set(n, [...(refs.get(n) ?? []), { where, changed }]);
   };
-  // 範囲と形は、文書の参照の実在の検査（check-package の checkReferences）と同じ（scripts/decision-references.ts）
+  // Scope and form equal the check that the references exist (checkReferences of check-package;
+  // scripts/decision-references.ts)
   for (const file of decisionReferenceFiles()) {
     const changed = since === undefined ? undefined : changedLines(file);
     read(file)
@@ -241,8 +265,9 @@ if (process.argv.includes("--decisions")) {
           add(m[1]!, `${file}:${i + 1}`, changed === null || (changed?.has(i + 1) ?? false));
       });
   }
-  // CHANGELOG は、今の番号で書いた節だけを表に入れる（番号を振り直す前の節は旧番号で、今の見出しと照らせないため）。
-  // --since では、今のバージョンの節（と [Unreleased]）の参照に印を付ける
+  // For the CHANGELOG only the sections written with the current numbers go into the table (sections from before
+  // the renumbering have old numbers that cannot be matched with the current headings).
+  // With --since, the references in the section of the current version (and [Unreleased]) are marked
   let oldReferences = 0;
   for (const { version: v, text, oldNumbering } of changelogSections())
     for (const m of text.matchAll(DECISION_REFERENCE)) {
@@ -264,7 +289,8 @@ if (process.argv.includes("--decisions")) {
     "",
   );
   if (since !== undefined) {
-    // 人が読むのは、前のタグから足した・変えた参照（実在は check-package が確かめている）
+    // A person reads the references added or changed since the previous tag (check-package verified that they
+    // exist)
     const marked = rows.flatMap(([n, list]) =>
       list.filter((r) => r.changed).map((r) => ({ n, where: r.where })),
     );
@@ -287,15 +313,27 @@ if (process.argv.includes("--decisions")) {
 }
 
 // ---------------------------------------------------------------------------
-// e. 1.0.0 で行う作業と約束の置き場
+// e. Where the work and the promises for 1.0.0 are written
 // ---------------------------------------------------------------------------
 
 const WORK_SECTION = "1.0.0 で行う作業";
 const PROMISE_SECTION = "1.0.0 で削除する予定の API";
-/** 1.0.0 の後に、外す・消す・削除・置き換え・invalid-option が続く文（または「外れたら（1.0.0）」の形） */
+/**
+ * A sentence in which 1.0.0 is followed by a Japanese word for removing, deleting or replacing, or by
+ * invalid-option (or the Japanese form "once it is dropped (1.0.0)")
+ */
 const ONE_ZERO_WORK =
   /1\.0\.0.*?(?:外[さしすせれ]|消[さしすせえ]|削除|置き換え|invalid-option)|外れたら（1\.0\.0）/s;
-/** コメントの本文（行頭の記号を除いたもの）を、続いている行どうしまとめて返す */
+/**
+ * The same in English comments: a sentence with 1.0.0 and remove / delete / drop / replace (in either order), or
+ * invalid-option after 1.0.0
+ */
+const ONE_ZERO_WORK_EN =
+  /\b(?:remov|delet|drop|replac)\w*\b.*?1\.0\.0|1\.0\.0.*?(?:\b(?:remov|delet|drop|replac)\w*|invalid-option)/is;
+/** How an English comment names the two sections (compared without case) */
+const WORK_SECTION_EN = "work for 1.0.0";
+const PROMISE_SECTION_EN = "api to be removed in 1.0.0";
+/** Returns the bodies of the comments (without the leading marks), joining consecutive lines */
 function commentsOf(file: string): { text: string; line: number; doc: boolean }[] {
   const source = read(file);
   const lineOf = (pos: number): number => source.slice(0, pos).split("\n").length;
@@ -311,8 +349,9 @@ function commentsOf(file: string): { text: string; line: number; doc: boolean }[
     });
     return out;
   }
-  // コメントの位置は構文木の字句（記号を含む）から集める（字句だけで読むと、正規表現のリテラルの後を読み違える。
-  // 型の「|」の前のコメントは、どのノードの前にも付かないので、記号の字句まで見る）
+  // Comment positions are collected from the tokens of the syntax tree (including punctuation). (Reading tokens
+  // alone misreads what follows a regular-expression literal. A comment before the "|" of a type is attached to
+  // no node, so punctuation tokens are examined too)
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const ranges = new Map<number, ts.CommentRange>();
   const collect = (node: ts.Node): void => {
@@ -348,11 +387,31 @@ function commentsOf(file: string): { text: string; line: number; doc: boolean }[
   }
   return out;
 }
-/** 文ごとに、置き場を指していない 1.0.0 の作業の記述を返す */
-const strayOneZero = (text: string, place: string, lines = false): string[] =>
-  (lines ? text : text.replaceAll("\n", ""))
+/** Japanese text (a sentence is read by the Japanese rule when it has any, otherwise by the English rule) */
+const JAPANESE = /[\u3040-\u30ff\u4e00-\u9fff]/;
+/** Per sentence, the descriptions of work for 1.0.0 that do not point to their section */
+const strayOneZero = (text: string, place: string, lines = false): string[] => [
+  ...(lines ? text : text.replaceAll("\n", ""))
     .split(lines ? /。|\n/ : "。")
-    .filter((s) => ONE_ZERO_WORK.test(s) && !s.includes(place) && !s.includes(PROMISE_SECTION));
+    .filter(
+      (s) =>
+        (lines || JAPANESE.test(s)) &&
+        ONE_ZERO_WORK.test(s) &&
+        !s.includes(place) &&
+        !s.includes(PROMISE_SECTION),
+    ),
+  // English comments: sentences end with ". " or "; " (lines are joined with a space). The section is named by
+  // its English alias
+  ...(lines ? [] : text.replace(/\n\s*/g, " ").split(/(?<=[.;])\s+/)).filter((s) => {
+    const lower = s.toLowerCase();
+    return (
+      !JAPANESE.test(s) &&
+      ONE_ZERO_WORK_EN.test(s) &&
+      !lower.includes(place === WORK_SECTION ? WORK_SECTION_EN : PROMISE_SECTION_EN) &&
+      !lower.includes(PROMISE_SECTION_EN)
+    );
+  }),
+];
 let oneZeroChecked = 0;
 {
   const releasing = read("RELEASING.md");
@@ -371,14 +430,14 @@ let oneZeroChecked = 0;
     ...filesUnder("test", /\.(?:ts|mjs)$/),
     ...filesUnder(".github", /\.ya?ml$/),
   ];
-  // この検査自身の説明（このファイルのコメント）は規則を書いたもので、作業ではないので除く
+  // The description of this check itself (the comments of this file) writes the rule and is not work: excepted
   for (const file of [...workFiles, ...filesUnder("src", /\.ts$/)].filter(
     (f) => f !== "scripts/check-claims.ts",
   )) {
     oneZeroChecked++;
     for (const c of commentsOf(file)) {
       if (file.startsWith("src/") && c.doc) {
-        // 約束の側: @deprecated の付いていない TSDoc は、移行ガイドの節を指す
+        // The promise side: a TSDoc without @deprecated points to the section of the migration guide
         if (c.text.includes("@deprecated")) continue;
         for (const s of strayOneZero(c.text, PROMISE_SECTION))
           failures.push(
@@ -395,12 +454,12 @@ let oneZeroChecked = 0;
 }
 
 // ---------------------------------------------------------------------------
-// f. 「版」の語
+// f. The character for "edition"
 // ---------------------------------------------------------------------------
 
-/** 「版」（ソフトウェアのバージョンの意味では使わない） */
+/** The character for "edition" (not used for software versions) */
 const HAN = /\u7248/g;
-/** 除く形: 言語ごとの版、年・日付の付いた法令の版 */
+/** Excepted forms: language editions, statute editions with a year or date */
 const HAN_ALLOWED = /(?:日本|英|ウェールズ)語\u7248|\d{4} 年\u7248|\d{4}-\d{2}-\d{2} \u7248/g;
 let hanChecked = 0;
 {
@@ -429,17 +488,19 @@ let hanChecked = 0;
 }
 
 // ---------------------------------------------------------------------------
-// d. 公開物の変化
+// d. Changes of the published files
 // ---------------------------------------------------------------------------
 
 /**
- * CHANGELOG の利用者向けの区分。今のバージョンの節か [Unreleased] に、どれか 1 つがあればよい（data-compare の「### Data」と同じ扱い）。
- * 「Migration」（0.30.x 以前の「移行」）は変更の区分（Changed・Removed など）に添えて書くもので、それだけでは何が変わったかを言わない。「開発」は利用者に
- * 見えない変更（テスト・道具・文書の運用）、「既知の不具合」は公開物の変化ではないので、どれも数えない
+ * The user-facing categories of the CHANGELOG. One of them in the section of the current version or
+ * [Unreleased] is enough (as "### Data" for data-compare).
+ * "Migration" accompanies a category of change (Changed, Removed, ...) and does not say by itself what changed.
+ * The development category is for changes invisible to users (tests, tools, how documents are kept) and known
+ * issues are not a change of the published files, so none of these count
  */
 const USER_FACING = ["Added", "Changed", "Fixed", "Deprecated", "Removed", "Data", "Security"];
 const baseDir = argValue("--base");
-/** 比べる中身（.d.ts はコメントを除いて印刷し直したもの） */
+/** The content compared (.d.ts printed again without comments) */
 function published(path: string): string {
   const text = read(path);
   if (!path.endsWith(".d.ts")) return text;
@@ -467,8 +528,9 @@ if (baseDir !== undefined) {
     .version;
   const changed: string[] = [];
   /**
-   * 型の説明（.d.ts の TSDoc）の文は、利用者への約束で公開物に入る（RELEASING.md の用語）。中身が同じでもコメントの文が変われば
-   * 数える。空白と改行はすべて除いて比べる（文を変えずに折り返し直しただけでは数えない）
+   * The text of the type descriptions (TSDoc of .d.ts) is a promise to users and part of the published files
+   * (terms of RELEASING.md). A changed comment text counts even when the content is the same. Compared with all
+   * whitespace and line breaks removed (re-wrapping without changing the text does not count)
    */
   const commentTexts = (path: string): string =>
     JSON.stringify(commentsOf(path).map((c) => c.text.replace(/\s+/g, "")));
@@ -487,7 +549,7 @@ if (baseDir !== undefined) {
   }
   changed.sort((a, b) => a.slice(8).localeCompare(b.slice(8)));
   const changelog = read("CHANGELOG.md");
-  /** CHANGELOG の節（次の「## [」の前まで） */
+  /** A section of the CHANGELOG (up to the next "## [") */
   const sectionOf = (name: string): string => {
     const start = changelog.indexOf(`## [${name}]`);
     if (start < 0) return "";
@@ -496,7 +558,8 @@ if (baseDir !== undefined) {
   };
   const userFacing = [
     ...new Set(
-      // 今のバージョンが公開済み（比べる相手と同じバージョン）なら、その節は前の公開の記録なので [Unreleased] だけを見る
+      // When the current version is published (the same version as the one compared), its section records the
+      // earlier publication, so only [Unreleased] is examined
       (baseVersion === version
         ? [sectionOf("Unreleased")]
         : [sectionOf("Unreleased"), sectionOf(version)]
@@ -524,7 +587,7 @@ if (baseDir !== undefined) {
 }
 
 // ---------------------------------------------------------------------------
-// g. 決定の文書が、公開の設定の項目と名前を決めていること（scripts/decision-coverage.ts）
+// g. The decisions document decides the published option keys and names (scripts/decision-coverage.ts)
 // ---------------------------------------------------------------------------
 const coverage = decisionCoverage({
   api: read("etc/api.md"),

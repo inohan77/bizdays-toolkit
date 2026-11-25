@@ -1,8 +1,8 @@
 /**
- * 規則の診断（bizdays-toolkit/diagnose）。
+ * Diagnostics of rules (bizdays-toolkit/diagnose).
  *
- * 営業日カレンダー・スケジュールの設定を調べ、誤り・使われない規則・打ち間違いなどを返す。
- * 開発やテストで使う道具なので、アプリの本体のバンドルに入らないようサブパスに分けている。
+ * Examines the options of a business calendar or schedule and returns errors, unused rules, typos and so on.
+ * A tool for development and tests, kept in a subpath so that it stays out of the application bundle.
  */
 
 export {

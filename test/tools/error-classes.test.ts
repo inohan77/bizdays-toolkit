@@ -1,5 +1,6 @@
-// 例外のクラスの静的な検査（src を TypeScript のコンパイラーの API で読む。ライブラリの実行結果を見ないので、test/ から
-// test/tools/ に移した。test:tz の再実行の対象から外すため。提案書 bizdays-toolkit-0.31.8-proposal の T-2）
+// A static check of the error classes (reads src with the TypeScript compiler API; it does not look at results of
+// running the library, so it was moved from test/ to test/tools/, out of the reruns of test:tz. T-2 of the
+// proposal bizdays-toolkit-0.31.8-proposal)
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -31,7 +32,8 @@ test("例外のクラスの静的な検査: src で typeError に渡す code は
           const first = node.arguments[0]!;
           const where = `${file}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
           if (ts.isStringLiteral(first)) found[name]!.add(first.text);
-          // 文字列でない code は、typeError では許さない（rangeError は記録した誤りを投げ直す経路で使う）
+          // A code that is not a string literal is not allowed for typeError (rangeError is used on the path that
+          // rethrows a recorded problem)
           else if (name === "typeError") notLiteral.push(where);
         }
       }

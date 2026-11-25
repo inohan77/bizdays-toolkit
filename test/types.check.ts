@@ -1,8 +1,9 @@
 /**
- * 型のテスト。実行はせず、pnpm typecheck（tsc）で確かめる。
+ * Type tests. Not run; checked by pnpm typecheck (tsc).
  *
- * 利用者から見た型の使い心地（推論・補完・型エラーになるべき書き方）が保たれているかを見る。
- * 型エラーになるべき行には @ts-expect-error を付けており、型エラーにならなくなると tsc が失敗する。
+ * They check that the types keep working well from a user's point of view (inference, completion, and what
+ * should be a type error).
+ * Lines that should be type errors have @ts-expect-error, so tsc fails when one stops being a type error.
  */
 
 import {
@@ -53,7 +54,7 @@ type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 function expectType<T extends true>(): T | void {}
 
-// --- スケジュールの値の型は、weekly から推論される ---
+// --- The value type of a schedule is inferred from weekdayValues ---
 const numbers = createSchedule({ weekdayValues: [1, 2, 3, 4, 5, 6, 7] });
 expectType<Equal<ReturnType<typeof numbers.valueOn>, number>>();
 
@@ -64,18 +65,18 @@ const hours = createSchedule<Hours>({
 });
 expectType<Equal<ReturnType<typeof hours.valueOn>, Hours>>();
 
-// --- 判定の理由は開いた型: 既知の値と比べられ、将来の値も受け付ける ---
+// --- The reason of a judgement is an open type: comparable with known values, and accepting future ones ---
 const reason: DayReason = createCalendar().dayInfoOn("2026-01-01").reason;
 if (reason === "closed-annual" || reason === "default") {
-  // 既知の値との比較はそのまま書ける
+  // A comparison with a known value can be written as it is
 }
 const futureReason: DayReason = "closed-something-new";
 const futureScheduleReason: ScheduleDayReason = "something-new";
 void futureReason;
 void futureScheduleReason;
 
-// 閉じた型（Known…）は将来の値を受け付けない。網羅を確かめたい利用者向け
-// @ts-expect-error -- KnownDayReason に "closed-something-new" はない
+// The closed type (Known...) does not accept future values. For users who want to check exhaustiveness
+// @ts-expect-error -- KnownDayReason has no "closed-something-new"
 const closedReason: KnownDayReason = "closed-something-new";
 void closedReason;
 
@@ -99,40 +100,40 @@ function labelOf(r: KnownScheduleDayReason): string {
 }
 void labelOf;
 
-// --- 祝日の種別も開いた型 ---
+// --- The kind of a holiday is an open type too ---
 const kind: JpHolidayKind | undefined = holidayOn("2026-11-23")?.kind;
 void kind;
 const futureKind: JpHolidayKind = "observance";
 void futureKind;
-// @ts-expect-error -- KnownJpHolidayKind に "observance" はない
+// @ts-expect-error -- KnownJpHolidayKind has no "observance"
 const closedKind: KnownJpHolidayKind = "observance";
 void closedKind;
 
-// --- エラーコード ---
+// --- Error codes ---
 try {
   createCalendar({ timeZone: "Asia/Nowhere" });
 } catch (error) {
   if (isBizdaysError(error)) {
     const code: ErrorCode = error.code;
     if (code === "invalid-time-zone") {
-      // 既知のコードとの比較はそのまま書ける
+      // A comparison with a known code can be written as it is
     }
   }
 }
 
-// --- 型エラーになるべき書き方 ---
-// @ts-expect-error -- weekly は 7 つの値が必要
+// --- What should be a type error ---
+// @ts-expect-error -- weekdayValues needs 7 values
 createSchedule({ weekdayValues: [1, 2, 3] });
-// @ts-expect-error -- sameAs は曜日（0〜6）
+// @ts-expect-error -- sameAs is a weekday (0-6)
 createSchedule({ weekdayValues: [1, 1, 1, 1, 1, 1, 1], holidayPolicy: { sameAs: 7 } });
-// @ts-expect-error -- 設定のキーの打ち間違いは TypeScript では型エラーになる
+// @ts-expect-error -- a typo in an option key is a type error in TypeScript
 createCalendar({ closedWeekday: [0] });
-// @ts-expect-error -- holidayPolicy の値の誤り
+// @ts-expect-error -- wrong value of holidayPolicy
 createCalendar({ holidayPolicy: "skip" });
-// @ts-expect-error -- 返す一覧は変更できない
+// @ts-expect-error -- the returned list cannot be changed
 createCalendar({ holidayProvider: jp }).holidaysInYear(2026).push(jp.holidaysInYear(2026)[0]!);
 
-// --- 繰り返しの規則 ---
+// --- Recurring rules ---
 createCalendar({
   closedRecurringRules: [
     { weekday: 1 },
@@ -140,22 +141,22 @@ createCalendar({
     { dayOfMonth: -1, holidayOverlapPolicy: "over-holiday" },
   ],
 });
-// @ts-expect-error -- weekday と day は同時に指定できない
+// @ts-expect-error -- weekday and dayOfMonth cannot be given together
 createCalendar({ closedRecurringRules: [{ weekday: 1, dayOfMonth: 3 }] });
-// @ts-expect-error -- nth は 1〜5 と -1
+// @ts-expect-error -- nth is 1-5 or -1
 createCalendar({ closedRecurringRules: [{ weekday: 1, nth: 6 }] });
-// @ts-expect-error -- nth は曜日の規則でだけ使える
+// @ts-expect-error -- nth can be used only in a weekday rule
 createCalendar({ closedRecurringRules: [{ dayOfMonth: 3, nth: 1 }] });
-// @ts-expect-error -- day は 1〜31 と -1
+// @ts-expect-error -- dayOfMonth is 1-31 or -1
 createCalendar({ closedRecurringRules: [{ dayOfMonth: 32 }] });
-// @ts-expect-error -- months は 1〜12
+// @ts-expect-error -- months is 1-12
 createCalendar({ closedRecurringRules: [{ dayOfMonth: 1, months: [13] }] });
-// @ts-expect-error -- holidayOverlapPolicy の値の誤り
+// @ts-expect-error -- wrong value of holidayOverlapPolicy
 createCalendar({ closedRecurringRules: [{ dayOfMonth: 1, holidayOverlapPolicy: "rule" }] });
-// @ts-expect-error -- スケジュールの繰り返しの規則には value が必要
+// @ts-expect-error -- a recurring rule of a schedule needs value
 createSchedule({ weekdayValues: [1, 1, 1, 1, 1, 1, 1], recurringRules: [{ dayOfMonth: 1 }] });
 
-// --- 有効期間・周期、祝日の翌日 ---
+// --- Effective period, cycle, day after a holiday ---
 createCalendar({
   holidayProvider: jp,
   closedRecurringRules: [
@@ -165,16 +166,16 @@ createCalendar({
   ],
   closedAnnualDates: [{ from: "08-13", to: "08-16", effectiveTo: "2026-12-31" }, "12-31"],
 });
-// @ts-expect-error -- interval は曜日の規則でだけ使える
+// @ts-expect-error -- interval can be used only in a weekday rule
 createCalendar({ closedRecurringRules: [{ dayOfMonth: 1, interval: 2, anchor: "2026-01-07" }] });
-// @ts-expect-error -- dayAfterHoliday は true だけ
+// @ts-expect-error -- dayAfterHoliday is true only
 createCalendar({ closedRecurringRules: [{ dayAfterHoliday: false }] });
-// @ts-expect-error -- dayAfterHoliday と weekday は同時に指定できない
+// @ts-expect-error -- dayAfterHoliday and weekday cannot be given together
 createCalendar({ closedRecurringRules: [{ dayAfterHoliday: true, weekday: 1 }] });
-// @ts-expect-error -- 個別の日付には有効期間を付けられない
+// @ts-expect-error -- a specific date cannot have an effective period
 createCalendar({ closedDates: [{ date: "2026-10-19", effectiveTo: "2026-12-31" }] });
 
-// --- 祝日の規則・optionPath ---
+// --- Holiday rules, optionPath ---
 createCalendar({
   holidayProvider: jp,
   openRecurringRules: [
@@ -182,29 +183,29 @@ createCalendar({
     { holiday: true, kinds: ["substitute", "citizens"], months: [5], effectiveFrom: "2027-04-01" },
   ],
 });
-// @ts-expect-error -- holiday は true だけ
+// @ts-expect-error -- holiday is true only
 createCalendar({ closedRecurringRules: [{ holiday: false }] });
-// @ts-expect-error -- kinds は holiday の規則でだけ使える
+// @ts-expect-error -- kinds can be used only in a holiday rule
 createCalendar({ closedRecurringRules: [{ weekday: 1, kinds: ["regular"] }] });
-// @ts-expect-error -- holiday と dayAfterHoliday は同時に指定できない
+// @ts-expect-error -- holiday and dayAfterHoliday cannot be given together
 createCalendar({ closedRecurringRules: [{ holiday: true, dayAfterHoliday: true }] });
 
-// --- 未確定の祝日のガード・診断の asOf ---
+// --- The guard for unconfirmed holidays, asOf of the diagnostics ---
 {
   const c = createCalendar({ holidayProvider: jp, unconfirmedHolidayPolicy: "throw" });
   expectType<Equal<typeof c.unconfirmedHolidayPolicy, "accept" | "throw">>();
   createSchedule({ weekdayValues: [0, 1, 1, 1, 1, 1, 0], unconfirmedHolidayPolicy: "accept" });
-  // @ts-expect-error -- unconfirmedHolidayPolicy は "accept" か "throw"
+  // @ts-expect-error -- unconfirmedHolidayPolicy is "accept" or "throw"
   createCalendar({ holidayProvider: jp, unconfirmedHolidayPolicy: "ignore" });
   const list = diagnoseCalendar({ holidayProvider: jp }, { asOf: "2026-10-23" });
   const codes: readonly string[] = list.map((d) => d.code);
   void codes;
   diagnoseSchedule({ weekdayValues: [0, 1, 1, 1, 1, 1, 0] }, {});
-  // @ts-expect-error -- asOf は暦日の文字列だけ
+  // @ts-expect-error -- asOf is a date string only
   diagnoseCalendar({}, { asOf: new Date() });
 }
 
-// --- 祝前日・decidedByPath ---
+// --- Day before a holiday, decidedByPath ---
 createCalendar({
   holidayProvider: jp,
   closedRecurringRules: [
@@ -212,13 +213,13 @@ createCalendar({
     { dayBeforeHoliday: true, weekdays: [1, 2, 3, 4, 5], months: [5], effectiveFrom: "2027-01-01" },
   ],
 });
-// @ts-expect-error -- dayBeforeHoliday は true だけ
+// @ts-expect-error -- dayBeforeHoliday is true only
 createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: false }] });
-// @ts-expect-error -- dayBeforeHoliday と dayAfterHoliday は同時に指定できない
+// @ts-expect-error -- dayBeforeHoliday and dayAfterHoliday cannot be given together
 createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, dayAfterHoliday: true }] });
-// @ts-expect-error -- dayBeforeHoliday と weekday は同時に指定できない
+// @ts-expect-error -- dayBeforeHoliday and weekday cannot be given together
 createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, weekday: 1 }] });
-// 祝前日の規則は、翌日の祝日の kinds・keys で絞れる
+// A day-before-holiday rule can be filtered by kinds and keys of the holiday on the next day
 createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, kinds: ["regular"] }] });
 {
   const c = combineCalendars([createCalendar({}), createCalendar({ closedWeekdays: [0] })], {
@@ -236,7 +237,7 @@ createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, kinds: ["regul
   void rulePath2;
 }
 
-// --- weekdays の絞り込み・kinds の型・営業日を考慮した締め日 ---
+// --- The weekdays filter, the type of kinds, closing days that consider business days ---
 {
   const c = createCalendar({
     holidayProvider: jp,
@@ -245,18 +246,18 @@ createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, kinds: ["regul
       { dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5] },
     ],
   });
-  // kinds は提供元の種別で補完が効く（開いた型なので、他の文字列も通る）
+  // Completion works for kinds with the provider's kinds (an open type, so other strings pass too)
   createCalendar({
     holidayProvider: jp,
     openRecurringRules: [{ holiday: true, kinds: ["anything"] }],
   });
-  // @ts-expect-error -- weekdays は祝日・祝日の翌日の規則でだけ使える
+  // @ts-expect-error -- weekdays can be used only in holiday and day-after-holiday rules
   createCalendar({ closedRecurringRules: [{ weekday: 1, weekdays: [1] }] });
-  // @ts-expect-error -- weekdays の要素は 0〜6
+  // @ts-expect-error -- the elements of weekdays are 0-6
   createCalendar({ closedRecurringRules: [{ holiday: true, weekdays: [7] }] });
-  // 祝日の翌日の規則は、前日の祝日の kinds で絞れる
+  // A day-after-holiday rule can be filtered by kinds of the holiday on the day before
   createCalendar({ closedRecurringRules: [{ dayAfterHoliday: true, kinds: ["regular"] }] });
-  // @ts-expect-error -- kinds は祝日・祝日の翌日・祝前日の規則でだけ使える
+  // @ts-expect-error -- kinds can be used only in holiday, day-after-holiday and day-before-holiday rules
   createCalendar({ closedRecurringRules: [{ weekday: 1, kinds: ["regular"] }] });
   const month: string = c.closingMonth("2026-09-19", 20, { convention: "preceding" });
   const period: { readonly from: string; readonly to: string } = c.closingPeriod("2026-10", 20, {
@@ -264,16 +265,16 @@ createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, kinds: ["regul
   });
   void month;
   void period;
-  // @ts-expect-error -- convention は必須
+  // @ts-expect-error -- convention is required
   c.closingMonth("2026-09-19", 20);
-  // @ts-expect-error -- convention は必須
+  // @ts-expect-error -- convention is required
   c.closingPeriod("2026-10", 20, {});
-  // RecurringRule を単独で使うコードは、型引数なしで今までどおり
+  // Code that uses RecurringRule alone works as before without a type argument
   const rules: RecurringRule[] = [{ holiday: true, kinds: ["x"] }, { weekday: 1 }];
   createCalendar({ holidayProvider: jp, closedRecurringRules: rules });
 }
 
-// --- 締め期間・瞬間への変換 ---
+// --- Closing periods, conversion to an instant ---
 {
   const period: { readonly from: string; readonly to: string } = closingPeriod("2026-11", 20);
   createCalendar({ closedDates: [period, closingPeriod("2026-11-05", -1)] });
@@ -282,13 +283,13 @@ createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, kinds: ["regul
   const instant2: Date = c.instantOf("2026-11-23", "10:00:30");
   void instant;
   void instant2;
-  // @ts-expect-error -- instantOf は暦日の文字列だけを受け付ける（Date は渡せない）
+  // @ts-expect-error -- instantOf accepts a date string only (a Date cannot be passed)
   c.instantOf(new Date(), "10:00");
-  // @ts-expect-error -- closingDay は数値
+  // @ts-expect-error -- closingDay is a number
   closingPeriod("2026-11", "20");
 }
 
-// --- スケジュールからのカレンダー ---
+// --- A calendar from a schedule ---
 {
   const hours = createSchedule<{ open: string } | null>({
     weekdayValues: [null, { open: "9" }, null, null, null, null, null],
@@ -296,17 +297,17 @@ createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, kinds: ["regul
   const c = createCalendarFromSchedule(hours, (v) => v !== null);
   expectType<Equal<typeof c, ReturnType<typeof createCalendar<string>>>>();
   createCalendarFromSchedule(hours, (v) => v !== null, { searchDayLimit: 10 });
-  // @ts-expect-error -- isOpen は値だけを受け取る（日付は渡されない）
+  // @ts-expect-error -- isOpen receives the value only (no date is passed)
   createCalendarFromSchedule(hours, (v, date: string) => v !== null && date > "");
-  // @ts-expect-error -- 値の型が合わない
+  // @ts-expect-error -- the value type does not match
   createCalendarFromSchedule(hours, (v: number) => v > 0);
-  // @ts-expect-error -- カレンダーは渡せない
+  // @ts-expect-error -- a calendar cannot be passed
   createCalendarFromSchedule(c, () => true);
   const reason: "open-annual" | "closed-annual" | string = c.dayInfoOn("2026-10-20").reason;
   void reason;
 }
 
-// --- カレンダーの合成 ---
+// --- Combining calendars ---
 {
   const a = createCalendar({ holidayProvider: jp });
   const b = createCalendar({ holidayProvider: jp, closedWeekdays: [0] });
@@ -314,32 +315,32 @@ createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, kinds: ["regul
   expectType<Equal<typeof combined, ReturnType<typeof createCalendar<JpHolidayKind>>>>();
   const decidedBy: number | undefined = combined.dayInfoOn("2026-10-19").decidedBy;
   void decidedBy;
-  // @ts-expect-error -- businessDay は "all" か "any"
+  // @ts-expect-error -- businessDay is "all" or "any"
   combineCalendars([a, b], { businessDay: "both" });
-  // @ts-expect-error -- businessDay は必須
+  // @ts-expect-error -- businessDay is required
   combineCalendars([a, b], {});
 }
 
-// 振替の元の日付は省略可能な文字列
+// The original date of a move is an optional string
 const shifted: string | undefined = createCalendar().dayInfoOn("2026-10-13").shiftedFrom;
 void shifted;
 
-// 祝日の値の決め方の型 ScheduleHolidayPolicy
+// The type for how a holiday's value is decided, ScheduleHolidayPolicy
 const sundayHours: ScheduleHolidayPolicy<number> = { sameAs: 0 };
 createSchedule({ weekdayValues: [1, 2, 3, 4, 5, 6, 7], holiday: sundayHours });
 
-// --- 規則の診断 ---
+// --- Diagnostics of rules ---
 const diagnostics = diagnoseCalendar({ holidayProvider: jp, closedWeekdays: [0] });
-// 打ち間違いのキーも型エラーにならずに渡せる（診断で見つけるため）
+// A mistyped key can be passed without a type error (so that the diagnostics find it)
 diagnoseCalendar({ closeWeekdays: [0] });
 diagnoseSchedule({
   weekdayValues: [1, 1, 1, 1, 1, 1, 1],
   recurringRules: [{ dayOfMonth: 1, value: 0 }],
 });
 for (const d of diagnostics) {
-  // 重さは閉じた型（網羅できる）
+  // The severity is a closed type (exhaustive)
   expectType<Equal<typeof d.severity, "error" | "warning" | "info">>();
-  // code は開いた型
+  // code is an open type
   expectType<Equal<typeof d.code, DiagnosticCode>>();
   const known: KnownDiagnosticCode = "shadowed";
   const code: DiagnosticCode = "some-future-code";
@@ -348,29 +349,29 @@ for (const d of diagnostics) {
   const related: string | undefined = d.relatedPath;
   void related;
 }
-// @ts-expect-error -- 診断の結果は変更できない
+// @ts-expect-error -- the diagnostics result cannot be changed
 diagnostics.push(diagnostics[0]!);
 
-// --- 月の計算と日付の調整 ---
+// --- Month calculations and adjusting dates ---
 const office = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
 const adjusted: string = office.adjust("2026-10-31", { convention: "modified-following" });
 void adjusted;
 office.dueDate(monthOf("2026-10-16", 1), { dayOfMonth: -1, convention: "preceding" });
-// @ts-expect-error -- convention は必須（既定値を持たない）
+// @ts-expect-error -- convention is required (it has no default)
 office.adjust("2026-10-31", {});
-// @ts-expect-error -- "nearest" は採用していない
+// @ts-expect-error -- "nearest" is not adopted
 office.adjust("2026-10-31", { convention: "nearest" });
-// @ts-expect-error -- 期日の日は 1〜31 と -1
+// @ts-expect-error -- the day of a due date is 1-31 or -1
 office.dueDate("2026-10", { dayOfMonth: 0, convention: "following" });
 const convention: BusinessDayConvention = "preceding";
 void convention;
 
-// --- 祝日のほかの言語の名称 ---
+// --- Names of holidays in other languages ---
 const holidayNames: Readonly<Record<string, string>> | undefined = createCalendar({
   holidayProvider: jp,
 }).holidayOn("2026-11-23")?.names;
 void holidayNames;
-// 提供元は names を省略できる（既存の提供元はそのまま型が通る）
+// A provider may omit names (existing providers keep type-checking as they are)
 const withoutNames: HolidayProvider = {
   id: "XX",
   timeZone: "UTC",
@@ -383,7 +384,8 @@ const withoutNames: HolidayProvider = {
 void withoutNames;
 
 // ------------------------------------------------------------
-// 時刻を必ず持つ入力では time が string になる（toDateTimeParts・civilOf・非推奨の toJapanDateTime も削除までは確かめる）
+// With an input that always has a time, `time` is string (toDateTimeParts, civilOf, and the deprecated
+// toJapanDateTime as long as it exists)
 // ------------------------------------------------------------
 {
   const instant = { epochMilliseconds: 0 };
@@ -415,7 +417,7 @@ void withoutNames;
 }
 
 // ------------------------------------------------------------
-// 祝日の識別子 key と絞り込み keys
+// The holiday key `key` and the filter `keys`
 // ------------------------------------------------------------
 {
   const h = jp.holidaysInYear(2026)[0];
@@ -436,17 +438,17 @@ void withoutNames;
     weekdayValues: [0, 1, 1, 1, 1, 1, 0],
     recurringRules: [{ holiday: true, keys: [sgKey], value: 2 }],
   });
-  // keys は string の配列（Kind のような型引数は増やさない）
+  // keys is an array of string (no further type parameter like Kind)
   createCalendar({
     holidayProvider: jp,
     openRecurringRules: [{ holiday: true, keys: ["anything"] }],
   });
-  // @ts-expect-error -- keys は祝日の規則でだけ使える
+  // @ts-expect-error -- keys can be used only in a holiday rule
   createCalendar({ closedRecurringRules: [{ weekday: 1, keys: ["sports"] }] });
-  // 祝日の翌日・祝前日の規則も keys で絞れる
+  // Day-after-holiday and day-before-holiday rules can be filtered by keys too
   createCalendar({ closedRecurringRules: [{ dayAfterHoliday: true, keys: ["sports"] }] });
   createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, keys: ["sports"] }] });
-  // @ts-expect-error -- 既知の値の型なので、知らない文字列は誤り
+  // @ts-expect-error -- a type of known values, so an unknown string is wrong
   const badKey: KnownJpHolidayKey = "golden-week";
   void badKey;
   const substituted: readonly Holiday<"regular" | "substitute">[] = withSubstituteDays(
@@ -454,16 +456,16 @@ void withoutNames;
     { directions: { 0: "next" }, kind: "substitute", originalPolicy: "drop" },
   );
   void substituted;
-  // 返す配列は凍結した readonly の配列なので、可変の配列の型には代入できない（4 番）
-  // @ts-expect-error -- readonly の配列は可変の配列の型に代入できない
+  // The returned array is a frozen readonly array and cannot be assigned to a mutable array type (decisions.md #4)
+  // @ts-expect-error -- a readonly array cannot be assigned to a mutable array type
   const mutable: Holiday<"regular" | "substitute">[] = substituted;
   void mutable;
-  // @ts-expect-error -- 向きは "next" か "previous"
+  // @ts-expect-error -- the direction is "next" or "previous"
   withSubstituteDays([], { directions: { 0: "nearest" }, kind: "substitute" });
 }
 
 // ------------------------------------------------------------
-// 第 n 営業日の規則 businessDayOfMonth と、振替で飛ばす曜日 skipWeekdays
+// The nth-business-day rule businessDayOfMonth, and skipWeekdays, the weekdays skipped by a move
 // ------------------------------------------------------------
 {
   const branch = createCalendar({
@@ -488,79 +490,79 @@ void withoutNames;
   });
 }
 
-// 規則の形ごとに受ける holidayOverlapPolicy・skipWeekdays・calendar（0.30.0。docs/decisions.md の 6 番）
+// holidayOverlapPolicy, skipWeekdays and calendar as accepted per rule shape (0.30.0. docs/decisions.md #6)
 {
   const branch = createCalendar({ holidayProvider: jp });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- 祝日の翌日の規則は holidayOverlapPolicy を受けない
+      // @ts-expect-error -- a day-after-holiday rule does not accept holidayOverlapPolicy
       { dayAfterHoliday: true, holidayOverlapPolicy: "over-holiday" },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- 祝前日の規則は holidayOverlapPolicy を受けない
+      // @ts-expect-error -- a day-before-holiday rule does not accept holidayOverlapPolicy
       { dayBeforeHoliday: true, holidayOverlapPolicy: "under-holiday" },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- 祝日の規則は holidayOverlapPolicy を受けない
+      // @ts-expect-error -- a holiday rule does not accept holidayOverlapPolicy
       { holiday: true, holidayOverlapPolicy: "over-holiday" },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- 周期の規則は "after-holiday" を受けない
+      // @ts-expect-error -- a cycle rule does not accept "after-holiday"
       { cycle: 6, anchor: "2026-01-05", positions: [5], holidayOverlapPolicy: "after-holiday" },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- 第 n 営業日の規則は "after-holiday" を受けない
+      // @ts-expect-error -- an nth-business-day rule does not accept "after-holiday"
       { businessDayOfMonth: 1, holidayOverlapPolicy: "after-holiday" },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- 週の第 n 営業日の規則も "after-holiday" を受けない
+      // @ts-expect-error -- an nth-business-day-of-week rule does not accept "after-holiday" either
       { businessDayOfWeek: 1, weekStart: 1, holidayOverlapPolicy: "after-holiday" },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- skipWeekdays は "after-holiday" のときだけ
+      // @ts-expect-error -- skipWeekdays only with "after-holiday"
       { weekday: 1, skipWeekdays: [6] },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- skipWeekdays は "over-holiday" では受けない
+      // @ts-expect-error -- skipWeekdays is not accepted with "over-holiday"
       { dayOfMonth: 1, holidayOverlapPolicy: "over-holiday", skipWeekdays: [6] },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- カレンダーの第 n 営業日の規則は calendar を受けない
+      // @ts-expect-error -- an nth-business-day rule of a calendar does not accept calendar
       { businessDayOfMonth: 1, calendar: branch },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- 週の第 n 営業日の規則は weekStart が必須
+      // @ts-expect-error -- an nth-business-day-of-week rule requires weekStart
       { businessDayOfWeek: -1 },
     ],
   });
   createCalendar({
     closedRecurringRules: [
-      // @ts-expect-error -- 週の第 n 営業日は 1〜7 と -1〜-7
+      // @ts-expect-error -- the nth business day of a week is 1-7 or -1 to -7
       { businessDayOfWeek: 8, weekStart: 1 },
     ],
   });
   createSchedule({
     weekdayValues: [0, 0, 0, 0, 0, 0, 0],
     recurringRules: [
-      // @ts-expect-error -- スケジュールの第 n 営業日の規則は calendar が必須
+      // @ts-expect-error -- an nth-business-day rule of a schedule requires calendar
       { businessDayOfMonth: 1, value: 1 },
     ],
   });
@@ -578,13 +580,13 @@ void withoutNames;
     weekdayValues: [0, 1, 1, 1, 1, 1, 0],
     recurringRules: [{ businessDayOfWeek: 1, weekStart: 0, calendar: branch, value: 2 }],
   });
-  // @ts-expect-error -- skipWeekdays は曜日・日の規則でだけ使える
+  // @ts-expect-error -- skipWeekdays can be used only in weekday and day-of-month rules
   createCalendar({ closedRecurringRules: [{ holiday: true, skipWeekdays: [6] }] });
-  // @ts-expect-error -- 曜日の規則と第 n 営業日の規則は同時に書けない
+  // @ts-expect-error -- a weekday rule and an nth-business-day rule cannot be written together
   createCalendar({ closedRecurringRules: [{ weekday: 1, businessDayOfMonth: 1 }] });
 }
 
-// 日単位の周期の規則 cycle・anchor・positions と、祝日の翌日・祝前日の skipWeekdays
+// The day-cycle rule cycle / anchor / positions, and skipWeekdays of day-after and day-before-holiday rules
 {
   createCalendar({
     holidayProvider: jp,
@@ -604,16 +606,16 @@ void withoutNames;
       },
     ],
   });
-  // @ts-expect-error -- cycle には anchor と positions が要る
+  // @ts-expect-error -- cycle needs anchor and positions
   createCalendar({ closedRecurringRules: [{ cycle: 6, positions: [5, 6] }] });
   createCalendar({
-    // @ts-expect-error -- cycle と weekday は同時に指定できない
+    // @ts-expect-error -- cycle and weekday cannot be given together
     closedRecurringRules: [{ cycle: 6, anchor: "2026-01-05", positions: [5], weekday: 1 }],
   });
-  // @ts-expect-error -- positions は cycle の規則でだけ使える
+  // @ts-expect-error -- positions can be used only in a cycle rule
   createCalendar({ closedRecurringRules: [{ dayOfMonth: 1, positions: [1] }] });
   createCalendar({
-    // @ts-expect-error -- cycle の規則は weekdays で絞らない
+    // @ts-expect-error -- a cycle rule is not filtered by weekdays
     closedRecurringRules: [{ cycle: 6, anchor: "2026-01-05", positions: [5], weekdays: [1] }],
   });
   createCalendar({
@@ -624,9 +626,9 @@ void withoutNames;
     holidayProvider: jp,
     closedRecurringRules: [{ dayAfterHoliday: true, skipWeekdays: [0, 6], keys: ["sports"] }],
   });
-  // @ts-expect-error -- skipWeekdays の要素は 0〜6
+  // @ts-expect-error -- the elements of skipWeekdays are 0-6
   createCalendar({ closedRecurringRules: [{ dayBeforeHoliday: true, skipWeekdays: [7] }] });
-  // @ts-expect-error -- skipWeekdays は祝日の規則には付かない
+  // @ts-expect-error -- a holiday rule has no skipWeekdays
   createCalendar({ closedRecurringRules: [{ holiday: true, skipWeekdays: [0] }] });
   const pattern: CyclePattern = { cycle: 4, anchor: "2026-01-01", positions: [4] };
   createSchedule({

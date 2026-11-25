@@ -1,15 +1,18 @@
 /**
- * 実行環境のタイムゾーン（環境変数 TZ）を変えて、瞬間・時刻を渡すテストを実行する（pnpm check から実行）。
+ * Runs the tests that pass instants and times with a different runtime time zone (the environment variable TZ)
+ * (run by pnpm check).
  *
- * このライブラリは「サーバーがどのタイムゾーンで動いていても結果が変わらない」ことを約束している。
- * 実行環境のタイムゾーンに依存する API は scripts/check-package.ts（checkPortableSource）が静的に禁止する。
- * ここでは、禁止の網から漏れた依存が日付のずれとして現れる、UTC より遅いゾーンと進んだゾーンを 1 つずつ試す
- * （UTC は既定の実行と同じ。Asia/Tokyo は Chatham と同じ進んだ側なので試さない。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+ * The library promises that results do not change whatever time zone the server runs in.
+ * APIs that depend on the runtime's time zone are forbidden statically by scripts/check-package.ts
+ * (checkPortableSource). Here one zone behind UTC and one ahead of it are tried, in which a dependency that
+ * slipped through shows as a shifted date (UTC equals the default run; Asia/Tokyo is on the same side as Chatham
+ * and is not tried. RELEASING.md, reasons for the quality mechanisms, "runtimes that are checked").
  *
- * 再実行するのは、src の Date・Intl に触れる経路（core/date.ts の日数の変換・core/input.ts の瞬間の変換・today）を
- * 通るテストだけ（TZ_FILES）。暦日の文字列だけを渡すテストは、ゾーンを変えても同じ経路を通る。瞬間・時刻を書いたテスト
- * （INSTANT_PATTERN に当たるファイル）は TZ_FILES か、理由を書いた TZ_EXCLUDED のどちらかに載っていなければ失敗にする
- * （黙って外れる検査を作らない。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）
+ * Only the tests that go through the paths of src touching Date and Intl are run again (TZ_FILES): the day
+ * number conversion of core/date.ts, the instant conversion of core/input.ts, and today. Tests that pass only
+ * date strings take the same path in any zone. A test that writes instants or times (a file matching
+ * INSTANT_PATTERN) must be in TZ_FILES or in TZ_EXCLUDED with a reason, or the script fails (no check silently
+ * drops out. RELEASING.md, reasons for the quality mechanisms, "write a rule in one place")
  */
 
 import "./strict-warnings.ts";
@@ -17,15 +20,18 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 const ZONES = [
-  "America/Los_Angeles", // 夏時間あり・UTC より遅い
-  "Pacific/Chatham", // UTC+12:45（夏時間で +13:45）。日付の境目がずれる端の例
+  "America/Los_Angeles", // daylight saving time; behind UTC
+  "Pacific/Chatham", // UTC+12:45 (+13:45 in daylight saving time): an extreme case of a shifted date boundary
 ];
 
-/** 瞬間・時刻を書いたテストの印（Date・Temporal・時刻付きの文字列・瞬間を受ける API） */
+/** Marks of a test that writes instants or times (Date, Temporal, strings with a time, APIs taking an instant) */
 const INSTANT_PATTERN =
   /new Date\(|Date\.UTC|Date\.now|toInstant|civilOf|instantOf|Temporal|T\d{2}:\d{2}|today\(/;
 
-/** 再実行するテスト。date.test.ts は印に当たらないが、すべての日数の計算が通る core/date.ts を確かめるので入れる */
+/**
+ * The tests run again. date.test.ts does not match the marks but is included because it checks core/date.ts,
+ * through which every day-number calculation goes
+ */
 export const TZ_FILES: readonly string[] = [
   "test/argument-errors.test.ts",
   "test/calendar-closing.test.ts",
@@ -43,7 +49,7 @@ export const TZ_FILES: readonly string[] = [
   "test/uk-rules.test.ts",
 ];
 
-/** 印に当たるが再実行しないテストと、その理由 */
+/** Tests that match the marks but are not run again, with the reason */
 export const TZ_EXCLUDED: Readonly<Record<string, string>> = {
   "test/time-zone-identity.test.ts":
     "Temporal は、タイムゾーンの名前の比較を差し替えるための代わりの実装を書くだけで、瞬間を暦日に変換しない（結果は TZ に依存しない）",
@@ -81,7 +87,7 @@ if (problems.length > 0) {
 
 let failed = 0;
 for (const tz of ZONES) {
-  // 結果の表示形式は Node.js のバージョンで既定が違う（22 は TAP、24 は spec）ため、読み取れるよう TAP に固定する
+  // The default reporter differs by Node.js version (TAP in 22, spec in 24), so TAP is fixed to be readable
   const result = spawnSync(
     process.execPath,
     ["--import", "./scripts/strict-warnings.ts", "--test", "--test-reporter=tap", ...TZ_FILES],

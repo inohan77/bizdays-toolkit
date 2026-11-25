@@ -1,15 +1,16 @@
 /**
- * CI の全件のジョブの時間を、同じジョブの直近 3 回の main の成功した実行と比べる部品（scripts/job-time.ts）。
- * スクリプトは GitHub の API を呼ぶので pnpm check で動かさず、比べ方と出す文をここに切り出して
- * test/tools/job-time-parts.test.ts が確かめる。決まりは RELEASING.md の「品質の仕組みを足すとき」の 6。
+ * Parts for comparing the time of the full-test jobs of CI with the last 3 successful runs of the same job on
+ * main (scripts/job-time.ts). The script calls the GitHub API and is not run by pnpm check, so the comparison
+ * and the printed lines are here and checked by test/tools/job-time-parts.test.ts. The rule is item 6 of the
+ * section of RELEASING.md on adding a quality mechanism.
  */
 
-/** 注意を出す倍率（直近の中央値の何倍を超えたら知らせるか） */
+/** The ratio for a notice (how many times the recent median must be exceeded) */
 export const NOTICE_RATIO = 1.5;
-/** 比べる直近の実行の数 */
+/** The number of recent runs compared */
 export const RECENT_RUNS = 3;
 
-/** GitHub の API のジョブ（使う項目だけ） */
+/** A job of the GitHub API (only the properties used) */
 export interface JobRecord {
   readonly name: string;
   readonly status: string;
@@ -19,14 +20,14 @@ export interface JobRecord {
   readonly runner_name: string | null;
 }
 
-/** 終わったジョブの時間（秒）。開始か終了の時刻がなければ undefined */
+/** The time of a finished job in seconds; undefined without a start or end time */
 export function durationOf(job: JobRecord): number | undefined {
   if (job.started_at === null || job.completed_at === null) return undefined;
   const ms = Date.parse(job.completed_at) - Date.parse(job.started_at);
   return Number.isFinite(ms) && ms >= 0 ? ms / 1000 : undefined;
 }
 
-/** 中央値（空の配列は undefined） */
+/** The median (undefined for an empty array) */
 export function median(values: readonly number[]): number | undefined {
   if (values.length === 0) return undefined;
   const sorted = [...values].sort((a, b) => a - b);
@@ -37,8 +38,9 @@ export function median(values: readonly number[]): number | undefined {
 const seconds = (s: number): string => `${Math.round(s)} 秒`;
 
 /**
- * 今のジョブの時間と、直近の実行の同じジョブの時間（新しい順）から、Job Summary に出す行を作る。
- * 比べる値が RECENT_RUNS に満たなければ、比べられなかったことを出す（黙って何も出さない形にしない）
+ * Builds the lines for the Job Summary from the time of the current job and the times of the same job in recent
+ * runs (newest first). With fewer values than RECENT_RUNS, it says that no comparison was possible (never
+ * silently nothing)
  */
 export function judge(
   name: string,
@@ -75,11 +77,12 @@ export function judge(
   };
 }
 
-/** GitHub の API の一時的な失敗（5xx・通信の失敗）のときに、再試行の前に待つ時間（ミリ秒） */
+/** The wait before a retry after a temporary failure of the GitHub API (5xx, network failure), in milliseconds */
 export const RETRY_WAIT_MS = 10_000;
 
 /**
- * 1 回の取得の結果。HTTP の状態と、成功したときの本文（JSON）。通信の失敗（応答がない）は status 0 と、その理由の error
+ * The result of one fetch: the HTTP status and, on success, the body (JSON). A network failure (no response) is
+ * status 0 with the reason in `error`
  */
 export interface FetchResult {
   readonly status: number;
@@ -88,10 +91,11 @@ export interface FetchResult {
 }
 
 /**
- * 取得を行い、一時的な失敗（5xx か、通信の失敗の status 0）なら RETRY_WAIT_MS 待って 1 回だけ再試行する。
- * 2 回目も失敗するか、4xx（429 を含む。待っても直らない）なら例外にする（呼び出し側が「比べられなかった」の行にする）。
- * fetchOnce が投げた例外（設定の誤り、本文が JSON でないなど）は、一時的な失敗ではないので再試行せずにそのまま投げる。
- * 取得と待ちは引数で受ける（test/tools/job-time-parts.test.ts が実際の通信なしで確かめる）
+ * Fetches and, on a temporary failure (5xx, or status 0 for a network failure), waits RETRY_WAIT_MS and retries
+ * once. A second failure, or a 4xx (including 429, which waiting does not fix), throws (the caller turns it into
+ * the "could not compare" lines). An error thrown by fetchOnce (a configuration mistake, a body that is not
+ * JSON, ...) is not a temporary failure and is rethrown without a retry.
+ * The fetch and the wait are parameters (test/tools/job-time-parts.test.ts checks without real network access)
  */
 export async function getWithRetry(
   label: string,
@@ -112,7 +116,7 @@ export async function getWithRetry(
   return result.body;
 }
 
-/** 取得に失敗したときの行（失敗にはしない。比べられなかったことを出す） */
+/** The lines for a failed fetch (not a failure; says that no comparison was possible) */
 export function failedLines(reason: string): string[] {
   return ["### ジョブの時間", "", `比べられなかった: ${reason}`, ""];
 }

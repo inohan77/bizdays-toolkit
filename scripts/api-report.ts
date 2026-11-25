@@ -1,15 +1,15 @@
 /**
- * 公開 API のスナップショット（pnpm check から実行）。
+ * Snapshot of the public API (run by pnpm check).
  *
- * ビルド済みの型定義（dist/*.d.ts）から、package.json の exports の各エントリーが公開する
- * 名前と型の宣言を一覧にし、etc/api.md と比べる。違いがあれば失敗する。
+ * From the built type definitions (dist/*.d.ts), lists the names and type declarations published by each entry
+ * of `exports` in package.json and compares the list with etc/api.md. Fails on any difference.
  *
- *   node scripts/api-report.ts            … 比べる（pnpm check）
- *   node scripts/api-report.ts --update   … etc/api.md を書き直す（pnpm api:update）
+ *   node scripts/api-report.ts            ... compare (pnpm check)
+ *   node scripts/api-report.ts --update   ... rewrite etc/api.md (pnpm api:update)
  *
- * あわせて、公開するものすべてに TSDoc の @public または @beta が付いているかを確かめる。
- * 意図した API の変更なら --update で更新してコミットする。差分はレビューで
- * RELEASING.md の「互換性の約束」に沿っているか（入力への追加・出力の列挙への追加だけか）を確かめる。
+ * Also checks that everything published has the TSDoc tag @public or @beta.
+ * For an intended API change, update with --update and commit. In review, check the difference against the
+ * compatibility promise of RELEASING.md (only additions to inputs and to output enumerations).
  */
 
 import "./strict-warnings.ts";
@@ -43,7 +43,7 @@ const program = ts.createProgram(
 const checker = program.getTypeChecker();
 const printer = ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed });
 
-/** 宣言に付いた @public・@beta を取り出す */
+/** Reads @public / @beta of a declaration */
 function releaseTag(node: ts.Node): string | undefined {
   const target = ts.isVariableDeclaration(node) ? node.parent.parent : node;
   for (const tag of ts.getJSDocTags(target)) {
@@ -53,13 +53,16 @@ function releaseTag(node: ts.Node): string | undefined {
   return undefined;
 }
 
-/** 宣言に @deprecated が付いているか（非推奨の記録。削除は少なくとも 1 つのマイナーバージョンの後。RELEASING.md） */
+/**
+ * Whether a declaration has @deprecated (the record of a deprecation; removal comes at least one minor version
+ * later. RELEASING.md)
+ */
 function isDeprecated(node: ts.Node): boolean {
   const target = ts.isVariableDeclaration(node) ? node.parent.parent : node;
   return ts.getJSDocTags(target).some((tag) => tag.tagName.text === "deprecated");
 }
 
-/** 宣言を、コメントを除いた型定義の文として書き出す */
+/** Prints a declaration as a type-definition statement without comments */
 function printDeclaration(node: ts.Node): string {
   const target = ts.isVariableDeclaration(node) ? node.parent.parent : node;
   return printer.printNode(ts.EmitHint.Unspecified, target, target.getSourceFile()).trim();

@@ -1,23 +1,29 @@
 import "./strict-warnings.ts";
 /**
- * data.gov.sg の Singapore Public Holidays（MOM）とライブラリの表を、日付と名称で照合する（シンガポール）。
+ * Verifies the library's table against the Singapore Public Holidays (MOM) of data.gov.sg, by date and name
+ * (Singapore).
  *
- *   pnpm verify:datagovsg                    … data.gov.sg から取得して照合
- *   pnpm verify:datagovsg --file <path>      … 手元の JSON（フィクスチャと同じ形）で照合
- *   pnpm verify:datagovsg --write            … 照合に成功したらテスト用フィクスチャを更新
- *   pnpm verify:datagovsg --report <path>    … 結果を Markdown で書き出す（監視のワークフローが issue の本文に使う）
- *   pnpm verify:datagovsg --simulate         … 取得したデータに架空の祝日を 1 件足して照合する（--write とは併用できない）
+ *   pnpm verify:datagovsg                    ... fetch from data.gov.sg and verify
+ *   pnpm verify:datagovsg --file <path>      ... verify with a local JSON (same shape as the fixture)
+ *   pnpm verify:datagovsg --write            ... on success, update the test fixture
+ *   pnpm verify:datagovsg --report <path>    ... write the result as Markdown (the watch workflow uses it as
+ *                                                issue body)
+ *   pnpm verify:datagovsg --simulate         ... add one fictitious holiday to the fetched data and verify
+ *                                                (cannot be combined with --write)
  *
- * 取得のしかた: コレクション 691 のメタデータから年ごとのデータセットの ID を得て、各データセットの datastore_search を読む
- * （認証なし）。複数の年にまたがるデータセット（consolidated）は年ごとに分けて、年ごとのデータセットと同じ内容かも確かめる。
+ * Fetching: gets the IDs of the yearly datasets from the metadata of collection 691 and reads datastore_search
+ * of each dataset (no authentication). A dataset spanning several years (consolidated) is split by year and also
+ * checked to equal the yearly datasets.
  *
- * 照合すること:
- * - data.gov.sg に載っている年の日付と名称が、ライブラリの表と振替の規則から出る結果と一致するか。data.gov.sg の "(Observed)" は
- *   kind "substitute" と読み替える。既知の差分（フィクスチャの knownDifferences。MOM の改定後の告示と食い違う 2022 年分）だけを許す
- * - data.gov.sg に CONFIRMED_THROUGH より後の年が載っていないか（載ったら src/sg/rules.ts に表を足し、SUPPORTED_YEARS・CONFIRMED_THROUGH を上げる）
- * - フィクスチャ（test/fixtures/datagovsg-public-holidays.json）と data.gov.sg の内容が同じか
+ * Verified:
+ * - the dates and names of the years on data.gov.sg equal the results of the library's table and substitution
+ *   rule. "(Observed)" of data.gov.sg is read as kind "substitute". Only the known differences are allowed
+ *   (knownDifferences of the fixture: the 2022 data, which differs from MOM's revised gazette)
+ * - data.gov.sg has no year after CONFIRMED_THROUGH (when it does, add the table to src/sg/rules.ts and raise
+ *   SUPPORTED_YEARS and CONFIRMED_THROUGH)
+ * - the fixture (test/fixtures/datagovsg-public-holidays.json) equals data.gov.sg
  *
- * 終了コード: 0 = 一致、1 = 差分あり、2 = 取得・解析の失敗（監視が機能していない）
+ * Exit code: 0 = equal, 1 = differences, 2 = failed fetch or parse (the watch is not working)
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -56,10 +62,13 @@ const report = option("--report");
 const write = args.includes("--write");
 const simulate = args.includes("--simulate");
 if (simulate && write) throw new Error("--simulate cannot be combined with --write");
-/** 今日の日付（日本時間。報告書・フィクスチャの「取得」の日付。issue のコメントの日付と同じ基準） */
+/**
+ * Today's date (Japan time; the "fetched" date of reports and fixtures, on the same basis as the dates of issue
+ * comments)
+ */
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
 
-/** 一時的な失敗で監視が issue を立てないよう、3 回まで試す */
+/** Tries up to 3 times, so that a temporary failure does not make the watch open an issue */
 async function fetchJson(url: string): Promise<unknown> {
   let last: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -77,7 +86,10 @@ async function fetchJson(url: string): Promise<unknown> {
 
 const byDate = (a: { date: string }, b: { date: string }): number =>
   a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
-/** アポストロフィの字の揺れ（' と ’。data.gov.sg は年によって違う）を MOM の報道発表の綴り（’）にそろえて比べる。フィクスチャには受け取ったままを保存する */
+/**
+ * Compares with the variants of the apostrophe (' and ’; data.gov.sg differs by year) aligned to the spelling of
+ * MOM's press releases (’). The fixture stores the names as received
+ */
 const normalizeName = (name: string): string => name.replace(/'/g, "’").trim();
 
 function parseRecords(data: unknown, id: string): Record_[] {
@@ -100,7 +112,10 @@ function parseRecords(data: unknown, id: string): Record_[] {
   });
 }
 
-/** data.gov.sg から年ごとの一覧を集める。年ごとのデータセットと、複数年のデータセット（consolidated）を分けて返す */
+/**
+ * Collects the yearly lists from data.gov.sg. The yearly datasets and the datasets spanning several years
+ * (consolidated) are returned separately
+ */
 async function fetchRemote(): Promise<{
   years: Record<string, Record_[]>;
   consolidated: Record<string, Record_[]>;
@@ -125,7 +140,7 @@ async function fetchRemote(): Promise<{
   return { years, consolidated };
 }
 
-/** ライブラリの結果を data.gov.sg の形（振替は "(Observed)"）にする */
+/** Brings the library's results into the form of data.gov.sg (a substitute is "(Observed)") */
 const libraryLabels = (year: number): string[] =>
   sg
     .holidaysInYear(year)
@@ -157,7 +172,7 @@ async function main(): Promise<number> {
   const knownLibraryOnly = known.libraryOnly.map((d) => `${d.date} ${d.holiday}`);
   const knownDataOnly = known.dataOnly.map((d) => `${d.date} ${d.holiday}`);
 
-  // 1. ライブラリの表と振替の規則との照合（既知の差分だけを許す）
+  // 1. Verification against the library's table and substitution rule (only the known differences are allowed)
   const mismatches: string[] = [];
   for (const year of yearList) {
     const expected = remoteYears[String(year)]!.map((r) => `${r.date} ${normalizeName(r.holiday)}`);
@@ -173,7 +188,7 @@ async function main(): Promise<number> {
     for (const x of actual)
       if (!expected.includes(x) && !knownLibraryOnly.includes(x)) mismatches.push(`extra   ${x}`);
   }
-  // 既知の差分が消えた（data.gov.sg が直った）ときも知らせる（knownDifferences を減らす）
+  // A known difference that disappeared (data.gov.sg was corrected) is reported too (reduce knownDifferences)
   for (const x of knownDataOnly) {
     const year = Number(x.slice(0, 4));
     if (
@@ -192,14 +207,14 @@ async function main(): Promise<number> {
   }
   addSection("Library does not match data.gov.sg (beyond the known differences)", mismatches);
 
-  // 2. 公表済みの年
+  // 2. Published years
   const newYears = yearList.filter((y) => y > sg.confirmedThrough!);
   addSection(
     "New years published on data.gov.sg",
     newYears.map((y) => `${y} (CONFIRMED_THROUGH is ${sg.confirmedThrough})`),
   );
 
-  // 3. 複数年のデータセット（consolidated）と年ごとのデータセットの一致
+  // 3. The datasets spanning several years (consolidated) equal the yearly datasets
   const consolidatedDiffs: string[] = [];
   if (consolidated) {
     for (const y of Object.keys(consolidated).sort()) {
@@ -213,7 +228,7 @@ async function main(): Promise<number> {
   }
   addSection("Consolidated dataset differs from the yearly datasets", consolidatedDiffs);
 
-  // 4. フィクスチャとの照合
+  // 4. Verification against the fixture
   const fixtureDiffs: string[] = [];
   for (const y of yearList.map(String)) {
     const inFixture = (fixture.years[y] ?? []).map((r) => JSON.stringify(r));

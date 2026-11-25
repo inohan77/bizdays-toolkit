@@ -1,0 +1,39 @@
+{
+  "rows": [
+    {
+      "id": "U1",
+      "content": "The claim of no-business-day (no day of the diagnostic range is a business day) had not been checked on random options: the inventory of 0.32.8 and the prototype of 0.32.9 made no options with no-business-day",
+      "foundIn": "0.32.9 (the plan, 14-11)",
+      "state": "verified",
+      "evidence": "scripts/promise-inventory.ts makes calendars closed on every weekday (some with a rule that opens the day after holidays) and fails when a day of the diagnostic range is a business day where no-business-day is reported, and when the full set meets no such options; the full set of 0.32.9 checked 43 such options with 0 FINDING"
+    },
+    {
+      "id": "U2",
+      "content": "The days outside the diagnostic range (before 1955 and after 2099): the diagnostics do not examine them, so whether a reported rule can be removed without changing those days is not known (in 0.32.8: the years of a provider with more than 200 supported years outside 1900-2099)",
+      "foundIn": "0.32.8 (the plan, 6-21)",
+      "state": "documented",
+      "evidence": "The diagnostic range and that the reports are about its days only are written in `docs/guide.md`, `docs/guide.ja.md` and `docs/decisions.md` (#31)"
+    },
+    {
+      "id": "U3",
+      "content": "Dimensions the promise checks do not vary (such as nested basis calendars beyond one level, annual dates with effective periods, skipWeekdays, time zones other than UTC, three or more providers): an error that needs one of them is not found by the checks of the repository",
+      "foundIn": "0.32.9 (the plan, 14-5 and 14-9)",
+      "state": "documented",
+      "evidence": "The dimensions are those of `etc/promise-dimensions.json`, and the limit is written in `RELEASING.md` (\"Checks that keep the promises of the diagnostics\"); after 0.32.9 is published, random options with dimensions the repository does not vary are checked (the plan, 14-9 V1)"
+    },
+    {
+      "id": "U4",
+      "content": "The table of lines the promise checks do not reach sees whether a line runs, not whether the values that reach it are varied enough, and does not judge whether a reason in a table is right",
+      "foundIn": "0.32.9 (the plan, 14-5)",
+      "state": "documented",
+      "evidence": "Written in `RELEASING.md` (\"Checks that keep the promises of the diagnostics\"): the combinations of values are left to the dimensions and the inventory, and a change of a table needs the approval of its diff"
+    },
+    {
+      "id": "U5",
+      "content": "The table of lines the promise checks do not reach was made with Node.js 22.23.5 on Linux; whether the block coverage of V8 gives the same blocks with Node.js 24 and 26 and on Windows was not checked",
+      "foundIn": "0.32.9",
+      "state": "documented",
+      "evidence": "The promise-coverage job of CI runs with Node.js 22.23.5 (`RELEASING.md`, \"Checks that keep the promises of the diagnostics\"); a run with another version that finds other blocks fails and shows them"
+    }
+  ]
+}

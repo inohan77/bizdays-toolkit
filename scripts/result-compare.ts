@@ -1,31 +1,46 @@
 /**
- * 前のバージョンとの設定の結果の比較（CI の result-compare ジョブ。RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」）。
+ * Comparison of the results of options with the previous version (the result-compare job of CI; RELEASING.md,
+ * reasons for the quality mechanisms, "compare with the previous version").
  *
- * 種（シード）で決まる設定の集まりと、過去の退行を書き留めた固定の設定を、前のバージョンと今回の dist の両方に渡し、
- * カレンダー（直接・合成・スケジュールから）とスケジュールの結果を 1 日ずつ比べる。比べる項目は、営業日か（値）・
- * reason・name・shiftedFrom・設定の位置。診断は、前のバージョンの結果（severity・code・path・relatedPath）がすべて
- * 今回の結果に含まれることを確かめる（RELEASING.md の「互換性の約束」の診断の項。誤った診断を直して消えた結果は、etc/result-changes.json で許す）。
+ * A set of options decided by a seed, and fixed options that record past regressions, are passed to both the
+ * previous version and this dist, and the results of calendars (direct, combined, from a schedule) and schedules
+ * are compared day by day. Compared: business day or not (the value), reason, name, shiftedFrom and the option
+ * position. For the diagnostics, every result of the previous version (severity, code, path, relatedPath) must
+ * be among the results of this version (the diagnostics item of the compatibility promise of RELEASING.md;
+ * results that disappeared because a wrong diagnostic was fixed are allowed in etc/result-changes.json).
  *
- * 設定の名前: 前のバージョンが改名の前（0.30.0 より前）なら旧名だけ、そうでなければ新しい名前と旧名の両方で書く。
- * 改名の前のバージョンと比べるときは、返す値の改名（reason の "regular" → "default"）と設定の位置のキーの改名をそろえてから比べる。
+ * Option names: when the previous version is from before the rename (before 0.30.0), only the old names;
+ * otherwise both the new and the old names. Compared with a version from before the rename, the renamed returned
+ * values (reason "regular" → "default") and the renamed keys in option positions are aligned first.
  *
- * 意図した差分は etc/result-changes.json に、設定の特徴（trait）・入ったバージョン・出典を書いて許す。診断の差分は、消えた結果のコード
- * （removedCodes）でも絞れる。
- * 許すのは、前のバージョンがその変更より前（affectedSince 以上・introducedIn 未満）で、今回のバージョンがその変更を含むときだけ。
- * 失敗にする条件: 許していない差分がある。今回のバージョンで、意図せず作成に失敗した設定がある（生成器が意図して混ぜた入力の誤り
- * （test/support/catalog.ts の印を付けた規則を含む設定）は数えて Job Summary に出し（0 件なら空振りとして失敗）、それ以外の作成の失敗は、結果を比べられていないので失敗にする。
- * 名前の書き方（新しい名前・旧名）ごとに数え、前のバージョンでも失敗した設定の数も出す。前のバージョンと誤りが同じなら差分にならないので、
- * 数えなければ黙って空振りになるため）。旧名の回で、新しい名前で書ける項目があるのに旧名に書き換わらなかった設定がある。
+ * Intended differences are allowed in etc/result-changes.json with a feature of the options (trait), the version
+ * they came in and the source. Differences of diagnostics can also be narrowed by the codes of the results that
+ * disappeared (removedCodes).
+ * A difference is allowed only when the previous version is from before the change (at least affectedSince and
+ * below introducedIn) and this version contains it.
+ * It fails when: there is a difference that is not allowed; in this version some options unintentionally failed
+ * to be created (wrong inputs the generators mixed in on purpose - options with a rule marked by
+ * test/support/catalog.ts - are counted and shown in the Job Summary, and 0 of them fails as an empty run; any
+ * other failure to create fails because no result was compared. They are counted per way of naming (new names,
+ * old names), and the number of options that also failed in the previous version is shown: the same mistake in
+ * both versions is no difference, so without counting it would silently be an empty run); in the old-name round,
+ * some options that have properties writable under a new name were not rewritten to the old names.
  *
- * 使い方: node scripts/result-compare.ts --base <dir> [--head .] [--base-label <label>] [--seed <n>] [--scale <n>] [--changes <file>]
- *   --base は前のバージョンを展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回のリポジトリ（pnpm build 済み）。
- *   --scale は設定の数の倍率（既定 1）。--changes は意図した差分の一覧（既定は --head の etc/result-changes.json。
- *   公開済みのバージョンどうしを比べて検査が働くかを確かめるときに、このリポジトリの一覧を渡す）
- * 終了コード: 0 = 合格、1 = 許していない差分・意図せず作成に失敗した設定、2 = 引数・読み込みの誤り・予期しない例外
- * （設定ごとの比較の外で投げたもの。比較が終わっていないので、差分の有無は分からない）。結果は Markdown で標準出力に書く。
+ * Usage: node scripts/result-compare.ts --base <dir> [--head .] [--base-label <label>] [--seed <n>] [--scale <n>]
+ *        [--changes <file>]
+ *   --base is the directory of the unpacked previous version (package/ of the npm pack tgz). --head is this
+ *   repository (after pnpm build).
+ *   --scale multiplies the number of options (default 1). --changes is the list of intended differences
+ *   (default: etc/result-changes.json of --head; pass this repository's list when comparing two published
+ *   versions to see whether the check works)
+ * Exit code: 0 = pass, 1 = a difference that is not allowed or options that unintentionally failed to be
+ * created, 2 = wrong arguments, a loading error or an unexpected error (thrown outside the comparison of an
+ * option; the comparison did not finish, so whether there are differences is unknown). The result is written as
+ * Markdown on standard output.
  */
 
-// 最初の import: 予期しない例外を終了コード 2 にする（ほかの import の評価の途中で投げた例外も受けるため、ほかより先に読み込む）
+// The first import: turns an unexpected error into exit code 2 (loaded before the others, to catch errors thrown
+// while another import is evaluated)
 import "./exit-on-unexpected.ts";
 import "./strict-warnings.ts";
 import { existsSync, readFileSync } from "node:fs";
@@ -56,7 +71,10 @@ if (baseDir === undefined) {
   process.exit(2);
 }
 const headDir = argValue("--head") ?? ".";
-/** 数の引数（数でない値や範囲の外の値は、比べる設定が 0 件になって黙って合格しないよう使い方の誤りにする） */
+/**
+ * A numeric argument (a value that is not a number or is out of range is a usage error, so that 0 compared
+ * options do not pass silently)
+ */
 const numberArg = (name: string, fallback: string, valid: (n: number) => boolean): number => {
   const text = argValue(name) ?? fallback;
   const n = Number(text);
@@ -74,18 +92,18 @@ const headVersion = versionOf(headDir);
 const baseVersion = versionOf(baseDir);
 const baseLabel = argValue("--base-label") ?? baseVersion;
 
-/** "a.b.c" のバージョンを比べる（プレリリースは使わない） */
+/** Compares "a.b.c" versions (prereleases are not used) */
 const cmp = (a: string, b: string): number => {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
   for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return (pa[i] ?? 0) - (pb[i] ?? 0);
   return 0;
 };
-/** 改名（0.30.0）より前のバージョンか */
+/** Whether the base version is from before the rename (0.30.0) */
 const baseIsBeforeRename = cmp(baseVersion, "0.30.0") < 0;
 
 // ------------------------------------------------------------
-// 読み込み
+// Loading
 // ------------------------------------------------------------
 
 interface Lib {
@@ -128,7 +146,7 @@ async function load(dir: string): Promise<Lib> {
 }
 
 // ------------------------------------------------------------
-// 旧名で書く・結果の名前をそろえる
+// Writing with old names, aligning the names in results
 // ------------------------------------------------------------
 
 interface Renamed {
@@ -136,7 +154,7 @@ interface Renamed {
   readonly from: string;
   readonly to: string;
 }
-/** 改名の表（今回の dist の内部の表。改名の前のバージョンと比べるときだけ使う） */
+/** The rename table (the internal table of this dist; used only against a version from before the rename) */
 let renamedKeys: readonly Renamed[] = [];
 
 const renameObject = (places: readonly string[], value: Obj, toOld: boolean): Obj => {
@@ -148,7 +166,7 @@ const renameObject = (places: readonly string[], value: Obj, toOld: boolean): Ob
   return out;
 };
 
-/** 新しい名前の設定を旧名で書く（値の改名: スケジュールの holidayPolicy の "ignore" → "weekday"） */
+/** Writes options with new names under the old names (renamed value: holidayPolicy "ignore" → "weekday" of schedules) */
 function toOld(c: Case): Obj {
   const ruleList = (list: unknown): unknown =>
     Array.isArray(list) ? list.map((r) => renameObject(["rule"], r as Obj, true)) : list;
@@ -160,7 +178,7 @@ function toOld(c: Case): Obj {
   return renameObject(top, o, true);
 }
 
-/** 設定の位置（"closedRecurring[0].kinds[0]" など）の旧名のキーを新しい名前にそろえる */
+/** Aligns the old-name keys of an option position ("closedRecurring[0].kinds[0]", ...) to the new names */
 function normalizePath(path: string | undefined): string | undefined {
   if (path === undefined || renamedKeys.length === 0) return path;
   return path
@@ -176,7 +194,7 @@ function normalizePath(path: string | undefined): string | undefined {
 }
 
 // ------------------------------------------------------------
-// 比べる
+// Comparing
 // ------------------------------------------------------------
 
 const withProviders = (lib: Lib, options: Obj): Obj => {
@@ -193,7 +211,7 @@ const withProvidersOld = (lib: Lib, options: Obj): Obj => {
   return { ...options, holidays: Array.isArray(p) ? p.map(one) : one(p) };
 };
 
-/** 改名したエラーコード（改名の前のバージョンと比べるときにそろえる） */
+/** Renamed error codes (aligned when comparing with a version from before the rename) */
 const RENAMED_CODES: Readonly<Record<string, string>> = {
   "invalid-month-day": "invalid-annual-date",
 };
@@ -203,8 +221,9 @@ const errorCode = (error: unknown): string => {
 };
 
 /**
- * 1 日の結果を比べる形にそろえる。改名の前のバージョンの reason "regular" は、改名の後の語にそろえる
- * （createCalendarFromSchedule のカレンダーは "open-weekday"、それ以外は "default"。docs/migration.md の 0.30.0 の「返す値」）
+ * Brings the result of one day into the compared form. The reason "regular" of a version from before the rename
+ * becomes the word after the rename ("open-weekday" for a calendar of createCalendarFromSchedule, otherwise
+ * "default"; the returned values of 0.30.0 in docs/migration.md)
  */
 function dayRecord(day: Obj, fromSchedule: boolean): string {
   const reason =
@@ -243,13 +262,14 @@ interface Diff {
   readonly target: string;
   readonly detail: string;
   readonly traits: readonly string[];
-  /** 診断の差分で、前のバージョンにあって今回のバージョンにない結果のコード */
+  /** For a difference of diagnostics: the codes of the results the previous version has and this one lacks */
   readonly removedCodes?: readonly string[];
 }
 
 /**
- * 比べた対象の特徴（意図した差分を許す単位）。合成は組のカレンダーの両方の設定、ほかはその設定だけから付ける
- * （相手のカレンダーの特徴で、単独の結果の差分を許さないため）
+ * The features of what was compared (the unit by which intended differences are allowed). A combination gets
+ * them from the options of both calendars of the pair, anything else from its own options only (so that the
+ * features of the partner calendar do not allow a difference of a single result)
  */
 function traitsOf(c: Case, target: string): string[] {
   const own = traitsOfCase(c);
@@ -298,16 +318,21 @@ function diagnosticKeys(list: unknown): Set<string> | string {
   );
 }
 
-/** 意図した入力の誤り（生成器が印を付けた規則。test/support/catalog.ts の isIntendedInvalid）を含む設定か */
+/**
+ * Whether the options contain an intended wrong input (a rule marked by the generator; isIntendedInvalid of
+ * test/support/catalog.ts)
+ */
 const intendedInvalid = (c: Case): boolean =>
   ["closedRecurringRules", "openRecurringRules", "recurringRules"].some(
     (k) => Array.isArray(c.options[k]) && (c.options[k] as unknown[]).some(isIntendedInvalid),
   );
 
 /**
- * 作成の結果の集計（今回のバージョンで、意図した入力の誤りの設定・意図せず作成に失敗した設定）。bothFailed は、意図せず作成に失敗した
- * 設定のうち、前のバージョンでも作成に失敗したもの（誤りが同じなら差分にならず、結果を何も比べていない空振り）。notRenamed は、旧名の回で
- * 旧名に書き換わらなかった設定（新しい名前で書ける項目があるのに、書き換えた設定が新しい名前の設定と同じ）
+ * Tally of creation (in this version: options with an intended wrong input, options that unintentionally failed
+ * to be created). bothFailed: of the unintended failures, those that also failed in the previous version (the
+ * same mistake is no difference, an empty run that compares no result). notRenamed: options that were not
+ * rewritten to old names in the old-name round (they have properties writable under a new name, yet the
+ * rewritten options equal the new-name ones)
  */
 const creation = {
   intended: 0,
@@ -317,8 +342,9 @@ const creation = {
 };
 
 /**
- * 作成の結果を数える。意図した入力の誤りは、名前の書き方のうち最初の 1 つだけで数える（同じ設定を 2 回数えないため）。
- * 意図せず作成に失敗した設定は、名前の書き方ごとに数える（旧名の回だけで失敗する設定も見つけるため）
+ * Counts the results of creation. An intended wrong input is counted in the first way of naming only (the same
+ * options are not counted twice). An unintended failure to create is counted per way of naming (to find options
+ * that fail only in the old-name round)
  */
 function tally(c: Case, h: Built, naming: "new" | "old", b?: Built): void {
   if (intendedInvalid(c)) {
@@ -331,7 +357,10 @@ function tally(c: Case, h: Built, naming: "new" | "old", b?: Built): void {
   }
 }
 
-/** 新しい名前で書ける項目（旧名の表にある名前）を持つ設定か（旧名の回で、書き換わったことを確かめる対象） */
+/**
+ * Whether the options have a property writable under a new name (a name in the table of old names): the ones
+ * checked for being rewritten in the old-name round
+ */
 function hasRenamable(c: Case): boolean {
   const places = c.kind === "calendar" ? ["source", "calendar"] : ["source", "schedule"];
   const top = Object.keys(c.options).some((k) =>
@@ -370,7 +399,8 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
     const h = build(() => head.createCalendar(opts(head)));
     tally(c, h, naming, b);
     if (c.partner) {
-      // 合成の相手も、本体の設定と同じに数える（前のバージョンの結果を渡し、旧名の回で旧名に書き換わったかも確かめる）
+      // The partner of a combination is counted like the options themselves (the previous version's result is
+      // passed, and the rewrite to old names in the old-name round is checked too)
       const partner = c.partner;
       const partnerOpts = (lib: Lib): Obj =>
         naming === "old"
@@ -439,9 +469,10 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
       if (bk !== hk) diffs.push({ ...meta("diagnose"), detail: `${String(bk)} → ${String(hk)}` });
     } else {
       const missing = [...bk].filter((k) => !hk.has(k));
-      // 増えた結果は約束の範囲内（失敗にしない）。CHANGELOG に書くべき変化に気付くため、一覧に出す。旧名の設定の比較では、
-      // deprecated-option は旧名で書いたことを知らせるだけ（改名の前のバージョンにはない）なので数えない。新しい名前の設定で
-      // deprecated-option が増えたら、利用者に見える変化なので数える
+      // Additional results are within the promise (not a failure). They are listed, to notice changes that
+      // belong in the CHANGELOG. In the comparison of old-name options deprecated-option only reports the use of
+      // an old name (absent in a version from before the rename), so it is not counted. A deprecated-option
+      // added for new-name options is a change users see and is counted
       const added = [...hk].filter(
         (k) =>
           !bk.has(k) &&
@@ -460,11 +491,11 @@ function runCase(c: Case, base: Lib, head: Lib, naming: "new" | "old", diag: boo
   return diffs;
 }
 
-/** 診断の結果が増えた設定（前のバージョンになかった結果。約束の範囲内なので失敗にしない） */
+/** Options with more diagnostics (results the previous version lacks; within the promise, so not a failure) */
 const increases: string[] = [];
 
 // ------------------------------------------------------------
-// 意図した差分
+// Intended differences
 // ------------------------------------------------------------
 
 interface KnownChange {
@@ -474,7 +505,10 @@ interface KnownChange {
   readonly introducedIn: string;
   readonly source: string;
   readonly summary: string;
-  /** 診断の差分を、前のバージョンの結果が消えたもので、消えた結果のコードがすべてこの中にあるものだけに絞る */
+  /**
+   * Narrows a difference of diagnostics to disappeared results of the previous version whose codes are all in
+   * this list
+   */
   readonly removedCodes?: readonly string[];
 }
 
@@ -489,7 +523,10 @@ function knownChanges(): KnownChange[] {
   return list.changes;
 }
 
-/** その差分を許すか: 前のバージョンが変更の前で、今回のバージョンが変更を含み、設定がその特徴を持ち、比べた対象が合う */
+/**
+ * Whether a difference is allowed: the previous version is from before the change, this version contains it,
+ * the options have the feature and the compared target matches
+ */
 const allowedBy = (known: readonly KnownChange[], d: Diff): KnownChange | undefined =>
   known.find(
     (k) =>
@@ -504,7 +541,7 @@ const allowedBy = (known: readonly KnownChange[], d: Diff): KnownChange | undefi
   );
 
 // ------------------------------------------------------------
-// 実行
+// Running
 // ------------------------------------------------------------
 
 let base: Lib;
@@ -514,13 +551,15 @@ try {
   base = await load(baseDir);
   head = await load(headDir);
   known = knownChanges();
-  // 旧名の回（どの比較にもある）で設定を旧名に書き換えるので、旧名の表はいつも読み込む（0.30.7 までは、改名の前のバージョンとの
-  // 比較でだけ読み込んでいたので、latest との比較の旧名の回は旧名に書き換わっていなかった）
+  // The old-name round (part of every comparison) rewrites options to the old names, so the table of old names
+  // is always loaded (up to 0.30.7 it was loaded only against a version from before the rename, so the old-name
+  // round of the comparison with latest was not rewritten)
   const table = (await import(pathToFileURL(resolve(headDir, "dist/core/renamed.js")).href)) as {
     RENAMED_KEYS?: readonly Renamed[];
   };
-  // 空の表は読み込みの誤りとする（空だと旧名の回が旧名に書き換わらず、「旧名に書き換わらなかった設定」の検査も表を使うので
-  // 何も見つけない。0.30.7 で直した穴そのものを、この検査が止められるように）
+  // An empty table is a loading error (with an empty table the old-name round is not rewritten, and the check
+  // for options not rewritten uses the table too and finds nothing; this check must be able to stop the very
+  // hole fixed in 0.30.7)
   if (!table.RENAMED_KEYS || table.RENAMED_KEYS.length === 0)
     throw new Error("dist/core/renamed.js has no RENAMED_KEYS (or it is empty)");
   renamedKeys = table.RENAMED_KEYS;
@@ -535,9 +574,11 @@ const fixed = fixedCases().filter(
 );
 const cases: Case[] = [...fixed, ...generateCases(seed, scale, newShapes)];
 /**
- * 診断は時間がかかるので、固定の設定と、種で作った設定の 4 件に 1 件だけ。種で作った設定は、その中の番号を 4 で割った余り
- * （DIAGNOSED_REMAINDER）で選ぶ。固定の設定を足しても、診断する種で作った設定が変わらないようにするため。余りは、固定の設定の
- * 数で選んでいた 0.30.6 までと同じ設定になるように、改名の前のバージョンとの比較とそれ以外で分ける（生成範囲の記録を保つため）
+ * Diagnostics take time, so they run on the fixed options and on one in four of the seeded options. A seeded
+ * option is chosen by the remainder of its number divided by 4 (DIAGNOSED_REMAINDER), so that adding fixed
+ * options does not change which seeded options are diagnosed. The remainder differs between the comparison with
+ * a version from before the rename and the others, so that the same options are chosen as up to 0.30.6, when the
+ * choice depended on the number of fixed options (to keep the record of the generated range)
  */
 const DIAGNOSED_REMAINDER = newShapes ? 1 : 2;
 const diagnosed = (c: Case, i: number): boolean =>
@@ -553,7 +594,8 @@ cases.forEach((c, i) => {
 });
 
 const unexpected = diffs.filter((d) => allowedBy(known, d) === undefined);
-// 生成器は誤りを混ぜる文脈で作るので、入力の誤りの設定が 0 件なら、エラーコードの比較を黙って見なくなっている
+// The generators work in a context that mixes in mistakes, so 0 options with a wrong input means that the
+// comparison of error codes is silently no longer looked at
 const noInvalid = creation.intended === 0;
 const failed =
   unexpected.length > 0 ||
@@ -594,7 +636,7 @@ if (allowed.length > 0) {
   out.push("意図した差分（etc/result-changes.json）:", "");
   for (const [k, n] of byChange) {
     out.push(`- ${k.trait}（${k.introducedIn}）: ${n} 件 — ${k.summary}（${k.source}）`);
-    // 許した差分の設定（意図しない差分が出たときに、許した側と見比べるため）
+    // The options of the allowed differences (to compare with the allowed side when an unintended difference appears)
     const ids = allowed
       .filter((d) => allowedBy(known, d) === k)
       .map((d) => `${d.id} [${d.target}]`);

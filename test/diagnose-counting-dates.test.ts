@@ -1,9 +1,12 @@
 /**
- * 自分の設定を基準に数える第 n 営業日の規則と個別の日付のある設定の診断と、unconfirmedHolidayPolicy: "throw" の
- * redundant、counting-basis の条件（0.32.8 で直した誤り）。個別の日付は数え方を変える（臨時休業日が 1 日入ると、その月・週の
- * 第 n 営業日が後ろにずれる。decisions.md の 16 番）ので、診断は、走査の範囲（提供元なしでは 2001〜2028 年）を個別の日付を
- * 除いて調べ、加えて個別の日付の両端の月・週を、走査の範囲の外でも、日付を残して調べる（31 番）。
- * どのテストも、診断の項目と、項目が言うこと（取り除いても変わらない・変わる、営業日がある）を判定で確かめる
+ * The diagnostics of options with an nth-business-day rule counting on the own options and specific dates, and
+ * the conditions of redundant with unconfirmedHolidayPolicy: "throw" and of counting-basis (the mistakes fixed in
+ * 0.32.8). Specific dates change the count (one extra closed day shifts the nth business day of its month and
+ * week. decisions.md #16), so the diagnostics examine the scan range (2001-2028 without a provider) without
+ * specific dates and, in addition, the months and weeks at both ends of each specific date with the dates, also
+ * outside the scan range (decisions.md #31).
+ * Every test checks the diagnostics' items and, with the judgement, what the items claim (removal changes
+ * nothing / changes something; there are business days)
  */
 
 import assert from "node:assert/strict";
@@ -15,11 +18,11 @@ import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 
 type Obj = Record<string, unknown>;
 
-/** 診断の項目（重さ・code・path） */
+/** The items of the diagnostics (severity, code, path) */
 const items = (list: readonly { severity: string; code: string; path: string }[]): string[] =>
   list.map((d) => `${d.severity} ${d.code} ${d.path}`.trim());
 const diagnosed = (o: Obj): string[] => items(diagnoseCalendar(o as CalendarOptions));
-/** 判定（例外はエラーコード） */
+/** The judgement (the error code when it throws) */
 const at = (o: Obj, date: string): string => {
   try {
     return String(createCalendar(o as CalendarOptions).isBusinessDay(date));
@@ -27,7 +30,7 @@ const at = (o: Obj, date: string): string => {
     return `throws ${(e as { code?: string }).code}`;
   }
 };
-/** 配列 key の i 番目を取り除いた設定 */
+/** The options without the i-th element of the array `key` */
 const drop = (o: Obj, key: string, i: number): Obj => ({
   ...o,
   [key]: (o[key] as unknown[]).filter((_, k) => k !== i),
@@ -36,14 +39,16 @@ const COUNT_ALL_BUT_FIRST = { businessDayOfMonth: Array.from({ length: 30 }, (_,
 const WEEK_RULES = [{ weekday: 6 }, { businessDayOfWeek: 6, weekStart: 1 }];
 
 test("0.32.8 P7: 数える規則と臨時休業日のある設定に営業日があれば、no-business-day を出さない（日付のない設定・全曜日を閉じた設定には出す）", () => {
-  // 1 日を閉じ、2〜31 番目の営業日を閉じる。2026-01-01 を臨時休業日にすると、1 月は 2 日が 1 番目の営業日になり、営業日のまま
+  // Closes the 1st, and the 2nd to 31st business days. With 2026-01-01 as an extra closed day, the 2nd becomes
+  // the first business day of January and stays a business day
   const options = { closedRecurringRules: [{ dayOfMonth: 1 }, COUNT_ALL_BUT_FIRST] };
   const withDate = { ...options, closedDates: ["2026-01-01"] };
   assert.equal(at(withDate, "2026-01-02"), "true");
   assert.deepEqual(diagnosed(withDate), []);
-  // 臨時休業日のない同じ設定には、本当に営業日がない
+  // The same options without the extra closed day really have no business day
   assert.deepEqual(diagnosed(options), ["warning no-business-day"]);
-  // 全曜日を閉じた設定は、数える規則と臨時休業日があっても営業日がない（正しい項目を消さない）
+  // Options closing every weekday have no business day even with a counting rule and an extra closed day (a
+  // correct item is not lost)
   const allClosed = {
     closedWeekdays: [0, 1, 2, 3, 4, 5, 6],
     closedRecurringRules: [{ businessDayOfMonth: 1 }],
@@ -53,8 +58,9 @@ test("0.32.8 P7: 数える規則と臨時休業日のある設定に営業日が
 });
 
 test("0.32.8 P7: 規則が残した月を個別の日付がすべて閉じる設定には、今までどおり no-business-day を出さない（出る設定を増やさない）", () => {
-  // 規則は 2026 年 1 月の最終営業日のほかをすべて閉じ、その月は臨時休業日が閉じる。営業日はないが、0.32.7 も出していない
-  // （個別の日付が営業日をすべて閉じる形は、0.33.0 で扱う）
+  // The rule closes everything but the last business day of January 2026, and extra closed days close that
+  // month. There is no business day, but 0.32.7 did not report it either (specific dates closing every business
+  // day are handled in 0.33.0)
   const all = Array.from({ length: 31 }, (_, i) => i + 1);
   const options = {
     closedWeekdays: [],
@@ -69,7 +75,8 @@ test("0.32.8 P7: 規則が残した月を個別の日付がすべて閉じる設
 });
 
 test("0.32.8 P8: 走査の範囲の外の臨時営業日の月で決める数える規則に、never-matches を出さない（月の形・週の形）", () => {
-  // 2050 年 1 月の土曜を臨時営業日にすると、その月だけ営業日が 26 日あり、規則が 2050-01-31 を閉じる
+  // With the Saturdays of January 2050 as extra business days, only that month has 26 business days and the rule
+  // closes 2050-01-31
   const month = {
     closedWeekdays: [0, 6],
     openDates: ["2050-01-01", "2050-01-08", "2050-01-15", "2050-01-22", "2050-01-29"],
@@ -80,7 +87,7 @@ test("0.32.8 P8: 走査の範囲の外の臨時営業日の月で決める数え
     "false / true",
   );
   assert.deepEqual(diagnosed(month), []);
-  // 同じ臨時営業日を走査の範囲の中（2026 年）に置いても同じ
+  // The same with the extra business days inside the scan range (2026)
   assert.deepEqual(
     diagnosed({
       ...month,
@@ -88,7 +95,8 @@ test("0.32.8 P8: 走査の範囲の外の臨時営業日の月で決める数え
     }),
     [],
   );
-  // 週の形: 定休日の日曜のうち 2045-03-05 を開くと、日曜始まりのその週だけ営業日が 6 日あり、規則が金曜（2045-03-10）を閉じる
+  // The week form: opening 2045-03-05, one of the closed Sundays, gives only that week (starting on Sunday) 6
+  // business days, and the rule closes its Friday (2045-03-10)
   const week = {
     closedWeekdays: [0, 6],
     openDates: ["2045-03-05"],
@@ -102,7 +110,8 @@ test("0.32.8 P8: 走査の範囲の外の臨時営業日の月で決める数え
 });
 
 test("0.32.8 P9: 走査の範囲の外（2029 年・2000 年以前）の臨時休業日の月・週で決める規則に、redundant を出さない（週の形・月の形）", () => {
-  // 週の形: 臨時休業日のある週は 6 番目の営業日が日曜にずれ、その週の土曜を閉じているのは土曜の規則だけ
+  // The week form: in a week with an extra closed day the sixth business day moves to Sunday, and only the
+  // Saturday rule closes the Saturday of that week
   for (const [date, saturday] of [
     ["2029-05-08", "2029-05-12"],
     ["1999-05-11", "1999-05-15"],
@@ -115,7 +124,7 @@ test("0.32.8 P9: 走査の範囲の外（2029 年・2000 年以前）の臨時�
     );
     assert.deepEqual(diagnosed(week), ["info counting-basis closedRecurringRules[1]"], date);
   }
-  // 日付を走査の範囲の中（2028 年）に置いた設定と、日付のない設定は、今までどおり
+  // Options with the date inside the scan range (2028) and options without a date behave as before
   assert.deepEqual(
     diagnosed({
       closedWeekdays: [],
@@ -128,7 +137,8 @@ test("0.32.8 P9: 走査の範囲の外（2029 年・2000 年以前）の臨時�
     "info counting-basis closedRecurringRules[1]",
     "info redundant closedRecurringRules[0]",
   ]);
-  // 月の形: 2042-05-01 を閉じると、2 番目の営業日が 5 月 3 日にずれ、5 月 2 日を閉じているのは 2 日の規則だけ
+  // The month form: closing 2042-05-01 moves the second business day to May 3, and only the rule of the 2nd
+  // closes May 2
   const month = {
     closedWeekdays: [],
     closedRecurringRules: [{ dayOfMonth: 2 }, { businessDayOfMonth: 2 }],
@@ -155,7 +165,7 @@ test("0.32.8 P9: 日付の期間の終わりの月（始まりと違う月）で
 });
 
 test("0.32.8 P9: 日付の月をまたぐ端の週（翌月の初めの日）で決める規則に、redundant を出さない", () => {
-  // 2029-04-30（月）を閉じると、その週（5 月 5 日の土曜まで）の 6 番目の営業日が日曜にずれる
+  // Closing 2029-04-30 (Mon) moves the sixth business day of that week (to Saturday, May 5) to Sunday
   const options = {
     closedWeekdays: [],
     closedRecurringRules: WEEK_RULES,
@@ -168,7 +178,7 @@ test("0.32.8 P9: 日付の月をまたぐ端の週（翌月の初めの日）で
   assert.deepEqual(diagnosed(options), ["info counting-basis closedRecurringRules[1]"]);
 });
 
-test("0.32.8 P9: 200 年を超える日付と並べても、走査の範囲の外の日付の週で決める規則に redundant を出さない", () => {
+test("0.32.8 P9: 診断の範囲に日のない日付と並べても、走査の範囲の外の日付の週で決める規則に redundant を出さない", () => {
   const options = {
     closedWeekdays: [],
     closedRecurringRules: WEEK_RULES,
@@ -178,11 +188,15 @@ test("0.32.8 P9: 200 年を超える日付と並べても、走査の範囲の�
     `${at(options, "2029-05-12")} / ${at(drop(options, "closedRecurringRules", 0), "2029-05-12")}`,
     "false / true",
   );
-  assert.deepEqual(diagnosed(options), ["info counting-basis closedRecurringRules[1]"]);
+  // The date of 2300-2600 has no day in the diagnostic range: it is not examined and gets out-of-range
+  assert.deepEqual(diagnosed(options), [
+    "warning out-of-range closedDates[1]",
+    "info counting-basis closedRecurringRules[1]",
+  ]);
 });
 
 test("0.32.8 P11: 走査の範囲を覆う長い臨時休業日の外の年で決める規則を、使われないと出さない（数える規則のない設定と同じ）", () => {
-  // 2000〜2030 年を閉じた設定。1999 年以前と 2031 年以降は、規則が判定を決めている
+  // Options closing 2000-2030. Up to 1999 and from 2031 the rule decides the judgement
   const options = {
     closedWeekdays: [0, 6],
     closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: -1 }],
@@ -197,7 +211,7 @@ test("0.32.8 P11: 走査の範囲を覆う長い臨時休業日の外の年で�
     "false / true",
   );
   assert.deepEqual(diagnosed(options), []);
-  // 数える規則のない同じ設定も、何も出ない
+  // The same options without a counting rule report nothing either
   assert.deepEqual(diagnosed({ ...options, closedRecurringRules: [{ dayOfMonth: 1 }] }), []);
 });
 
@@ -221,8 +235,9 @@ test("0.32.8 P11: 開業の前（1000-01-01 から）・9999 年までの長い�
 });
 
 test("0.32.8 P11: 長い臨時営業日の内側の月でだけ当てはまる数える規則は、never-matches ではなく redundant（使われない）", () => {
-  // 全曜日を閉じ、2026-09-10 から 2276-06-15 までを臨時営業日にする。22 番目の営業日は、臨時営業日の内側の月にだけあり、
-  // その日は臨時営業日が決めるので、規則は当てはまる日があるが使われない
+  // Every weekday is closed, and 2026-09-10 to 2276-06-15 are extra business days. A 22nd business day exists
+  // only in months inside the extra business days, where the extra business days decide, so the rule has
+  // matching days but is never used
   const options = {
     closedWeekdays: [0, 1, 2, 3, 4, 5, 6],
     openDates: [{ from: "2026-09-10", to: "2276-06-15" }],
@@ -261,7 +276,8 @@ test('0.32.8 P10: unconfirmedHolidayPolicy: "throw" で、取り除くと未確�
       provider.id,
     );
   }
-  // 取り除いても例外にならない規則（英国の提供元の、日曜を閉じる規則）は、"throw" でも今までどおり出る
+  // A rule whose removal does not throw (closing Sundays, with the UK provider) is reported as before with
+  // "throw" too
   assert.deepEqual(
     diagnosed({
       holidayProvider: england,
@@ -301,7 +317,7 @@ test('0.32.8 P10: スケジュールでも、unconfirmedHolidayPolicy: "throw" �
 });
 
 test("0.32.8 K6: 定休日の扱いを変えない毎週の曜日の規則に counting-basis を出さない（変える規則には出す）", () => {
-  // 月曜が定休日なら、月曜を閉じる規則は数え方に関わらない（規則は redundant）
+  // When Monday is a closed weekday, a rule closing Mondays does not affect the count (the rule is redundant)
   assert.deepEqual(
     diagnosed({
       closedWeekdays: [1],
@@ -309,7 +325,7 @@ test("0.32.8 K6: 定休日の扱いを変えない毎週の曜日の規則に co
     }),
     ["info redundant closedRecurringRules[0]"],
   );
-  // 月曜が定休日でなければ、月曜を開く規則は数え方に関わらない
+  // When Monday is not a closed weekday, a rule opening Mondays does not affect the count
   assert.deepEqual(
     diagnosed({
       closedWeekdays: [0],
@@ -318,7 +334,8 @@ test("0.32.8 K6: 定休日の扱いを変えない毎週の曜日の規則に co
     }),
     [],
   );
-  // 定休日でない曜日を閉じる規則、定休日を開く規則は、数え方に関わるので出す
+  // A rule closing a weekday that is not closed, and a rule opening a closed weekday, affect the count and are
+  // reported
   assert.deepEqual(
     diagnosed({
       closedWeekdays: [0],

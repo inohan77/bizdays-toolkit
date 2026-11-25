@@ -16,8 +16,9 @@ const fixture = JSON.parse(
 };
 
 /**
- * 政府の一覧の表記（DTI・BERR・directgov・Scottish Executive/Government・nidirect で揺れがある）を、ライブラリの名称に寄せる。
- * 括弧書き（"(or in lieu of 1 Jan)"・"(substitute day)"）と大文字小文字は見ない
+ * Brings the wording of the government lists (which varies between DTI, BERR, directgov, the Scottish
+ * Executive/Government and nidirect) to the library's names.
+ * Notes in parentheses ("(or in lieu of 1 Jan)", "(substitute day)") and case are ignored
  */
 const ALIASES: Readonly<Record<string, string>> = {
   "new years day": "new year's day",
@@ -25,7 +26,7 @@ const ALIASES: Readonly<Record<string, string>> = {
   "substitute bank holiday in lieu of 26th": "boxing day", // DTI 2004
   "substitute bank holiday in lieu of 25th": "christmas day", // DTI 2004
   "golden jubilee holiday": "golden jubilee bank holiday", // Scottish Executive 2002
-  "royal wedding": "royal wedding bank holiday", // directgov・nidirect 2011
+  "royal wedding": "royal wedding bank holiday", // directgov, nidirect 2011
 };
 const normalize = (title: string): string => {
   const base = title
@@ -35,7 +36,10 @@ const normalize = (title: string): string => {
     .trim();
   return ALIASES[base] ?? base;
 };
-/** 日付は同じで名称だけ政府の一覧と違う日（出典つきで記録。dates are authoritative, names follow the library's conventions） */
+/**
+ * Days with the same date whose name differs from the government list (recorded with the source. dates are
+ * authoritative, names follow the library's conventions)
+ */
 const NAME_DIFFERENCES: readonly {
   division: string;
   date: string;
@@ -46,7 +50,7 @@ const NAME_DIFFERENCES: readonly {
     division: "scotland",
     date: "2002-06-04",
     listed: "Golden Jubilee Holiday (in place of 27 May 2002)",
-    library: "Spring bank holiday", // 5 月 27 日の Spring を 6 月 4 日に移したもの（England・Wales・NI の一覧は Spring Bank Holiday）
+    library: "Spring bank holiday", // Spring moved from May 27 to June 4 (Spring Bank Holiday in the lists of England, Wales, NI)
   },
 ];
 
@@ -87,7 +91,8 @@ test("英国 2000〜2011 年: 布告のない 3 日（Scotland 2010-01-04・2010
     assert.equal(holiday.kind, "substitute", d.date);
     assert.equal(edinburgh.isBusinessDay(d.date), false, d.date);
   }
-  // 同じ曜日の並びの 2000 年・2005 年は布告があり、1 月 4 日は New Year’s Day の振替（1 月 3 日は附則による 2nd January）
+  // 2000 and 2005, with the same weekdays, had proclamations: January 4 is the substitute for New Year’s Day
+  // (January 3 is 2nd January by the schedule)
   for (const year of [2000, 2005]) {
     const jan = scotland.holidaysInYear(year).filter((h) => h.date.startsWith(`${year}-01`));
     assert.deepEqual(
@@ -99,7 +104,7 @@ test("英国 2000〜2011 年: 布告のない 3 日（Scotland 2010-01-04・2010
       String(year),
     );
   }
-  // 2011 年は逆（1 月 3 日が New Year’s Day、4 日が 2nd January。当時の一覧どおり）
+  // 2011 is the reverse (January 3 New Year’s Day, the 4th 2nd January, as in the list of the time)
   assert.deepEqual(
     scotland
       .holidaysInYear(2011)
@@ -125,7 +130,7 @@ test("英国 2000〜2011 年: 規則の境界（St Andrew's Day は 2007 年か�
     scotland.holidaysInYear(2008).find((h) => h.key === "st-andrews")?.date,
     "2008-12-01",
   );
-  // 2002 年の Golden Jubilee: 6 月 3 日が臨時、Spring は 5 月 27 日から 6 月 4 日へ
+  // Golden Jubilee of 2002: June 3 is the special day, and Spring moves from May 27 to June 4
   for (const p of [england, scotland, northernIreland]) {
     const june = p
       .holidaysInYear(2002)
@@ -140,7 +145,8 @@ test("英国 2000〜2011 年: 規則の境界（St Andrew's Day は 2007 年か�
     );
     assert.equal(p.holidaysInYear(2011).find((h) => h.date === "2011-04-29")?.kind, "special");
   }
-  // 2004 年の 12 月（25 日が土曜日・26 日が日曜日）: 27 日が Boxing Day、28 日が Christmas Day の振替（当時の一覧と布告）
+  // December 2004 (the 25th a Saturday, the 26th a Sunday): the 27th is Boxing Day and the 28th the substitute
+  // for Christmas Day (the list and proclamation of the time)
   assert.deepEqual(
     england
       .holidaysInYear(2004)
@@ -151,7 +157,7 @@ test("英国 2000〜2011 年: 規則の境界（St Andrew's Day は 2007 年か�
       ["2004-12-28", "christmas"],
     ],
   );
-  // 2021 年（同じ曜日の並び）は GOV.UK の割り当てで、27 日が Christmas Day、28 日が Boxing Day
+  // 2021 (the same weekdays) follows the assignment of GOV.UK: the 27th Christmas Day, the 28th Boxing Day
   assert.deepEqual(
     england
       .holidaysInYear(2021)
@@ -162,7 +168,7 @@ test("英国 2000〜2011 年: 規則の境界（St Andrew's Day は 2007 年か�
       ["2021-12-28", "boxing-day"],
     ],
   );
-  // 北アイルランドの 7 月 12 日・3 月 17 日の振替は Secretary of State の Order どおり
+  // The substitutes of July 12 and March 17 in Northern Ireland follow the Orders of the Secretary of State
   const ni = (date: string) =>
     northernIreland.holidaysInYear(Number(date.slice(0, 4))).find((h) => h.date === date);
   assert.equal(ni("2003-07-14")?.key, "battle-of-the-boyne");

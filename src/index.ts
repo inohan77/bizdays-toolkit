@@ -1,11 +1,11 @@
 /**
- * 祝日と、会社・店舗の休業日を組み合わせた営業日カレンダー（createCalendar）と、
- * 曜日・祝日・特定日で変わる値（営業時間など）のスケジュール（createSchedule）。
+ * A business calendar that combines holidays with the closing days of a company or shop (createCalendar), and a
+ * schedule of values that vary by weekday, holiday and specific date, such as opening hours (createSchedule).
  *
- * 国ごとの祝日はサブパスから読み込む（例: "bizdays-toolkit/jp"・"bizdays-toolkit/uk"）。
+ * Holidays of each country are loaded from subpaths (e.g. "bizdays-toolkit/jp", "bizdays-toolkit/uk").
  *
- * 公開する API には TSDoc の @public（安定）または @beta（マイナーバージョンで変わりうる）を付ける。
- * 公開する名前と型は etc/api.md に記録し、pnpm check で意図しない変化を検出する。
+ * The public API is marked with TSDoc @public (stable) or @beta (may change in a minor version).
+ * Public names and types are recorded in etc/api.md, and pnpm check detects unintended changes.
  */
 
 export {

@@ -1,12 +1,14 @@
 import "./strict-warnings.ts";
 /**
- * 公開する dist を Cloudflare Workers の実行環境（workerd）で確かめる（CI の workerd ジョブから実行。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+ * Checks the published dist in the runtime of Cloudflare Workers (workerd) (run by the workerd job of CI;
+ * RELEASING.md, reasons for the quality mechanisms, "runtimes that are checked").
  *
- *   node scripts/test-workerd.ts <workerd のパス>
+ *   node scripts/test-workerd.ts <path of workerd>
  *
- * pnpm build の後に実行する。dist と test/compat の Worker をモジュールとして並べた設定をリポジトリ内の一時ディレクトリに書き
- * （workerd の設定は、埋め込むファイルを設定ファイルからの相対パスで指定する必要がある）、
- * workerd を起動して、Worker が返す smoke.mjs の結果を HTTP で受け取る。
+ * Run after pnpm build. Writes a configuration that lists dist and the Worker of test/compat as modules into a
+ * temporary directory inside the repository (a workerd configuration must name embedded files by paths relative
+ * to the configuration file), starts workerd and receives over HTTP the result of smoke.mjs returned by the
+ * Worker.
  */
 
 import { spawn } from "node:child_process";
@@ -87,7 +89,8 @@ try {
   console.log(
     `Temporal: ${temporal === "native" ? "checked with the native Temporal" : `skipped (${skipWhen("temporal-unavailable-runtime", true)})`}`,
   );
-  // タイムゾーンの名前の扱いの記録（中身は合否にしない）。1 行も出なければ、黙って飛ばさずに失敗にする
+  // The record of how time zone names are handled (its content does not decide pass or fail). Without a single
+  // line it fails instead of silently skipping
   for (const line of timeZones) console.log(`TimeZone: ${line}`);
   if (timeZones.length === 0) console.log("FAIL no time zone report");
   code = results.every((r) => r.ok) && results.length > 0 && timeZones.length > 0 ? 0 : 1;

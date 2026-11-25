@@ -62,6 +62,9 @@ jobs:
           fi
 
       - run: pnpm check
+      # 確かめていないことの表（etc/unverified.json）に、状態が open の行があれば、ステージせずに止まる
+      # （pnpm check は表の形だけを確かめる。RELEASING.md の「診断の約束を守る検査」）
+      - run: node scripts/check-unverified.ts
 
       - name: Stage on npm
         # staged publishing: ステージしたバージョンは、メンテナーが npmjs.com（または npm stage approve）で

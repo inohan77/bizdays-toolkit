@@ -1,13 +1,19 @@
-// 診断の catch 節に届く経路（テスト拡充案の T3。scripts/check-catch-coverage.ts が、src/core の catch 節がテストで通ることを確かめる）。
-// 途中から例外を投げる提供元（test/support/faulty.ts の throwingAfter）は、提供元の約束（同じ年に同じ結果を返す）の外なので、
-// 診断の結果の中身は決まらない（docs/providers.ja.md の「提供元の約束と誤りの扱い」）。ここでは、診断が例外を投げずに一覧を返し、
-// 規則どうしの診断の途中で投げた例外を error として報告することだけを確かめる。
+// Paths that reach the catch clauses of the diagnostics (T3 of the test expansion plan;
+// scripts/check-catch-coverage.ts checks that the catch clauses of src/core are taken by the tests).
+// A provider that starts throwing part-way (throwingAfter of test/support/faulty.ts) is outside the provider
+// contract (the same result for the same year), so the content of the diagnostics is undefined (the section of
+// docs/providers.ja.md on the provider contract and the handling of mistakes). Here it is only checked that the
+// diagnostics return a list without throwing and report an error thrown during the diagnostics between rules as
+// an error.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 import { throwingAfter } from "./support/faulty.ts";
 
-/** 祝日に従属する規則・第 n 営業日の規則・振替・個別の日付・取り除いて比べる規則（redundant の候補）を含む設定 */
+/**
+ * Options with rules that depend on holidays, nth-business-day rules, moves, specific dates and rules compared by
+ * removal (candidates for redundant)
+ */
 const CONFIGS: readonly Record<string, unknown>[] = [
   { closedRecurringRules: [{ holiday: true, months: [5] }, { holiday: true }] },
   { closedRecurringRules: [{ dayAfterHoliday: true }, { dayAfterHoliday: true, months: [1] }] },
@@ -41,8 +47,10 @@ const CONFIGS: readonly Record<string, unknown>[] = [
 
 test("診断の catch 節: 途中から例外を投げる提供元でも、診断は例外を投げずに一覧を返す", () => {
   let reported = 0;
-  // 届く組み合わせ（投げ始める呼び出しの回数・投げる年）。全年で投げると祝日の規則の判定・規則どうしの診断の全体の catch 節に、
-  // 2026 年だけで投げると日ごとの値を求める catch 節に届く（scripts/check-catch-coverage.ts で確かめた）
+  // The combinations that reach them (the number of calls after which it throws, the year in which it throws).
+  // Throwing in every year reaches the catch clauses of the judgement of holiday rules and of the whole of the
+  // diagnostics between rules; throwing in 2026 only reaches the catch clause for the value of each day (checked
+  // with scripts/check-catch-coverage.ts)
   for (const [calls, year] of [
     [1, undefined],
     [2, undefined],
@@ -66,7 +74,8 @@ test("診断の catch 節: 途中から例外を投げる提供元でも、診�
       });
       assert.ok(Array.isArray(schedule));
     }
-  // 規則どうしの診断の途中で投げた例外は、途中の結果を捨てて error として報告する経路がある
+  // An error thrown during the diagnostics between rules has a path that discards the intermediate results and
+  // reports it as an error
   assert.ok(
     reported > 0,
     "規則どうしの診断の途中の例外を error として報告した設定がない（空振り）",

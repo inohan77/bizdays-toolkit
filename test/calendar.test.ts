@@ -9,7 +9,7 @@ import {
 } from "../src/index.ts";
 import { jp } from "../src/jp/index.ts";
 
-/** 出荷カレンダーの例: 日曜と年末年始は出荷しない、祝日は出荷する */
+/** An example shipping calendar: no shipping on Sundays and over the New Year; shipping on holidays */
 const shipping = createCalendar({
   holidayProvider: jp,
   closedWeekdays: [0],
@@ -18,7 +18,7 @@ const shipping = createCalendar({
 });
 
 test("締め時刻（14 時）をはさむ最短の出荷日", () => {
-  // 2026-10-10 は土曜日
+  // 2026-10-10 is a Saturday
   assert.equal(
     shipping.businessDayOnOrAfter("2026-10-10T13:59", { cutoff: "14:00" }),
     "2026-10-10",
@@ -31,13 +31,13 @@ test("締め時刻（14 時）をはさむ最短の出荷日", () => {
     shipping.businessDayOnOrAfter("2026-12-30T15:00", { cutoff: "14:00" }),
     "2027-01-04",
   );
-  // 瞬間（UTC）で渡しても日本時間で判定する: 2026-10-10 04:59Z = 13:59 JST
+  // An instant (UTC) is judged in Japan time too: 2026-10-10 04:59Z = 13:59 JST
   assert.equal(
     shipping.businessDayOnOrAfter(new Date("2026-10-10T04:59:00Z"), { cutoff: "14:00" }),
     "2026-10-10",
   );
 
-  // 時刻のない入力と cutoff の組み合わせは、締め時刻が黙って無視されるのを防ぐため invalid-argument
+  // An input without a time combined with cutoff is invalid-argument, so that the cutoff is not silently ignored
   assert.throws(
     () => shipping.businessDayOnOrAfter("2026-10-10", { cutoff: "14:00" }),
     (e: unknown) =>
@@ -75,7 +75,7 @@ test("判定の理由と名前", () => {
 test("優先順位: 臨時営業日 > 臨時休業日 > 毎年の休業日 > 祝日 > 定休日", () => {
   const cal = createCalendar({
     holidayProvider: jp,
-    closedWeekdays: [1], // 月曜定休
+    closedWeekdays: [1], // closed on Mondays
     closedAnnualDates: ["08-13"],
     closedDates: [{ from: "2026-12-28", to: "2027-01-05", name: "冬季休業" }],
     openDates: [{ date: "2026-12-30", name: "大掃除" }, "2026-08-13"],
@@ -86,20 +86,20 @@ test("優先順位: 臨時営業日 > 臨時休業日 > 毎年の休業日 > 祝
   assert.equal(cal.dayInfoOn("2026-12-29").reason, "closed-date");
   assert.equal(cal.isBusinessDay("2026-08-13"), true, "臨時営業日は毎年の休業日より優先");
   assert.equal(cal.isBusinessDay("2027-08-13"), false);
-  // スポーツの日（月曜）: holidayPolicy: open は定休日より優先
+  // Sports Day (a Monday): holidayPolicy: open takes priority over the closed weekday
   assert.equal(cal.dayInfoOn("2026-10-12").reason, "holiday");
   assert.equal(cal.isBusinessDay("2026-10-12"), true);
   assert.equal(cal.isBusinessDay("2026-10-19"), false);
 });
 
 test("祝日の扱い（closed / open / ignore）", () => {
-  const monday = "2026-10-12"; // スポーツの日
+  const monday = "2026-10-12"; // Sports Day
   const make = (holidayPolicy: "closed" | "open" | "ignore") =>
     createCalendar({ holidayProvider: jp, closedWeekdays: [1], holidayPolicy });
   assert.equal(make("closed").isBusinessDay(monday), false);
   assert.equal(make("open").isBusinessDay(monday), true);
   assert.equal(make("ignore").isBusinessDay(monday), false, "ignore は曜日で判定");
-  const weekdayHoliday = "2026-11-03"; // 文化の日（火曜）
+  const weekdayHoliday = "2026-11-03"; // Culture Day (a Tuesday)
   assert.equal(make("closed").isBusinessDay(weekdayHoliday), false);
   assert.equal(make("ignore").isBusinessDay(weekdayHoliday), true);
 });
@@ -127,7 +127,7 @@ test("営業日の移動と数え上げ（土日祝休み）", () => {
     office.businessDatesBetween("2026-09-18", "2026-09-25").join(),
     "2026-09-18,2026-09-24,2026-09-25",
   );
-  // addBusinessDays と diffBusinessDays の対応（起点が営業日のとき）
+  // addBusinessDays and diffBusinessDays correspond (when the start is a business day)
   for (const n of [1, 5, 20, 60]) {
     const to = office.addBusinessDays("2026-09-01", n);
     assert.equal(office.diffBusinessDays("2026-09-01", to), n);
@@ -136,7 +136,7 @@ test("営業日の移動と数え上げ（土日祝休み）", () => {
 });
 
 test("searchDayLimit: 営業日が上限の日数のうちにあれば返し、なければ no-business-day（前後どちらの向きも）", () => {
-  // 営業日は 2026-02-01 だけ（2026-01-01 から 31 日先）、または 2026-01-01 だけ（2026-02-01 から 31 日前）
+  // The only business day is 2026-02-01 (31 days after 2026-01-01), or 2026-01-01 (31 days before 2026-02-01)
   const only = (date: string, searchDayLimit: number) =>
     createCalendar({ closedWeekdays: [0, 1, 2, 3, 4, 5, 6], openDates: [date], searchDayLimit });
   const noBusinessDay = (e: unknown) => isBizdaysError(e) && e.code === "no-business-day";
@@ -163,7 +163,7 @@ test("祝日の提供元がないカレンダーは UTC", () => {
   assert.equal(cal.today(new Date("2026-10-11T23:30:00Z")), "2026-10-11");
 });
 
-/** 他の国・地域の祝日はインターフェースを実装して渡せる */
+/** Holidays of other countries and regions can be passed by implementing the interface */
 const example: HolidayProvider<"public"> = {
   id: "XX",
   timeZone: "Europe/London",
@@ -234,7 +234,8 @@ test("毎年の月日: どの年にもない月日は作成時に invalid-annual
   });
   assert.equal(schedule.valueOn("2028-02-29"), 9);
   for (const date of ["2027-02-28", "2027-03-01"]) assert.equal(schedule.valueOn(date), 1, date);
-  // 端が 02-29 の期間は、うるう年でない年には間の日だけ（02-20〜02-28、03-01〜03-02）
+  // A period ending on 02-29 has only the days in between in a year that is not a leap year (02-20 to 02-28,
+  // 03-01 to 03-02)
   const toLeapDay = createCalendar({ closedAnnualDates: [{ from: "02-20", to: "02-29" }] });
   assert.equal(toLeapDay.isBusinessDay("2027-02-28"), false);
   assert.equal(toLeapDay.isBusinessDay("2027-03-01"), true);

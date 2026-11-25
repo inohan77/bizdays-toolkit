@@ -1,14 +1,17 @@
 /**
- * CI の全件のジョブの最後の段で、そのジョブの時間を、同じジョブ（分けたジョブは同じ分）の直近 3 回の main の
- * 成功した実行の中央値と比べ、Job Summary に書く。1.5 倍を超えたら注意を出す（失敗にはしない）。比べる値が
- * 取れないときは、比べられなかったことを出す（RELEASING.md の「品質の仕組みを足すとき」の 6）。
+ * In the last step of a full-test job of CI, compares the job's time with the median of the last 3 successful
+ * runs of the same job on main (for a split job, the same part) and writes it to the Job Summary. Above 1.5
+ * times it prints a notice (not a failure). When the values to compare cannot be obtained, it says that no
+ * comparison was possible (item 6 of the section of RELEASING.md on adding a quality mechanism).
  *
- * 今のジョブは、今の実行（試行）のジョブのうち、ランナーの名前（RUNNER_NAME）が同じで動いているものとする。
- * GitHub の API の一時的な失敗（5xx・通信の失敗）は、10 秒待って 1 回だけ再試行する（待ちはこのジョブの時間に含まれる）。終了コードはいつも 0（API の失敗でジョブを落とさない）。ジョブの権限に actions: read が要る。
+ * The current job is the running job of the current run (attempt) whose runner name (RUNNER_NAME) is the same.
+ * A temporary failure of the GitHub API (5xx, network failure) is retried once after 10 seconds (the wait is
+ * part of this job's time). The exit code is always 0 (an API failure does not fail the job). The job needs the
+ * permission actions: read.
  *
- * 使い方（CI だけ）: node scripts/job-time.ts
- *   環境変数: GITHUB_TOKEN、GITHUB_REPOSITORY、GITHUB_RUN_ID、GITHUB_RUN_ATTEMPT、RUNNER_NAME、GITHUB_STEP_SUMMARY
- *   （GITHUB_API_URL があればそれを使う）
+ * Usage (CI only): node scripts/job-time.ts
+ *   Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT, RUNNER_NAME,
+ *   GITHUB_STEP_SUMMARY (GITHUB_API_URL is used when set)
  */
 
 import "./strict-warnings.ts";
@@ -29,10 +32,10 @@ const env = (name: string): string => {
   return v;
 };
 
-/** GitHub の API の GET。一時的な失敗（5xx・通信の失敗）なら 1 回だけ待って再試行する（getWithRetry） */
+/** GET of the GitHub API. A temporary failure (5xx, network failure) is retried once after a wait (getWithRetry) */
 async function getJson(path: string): Promise<unknown> {
   const api = process.env["GITHUB_API_URL"] ?? "https://api.github.com";
-  // 設定の誤り（GITHUB_TOKEN がない）は、再試行の外で投げる
+  // A configuration mistake (no GITHUB_TOKEN) is thrown outside the retry
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${env("GITHUB_TOKEN")}`,
@@ -45,11 +48,11 @@ async function getJson(path: string): Promise<unknown> {
       try {
         response = await fetch(`${api}${path}`, { headers });
       } catch (error) {
-        // 通信の失敗（応答がない）だけを、一時的な失敗として返す
+        // Only a network failure (no response) is returned as a temporary failure
         return { status: 0, error: errorText(error) };
       }
       if (response.ok) return { status: response.status, body: await response.json() };
-      // 失敗の応答の本文は読まずに閉じる（接続を残さない）
+      // The body of a failed response is closed without reading (no connection left open)
       await response.body?.cancel();
       return { status: response.status };
     },

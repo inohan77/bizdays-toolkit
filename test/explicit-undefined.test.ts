@@ -1,6 +1,8 @@
-// 省略と明示的な undefined は同じ（decisions.md の 6 番）を、メソッド・関数のオプションで確かめる。設定（createCalendar・
-// createSchedule の設定・規則・個別の日付・毎年の月日）は test/metamorphic.test.ts の変形 7 が目録の設定で確かめる。
-// オプションの型は etc/api.md から読み、ここの表にない Options の型があれば失敗にする（型を足したときに黙って外れないため）。
+// Omission and an explicit undefined are the same (decisions.md #6): checked for the options of methods and
+// functions. The options of createCalendar / createSchedule (options, rules, specific dates, annual dates) are
+// checked by transformation 7 of test/metamorphic.test.ts with the catalog options.
+// The option types are read from etc/api.md, and an Options type missing in the table here fails (so that a new
+// type does not silently drop out).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -18,7 +20,7 @@ import { jp } from "../src/jp/index.ts";
 
 type Obj = Record<string, unknown>;
 
-/** 呼び出しの結果（投げればエラーコード） */
+/** The outcome of a call (the error code when it throws) */
 function outcome(call: () => unknown): string {
   try {
     return JSON.stringify(call());
@@ -42,13 +44,16 @@ const holidays = [
 ] as const;
 const rename = () => ({ name: "振替", nameEn: "Substitute" });
 
-/** オプションの型ごとに、呼び出しと、試す書き方（旧名を含む）と、旧名を引く場所 */
+/** Per option type: the call, the ways of writing tried (including old names), and the place of the old names */
 const CASES: readonly {
   readonly type: string;
   readonly places: readonly RenamedPlace[];
   readonly bases: readonly Obj[];
   readonly call: (options: Obj) => unknown;
-  /** 省略できる項目も旧名もない型（表の完全性のためだけに載せる。足す項目がないことを確かめる） */
+  /**
+   * A type with neither an optional property nor an old name (listed only for the completeness of the table; it
+   * is checked that nothing can be added)
+   */
   readonly nothingToAdd?: true;
 }[] = [
   {
@@ -115,7 +120,7 @@ const CASES: readonly {
   },
 ];
 
-/** etc/api.md の Options の型（別名の type を除く）と、その項目 */
+/** The Options types of etc/api.md (without `type` aliases) and their properties */
 function optionTypes(): Map<string, string[]> {
   const api = readFileSync(new URL("../etc/api.md", import.meta.url), "utf8");
   const out = new Map<string, string[]>();
@@ -127,7 +132,7 @@ function optionTypes(): Map<string, string[]> {
   return out;
 }
 
-/** 設定の型は変形 7 が確かめる */
+/** The option types checked by transformation 7 */
 const COVERED_BY_METAMORPHIC = ["CalendarOptions", "ScheduleOptions", "HolidaySourceOptions"];
 
 test("明示的な undefined: メソッド・関数のオプションの表は、etc/api.md の Options の型をすべて含む", () => {
@@ -151,7 +156,7 @@ test("明示的な undefined: メソッド・関数のオプションに書い�
     for (const base of c.bases) {
       const filled: Obj = { ...base };
       for (const key of keys) if (!Object.hasOwn(filled, key)) filled[key] = undefined;
-      // 足した項目がなければ何も確かめていないので、そう載せた型（nothingToAdd）だけに許す
+      // Without an added property nothing was checked, which is allowed only for types listed so (nothingToAdd)
       assert.equal(
         Object.keys(filled).length === Object.keys(base).length,
         c.nothingToAdd === true,

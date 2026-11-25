@@ -1,5 +1,7 @@
-// 飛ばしの決まり（test/support/skip.ts）。テストの skip・todo とスクリプトの SKIP の行が補助の関数を通っていること（grep。省略記法・分割代入・import は TypeScript のコンパイラーの API）と、
-// 補助の関数が CI で一覧にない理由・CI では飛ばさない理由を失敗にすることを確かめる（テスト拡充案の T3）。
+// The rule for skipping (test/support/skip.ts). Checks that skip and todo of tests and the SKIP lines of scripts
+// go through the helper functions (grep; shorthand, destructuring and imports with the TypeScript compiler API)
+// and that the helpers fail in CI for a reason missing in the list and for a reason that is not skipped in CI
+// (T3 of the test expansion plan).
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,8 +16,9 @@ import {
 } from "../support/skip.ts";
 
 /**
- * 補助の関数を通さない飛ばしと、その理由（ファイル → 理由）。test/compat は Node.js 22.12 の素の JavaScript で動き、
- * TypeScript の補助の関数を読み込めないので、Temporal のない実行環境での飛ばしを直接書く
+ * Skips that do not go through the helper functions, with the reason (file → reason). test/compat runs as plain
+ * JavaScript on Node.js 22.12 and cannot load the TypeScript helpers, so it writes the skip for a runtime
+ * without Temporal directly
  */
 const OUTSIDE: Readonly<Record<string, string>> = {
   "test/compat/esm.test.mjs":
@@ -30,10 +33,10 @@ const filesIn = (dir: string, ext: RegExp): string[] =>
 
 test("飛ばしの決まり: テストの skip・todo とスクリプトの SKIP の行は、補助の関数（skipWhen・todoFor）を通る", () => {
   const problems: string[] = [];
-  // テストと、テストの道具（test/support。飛ばしの一覧を定める skip.ts は除く）
+  // Tests and test tools (test/support, except skip.ts, which defines the list of skips)
   const testFiles = [
     ...filesIn("test", /\.test\.ts$/),
-    // テストのテスト（pnpm test:tools）も pnpm check で動くので、同じ決まりで確かめる
+    // The tests of tests (pnpm test:tools) run in pnpm check too, so they are checked by the same rule
     ...filesIn("test/tools", /\.test\.ts$/),
     ...filesIn("test/support", /\.ts$/).filter((f) => !f.endsWith("/skip.ts")),
   ];
@@ -45,16 +48,18 @@ test("飛ばしの決まり: テストの skip・todo とスクリプトの SKIP
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
         if (/\b(test|t|it|describe)\.(skip|todo)\(/.test(line))
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
-        // 飛ばしの理由を入れる定数（SKIP・SKIP_TZ）は、補助の関数の結果だけを入れる
+        // A constant that holds the reason of a skip (SKIP, SKIP_TZ) holds only the result of a helper function
         if (/\bconst SKIP(_TZ)?\s*=/.test(line) && !/skipWhen\(/.test(line))
           problems.push(`${file}:${i + 1}: ${line.trim()}`);
       });
   }
-  // 省略記法と、skip・todo という名前の値を持ち込む書き方は使わない（何を入れたかが行から読めず、補助の関数を通らない値を
-  // 飛ばしに渡せるため）。行に分けて書いても拾うよう、TypeScript のコンパイラーの API で読む（コメント・文字列の中は拾わない）。
-  // 拾う形: オブジェクトの省略記法（{ skip }）、分割代入（const { skip } = …・({ todo }) => …）、import・export
-  // （import { skip } from "node:test"。別名の import { skip as s } も）、その名前の変数・引数の宣言（const skip = …・
-  // (todo) => …。値を f(a, skip, b) のように渡す書き方は、その宣言で拾う）
+  // Shorthand, and ways of bringing in a value named skip or todo, are not used (the line does not show what was
+  // put in, and a value that did not go through the helpers could be passed as a skip). They are read with the
+  // TypeScript compiler API, to be found also when split across lines (nothing inside comments and strings).
+  // Found: object shorthand ({ skip }), destructuring (const { skip } = ...; ({ todo }) => ...), import and
+  // export (import { skip } from "node:test"; also the alias import { skip as s }), and declarations of
+  // variables and parameters with those names (const skip = ...; (todo) => ...; passing a value as in
+  // f(a, skip, b) is found through that declaration)
   const named = (n: ts.Node | undefined): string | undefined =>
     n !== undefined &&
     (ts.isIdentifier(n) || ts.isStringLiteral(n)) &&
@@ -126,7 +131,8 @@ test("飛ばしの決まり: CI では、一覧にない理由と CI では飛�
     assert.equal(sample.skipWhen("sample-skip", true), POLICY_SAMPLE["sample-skip"]!.reason);
     assert.equal(sample.todoFor("sample-known-bug"), POLICY_SAMPLE["sample-known-bug"]!.reason);
     delete process.env["CI"];
-    // 一覧にない理由は、CI でなくても、飛ばす条件がそろわなくても失敗（打ち間違いを早く見つける）
+    // A reason missing in the list fails outside CI too, and before the condition for skipping is met (to find a
+    // typo early)
     assert.throws(() => sample.skipWhen("no-such-reason", false), /にない理由: no-such-reason/);
     assert.throws(() => sample.skipWhen("no-such-reason", true), /にない理由: no-such-reason/);
     assert.equal(
@@ -134,10 +140,12 @@ test("飛ばしの決まり: CI では、一覧にない理由と CI では飛�
       POLICY_SAMPLE["sample-local-only"]!.reason,
     );
     assert.throws(() => sample.todoFor("sample-skip"), /既知の不具合（todo）の理由ではない/);
-    // skip と todo の取り違え・一覧にない todo の理由も、CI でなくても、飛ばす条件がそろわなくても投げる
+    // A mix-up of skip and todo, and a todo reason missing in the list, throw outside CI too, and before the
+    // condition for skipping is met
     assert.throws(() => sample.skipWhen("sample-known-bug", false), /飛ばし（skip）の理由ではない/);
     assert.throws(() => sample.todoFor("no-such-reason"), /にない理由: no-such-reason/);
-    // 環境変数 CI が "false" と空文字列のときは CI とみなさない（CI では飛ばさない理由も飛ばせる）
+    // With the environment variable CI being "false" or the empty string it is not CI (a reason that is not
+    // skipped in CI can be skipped)
     for (const value of ["false", ""]) {
       process.env["CI"] = value;
       assert.equal(
@@ -148,7 +156,7 @@ test("飛ばしの決まり: CI では、一覧にない理由と CI では飛�
     }
     process.env["CI"] = "1";
     assert.throws(() => sample.skipWhen("sample-local-only", true), /CI では飛ばさない理由/);
-    // 公開している skipWhen・todoFor は、意図した飛ばしの一覧（INTENDED_SKIPS）を引く
+    // The published skipWhen and todoFor look up the list of intended skips (INTENDED_SKIPS)
     delete process.env["CI"];
     assert.equal(skipWhen("ci-full-only", true), INTENDED_SKIPS["ci-full-only"]!.reason);
     assert.equal(skipWhen("no-release-tag", true), INTENDED_SKIPS["no-release-tag"]!.reason);

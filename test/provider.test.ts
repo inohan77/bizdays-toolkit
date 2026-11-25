@@ -31,7 +31,7 @@ test("provider: 第 n 何曜日（1〜5 と -1）", () => {
   );
   assert.equal(nthWeekdayOfMonth(2026, 2, 0, 1), "2026-02-01", "月の 1 日がその曜日なら第 1");
   assert.equal(nthWeekdayOfMonth(2026, 2, 6, 4), "2026-02-28", "月末がその曜日");
-  // -1 は、その月にある最後の回（4 回目か 5 回目）と一致し、曜日は指定どおり
+  // -1 equals the last occurrence the month has (the 4th or the 5th), and the weekday is as given
   for (let year = 2024; year <= 2030; year++) {
     for (let month = 1; month <= 12; month++) {
       for (let weekday = 0; weekday <= 6; weekday++) {
@@ -120,7 +120,8 @@ test("provider: 提供元を書く例（米国の連邦祝日の一部）がカ�
 const label = (h: Holiday) => `${h.date} ${h.name} ${h.kind} ${h.key ?? "-"} ${h.confirmed}`;
 
 test("provider: withSubstituteDays が返す配列と、入力のまま返す祝日・振替日は、どれも凍結している", () => {
-  // 返す配列と、入力のまま返す祝日・振替日は、どれも凍結している（4 番）。入力のまま返す祝日も入力とは別のもの
+  // The returned array, the holidays returned as given and the substitute days are all frozen (decisions.md #4).
+  // A holiday returned as given is also another object than the input
   const input = [
     { date: "2026-01-04", name: "X", nameEn: "X", kind: "regular", confirmed: true },
     { date: "2026-01-07", name: "Y", nameEn: "Y", kind: "regular", confirmed: true },
@@ -151,7 +152,7 @@ test("provider: withSubstituteDays は日本の振替休日（2007 年以降の�
       String(y),
     );
   }
-  // 連鎖: 2020 年は 5 月 3 日（日）の振替が 4 日・5 日を飛ばして 6 日になる
+  // A chain: in 2020 the substitute of May 3 (Sun) skips the 4th and 5th and becomes the 6th
   const may = withSubstituteDays(
     jp.holidaysInYear(2020).filter((h) => h.kind === "regular" && h.date.startsWith("2020-05")),
     { directions: { 0: "next" }, kind: "substitute" },
@@ -185,13 +186,14 @@ test("provider: withSubstituteDays は英国の振替（土日に当たる固定
     christmas: "12-25",
     "boxing-day": "12-26",
   };
-  // 2023 年の Scotland は振替の割り当てだけ GOV.UK に合わせている（1/2 が New Year’s Day、1/3 が 2nd January）ので、
-  // 附則どおりの計算（1/2 は 2nd January の当日、1/3 が New Year’s Day の振替）と名前・種別・key が入れ替わる。日付は同じ
+  // For Scotland in 2023 only the assignment of the substitutes follows GOV.UK (1/2 New Year’s Day, 1/3 2nd
+  // January), so name, kind and key are swapped against the calculation by the schedule (1/2 is 2nd January
+  // itself, 1/3 the substitute of New Year’s Day). The dates are the same
   const renamed = (h: Holiday) => `${h.date} ${h.confirmed}`;
   for (const provider of [england, wales, scotland, northernIreland]) {
     for (let y = 2012; y <= 2099; y++) {
       const all = provider.holidaysInYear(y);
-      // 振替日を元の固定日に戻した「振替前の一覧」を作る
+      // Builds the "list before substitution" by turning substitute days back to their fixed dates
       const before = all.map((h) =>
         h.kind === "substitute" ? { ...h, date: `${y}-${FIXED[h.key!]!}`, kind: "regular" } : h,
       ) as Holiday[];
@@ -208,7 +210,7 @@ test("provider: withSubstituteDays は英国の振替（土日に当たる固定
     wales.holidaysInYear(2021).find((h) => h.date === "2021-12-27")?.names?.cy,
     "Dydd Nadolig",
   );
-  // 振替日は元の祝日の names も引き継ぐ
+  // A substitute day inherits `names` of its holiday too
   const [first] = withSubstituteDays(
     [
       {
@@ -267,7 +269,7 @@ test("provider: withSubstituteDays の向き（米国式: 土曜日は前日、�
     observed([federal[1]!]).map((h) => `${h.date} ${h.kind}`),
     ["2027-12-24 observed", "2027-12-25 federal"],
   );
-  // 日曜日は次の月曜日。振替日自身は別の振替の対象にならず、年をまたぐことがある
+  // A Sunday goes to the next Monday. A substitute day is not substituted again and can cross the year end
   const dec = withSubstituteDays(
     [{ date: "2028-12-31", name: "X", nameEn: "X", kind: "regular", confirmed: false }],
     { directions: { 0: "next" }, kind: "substitute" },
@@ -347,35 +349,36 @@ test("withSubstituteDays: directions は普通のオブジェクトだけを受�
     { date: "2026-03-07", name: "B", nameEn: "B", kind: "k", confirmed: true },
   ];
   const code = (c: string) => (e: unknown) => isBizdaysError(e) && e.code === c;
-  // 明示的な undefined は省略と同じ（decisions.md の 6 番）
+  // An explicit undefined equals omission (decisions.md #6)
   assert.deepEqual(
     withSubstituteDays(holidays, {
-      // exactOptionalPropertyTypes を使わない利用者の型は undefined を通す
+      // The types of users without exactOptionalPropertyTypes let undefined through
       directions: { 0: "next", 6: undefined } as never,
       kind: "s",
     }).map((h) => h.date),
     withSubstituteDays(holidays, { directions: { 0: "next" }, kind: "s" }).map((h) => h.date),
   );
-  // Map・配列を黙って空として受けない（8 番）
+  // A Map or an array is not silently taken as empty (decisions.md #8)
   for (const directions of [new Map([[0, "next"]]), ["next"]])
     assert.throws(
       () => withSubstituteDays(holidays, { directions: directions as never, kind: "s" }),
       code("invalid-argument"),
     );
-  // すべての曜日に向きがあると振替日がない（年の範囲の外まで探さず、入口で止める）
+  // With a direction for every weekday there is no substitute day (stopped at the entry, without searching
+  // beyond the range of years)
   const all = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, "next"]));
   assert.throws(
     () => withSubstituteDays(holidays, { directions: all, kind: "s" }),
     code("invalid-argument"),
   );
-  // names は凍結した複製（入力と共有しない。4 番）
+  // names is a frozen copy (not shared with the input. decisions.md #4)
   const out = withSubstituteDays(holidays, { directions: { 0: "next" }, kind: "s" });
   for (const h of out.filter((x) => x.names !== undefined)) {
     assert.ok(Object.isFrozen(h.names), h.date);
     assert.notEqual(h.names, holidays[0]!.names, h.date);
     assert.deepEqual(h.names, { cy: "Aa" });
   }
-  // 入力の names と、renameSubstitute が返す名称も検証する（26 番）
+  // `names` of the input and the names returned by renameSubstitute are validated too (decisions.md #26)
   assert.throws(
     () =>
       withSubstituteDays([{ ...holidays[0]!, names: 123 as never }], {
@@ -396,7 +399,7 @@ test("withSubstituteDays: directions は普通のオブジェクトだけを受�
 });
 
 test('長く続く祝日（40 日・年をまたぐ 42 日）: 祝日の前後の規則は連続の前日と明けた日に当たり、"after-holiday" は本来の日が明けた日の 31 日前までなら振り替わり、それより前なら明けた日の判定が holiday-run-too-long（decisions.md の 24 番）', () => {
-  // 2026-03-01〜04-09（40 日）と、2026-12-01〜2027-01-11（42 日）を祝日として返す提供元
+  // A provider that returns 2026-03-01 to 04-09 (40 days) and 2026-12-01 to 2027-01-11 (42 days) as holidays
   const runs: [string, number][] = [
     ["2026-03-01", 40],
     ["2026-12-01", 42],
@@ -426,19 +429,20 @@ test('長く続く祝日（40 日・年をまたぐ 42 日）: 祝日の前後�
       closedRecurringRules: [rule],
     } as never);
   const closed = (rule: Record<string, unknown>, date: string) => !make(rule).isBusinessDay(date);
-  // 祝日の前後の規則は、連続の長さによらず当てはまる
+  // Rules for the days before and after a holiday apply whatever the length of the run
   assert.equal(closed({ dayAfterHoliday: true }, "2026-04-10"), true);
   assert.equal(closed({ dayBeforeHoliday: true }, "2026-02-28"), true);
   assert.equal(closed({ dayAfterHoliday: true, skipWeekdays: [0, 6] }, "2026-04-10"), true);
   assert.equal(closed({ dayAfterHoliday: true }, "2027-01-12"), true);
   assert.equal(closed({ dayBeforeHoliday: true }, "2026-11-30"), true);
-  // 振替: 本来の日（3 月 12 日）が明けた日の 29 日前なら振り替わる
+  // Move: the original day (March 12) is 29 days before the day after the run, so it moves
   assert.equal(
     closed({ dayOfMonth: 12, months: [3], holidayOverlapPolicy: "after-holiday" }, "2026-04-10"),
     true,
   );
-  // 振替: 本来の日（3 月 5 日）が明けた日の 36 日前なら届かない。休業日を黙って取りこぼさず、明けた日の判定で止める
-  // （0.31.9 までは振り替わらず、休業日が 1 日も出なかった）。連続の中の日と、明けた日の翌日からは判定できる
+  // Move: the original day (March 5) is 36 days before the day after the run and out of reach. The closed day is
+  // not silently lost; the judgement of the day after the run stops (up to 0.31.9 nothing moved and no closed
+  // day appeared at all). Days inside the run and from the day after the day after the run can be judged
   const far = make({ dayOfMonth: 5, months: [3], holidayOverlapPolicy: "after-holiday" });
   assert.throws(() => far.isBusinessDay("2026-04-10"), { code: "holiday-run-too-long" });
   assert.throws(() => far.daysBetween("2026-03-01", "2026-04-12"), {

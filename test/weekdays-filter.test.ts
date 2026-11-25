@@ -21,16 +21,16 @@ test("weekdays: 祝日の翌日休館（土日に当たる場合は開館）", (
       { dayAfterHoliday: true, weekdays: [1, 2, 3, 4, 5], name: "祝日の翌日休館（土日は開館）" },
     ],
   });
-  // 2026-02-11（水・建国記念の日）の翌日（木）は休館
+  // Closed on the day (Thu) after 2026-02-11 (Wed, National Foundation Day)
   assert.equal(museum.dayInfoOn("2026-02-12").name, "祝日の翌日休館（土日は開館）");
-  // 2026-11-03（火・文化の日）の翌日（水）は休館
+  // Closed on the day (Wed) after 2026-11-03 (Tue, Culture Day)
   assert.equal(museum.isBusinessDay("2026-11-04"), false);
-  // 2026-05-06（水・振替休日）の翌日（木）は休館
+  // Closed on the day (Thu) after 2026-05-06 (Wed, a substitute holiday)
   assert.equal(museum.isBusinessDay("2026-05-07"), false);
-  // 2027-01-01（金・元日）の翌日は土曜なので開館
+  // The day after 2027-01-01 (Fri, New Year's Day) is a Saturday, so it is open
   assert.equal(museum.isBusinessDay("2027-01-02"), true, "元日（金）の翌日の土曜は開館");
   assert.equal(museum.dayInfoOn("2027-01-02").reason, "default");
-  // weekdays なしなら土曜も休館
+  // Without weekdays, Saturdays are closed too
   const strict = createCalendar({
     holidayProvider: jp,
     holidayPolicy: "open",
@@ -49,15 +49,15 @@ test("weekdays: 祝日は休診、ただし土曜の祝日は午前のみ診療"
       { holiday: true, weekdays: [6], value: "morning", name: "土曜の祝日は午前診療" },
     ],
   });
-  // 祝日でない土曜は午前診療（曜日の値）
+  // A Saturday that is not a holiday has morning consultations (the weekday's value)
   assert.equal(clinic.valueOn("2026-05-02"), "morning");
-  // 土曜の祝日（2028-04-29 昭和の日）は祝日の規則で午前診療
+  // A holiday on a Saturday (2028-04-29, Showa Day) has morning consultations by the holiday rule
   assert.equal(clinic.dayInfoOn("2028-04-29").holiday?.name, "昭和の日");
   assert.equal(clinic.valueOn("2028-04-29"), "morning");
   assert.equal(clinic.dayInfoOn("2028-04-29").optionPath, "recurringRules[0]");
-  // 平日の祝日は休診
+  // Closed on a holiday on a weekday
   assert.equal(clinic.valueOn("2026-11-23"), null);
-  // 祝日の規則は曜日の規則（weekly）の値と区別できる: 土曜の祝日でも reason は recurring
+  // A holiday rule can be told from the weekday's value (weekly): a Saturday holiday still has the reason recurring
   assert.equal(clinic.dayInfoOn("2028-04-29").reason, "recurring");
   assert.equal(clinic.dayInfoOn("2026-05-02").reason, "weekday");
 });

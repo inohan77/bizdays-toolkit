@@ -62,7 +62,7 @@ test("スケジュールからのカレンダー: isOpen の結果で営業日�
     calendar.dueDate("2027-01", { dayOfMonth: 1, convention: "following" }),
     "2027-01-04",
   );
-  // 祝日・タイムゾーン・outOfRangePolicy はスケジュールのもの
+  // Holidays, time zone and outOfRangePolicy are the schedule's
   assert.equal(calendar.timeZone, "Asia/Tokyo");
   assert.equal(calendar.outOfRangePolicy, "throw");
   assert.equal(calendar.providers[0], jp);
@@ -99,7 +99,8 @@ test("スケジュールからのカレンダー: reason の対応（annual で�
     undefined,
     "曜日で決まった日には名前を付けない",
   );
-  // 祝日の扱いで営業になる祝日も reason は "holiday"（createCalendar の holidayPolicy: "open" と同じ）
+  // A holiday that is open through the holiday handling also has the reason "holiday" (as holidayPolicy: "open"
+  // of createCalendar)
   const openOnHolidays = createCalendarFromSchedule(
     createSchedule<Hours>({
       holidayProvider: jp,
@@ -110,7 +111,7 @@ test("スケジュールからのカレンダー: reason の対応（annual で�
   );
   assert.equal(openOnHolidays.dayInfoOn("2026-11-23").reason, "holiday");
   assert.equal(openOnHolidays.dayInfoOn("2026-11-23").open, true);
-  // 祝日が曜日どおり（"weekday"）なら open-weekday / closed-weekday
+  // When holidays follow the weekday ("weekday"), it is open-weekday / closed-weekday
   const ignore = createCalendarFromSchedule(
     createSchedule<Hours>({
       holidayProvider: jp,
@@ -129,7 +130,8 @@ test("スケジュールからのカレンダー: isOpen は値だけを受け�
     received.push(args);
     return args[0] !== null;
   });
-  // 作成時に、曜日の値と祝日の値（holidayPolicy: { value }）で 1 回ずつ呼ぶ（boolean を返すかを確かめる）
+  // At creation it is called once each with the weekday values and the holiday value (holidayPolicy: { value })
+  // (to check that it returns a boolean)
   const atCreation = received.length;
   assert.ok(atCreation > 0, "作成時に呼ばない");
   probe.isBusinessDay("2026-10-19");
@@ -138,7 +140,7 @@ test("スケジュールからのカレンダー: isOpen は値だけを受け�
     received.every((args) => (args as unknown[]).length === 1),
     "作成時の呼び出しも引数は値 1 つだけ",
   );
-  // 営業時間が 17:00 までの日だけを営業日とみなす、のような値の条件も書ける
+  // A condition on the value can be written too, such as "only days open until 18:00 are business days"
   const until18 = createCalendarFromSchedule(hours, (v) => v !== null && v.close === "18:00");
   assert.equal(until18.isBusinessDay("2026-10-17"), false, "土曜は 17:00 まで");
   assert.equal(until18.isBusinessDay("2026-10-19"), true);
@@ -198,7 +200,8 @@ test("スケジュールからのカレンダー: 入力の誤り・searchDayLim
     () => never.nextBusinessDay("2026-10-19"),
     (e: unknown) => isBizdaysError(e) && e.code === "no-business-day" && /10 days/.test(e.message),
   );
-  // isOpen が boolean でない値を返すと invalid-argument の RangeError（作成時に、曜日の値と祝日の値で確かめる）
+  // isOpen returning a value that is not a boolean is a RangeError with invalid-argument (checked at creation
+  // with the weekday values and the holiday value)
   assert.throws(
     () => createCalendarFromSchedule(hours, (v) => (v === null ? 0 : 1) as unknown as boolean),
     (e: unknown) =>
@@ -207,8 +210,9 @@ test("スケジュールからのカレンダー: 入力の誤り・searchDayLim
       e.code === "invalid-argument" &&
       /boolean/.test(e.message),
   );
-  // 作成時に呼ばない値（規則の値）で boolean でない値を返すと、その日を判定したときに投げる
-  // （仕事始め（01-04）の値 { open: "11:00", close: "15:00" } は規則の値で、曜日の値・祝日の値にない）
+  // Returning a non-boolean for a value that is not called at creation (a rule's value) throws when that day is
+  // judged (the value { open: "11:00", close: "15:00" } of the first working day (01-04) is a rule's value and
+  // not among the weekday values or the holiday value)
   const lazy = createCalendarFromSchedule(hours, (v) =>
     v !== null && v.close === "15:00" ? ("yes" as unknown as boolean) : v !== null,
   );

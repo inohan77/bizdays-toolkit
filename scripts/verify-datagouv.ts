@@ -1,24 +1,30 @@
 import "./strict-warnings.ts";
 /**
- * data.gouv.fr の「Jours fériés en France」（DINUM）の JSON とライブラリの計算結果を、日付と名称で照合する（フランス）。
+ * Verifies the library's results against the JSON of "Jours fériés en France" (DINUM) on data.gouv.fr, by date
+ * and name (France).
  *
- *   pnpm verify:datagouv                   … data.gouv.fr の JSON（etalab.github.io の安定した URL）から取得して照合
- *   pnpm verify:datagouv --file <path>     … 手元の JSON（フィクスチャと同じ形）で照合
- *   pnpm verify:datagouv --write           … 照合に成功したらテスト用フィクスチャを更新
- *   pnpm verify:datagouv --report <path>   … 結果を Markdown で書き出す（監視のワークフローが issue の本文に使う）
- *   pnpm verify:datagouv --simulate        … 取得したデータに架空の祝日を 1 件足して照合する（--write とは併用できない）
+ *   pnpm verify:datagouv                   ... fetch the JSON of data.gouv.fr (the stable URL on etalab.github.io)
+ *                                              and verify
+ *   pnpm verify:datagouv --file <path>     ... verify with a local JSON (same shape as the fixture)
+ *   pnpm verify:datagouv --write           ... on success, update the test fixture
+ *   pnpm verify:datagouv --report <path>   ... write the result as Markdown (the watch workflow uses it as issue
+ *                                              body)
+ *   pnpm verify:datagouv --simulate        ... add one fictitious holiday to the fetched data and verify (cannot
+ *                                              be combined with --write)
  *
- * 取得のしかた: ゾーン（metropole・alsace-moselle）ごとの JSON（{ "YYYY-MM-DD": "名称" }）を読む（認証なし）。
- * JSON は過去 20 年・未来 5 年の窓で、毎年 1 月に 1 年ずつ動く。
+ * Fetching: reads the JSON of each zone (metropole, alsace-moselle), { "YYYY-MM-DD": "name" } (no
+ * authentication). The JSON is a window of 20 years back and 5 years ahead that moves by one year every January.
  *
- * 照合すること:
- * - JSON に載っている年の日付と名称が、ライブラリの規則から出る結果と一致するか（2 つの祝日が同じ日に当たる年は、JSON と同じく
- *   復活祭から決まる祝日の名称で 1 件）
- * - フィクスチャ（test/fixtures/datagouv-jours-feries.json）と JSON の内容が同じか（窓が動いた年の初めは差分になるので --write で更新する）
+ * Verified:
+ * - the dates and names of the years in the JSON equal the results of the library's rules (in a year in which
+ *   two holidays fall on the same day, one entry with the name of the holiday tied to Easter, as in the JSON)
+ * - the fixture (test/fixtures/datagouv-jours-feries.json) equals the JSON (at the start of a year, when the
+ *   window has moved, there is a difference; update with --write)
  *
- * フランスの祝日は法令で定まり年ごとの告示はないので、「公表済みの年」の節はない。法改正（祝日の新設・廃止）は JSON の差分として現れる。
+ * Holidays of France are set by law without yearly announcements, so there is no "published years" section. A
+ * change in the law (a new or abolished holiday) shows as a difference from the JSON.
  *
- * 終了コード: 0 = 一致、1 = 差分あり、2 = 取得・解析の失敗（監視が機能していない）
+ * Exit code: 0 = equal, 1 = differences, 2 = failed fetch or parse (the watch is not working)
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -51,10 +57,13 @@ const report = option("--report");
 const write = args.includes("--write");
 const simulate = args.includes("--simulate");
 if (simulate && write) throw new Error("--simulate cannot be combined with --write");
-/** 今日の日付（日本時間。報告書・フィクスチャの「取得」の日付。issue のコメントの日付と同じ基準） */
+/**
+ * Today's date (Japan time; the "fetched" date of reports and fixtures, on the same basis as the dates of issue
+ * comments)
+ */
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
 
-/** 一時的な失敗で監視が issue を立てないよう、3 回まで試す */
+/** Tries up to 3 times, so that a temporary failure does not make the watch open an issue */
 async function fetchJson(url: string): Promise<unknown> {
   let last: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -109,7 +118,7 @@ async function main(): Promise<number> {
     }
   }
 
-  // 1. ライブラリの規則との照合（JSON に載っている年だけ）
+  // 1. Verification against the library's rules (only the years in the JSON)
   const mismatches: string[] = [];
   const summary: string[] = [];
   for (const { zone, provider } of ZONES) {
@@ -133,7 +142,8 @@ async function main(): Promise<number> {
   }
   addSection("Library does not match data.gouv.fr", mismatches);
 
-  // 2. フィクスチャとの照合（窓が 1 年動いた年の初めは、古い年が消え新しい年が増える差分になる）
+  // 2. Verification against the fixture (at the start of a year, when the window has moved by one year, old
+  // years disappear and new ones appear as differences)
   const fixtureDiffs: string[] = [];
   for (const { zone } of ZONES) {
     const inFixture = fixture.zones[zone] ?? {};

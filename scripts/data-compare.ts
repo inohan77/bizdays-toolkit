@@ -1,15 +1,16 @@
 /**
- * 前のバージョンとの祝日データの差分（CI の data-compare ジョブ。RELEASING.md の「品質の仕組みの理由」の「前のバージョンと比べる」）。
+ * Differences in holiday data from the previous version (the data-compare job of CI; RELEASING.md, reasons for
+ * the quality mechanisms, "compare with the previous version").
  *
- * 前のバージョンと今回の dist の同梱の提供元を、対応年が重なるすべての年について 1 日ずつ比べる。
- * 前のバージョンにない提供元と、前のバージョンの対応年の外の年は比べない。
- * 失敗にする条件: key が変わった、差分があるのに CHANGELOG の今のバージョン（または [Unreleased]）に「### Data」がない、
- * 前のバージョンの提供元がなくなったか対応年が狭まった。
+ * Compares the bundled providers of the previous version and of this dist day by day, for every year both
+ * support. Providers missing in the previous version and years outside its supported years are not compared.
+ * Fails when: a key changed; there is a difference but the CHANGELOG section of the current version (or
+ * [Unreleased]) has no "### Data"; a provider of the previous version disappeared or its supported years shrank.
  *
- * 使い方: node scripts/data-compare.ts --base <dir> [--head .] [--base-label <label>] [--changelog CHANGELOG.md]
- *   --base は前のバージョンを展開したパッケージのディレクトリ（npm pack した tgz の package/）。--head は今回の
- *   リポジトリ（pnpm build 済み）
- * 終了コード: 0 合格、1 失敗、2 使い方・読み込みの誤り。結果は Markdown で標準出力に書く。
+ * Usage: node scripts/data-compare.ts --base <dir> [--head .] [--base-label <label>] [--changelog CHANGELOG.md]
+ *   --base is the directory of the unpacked previous version (package/ of the npm pack tgz). --head is this
+ *   repository (after pnpm build)
+ * Exit code: 0 pass, 1 fail, 2 usage or loading error. The result is written as Markdown on standard output.
  */
 
 import "./strict-warnings.ts";
@@ -43,7 +44,7 @@ const baseVersion = (
 ).version;
 const baseLabel = argValue("--base-label") ?? baseVersion;
 
-/** CHANGELOG の [Unreleased] と今のバージョンの節に「### Data」があるか */
+/** Whether the CHANGELOG sections of [Unreleased] and the current version have "### Data" */
 function changelogHasData(): { has: boolean; sections: string } {
   const text = readFileSync(changelogPath, "utf8");
   const parts = text.split(/^## \[([^\]]+)\][^\n]*$/m);
@@ -53,7 +54,7 @@ function changelogHasData(): { has: boolean; sections: string } {
   return { has: /^### Data\s*$/m.test(body), sections: `[Unreleased]・[${headVersion}]` };
 }
 
-/** 比べる項目を 1 つの値にそろえる（names はキーの順に依らない形にする） */
+/** Normalizes the compared properties into one value each (`names` in a form independent of key order) */
 function fields(h: BundledHoliday): Record<string, string> {
   const names =
     h.names === undefined

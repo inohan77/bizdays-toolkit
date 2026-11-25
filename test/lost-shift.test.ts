@@ -13,8 +13,9 @@ import { diagnoseCalendar, diagnoseSchedule } from "../src/diagnose/index.ts";
 import { random } from "./support/catalog.ts";
 import { holidayRun as runOf, holidaysOn } from "./support/provider.ts";
 
-// 届かない振替（decisions.md の 24 番）: "after-holiday" の規則の日が、31 日を超える祝日の連続が明けた日に振り替えられない
-// とき、判定は holiday-run-too-long を投げ、診断は同じ code の warning を規則の位置に返す
+// Moves out of reach (decisions.md #24): when the day of an "after-holiday" rule cannot be moved to the day
+// after a run of holidays longer than 31 days, the judgement throws holiday-run-too-long and the diagnostics
+// return a warning with the same code at the rule's position
 
 const CODE = "holiday-run-too-long";
 const codeOf = (fn: () => unknown): string | undefined => {
@@ -41,31 +42,36 @@ const options = (
 const brief = (list: readonly { severity: string; code: string; path: string }[]) =>
   list.map((d) => [d.severity, d.code, d.path]);
 
-/** 素朴な定義: 対応年の全日を 1 日ずつ判定し、holiday-run-too-long を投げる日（判定の実装だけを使い、診断は使わない） */
+/**
+ * Naive definition: judges every day of the supported years one by one and returns the days that throw
+ * holiday-run-too-long (only the judgement is used, not the diagnostics)
+ */
 function throwingDays(isBusinessDay: (date: string) => unknown, years = SUPPORTED): string[] {
   const days: string[] = [];
   for (let date = `${years.from}-01-01`; date <= `${years.to}-12-31`; date = addDays(date, 1)) {
     const code = codeOf(() => isBusinessDay(date));
     if (code === CODE) days.push(date);
-    // 対応年の端の日は、隣の日が対応年の外なので out-of-range（前からの挙動。decisions.md の 17 番）
+    // An edge day of the supported years is out-of-range because its neighbour is outside them (the behaviour
+    // as before. decisions.md #17)
     else if (code !== "out-of-range") assert.equal(code, undefined, date);
   }
   return days;
 }
 
 test("届かない振替: 31 日以内の連続は今までどおり振り替わり、31 日を超えても届く振替元があればその日から振り替わる", () => {
-  // 7 月 1 日〜31 日（31 日）。明けた 8 月 1 日は、7 月 1 日の 31 日後
+  // July 1-31 (31 days). August 1, the day after the run, is 31 days after July 1
   const within = options(runOf(31), { dayOfMonth: 1, months: [7] });
   assert.equal(createCalendar(within).dayInfoOn("2026-08-01").shiftedFrom, "2026-07-01");
   assert.deepEqual(diagnoseCalendar(within), []);
-  // 7 月 1 日〜8 月 9 日（40 日）。7 月 15 日は、明けた 8 月 10 日の 26 日前で届く（7 月 1 日は届かないが、近い日が先に見つかる）
+  // July 1 to August 9 (40 days). July 15 is 26 days before August 10, the day after the run, and within reach
+  // (July 1 is not, but the nearer day is found first)
   const reachable = options(runOf(40), { dayOfMonth: [1, 15], months: [7] });
   assert.equal(createCalendar(reachable).dayInfoOn("2026-08-10").shiftedFrom, "2026-07-15");
   assert.deepEqual(diagnoseCalendar(reachable), []);
 });
 
 test("届かない振替: 届かない振替元があれば、明けた日の判定・その日を通る探索・その日を含む期間の計算が holiday-run-too-long", () => {
-  // 7 月 1 日〜8 月 9 日（40 日）。7 月 1 日・5 日は、明けた 8 月 10 日の 31 日より前
+  // July 1 to August 9 (40 days). July 1 and 5 are more than 31 days before August 10, the day after the run
   const calendar = createCalendar(options(runOf(40), { dayOfMonth: [1, 5], months: [7] }));
   assert.throws(() => calendar.isBusinessDay("2026-08-10"), {
     name: "RangeError",
@@ -77,10 +83,10 @@ test("届かない振替: 届かない振替元があれば、明けた日の判
     codeOf(() => calendar.dayInfoOn("2026-08-10")),
     CODE,
   );
-  // 連続の中の日・前後の日は判定できる
+  // Days inside the run and around it can be judged
   for (const date of ["2026-06-30", "2026-07-01", "2026-07-20", "2026-08-09", "2026-08-11"])
     assert.equal(calendar.isBusinessDay(date), true, date);
-  // 明けた日を通る探索と、その日を含む期間の計算も止まる
+  // A search that passes the day after the run, and a calculation over a period containing it, stop too
   assert.equal(
     codeOf(() => calendar.addBusinessDays("2026-06-30", 45)),
     CODE,
@@ -101,13 +107,14 @@ test("届かない振替: 届かない振替元があれば、明けた日の判
     codeOf(() => calendar.nthBusinessDayOfMonth("2026-08", 20)),
     CODE,
   );
-  // その日を含まない期間は数えられる
+  // A period without that day can be counted
   assert.equal(calendar.diffBusinessDays("2026-08-11", "2026-08-31"), 20);
   assert.equal(calendar.businessDatesBetween("2026-07-01", "2026-08-09").length, 40);
 });
 
 test("届かない振替: 連続が 367 日を超えて続き、振替元を確かめられないときも holiday-run-too-long（文は別）", () => {
-  // 2025-01-01 から 546 日（2026-06-30 まで）。2 月 29 日の規則は、さかのぼった 367 日の中に当たる日がない
+  // 546 days from 2025-01-01 (until 2026-06-30). The rule of February 29 has no matching day in the 367 days
+  // searched back
   const o = options(runOf(546, "2025-01-01"), { dayOfMonth: 29, months: [2] });
   assert.throws(() => createCalendar(o).isBusinessDay("2026-07-01"), {
     code: CODE,
@@ -115,25 +122,26 @@ test("届かない振替: 連続が 367 日を超えて続き、振替元を確�
       /^closedRecurringRules\[0\]: no day can be moved to 2026-07-01: .*longer than 367 days/,
   });
   assert.deepEqual(brief(diagnoseCalendar(o)), [["warning", CODE, "closedRecurringRules[0]"]]);
-  // 367 日より前に連続が終われば、確かめられる（2025-07-01 から 365 日。当たる日がないので止めない）
+  // When the run ends within 367 days it can be checked (365 days from 2025-07-01; there is no matching day, so
+  // nothing stops)
   const shorter = options(runOf(365, "2025-07-01"), { dayOfMonth: 29, months: [2] });
   assert.equal(createCalendar(shorter).isBusinessDay("2026-07-01"), true);
   assert.deepEqual(diagnoseCalendar(shorter), []);
 });
 
 test("届かない振替: 連続の中に規則の日がなければ止めず、毎週の曜日の規則・祝日の前後の規則は連続の長さによらない", () => {
-  // 6 月の規則は、7 月からの連続の中に当たる日がない
+  // The June rule has no matching day inside the run that starts in July
   const june = options(runOf(40), { dayOfMonth: 15, months: [6] });
   assert.deepEqual(
     throwingDays((d) => createCalendar(june).isBusinessDay(d)),
     [],
   );
   assert.deepEqual(diagnoseCalendar(june), []);
-  // 毎週の曜日の規則は 7 日以内に振替元が見つかる（8 月 10 日は月曜日。規則そのものが当たる）
+  // A weekly weekday rule finds its original day within 7 days (August 10 is a Monday; the rule itself matches)
   const weekly = options(runOf(40), { weekday: 2 });
   assert.equal(createCalendar(weekly).dayInfoOn("2026-08-10").shiftedFrom, "2026-08-04");
   assert.deepEqual(diagnoseCalendar(weekly), []);
-  // 祝日の前後の規則は、連続の長さによらない
+  // Rules for the days before and after a holiday do not depend on the length of the run
   const after: CalendarOptions = {
     holidayProvider: runOf(40),
     holidayPolicy: "open",
@@ -145,7 +153,7 @@ test("届かない振替: 連続の中に規則の日がなければ止めず、
 });
 
 test("届かない振替: 診断は同じ code の warning を規則の位置に 1 件返し、error を返さず、ほかの診断も返す", () => {
-  // 規則 [0] は届かない振替、規則 [2] は規則 [1] に覆われる（shadowed）
+  // Rule [0] is a move out of reach; rule [2] is covered by rule [1] (shadowed)
   const o: CalendarOptions = {
     holidayProvider: runOf(40),
     holidayPolicy: "open",
@@ -161,12 +169,13 @@ test("届かない振替: 診断は同じ code の warning を規則の位置に
     ["warning", CODE, "closedRecurringRules[0]"],
     ["warning", "shadowed", "closedRecurringRules[2]"],
   ]);
-  // 位置は規則、関係する位置は提供元（提供元が 1 つのとき）。文は例外と同じ内容
+  // The position is the rule and the related position is the provider (with one provider). The text has the
+  // same content as the error
   assert.equal(list[0]!.relatedPath, "holidayProvider");
   assert.match(list[0]!.message, /^the day 2026-07-05 cannot be moved to 2026-08-10: /);
-  // 設定は作成できる（error がない）
+  // The options can be created (no error)
   createCalendar(o);
-  // 提供元が 2 つ以上なら、関係する位置は付けない
+  // With two or more providers there is no related position
   const two = { ...o, holidayProvider: [runOf(40), runOf(1, "2026-01-01", "YY")] };
   const first = diagnoseCalendar(two)[0]!;
   assert.deepEqual(
@@ -175,7 +184,7 @@ test("届かない振替: 診断は同じ code の warning を規則の位置に
   );
 });
 
-// 規則の種類 × 連続の長さ × 規則の日の位置。連続は 2026-07-01（水曜日）から
+// Kind of rule × length of the run × position of the rule day. The run starts on 2026-07-01 (a Wednesday)
 const RULE_SHAPES: readonly (readonly [string, RecurringRule])[] = [
   ["月の日（1 日）", { dayOfMonth: 1, months: [7] }],
   ["月の日（5 日）", { dayOfMonth: 5, months: [7] }],
@@ -209,7 +218,7 @@ test("届かない振替: 判定がどこかの日で投げることと、診断
         warned.every((d) => d.severity === "warning" && d.path === "closedRecurringRules[0]"),
         context,
       );
-      // 投げるのは、連続が明けた日から 7 日以内の 1 日だけ
+      // At most one day throws, within 7 days after the run
       assert.ok(thrown.length <= 1, context);
       if (thrown.length > 0) lost++;
       else kept++;
@@ -220,8 +229,9 @@ test("届かない振替: 判定がどこかの日で投げることと、診断
 });
 
 test("届かない振替: 飛ばす曜日のある規則は、祝日の連続が 31 日より短くても、前後の飛ばす曜日を足して届かなければ、判定も診断も知らせる", () => {
-  // 判定は、祝日と飛ばす曜日（土日）を合わせて数える。連続の始まる曜日（7 通り）と長さを変えて、連続の前の土日に規則の日が
-  // ある場合・連続の後ろに土日が続く場合を通す。素朴な定義の走査を短くするため、対応年は 2025〜2027 年
+  // The judgement counts holidays and skipped weekdays (weekends) together. The weekday on which the run starts
+  // (7 variants) and its length vary, to exercise a rule day on the weekend before the run and a weekend
+  // following the run. The supported years are 2025-2027, to keep the naive scan short
   const years = { from: 2025, to: 2027 };
   let lost = 0;
   let kept = 0;
@@ -230,7 +240,8 @@ test("届かない振替: 飛ばす曜日のある規則は、祝日の連続が
     const start = addDays("2026-07-01", offset);
     const first = Number(start.slice(8));
     for (const days of [19, 20, 29, 30] as const) {
-      // 規則の日: 連続の最初の日と、その 2 日前（連続の前の、飛ばす曜日かもしれない日）
+      // Rule days: the first day of the run and 2 days before it (a day before the run that may be a skipped
+      // weekday)
       for (const dayOfMonth of [first, first - 2].filter((d) => d >= 1)) {
         const o = options(runOf(days, start, "XX", years), {
           dayOfMonth,
@@ -257,7 +268,7 @@ test("届かない振替: 飛ばす曜日のある規則は、祝日の連続が
 });
 
 test("届かない振替: 年をまたぐ連続でも、判定と診断が一致する", () => {
-  // 2026-12-10 から 42 日（2027-01-20 まで）。12 月 12 日は、明けた 1 月 21 日の 40 日前
+  // 42 days from 2026-12-10 (until 2027-01-20). December 12 is 40 days before January 21, the day after the run
   const o = options(runOf(42, "2026-12-10"), { dayOfMonth: 12, months: [12] });
   assert.deepEqual(
     throwingDays((d) => createCalendar(o).isBusinessDay(d)),
@@ -268,7 +279,7 @@ test("届かない振替: 年をまたぐ連続でも、判定と診断が一致
 
 test("届かない振替: 明けた日を個別の日付・先の規則が決めていれば、判定も診断も何も出さない", () => {
   const rule: RecurringRule = { dayOfMonth: [1, 5], months: [7] };
-  // 個別の日付（臨時営業日）が明けた日を決める
+  // A specific date (an extra business day) decides the day after the run
   const byDate = options(runOf(40), rule, { openDates: ["2026-08-10"] });
   assert.deepEqual(
     throwingDays((d) => createCalendar(byDate).isBusinessDay(d)),
@@ -278,7 +289,7 @@ test("届かない振替: 明けた日を個別の日付・先の規則が決め
     diagnoseCalendar(byDate).filter((d) => d.code === CODE),
     [],
   );
-  // 先に書いた規則（毎週の月曜日）が明けた日（月曜日）を決める
+  // A rule written earlier (every Monday) decides the day after the run (a Monday)
   const byRule: CalendarOptions = {
     holidayProvider: runOf(40),
     holidayPolicy: "open",
@@ -308,7 +319,8 @@ test("届かない振替: スケジュールでも、判定は holiday-run-too-l
     ["2026-08-10"],
   );
   assert.deepEqual(brief(diagnoseSchedule(o)), [["warning", CODE, "recurringRules[0]"]]);
-  // 基準のカレンダーが届かない振替で投げるスケジュール: 診断は error を返さない（判定できない月として扱う）
+  // A schedule whose basis calendar throws for a move out of reach: the diagnostics return no error (treated as
+  // an unjudgeable month)
   const basis = createCalendar(options(runOf(40), { dayOfMonth: [1, 5], months: [7] }));
   assert.equal(
     codeOf(() => basis.isBusinessDay("2026-08-10")),
@@ -328,8 +340,9 @@ test("届かない振替: スケジュールでも、判定は holiday-run-too-l
     CODE,
   );
   assert.equal(createSchedule(counting).valueOn("2026-07-01"), 2);
-  // 基準のカレンダーが投げる月だけに当たる規則を、never-matches にしない（判定できない月。投げた月を数えられない月として
-  // 扱わないと、当たる日がないと誤る）
+  // A rule that matches only in the month in which the basis calendar throws is not never-matches (an
+  // unjudgeable month; unless a month that threw is treated as a month that cannot be counted, it would wrongly
+  // seem to have no matching day)
   const onlyAugust = {
     ...counting,
     recurringRules: [
@@ -347,7 +360,8 @@ test("届かない振替: スケジュールでも、判定は holiday-run-too-l
 });
 
 test("届かない振替: 届かない振替のある設定の診断は、規則どうしを調べる走査の例外を error（invalid-provider-data）にしない", () => {
-  // shadowed・redundant・counting-basis・第 n 営業日の規則の走査を通る設定に、届かない振替の規則を混ぜる
+  // A rule with a move out of reach is mixed into options that go through the scans of shadowed, redundant,
+  // counting-basis and nth-business-day rules
   const o: CalendarOptions = {
     holidayProvider: runOf(40),
     holidayPolicy: "closed",
@@ -374,8 +388,10 @@ test("届かない振替: 届かない振替のある設定の診断は、規則
     codes.includes(CODE) && codes.includes("shadowed") && codes.includes("redundant"),
     JSON.stringify(brief(list)),
   );
-  // 営業日が 1 日もないかを調べる走査は、全日を判定するので、明けた日を必ず通る。届かない振替の例外を受けて、その日を営業日に
-  // 数えない（受けないと、規則どうしの診断の結果が捨てられ、error の invalid-provider-data になる）
+  // The scan that finds whether there is any business day judges every day, so it always passes the day after
+  // the run. It handles the error of the move out of reach and does not count that day as a business day
+  // (otherwise the results of the diagnostics between rules would be discarded and become an
+  // invalid-provider-data error)
   const allClosed: CalendarOptions = {
     holidayProvider: runOf(40),
     holidayPolicy: "closed",
@@ -390,8 +406,9 @@ test("届かない振替: 届かない振替のある設定の診断は、規則
 });
 
 test("届かない振替: 祝日の塊の間に、飛ばす曜日でない日があれば、そこが明けた日になる（塊の途中でも、判定も診断も知らせる）", () => {
-  // 2026-03-03 から 35 日（4 月 6 日まで）、3 日空けて、4 月 10 日から 20 日。水・木・金を飛ばす規則では、4 月 7 日（火曜日）が
-  // 明けた日で、3 月 4 日は 34 日前。空いた 3 日のうち 8 日・9 日は飛ばす曜日なので、祝日と飛ばす曜日は 4 月 29 日まで続く
+  // 35 days from 2026-03-03 (until April 6), a gap of 3 days, then 20 days from April 10. For a rule skipping
+  // Wednesday to Friday, April 7 (a Tuesday) is the day after the run and March 4 is 34 days before. Of the 3
+  // days of the gap the 8th and 9th are skipped weekdays, so holidays and skipped weekdays last until April 29
   const dates = [
     ...Array.from({ length: 35 }, (_, i) => addDays("2026-03-03", i)),
     ...Array.from({ length: 20 }, (_, i) => addDays("2026-04-10", i)),
@@ -410,7 +427,8 @@ test("届かない振替: 祝日の塊の間に、飛ばす曜日でない日が
 });
 
 test("届かない振替: 乱数で作った祝日の並びと規則でも、判定が投げる規則に、診断は warning を出す（種は固定）", () => {
-  // 決まった形を並べるテストが通らない並び（塊の数・長さ・間隔、飛ばす曜日の組、規則の形と順番）を、乱数で作る
+  // Sequences that the tests with fixed forms do not exercise (number, length and distance of blocks, sets of
+  // skipped weekdays, shapes and order of rules) are made with random numbers
   const next = random(20261114);
   const int = (min: number, max: number): number => min + Math.floor(next() * (max - min + 1));
   const years = { from: 2025, to: 2027 };
@@ -427,7 +445,7 @@ test("届かない振替: 乱数で作った祝日の並びと規則でも、判
   let kept = 0;
   let lostInBlocks = 0;
   for (let trial = 0; trial < 200; trial++) {
-    // 祝日の塊を 1〜3 つ。長さは 1〜40 日（6 割は 25 日以上）、間隔は 1〜8 日
+    // 1-3 blocks of holidays. Length 1-40 days (60% are 25 days or more), distance 1-8 days
     const dates: string[] = [];
     const blocks = int(1, 3);
     const first = addDays("2026-03-01", int(0, 20));
@@ -437,25 +455,27 @@ test("届かない振替: 乱数で作った祝日の並びと規則でも、判
       for (let i = 0; i < length; i++) dates.push(addDays(day, i));
       day = addDays(day, length + int(1, 8));
     }
-    // 飛ばす曜日は 0〜3 つ
+    // 0-3 skipped weekdays
     const candidates = [0, 1, 2, 3, 4, 5, 6].filter(() => next() < 0.25).slice(0, 3);
     const shape: Record<string, unknown> =
       next() < 0.7
-        ? // 月の日は、最初の塊の始まりの近く（3 日前から 6 日後まで）
+        ? // The day of the month is near the start of the first block (from 3 days before to 6 days after)
           {
             dayOfMonth: Number(addDays(first, int(-3, 6)).slice(8)),
-            // 半分は 1 つの月だけ（翌月の同じ日が塊の中にあると、近いほうから振り替わって届く）
+            // Half use one month only (when the same day of the next month is inside the block, the nearer one
+            // moves and is within reach)
             months: next() < 0.5 ? [Number(first.slice(5, 7))] : [2, 3, 4],
           }
         : { weekday: int(0, 6), nth: int(1, 4), months: [3, 4] };
-    // 曜日の規則は、その曜日を飛ばす曜日に書けない（設定の誤り）
+    // A weekday rule cannot have its own weekday among the skipped weekdays (wrong options)
     const skipped = candidates.filter((w) => w !== shape["weekday"]);
     const shifting = {
       ...shape,
       ...(skipped.length > 0 ? { skipWeekdays: skipped } : {}),
       ...AFTER,
     };
-    // 半分は、毎週の曜日の規則を前か後ろに足す（先の規則が明けた日を決めると、届かない振替は起きない）
+    // Half add a weekly weekday rule before or after (when an earlier rule decides the day after the run, no
+    // move out of reach occurs)
     const weekly = { weekday: int(0, 6) };
     const rules =
       next() < 0.5 ? [shifting] : next() < 0.5 ? [weekly, shifting] : [shifting, weekly];
@@ -479,7 +499,8 @@ test("届かない振替: 乱数で作った祝日の並びと規則でも、判
       [],
       context,
     );
-    // 判定が投げる規則には warning が出て、warning が出るのは、判定がどこかの日で投げる設定だけ
+    // A rule for which the judgement throws gets a warning, and a warning appears only for options whose
+    // judgement throws on some day
     for (const path of thrown) assert.ok(warned.has(path), `${context} 投げる ${path}`);
     assert.equal(warned.size > 0, thrown.size > 0, context);
     if (thrown.size > 0) {
@@ -494,7 +515,8 @@ test("届かない振替: 乱数で作った祝日の並びと規則でも、判
 });
 
 test("届かない振替: 暦日の範囲の端（9999-12-31）の祝日の後の日でも、診断は例外にならない", () => {
-  // 9999-12-30 が祝日。翌日（9999-12-31）を評価すると、祝前日の規則が範囲の外の日（10000-01-01）を見て例外になる
+  // 9999-12-30 is a holiday. Evaluating the next day (9999-12-31), the day-before-holiday rule looks at a day
+  // outside the range (10000-01-01) and throws
   const o: CalendarOptions = {
     holidayProvider: holidaysOn(["9999-12-30"], { from: 9998, to: 9999 }),
     holidayPolicy: "open",

@@ -1,5 +1,7 @@
-// 目録（test/support/catalog.ts）が公開の型（etc/api.md）と一致し、生成器が呼び出し側の文脈ごと・規則の形ごとに
-// 目録のすべてのキーを作ることを確かめる（テスト拡充案の T2）。規則の形・設定のキー・選択肢の値を足して目録に足し忘れると、ここで止まる。
+// Checks that the catalog (test/support/catalog.ts) agrees with the public types (etc/api.md) and that the
+// generator produces every key of the catalog per context of the callers and per rule shape (T2 of the test
+// expansion plan). Adding a rule shape, an option key or a choice value without adding it to the catalog stops
+// here.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -25,33 +27,36 @@ import { CONTEXT_USES, siteTrials } from "../support/sites.ts";
 import { SITES } from "../support/features-compare.ts";
 
 const api = readFileSync("etc/api.md", "utf8");
-/** 改名の旧名（置き場所ごと。規則の holiday と、スケジュールの旧名 holiday を取り違えないため） */
+/**
+ * The old names of the rename (per place, so that `holiday` of a rule and the old name `holiday` of schedules
+ * are not confused)
+ */
 const oldNames = (places: readonly string[]) =>
   new Set(RENAMED_KEYS.filter((r) => places.includes(r.place)).map((r) => r.from));
 
-/** etc/api.md の型の定義（```ts のブロック） */
+/** The definition of a type in etc/api.md (the ```ts block) */
 function definition(name: string): string {
   const m = new RegExp(`^### ${name} \\(.*\\n\\n\`\`\`ts\\n([\\s\\S]*?)^\`\`\``, "m").exec(api);
   assert.ok(m, `etc/api.md に ${name} がない`);
   return m[1]!;
 }
-/** 型の定義の never でないキー（その置き場所の改名の旧名は除く） */
+/** The keys of a type definition that are not never (old names of that place's rename left out) */
 const keysOf = (name: string, places: readonly string[] = ["rule"]): string[] => {
   const old = oldNames(places);
   return [...definition(name).matchAll(/readonly (\w+)\??: ([^;]+);/g)]
     .filter((m) => m[2]!.trim() !== "never" && !old.has(m[1]!))
     .map((m) => m[1]!);
 };
-/** 文字列の合併の値 */
+/** The values of a string union */
 const literalsOf = (text: string): string[] => [...text.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
 
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 
 // ------------------------------------------------------------
-// 呼び出し側が実際に作るキー（型ごと）
+// The keys the callers really produce (per type)
 // ------------------------------------------------------------
 
-/** 3 つの呼び出し側の設定から、型ごとに実際に作られたキーを集める（"型" → キーの集合） */
+/** Collects, from the options of the three callers, the keys really produced per type ("Type" → set of keys) */
 const produced = (() => {
   const out = new Map<string, Set<string>>();
   const add = (type: string, keys: Iterable<string>) => {
@@ -80,7 +85,7 @@ const produced = (() => {
   return out;
 })();
 
-/** 型ごとに確かめるキー（公開の型のキーのうち、その置き場所で意味のあるもの） */
+/** The keys checked per type (the keys of the public type that have a meaning in that place) */
 const TYPES: readonly [type: string, places: readonly string[]][] = [
   ["CalendarOptions", ["calendar", "source"]],
   ["HolidaySourceOptions", ["source"]],
@@ -103,7 +108,7 @@ test("目録: 繰り返しの規則の形が、公開の型（RecurringPattern �
 });
 
 test("目録: 規則の形ごとのキーが、公開の型のキーとそろっている", () => {
-  // RecurringPattern の合併で形に足されるキー（after-holiday の組み合わせ）
+  // The keys the union RecurringPattern adds to a shape (the combination with after-holiday)
   const added = keysOf("RecurringPattern");
   for (const shape of SHAPES) {
     const keys = keysOf(shape.pattern);
@@ -155,10 +160,10 @@ test("目録: 選択肢の値が、公開の型の文字列の合併とそろっ
 });
 
 // ------------------------------------------------------------
-// 生成器の到達性（呼び出し側の文脈ごと・規則の形ごと）
+// Reachability of the generator (per context of the callers and per rule shape)
 // ------------------------------------------------------------
 
-/** 文脈で作らない形と、その理由 */
+/** The shapes a context does not make, with the reason */
 function excludedShapes(ctx: (typeof CONTEXT_USES)[number]["ctx"]): Map<string, string> {
   const out = new Map<string, string>();
   for (const s of SHAPES) {
@@ -197,7 +202,7 @@ for (const use of CONTEXT_USES)
           for (const r of Array.isArray(o[k]) ? (o[k] as Obj[]) : [])
             policies.add(r["holidayOverlapPolicy"]);
       }
-      // 作る形と作らない形が、文脈の取り決め（shapesIn）とそろっている
+      // The shapes made and not made agree with the context's arrangement (shapesIn)
       assert.deepEqual(
         SHAPES.filter((s) => !excluded.has(s.pattern)).map((s) => s.pattern),
         shapesIn(use.ctx).map((s) => s.pattern),
@@ -230,7 +235,8 @@ for (const use of CONTEXT_USES)
   }
 
 test("意図した入力の誤りの印（result-compare が作成の失敗を分ける印）は、誤りの形の規則とそろう", () => {
-  // 印は規則のオブジェクトに付くので、写した規則に付け直し忘れると消える。誤りの形（test/support/features.ts の invalid=）と比べる
+  // The mark is on the rule object, so it disappears when a copied rule is not marked again. Compared with the
+  // forms of mistakes (invalid= of test/support/features.ts)
   const problems: string[] = [];
   let marked = 0;
   for (const newShapes of [true, false])

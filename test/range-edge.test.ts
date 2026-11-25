@@ -1,5 +1,7 @@
-// 暦日の範囲（1000〜9999 年）の端・循環する値・穴のある配列・Date の範囲を超える瞬間（0.31.6 の修正）。
-// どれも「作成できる設定に診断が error を返さない」「例外は code を持つ」という約束の、入力の種類ごとの確認。
+// The ends of the calendar range (years 1000-9999), circular values, arrays with holes and instants beyond the
+// range of Date (the fixes of 0.31.6).
+// Each is a check, per kind of input, of the promises that the diagnostics return no error for options that can
+// be created and that errors have a code.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCalendar, createSchedule, isBizdaysError, toDateString } from "../src/index.ts";
@@ -16,7 +18,7 @@ const codeOf = (f: () => unknown): unknown => {
   return undefined;
 };
 
-/** 規則の種類ごとに、有効期間を範囲の端に片側だけ置く */
+/** Per kind of rule, an effective period put at an end of the range on one side only */
 const EDGE_RULES: readonly Record<string, unknown>[] = [
   { weekday: 1 },
   { weekday: 2, interval: 50, anchor: "2026-01-06" },
@@ -31,13 +33,13 @@ const EDGE_RULES: readonly Record<string, unknown>[] = [
   { cycle: 400, anchor: "2026-01-01", positions: [1] },
 ];
 const EDGE_PERIODS: readonly Record<string, unknown>[] = [
-  {}, // 有効期間なし（対応年が範囲の端にある提供元では、走査の窓そのものが端に来る）
+  {}, // no effective period (with a provider whose supported years are at an end, the scan window is there)
   { effectiveTo: "1000-01-10" },
   { effectiveTo: "1000-12-31" },
   { effectiveFrom: "9999-12-20" },
   { effectiveFrom: "9999-12-31" },
 ];
-/** 対応年が暦日の範囲の端にある提供元（毎年 1 月 1 日が祝日） */
+/** A provider whose supported years are at an end of the calendar range (January 1 is a holiday every year) */
 const edgeProvider = (from: number, to: number) => ({
   id: `EDGE-${from}`,
   timeZone: "UTC",
@@ -48,8 +50,8 @@ const edgeProvider = (from: number, to: number) => ({
   ],
 });
 /**
- * 対応年が範囲の端にない提供元（2020〜2030 年、毎年 1 月 1 日が祝日）。日本の提供元（1955〜2099 年）と同じ経路を通り、
- * 対応年の全日の走査が短い
+ * A provider whose supported years are not at an end of the range (2020-2030, January 1 a holiday every year).
+ * It takes the same path as the Japanese provider (1955-2099) with a short scan of all supported days
  */
 const middleProvider = {
   ...edgeProvider(2020, 2030),
@@ -62,7 +64,7 @@ const EDGE_BASES: readonly Record<string, unknown>[] = [
   { holidayProvider: edgeProvider(1000, 1002) },
   { holidayProvider: edgeProvider(9997, 9999) },
 ];
-/** 第 n 営業日の規則か（スケジュールでは数える基準のカレンダーが要る） */
+/** Whether a rule is an nth-business-day rule (in a schedule it needs a basis calendar) */
 const isCounting = (rule: Record<string, unknown>): boolean =>
   "businessDayOfMonth" in rule || "businessDayOfWeek" in rule;
 
@@ -70,8 +72,9 @@ test("範囲の端: 有効期間が 1000 年・9999 年の端にある設定で�
   for (const rule of EDGE_RULES)
     for (const period of EDGE_PERIODS)
       for (const base of EDGE_BASES) {
-        // 対応年が範囲の端にある提供元は、走査の窓そのものが端に来るので、有効期間のない規則だけで調べる。ほかの提供元は、
-        // 有効期間を端に置いた規則で調べる
+        // With a provider whose supported years are at an end of the range the scan window itself is there, so
+        // only rules without an effective period are examined. Other providers are examined with rules whose
+        // effective period is at an end
         const edge = String(
           (base["holidayProvider"] as { id?: string } | undefined)?.id,
         ).startsWith("EDGE");
@@ -80,7 +83,7 @@ test("範囲の端: 有効期間が 1000 年・9999 年の端にある設定で�
         const created = codeOf(() => createCalendar(options as never)) === undefined;
         const errors = diagnoseCalendar(options).filter((d) => d.severity === "error");
         assert.equal(errors.length === 0, created, JSON.stringify([options, errors]));
-        // スケジュールの第 n 営業日の規則は、同じ提供元のカレンダー（規則なし）を数える基準にする
+        // An nth-business-day rule of a schedule counts on a calendar with the same provider (no rules)
         const basis = isCounting(rule) ? { calendar: createCalendar(base as never) } : {};
         const schedule = {
           ...base,
@@ -119,7 +122,8 @@ test("範囲の端の判定: 規則の種類ごとに、1000 年・9999 年の�
       assert.ok(allowed.has(error.code), `${error.code}: ${error.message}`);
       return error.code;
     }
-    // 日付の形の文字列は、範囲の中の暦日であること（理由などの文字列は数字で始まらない）
+    // A string shaped like a date must be a calendar date within the range (strings such as reasons do not start
+    // with a digit)
     if (typeof value === "string" && /^[+-]?\d/.test(value))
       assert.match(value, /^[1-9]\d{3}-\d{2}-\d{2}$/, `範囲の外の日付: ${value}`);
     return "value";
@@ -147,7 +151,8 @@ test("範囲の端の判定: 規則の種類ごとに、1000 年・9999 年の�
           () => schedule.dayInfoOn(day).reason,
         ])
           outcome(f);
-        // 判定の例外は、範囲の外の日を見るときの out-of-range だけ（その日の判定に、暦日として存在しない日が要る）
+        // The only error of a judgement is out-of-range when it looks at a day outside the range (the judgement
+        // of that day needs a day that does not exist as a calendar date)
         assert.ok(
           ["value", "out-of-range"].includes(outcome(() => calendar.isBusinessDay(day))),
           label,

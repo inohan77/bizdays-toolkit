@@ -1,17 +1,21 @@
 /**
- * 性能の比較（CI の bench ジョブ）。公開済みの前のバージョンと今回の dist を、同じ機械で scripts/bench.ts にかけた
- * 結果（JSON）を比べ、比率を表にする。
+ * Performance comparison (the bench job of CI). Compares the results (JSON) of scripts/bench.ts for the
+ * previous published version and for this dist, measured on the same machine, and prints the ratios as a table.
  *
- * ランナーの性能は実行ごとに数十%ぶれるので、絶対値では判定しない。同じ実行の中で測った 2 つの結果の
- * 比率だけを見て、どれかの計測が前のバージョンの RATIO 倍より遅くなったら失敗にする（アルゴリズムの悪化だけを捉える）。
- * 絶対値は記録として表に残す（GitHub の Job Summary に書くには、出力を $GITHUB_STEP_SUMMARY に渡す）。
+ * Runner performance varies by tens of percent between runs, so absolute values are not judged. Only the ratio
+ * of two results measured in the same run is examined, and the job fails when a measurement is more than RATIO
+ * times slower than the previous version (to catch only algorithmic degradation).
+ * Absolute values stay in the table as a record (pass the output to $GITHUB_STEP_SUMMARY for the Job Summary).
  *
- * 正しさのために遅くなることを受け入れるバージョンは、開発の記録（docs/development-log.md。CHANGELOG.md の同じ節も読む）の今のバージョン（または [Unreleased]）に、
- * 上限を超える計測ごとに、許可の行「- 性能の退行: <計測の名前> は <数>x まで受け入れる（<理由>）」を書く（scripts/bench-allowance.ts）。
- * 上限を超えた計測のすべてに許可の行があり、測った比率が書いた倍率以下なら、表に記録して合格にする（RELEASING.md の
- * 「品質の仕組みの理由」の「前のバージョンと比べる」）。「性能の退行」という言葉があるだけでは、許可にならない。
+ * A version that accepts being slower for correctness writes, in the development log (docs/development-log.md;
+ * the same section of CHANGELOG.md is read too) of the current version (or [Unreleased]), one allowance line per
+ * measurement over the limit (the format is in scripts/bench-allowance.ts).
+ * When every measurement over the limit has an allowance line and the measured ratio is at most the written
+ * one, the result is recorded in the table and passes (RELEASING.md, reasons for the quality mechanisms,
+ * "compare with the previous version"). The mere words of the prefix are not an allowance.
  *
- * 使い方: node scripts/bench-compare.ts <base.json> <head.json> [--ratio 2] [--base-label <label>] [--head-label <label>]
+ * Usage: node scripts/bench-compare.ts <base.json> <head.json> [--ratio 2] [--base-label <label>]
+ *        [--head-label <label>]
  */
 
 import "./strict-warnings.ts";
@@ -33,7 +37,7 @@ if (files.length !== 2) {
 }
 const ratioText = argValue("--ratio", "2");
 const ratioLimit = Number(ratioText);
-// 数でない値は比べる条件がすべて偽になり、黙って合格するので使い方の誤りにする
+// A value that is not a number makes every comparison false and passes silently, so it is a usage error
 if (ratioText.trim() === "" || !Number.isFinite(ratioLimit) || ratioLimit <= 1) {
   console.error(`--ratio: invalid value ${JSON.stringify(ratioText)} (a number greater than 1)`);
   process.exit(2);
@@ -52,7 +56,7 @@ const format = (ms: number): string =>
 
 const lines = [`| 計測 | ${baseLabel} | ${headLabel} | 比率 |`, "| --- | ---: | ---: | ---: |"];
 let worst = 0;
-/** 上限を超えた計測（名前と比率） */
+/** Measurements over the limit (name and ratio) */
 const exceeded: { name: string; ratio: number }[] = [];
 for (const name of Object.keys(head)) {
   const b = base[name];
@@ -72,7 +76,10 @@ lines.push(
   `最も遅くなった計測の比率: ${worst.toFixed(2)}x（上限 ${ratioLimit}x。ランナーの性能のぶれは比率には現れにくい）`,
 );
 console.log(lines.join("\n"));
-/** 今のバージョンと [Unreleased] の記録の節（docs/development-log.md と CHANGELOG.md。scripts/release-sections.ts） */
+/**
+ * The log sections of the current version and of [Unreleased] (docs/development-log.md and CHANGELOG.md;
+ * scripts/release-sections.ts)
+ */
 function noteSections(): string[] {
   let version: string;
   try {

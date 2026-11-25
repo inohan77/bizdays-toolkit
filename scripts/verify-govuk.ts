@@ -1,22 +1,29 @@
 /**
- * GOV.UK の bank holidays とライブラリの計算結果を、日付と名称で照合する（英国）。
+ * Verifies the library's results against the bank holidays of GOV.UK, by date and name (UK).
  *
- *   pnpm verify:govuk                    … GOV.UK から取得して照合
- *   pnpm verify:govuk --file <path>      … 手元の JSON（https://www.gov.uk/bank-holidays.json と同じ形）で照合
- *   pnpm verify:govuk --write            … 照合に成功したらテスト用フィクスチャを更新
- *   pnpm verify:govuk --report <path>    … 結果を Markdown で書き出す（監視のワークフローが issue の本文に使う）
- *   pnpm verify:govuk --skip-welsh       … ウェールズ語の名称の照合を飛ばす（翻訳ファイルを取得しない）
- *   pnpm verify:govuk --simulate         … 取得したデータに架空の祝日を 1 件足して照合する（監視のワークフローの差分の経路を確かめる。--write とは併用できない）
+ *   pnpm verify:govuk                    ... fetch from GOV.UK and verify
+ *   pnpm verify:govuk --file <path>      ... verify with a local JSON (same shape as
+ *                                            https://www.gov.uk/bank-holidays.json)
+ *   pnpm verify:govuk --write            ... on success, update the test fixture
+ *   pnpm verify:govuk --report <path>    ... write the result as Markdown (the watch workflow uses it as issue body)
+ *   pnpm verify:govuk --skip-welsh       ... skip the verification of Welsh names (the translation file is not
+ *                                            fetched)
+ *   pnpm verify:govuk --simulate         ... add one fictitious holiday to the fetched data and verify (checks the
+ *                                            difference path of the watch workflow; cannot be combined with
+ *                                            --write)
  *
- * 照合すること:
- * - GOV.UK に載っている年の日付と名称が、ライブラリの計算結果と一致するか（England・Wales・Scotland・Northern Ireland）
- * - GOV.UK に CONFIRMED_THROUGH より後の年が載っていないか（載ったら src/uk/rules.ts の CONFIRMED_THROUGH を上げる）
- * - フィクスチャ（test/fixtures/govuk-bank-holidays.json）と GOV.UK の内容が同じか
- * - Wales の祝日のウェールズ語の名称が、GOV.UK のウェールズ語版の表記（alphagov/frontend の翻訳ファイル）と一致するか
+ * Verified:
+ * - the dates and names of the years on GOV.UK equal the library's results (England, Wales, Scotland, Northern
+ *   Ireland)
+ * - GOV.UK has no year after CONFIRMED_THROUGH (when it does, raise CONFIRMED_THROUGH of src/uk/rules.ts)
+ * - the fixture (test/fixtures/govuk-bank-holidays.json) equals GOV.UK
+ * - the Welsh names of the holidays of Wales equal the Welsh version of GOV.UK (the translation file of
+ *   alphagov/frontend)
  *
- * GOV.UK の JSON は古い年が消えていくので、フィクスチャの古い年は --write でも残す（GOV.UK に載っている年だけを置き換える）。
+ * Old years disappear from the JSON of GOV.UK, so the old years of the fixture stay even with --write (only the
+ * years on GOV.UK are replaced).
  *
- * 終了コード: 0 = 一致、1 = 差分あり、2 = 取得・解析の失敗（監視が機能していない）
+ * Exit code: 0 = equal, 1 = differences, 2 = failed fetch or parse (the watch is not working)
  */
 
 import "./strict-warnings.ts";
@@ -25,7 +32,8 @@ import { fileURLToPath } from "node:url";
 import type { Holiday } from "../src/core/types.ts";
 import { england, northernIreland, scotland, wales } from "../src/uk/index.ts";
 
-// 提供元の項目を使う（英国の提供元はどれも同じ値。モジュールの定数 confirmedThrough は非推奨）
+// The provider's property is used (the same value for every UK provider; the module constant confirmedThrough is
+// deprecated)
 const confirmedThrough = england.confirmedThrough!;
 
 const JSON_URL = "https://www.gov.uk/bank-holidays.json";
@@ -62,10 +70,13 @@ const write = args.includes("--write");
 const skipWelsh = args.includes("--skip-welsh");
 const simulate = args.includes("--simulate");
 if (simulate && write) throw new Error("--simulate cannot be combined with --write");
-/** 今日の日付（日本時間。報告書・フィクスチャの「取得」の日付。issue のコメントの日付と同じ基準） */
+/**
+ * Today's date (Japan time; the "fetched" date of reports and fixtures, on the same basis as the dates of issue
+ * comments)
+ */
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
 
-/** 一時的な失敗で監視が issue を立てないよう、3 回まで試す */
+/** Tries up to 3 times, so that a temporary failure does not make the watch open an issue */
 async function fetchText(url: string): Promise<string> {
   let last: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -81,7 +92,7 @@ async function fetchText(url: string): Promise<string> {
   throw last instanceof Error ? last : new Error(String(last));
 }
 
-/** GOV.UK の JSON を区分ごとの日付順の一覧にする（照合に使わない項目は捨てる） */
+/** Turns the JSON of GOV.UK into date-ordered lists per division (properties not used for verification are dropped) */
 function parseGovuk(text: string): Record<Division, Event[]> {
   const data = JSON.parse(text) as Record<string, { events?: unknown }>;
   const out = {} as Record<Division, Event[]>;
@@ -103,7 +114,7 @@ function parseGovuk(text: string): Record<Division, Event[]> {
   return out;
 }
 
-/** 翻訳ファイル（YAML）の bank_holidays の節を読む（キー: 値 の 1 行ずつの形だけを扱う） */
+/** Reads the bank_holidays section of the translation file (YAML) (only lines of the form key: value) */
 function parseLocale(text: string): Map<string, string> {
   const map = new Map<string, string>();
   let section: string | undefined;
@@ -134,7 +145,8 @@ const addSection = (title: string, lines: string[]): void => {
 async function main(): Promise<number> {
   const remote = parseGovuk(file ? readFileSync(file, "utf8") : await fetchText(JSON_URL));
   if (simulate) {
-    // 最後の年の 10 月 1 日に、Scotland だけの架空の祝日を足す（ライブラリ・フィクスチャの両方と食い違う）
+    // Adds a fictitious holiday of Scotland only on October 1 of the last year (differs from both the library
+    // and the fixture)
     const last = remote.scotland.at(-1)!.date.slice(0, 4);
     remote.scotland.push({ date: `${last}-10-01`, title: "Simulated bank holiday", notes: "" });
     remote.scotland.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -145,7 +157,7 @@ async function main(): Promise<number> {
   const fixture = JSON.parse(readFileSync(FIXTURE, "utf8")) as Fixture;
   const welshFixture = JSON.parse(readFileSync(WELSH_FIXTURE, "utf8")) as WelshFixture;
 
-  // 1. ライブラリの計算結果との照合
+  // 1. Verification against the library's results
   const providers: [string, Division, (year: number) => readonly Holiday[]][] = [
     ["England", "england-and-wales", (y) => england.holidaysInYear(y)],
     ["Wales", "england-and-wales", (y) => wales.holidaysInYear(y)],
@@ -169,14 +181,14 @@ async function main(): Promise<number> {
   }
   addSection("Library does not match GOV.UK", mismatches);
 
-  // 2. 公表済みの年
+  // 2. Published years
   const newYears = remoteYears.filter((y) => y > confirmedThrough);
   addSection(
     "New years published by GOV.UK",
     newYears.map((y) => `${y} (CONFIRMED_THROUGH is ${confirmedThrough})`),
   );
 
-  // 3. フィクスチャとの照合
+  // 3. Verification against the fixture
   const fixtureDiffs: string[] = [];
   for (const division of DIVISIONS) {
     const inFixture = fixture.divisions[division]
@@ -188,7 +200,7 @@ async function main(): Promise<number> {
   }
   addSection("Fixture differs from GOV.UK (update with --write)", fixtureDiffs);
 
-  // 4. ウェールズ語の名称
+  // 4. Welsh names
   const welshDiffs: string[] = [];
   let welshNames: Record<string, string> | undefined;
   if (!skipWelsh) {
@@ -247,7 +259,8 @@ function writeFixtures(
   remoteYears: readonly number[],
   welshNames: Record<string, string> | undefined,
 ): void {
-  // 内容が変わった年（新しく載った年を含む）だけ、出典を書き換える（変わっていない年の差分を出さないため）
+  // The source is rewritten only for years whose content changed (including newly listed years) (so that
+  // unchanged years show no difference)
   const yearKey = (events: readonly Event[], year: number): string =>
     JSON.stringify(events.filter((e) => yearOf(e.date) === year));
   const changedYears = remoteYears.filter((year) =>

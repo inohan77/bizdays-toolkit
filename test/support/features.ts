@@ -1,12 +1,18 @@
-// 設定から「特徴」の文字列の集合を取り出す（生成範囲の包含の検査。test/tools/generator-features.test.ts）。
-// 特徴は、生成器が作った設定の形を区別する細かさで付ける: 規則の形・キー・値の要素・配列の長さ・日付の年代・有効期間の年・
-// 入力の誤りの種類。旧名で書いた設定は新しい名前にそろえてから付ける（値の旧名 "national" などはそのまま残す）。
+// Extracts the set of "feature" strings from options (the inclusion check of the generated range;
+// test/tools/generator-features.test.ts).
+// Features are as fine as needed to tell apart the forms of options the generator makes: rule shape, keys,
+// elements of values, array lengths, the era of dates, the years of effective periods, the kind of wrong input.
+// Options written with old names are brought to the new names first (old values such as "national" stay).
 
+import { DIAGNOSTIC_YEARS } from "../../src/core/diagnose.ts";
 import { RENAMED_KEYS } from "../../src/core/renamed.ts";
 
 type Obj = Record<string, unknown>;
 
-/** 規則の形（判別のキー → 公開の型の名前）。目録の SHAPES と同じ対応（test/tools/catalog.test.ts が突き合わせる） */
+/**
+ * Rule shapes (identifying key → name of the public type). The same mapping as SHAPES of the catalog
+ * (test/tools/catalog.test.ts compares them)
+ */
 export const PATTERN_OF: Readonly<Record<string, string>> = {
   weekday: "WeekdayPattern",
   dayOfMonth: "DayOfMonthPattern",
@@ -18,7 +24,7 @@ export const PATTERN_OF: Readonly<Record<string, string>> = {
   dayBeforeHoliday: "DayBeforeHolidayPattern",
 };
 
-/** 提供元の名前（result-compare の設定は提供元を名前で持つ） → ID */
+/** Provider name (the options of result-compare keep providers by name) → ID */
 export const PROVIDER_IDS: Readonly<Record<string, string>> = {
   jp: "JP",
   england: "GB-ENG",
@@ -27,7 +33,7 @@ export const PROVIDER_IDS: Readonly<Record<string, string>> = {
   sg: "SG",
 };
 
-/** 提供元の名前 → 対応年（result-compare の設定は提供元を名前で持つ） */
+/** Provider name → supported years (the options of result-compare keep providers by name) */
 const PROVIDER_YEARS: Readonly<Record<string, readonly [number, number]>> = {
   jp: [1955, 2099],
   england: [1974, 2099],
@@ -39,7 +45,7 @@ const PROVIDER_YEARS: Readonly<Record<string, readonly [number, number]>> = {
 const RULE_LISTS = ["closedRecurringRules", "openRecurringRules", "recurringRules"] as const;
 const DATE_LISTS = ["closedDates", "openDates", "dates"] as const;
 const ANNUAL_LISTS = ["closedAnnualDates", "annualDates"] as const;
-/** 値の要素ごとに特徴を付ける規則のキー（ほかのキーは「ある」ことだけ） */
+/** The rule keys that get a feature per element of the value (other keys only get "present") */
 const VALUE_KEYS = new Set([
   "weekday",
   "nth",
@@ -58,7 +64,7 @@ const VALUE_KEYS = new Set([
 ]);
 
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
-/** 配列の長さ（4 以上はまとめる） */
+/** Array length (4 or more are merged) */
 const size = (n: number): string => (n >= 4 ? "4+" : String(n));
 const year = (d: unknown): string | undefined =>
   typeof d === "string" && /^\d{4}-/.test(d) ? d.slice(0, 4) : undefined;
@@ -68,7 +74,7 @@ const decade = (d: unknown): string | undefined => {
 };
 const weekdayOf = (d: string): number => new Date(`${d.slice(0, 10)}T00:00:00Z`).getUTCDay();
 
-/** 旧名のキーを新しい名前にする（places はその置き場所の改名） */
+/** Turns old-name keys into the new names (`places` are the rename places that apply) */
 function renameKeys(value: Obj, places: readonly string[]): Obj {
   const out: Obj = {};
   for (const [k, v] of Object.entries(value)) {
@@ -78,7 +84,10 @@ function renameKeys(value: Obj, places: readonly string[]): Obj {
   return out;
 }
 
-/** 設定の旧名を新しい名前にそろえる（kind はスケジュールかカレンダーか。値の旧名 "weekday" も読み替える） */
+/**
+ * Brings the old names of options to the new names (`kind`: schedule or calendar; the old value "weekday" is
+ * translated too)
+ */
 export function normalizeOptions(options: Obj, kind: "calendar" | "schedule"): Obj {
   const o = renameKeys(options, ["source", kind]);
   for (const k of RULE_LISTS)
@@ -95,7 +104,7 @@ const providerId = (p: unknown): string =>
       ? (p["id"] as string)
       : "?";
 
-/** 設定の提供元の ID（和集合は + でつなぐ。提供元がなければ "none"） */
+/** The IDs of the providers of options (a union is joined with +; "none" without a provider) */
 export function providerKey(options: Obj): string {
   const p = options["holidayProvider"] ?? options["holidays"];
   if (p === undefined) return "none";
@@ -108,15 +117,19 @@ const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 const lcm = (a: number, b: number): number => (a / gcd(a, b)) * b;
 
 /**
- * 診断の走査の基準の範囲（"YYYY-MM-DD" の両端）。有効期間で広げる前の範囲で、src/core/diagnose.ts の scanWindow と同じ決め方:
- * 提供元があれば対応年（outOfRangePolicy が "ignore" なら和、ほかは共通部分。200 年を超えれば 1900〜2099 年に絞る）、
- * なければ 2001 年から、28 年と規則の周期（interval・cycle）の最小公倍数（上限 200 年）。docs/decisions.md の 31 番
+ * The base range of the diagnostics' scan (both ends as "YYYY-MM-DD"). The range before widening by effective
+ * periods, decided as in scanWindow of src/core/diagnose.ts and clipped to the diagnostic range
+ * (DIAGNOSTIC_YEARS): with providers the supported years (the union for outOfRangePolicy "ignore", otherwise
+ * the intersection); without, from 2001 for the least common multiple of 28 years and the rules' cycles
+ * (interval, cycle), or the whole diagnostic range when that does not fit into it. undefined when no day of the
+ * diagnostic range can be judged. docs/decisions.md #31
  */
 export function diagnoseRangeOf(options: Obj): { from: string; to: string } | undefined {
+  const whole = { from: `${DIAGNOSTIC_YEARS.from}-01-01`, to: `${DIAGNOSTIC_YEARS.to}-12-31` };
   const p = options["holidayProvider"] ?? options["holidays"];
   const list = p === undefined ? [] : Array.isArray(p) ? p : [p];
   if (list.length === 0) {
-    const max = 366 * 200;
+    const max = dayNumber(whole.to) - dayNumber(whole.from) + 1;
     let days = 7;
     for (const k of RULE_LISTS)
       for (const r of Array.isArray(options[k]) ? (options[k] as unknown[]) : [])
@@ -125,8 +138,9 @@ export function diagnoseRangeOf(options: Obj): { from: string; to: string } | un
           if (typeof r["cycle"] === "number") days = Math.min(lcm(days, r["cycle"]), max);
         }
     const from = dayNumber("2001-01-01");
-    const span = Math.min(lcm(dayNumber("2028-12-31") - from + 1, days), max);
-    return { from: "2001-01-01", to: new Date((from + span - 1) * DAY).toISOString().slice(0, 10) };
+    const to = from + Math.min(lcm(dayNumber("2028-12-31") - from + 1, days), max) - 1;
+    if (to > dayNumber(whole.to)) return whole;
+    return { from: "2001-01-01", to: new Date(to * DAY).toISOString().slice(0, 10) };
   }
   const years = list.map((x): readonly [number, number] => {
     if (typeof x === "string") return PROVIDER_YEARS[x] ?? [0, -1];
@@ -136,15 +150,15 @@ export function diagnoseRangeOf(options: Obj): { from: string; to: string } | un
     return y ? [y.from, y.to] : [0, -1];
   });
   const ignore = (options["outOfRangePolicy"] ?? options["outOfRange"]) === "ignore";
-  let from = ignore ? Math.min(...years.map((y) => y[0])) : Math.max(...years.map((y) => y[0]));
-  let to = ignore ? Math.max(...years.map((y) => y[1])) : Math.min(...years.map((y) => y[1]));
+  const from = Math.max(
+    ignore ? Math.min(...years.map((y) => y[0])) : Math.max(...years.map((y) => y[0])),
+    DIAGNOSTIC_YEARS.from,
+  );
+  const to = Math.min(
+    ignore ? Math.max(...years.map((y) => y[1])) : Math.min(...years.map((y) => y[1])),
+    DIAGNOSTIC_YEARS.to,
+  );
   if (from > to) return undefined;
-  // 200 年を超える範囲は 1900〜2099 年に絞り、重ならなければ先頭の 200 年にする（src/core/diagnose.ts の clipYears）
-  if (to - from + 1 > 200) {
-    const a = Math.max(from, 1900);
-    const b = Math.min(to, 2099);
-    [from, to] = a <= b ? [a, b] : [from, from + 199];
-  }
   return { from: `${from}-01-01`, to: `${to}-12-31` };
 }
 
@@ -155,7 +169,7 @@ function addValues(out: Set<string>, prefix: string, value: unknown): void {
   } else out.add(`${prefix}=${String(value)}`);
 }
 
-/** 繰り返しの規則 1 つの特徴 */
+/** The features of one recurring rule */
 function ruleFeatures(
   out: Set<string>,
   list: string,
@@ -171,7 +185,7 @@ function ruleFeatures(
     if (VALUE_KEYS.has(k)) addValues(out, `${pattern}.${k}`, v);
     else out.add(`${pattern}.${k}=present`);
   }
-  // 有効期間（年・形・年をまたぐか）
+  // The effective period (years, form, across a year end or not)
   const from = year(rule["effectiveFrom"]);
   const to = year(rule["effectiveTo"]);
   if (from !== undefined) out.add(`effectiveFrom.year=${from}`);
@@ -181,7 +195,7 @@ function ruleFeatures(
       `effectivePeriod=${from !== undefined && to !== undefined ? "both" : from !== undefined ? "from-only" : "to-only"}`,
     );
   if (from !== undefined && to !== undefined && from !== to) out.add("effectivePeriod=spans-years");
-  // 診断の走査の範囲との関係（範囲の端をまたぐ・範囲の外に丸ごとある）
+  // The relation to the diagnostics' scan range (across an end of the range, entirely outside it)
   const f = rule["effectiveFrom"] as string | undefined;
   const t = rule["effectiveTo"] as string | undefined;
   if (range !== undefined && (f !== undefined || t !== undefined)) {
@@ -192,14 +206,15 @@ function ruleFeatures(
     if ((f !== undefined && f > range.to) || (t !== undefined && t < range.from))
       out.add("effectivePeriod.scanRange=outside");
   }
-  // 周期の最後の日（positions に cycle を含む）
+  // The last day of the cycle (positions includes cycle)
   if (
     typeof rule["cycle"] === "number" &&
     Array.isArray(rule["positions"]) &&
     (rule["positions"] as unknown[]).includes(rule["cycle"])
   )
     out.add("CyclePattern.positions=last");
-  // 入力の誤り（作成が invalid-option になる設定。前のバージョンとエラーコードをそろえる比較に使う）
+  // A wrong input (options whose creation gives invalid-option; used for the comparison that aligns error codes
+  // with the previous version)
   if (
     kind === "schedule" &&
     ("businessDayOfMonth" in rule || "businessDayOfWeek" in rule) &&
@@ -217,7 +232,7 @@ function ruleFeatures(
   }
 }
 
-/** 毎年の月日 1 つの特徴 */
+/** The features of one annual date */
 function annualFeatures(out: Set<string>, list: string, value: unknown): void {
   if (typeof value === "string") {
     out.add(`${list}.form=string`);
@@ -237,7 +252,7 @@ function annualFeatures(out: Set<string>, list: string, value: unknown): void {
   if ("name" in value) out.add(`${list}.name=present`);
 }
 
-/** 個別の日付 1 つの特徴 */
+/** The features of one specific date */
 function dateFeatures(out: Set<string>, list: string, value: unknown): void {
   const from =
     typeof value === "string" ? value : isObj(value) ? (value["from"] ?? value["date"]) : undefined;
@@ -250,7 +265,7 @@ function dateFeatures(out: Set<string>, list: string, value: unknown): void {
 }
 
 /**
- * 設定の特徴。kind はスケジュールかカレンダーか（旧名の読み替えに使う）
+ * The features of options. `kind`: schedule or calendar (used for translating old names)
  */
 export function featuresOf(options: Obj, kind: "calendar" | "schedule" = "calendar"): Set<string> {
   const out = new Set<string>();
@@ -291,8 +306,9 @@ export function featuresOf(options: Obj, kind: "calendar" | "schedule" = "calend
 }
 
 /**
- * 問い合わせた日付の範囲の特徴（提供元ごとに、範囲が覆う年代・数十年にわたるか・診断の走査の範囲の外を含むか）。
- * from・to は "YYYY-MM-DD"、range は diagnoseRangeOf の結果
+ * The features of the range of dates asked about (per provider: the eras the range covers, whether it spans
+ * decades, whether it includes days outside the diagnostics' scan range).
+ * from and to are "YYYY-MM-DD"; range is the result of diagnoseRangeOf
  */
 export function scanFeatures(
   provider: string,

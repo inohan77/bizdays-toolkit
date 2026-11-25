@@ -1,4 +1,5 @@
-// Cloudflare Workers（workerd）で dist を確かめる Worker（scripts/test-workerd.ts が起動する）。確認の中身は smoke.mjs
+// The Worker that checks dist in Cloudflare Workers (workerd) (started by scripts/test-workerd.ts). The checks
+// themselves are in smoke.mjs
 import * as root from "../../dist/index.js";
 import * as diagnose from "../../dist/diagnose/index.js";
 import * as jp from "../../dist/jp/index.js";

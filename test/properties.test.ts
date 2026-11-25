@@ -1,9 +1,9 @@
 /**
- * 性質のテスト。種を固定した乱数で日付とカレンダーの設定を大量に作り、
- * 「どの入力でも成り立つべき性質」を確かめる。
+ * Property tests. With seeded random numbers, many dates and calendar options are built, and "properties that
+ * must hold for any input" are checked.
  *
- * 失敗したときは、種・試行の番号・入力をメッセージに出すので、同じ条件で再現できる。
- * 種を変えて試すには: PROPERTY_SEED=123 node --test test/properties.test.ts
+ * A failure prints the seed, the trial number and the input, so it can be reproduced under the same conditions.
+ * To try another seed: PROPERTY_SEED=123 node --test test/properties.test.ts
  */
 
 import assert from "node:assert/strict";
@@ -35,15 +35,18 @@ import {
 const SEED = intEnv("PROPERTY_SEED", PROPERTY.seed);
 const RUNS = PROPERTY.runs;
 /**
- * 営業日が見つからない試行を飛ばしてよい上限（試行の 1 割）。目録の規則で営業日が（ほとんど）ないカレンダーもでき、
- * その試行は性質の前提を満たさないので飛ばす。飛ばした試行が 1 割を超えると、性質を確かめた試行が 9 割を切るので失敗にする
+ * The limit of trials that may be skipped because no business day is found (10% of the trials). The catalog
+ * rules can produce calendars with (almost) no business day; such a trial does not meet the premise of the
+ * property and is skipped. With more than 10% skipped, fewer than 90% of the trials checked the property, which
+ * fails
  */
 const SKIP_LIMIT = RUNS / 10;
 
 /**
- * 性質の設定を作る道具。設定は、性質の名前から決まる種の乱数の列で作り、日付などを引く乱数（g）とは分ける。
- * 使った作り方を覚えておき、test/support/sites.ts の PROPERTY_CONFIGS と同じかを確かめる
- * （生成範囲の包含の検査が、性質と同じ設定を同じ並びで作るため）
+ * The tool that builds a property's options. Options come from a random sequence seeded by the property's name,
+ * apart from the generator (g) that draws dates and so on.
+ * The way used is remembered and must equal PROPERTY_CONFIGS of test/support/sites.ts (the inclusion check of
+ * the generated range builds the same options in the same order as the property)
  */
 interface Configs {
   calendar(): { calendar: Calendar; describe: string };
@@ -83,14 +86,17 @@ test("飛ばした試行の上限: 件数が上限以下なら件数の行を返
   assert.throws(() => checkSkipped(1, 300, 0, "理由"), /上限（0）を超えた/);
 });
 
-/** 登録した性質の名前（PROPERTY_CONFIGS に古い名前が残っていないかを、ファイルの最後のテストで確かめる） */
+/**
+ * The names of the registered properties (the last test of the file checks that no stale name is left in
+ * PROPERTY_CONFIGS)
+ */
 const declared = new Set<string>();
 
-/** 性質を RUNS 回確かめる。失敗したら種・試行・入力を出す */
+/** Checks a property RUNS times. A failure prints the seed, the trial and the input */
 function property(name: string, check: (g: Gen, c: Configs) => string | void): void {
   declared.add(name);
   test(`性質: ${name}`, () => {
-    // 日付などを引く乱数と、設定を作る乱数（性質の名前から決まる種）を分ける
+    // The generator for dates and so on is apart from the one for options (seeded by the property's name)
     const g = propertyGen(random(SEED));
     const used = new Set<PropertyConfigKind>();
     const made = { count: 0 };
@@ -101,7 +107,8 @@ function property(name: string, check: (g: Gen, c: Configs) => string | void): v
       try {
         context = check(g, c) ?? "";
       } catch (error) {
-        // 目録の規則で、営業日が（ほとんど）ないカレンダーもできる。その試行は性質の前提を満たさないので数えずに飛ばす
+        // The catalog rules can produce calendars with (almost) no business day. Such a trial does not meet the
+        // premise of the property and is skipped without being counted
         if ((error as { code?: unknown } | null)?.code === "no-business-day") {
           skipped++;
           continue;
@@ -110,7 +117,8 @@ function property(name: string, check: (g: Gen, c: Configs) => string | void): v
         assert.fail(`seed=${SEED} run=${run} ${context}\n${detail}`);
       }
     }
-    // 飛ばした試行の件数はいつも出し、上限を超えたら失敗にする（黙って飛ばさない。RELEASING.md の「品質の確認」）
+    // The number of skipped trials is always printed, and above the limit it fails (never silently skipped. The
+    // quality checks of RELEASING.md)
     let line: string;
     try {
       line = checkSkipped(skipped, RUNS, SKIP_LIMIT, "営業日が見つからない設定");
@@ -118,13 +126,15 @@ function property(name: string, check: (g: Gen, c: Configs) => string | void): v
       assert.fail((error as Error).message);
     }
     console.log(`# ${name}: ${line}`);
-    // 使った設定の作り方が、生成範囲の包含の検査の一覧（PROPERTY_CONFIGS）と同じ
+    // The way the options were built equals the list of the inclusion check of the generated range
+    // (PROPERTY_CONFIGS)
     assert.deepEqual(
       [...used],
       PROPERTY_CONFIGS[name] === undefined ? [] : [PROPERTY_CONFIGS[name]],
       `性質「${name}」の設定の作り方が test/support/sites.ts の PROPERTY_CONFIGS と違う`,
     );
-    // 設定を作る性質は、1 回の試行で 1 回だけ作る（生成範囲の検査は、試行の数だけ作ると数えている）
+    // A property that builds options builds them once per trial (the check of the generated range counts on one
+    // per trial)
     if (used.size > 0)
       assert.equal(
         made.count,
@@ -143,16 +153,17 @@ property(
     const n = g.int(1, 20);
     const onOrAfter = calendar.businessDayOnOrAfter(day);
     const context = `${describe} start=${day}（休業日） n=${n}`;
-    // +0 と +1 は同じ日（翌営業日）で、n ≥ 1 は「翌営業日から n − 1 営業日後」
+    // +0 and +1 are the same day (the next business day), and n ≥ 1 is "n − 1 business days after the next
+    // business day"
     assert.equal(calendar.addBusinessDays(day, 0), onOrAfter, context);
     assert.equal(
       calendar.addBusinessDays(day, n),
       calendar.addBusinessDays(onOrAfter, n - 1),
       context,
     );
-    // 休業日の起点は数えないので、diffBusinessDays は n − 1（decisions.md の 22 番）
+    // A closed starting day is not counted, so diffBusinessDays is n − 1 (decisions.md #22)
     assert.equal(calendar.diffBusinessDays(day, calendar.addBusinessDays(day, n)), n - 1, context);
-    // 負の方向は、前営業日を −1 と数える
+    // In the negative direction the previous business day counts as −1
     assert.equal(calendar.addBusinessDays(day, -1), calendar.previousBusinessDay(day), context);
     return context;
   },
@@ -182,7 +193,7 @@ property("営業日カレンダーと、同じ規則の真偽値のスケジュ�
 });
 
 // ------------------------------------------------------------
-// 繰り返しの規則と振替
+// Recurring rules and moves
 // ------------------------------------------------------------
 
 property("振替先は振替元より後の祝日でない日で、その間はすべて祝日", (g, c) => {
@@ -227,7 +238,7 @@ property("繰り返しの規則でも、営業日カレンダーと真偽値の�
 });
 
 // ------------------------------------------------------------
-// 月の計算と日付の調整
+// Month calculations and adjusting dates
 // ------------------------------------------------------------
 
 const CONVENTIONS = ["following", "preceding", "modified-following", "modified-preceding"] as const;
@@ -247,7 +258,8 @@ property("adjust の結果は営業日で、方法ごとの定義どおり。も
     if (convention === "following") assert.equal(result, following, c);
     if (convention === "preceding") assert.equal(result, preceding, c);
     if (convention === "modified-following") {
-      // 翌営業日が同じ月ならそれ、違えば同じ月の前営業日、それもなければ翌営業日
+      // The next business day when it is in the same month, otherwise the previous business day of the same
+      // month, otherwise the next business day
       const expected = following.startsWith(month)
         ? following
         : preceding.startsWith(month)
@@ -311,7 +323,8 @@ property("closingMonth は、日付が進むと同じか後の月になり、締
   const month = closingMonth(date, closingDay);
   const context = `date=${date} closingDay=${closingDay} month=${month}`;
   assert.ok(closingMonth(next, closingDay) >= month, context);
-  // 締め日（その月にない日は末日）を、結果の月と前の月で求めると、date はその間に入る
+  // With the closing days (the last day when the month lacks the day) of the resulting month and of the month
+  // before, `date` lies between them
   const closingOf = (m: string) => {
     const last = Number(addDays(monthOf(m, 1) + "-01", -1).slice(8));
     const d = closingDay === -1 || closingDay > last ? last : closingDay;
@@ -319,7 +332,7 @@ property("closingMonth は、日付が進むと同じか後の月になり、締
   };
   assert.ok(date <= closingOf(month), context);
   assert.ok(date > closingOf(monthOf(month, -1)), context);
-  // monthOf は足し算になる
+  // monthOf is additive
   const a = g.int(-30, 30);
   const b = g.int(-30, 30);
   assert.equal(monthOf(monthOf(date, a), b), monthOf(date, a + b), `${context} a=${a} b=${b}`);

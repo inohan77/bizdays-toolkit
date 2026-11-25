@@ -1,21 +1,21 @@
 /**
- * 検査のスクリプトの検査（scripts/tool-selftest.ts）の部品。スクリプトは pnpm check で動かさないので、表と例外の扱いを
- * ここに切り出し、test/tools/tool-selftest-parts.test.ts が確かめる。
+ * Parts of the check of the checking scripts (scripts/tool-selftest.ts). The script is not run by pnpm check, so
+ * the table and the error handling are here and checked by test/tools/tool-selftest-parts.test.ts.
  */
 
-/** Markdown の表のセルに入れる文字列（| は \| にし、改行は / にする。表の列がずれないため） */
+/** A string for a Markdown table cell (| becomes \|, a line break becomes /, so that the columns do not shift) */
 export function cell(text: string): string {
   return text.replaceAll("|", "\\|").replace(/\r?\n/g, " / ");
 }
 
-/** 例外の文（Error でない値が投げられても、String で文にする） */
+/** The text of an error (a thrown value that is not an Error becomes text with String) */
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 /**
- * ファイルを 1 つずつ写し、写すたびに copied に足す。途中で例外が出ても、そこまでに写したファイルは copied に残る
- * （例外はそのまま投げる。呼び出し側が、写したファイルの一覧を出してから失敗にする）
+ * Copies files one by one and adds each to `copied`. When an error occurs on the way, the files copied so far
+ * stay in `copied` (the error is rethrown; the caller prints the list of copied files and then fails)
  */
 export function copyEach(
   files: readonly string[],

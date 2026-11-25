@@ -1,4 +1,5 @@
-// 子プロセスの --import の値がファイルの URL になること（CI は Linux なので、Windows の絶対パスで止まる退行をここで捕まえる）
+// The value of --import for a child process is a file URL (CI runs on Linux, so the regression of stopping on a
+// Windows absolute path is caught here)
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";

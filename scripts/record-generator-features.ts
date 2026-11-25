@@ -1,33 +1,44 @@
 import "./strict-warnings.ts";
 /**
- * 生成器が実際に作った設定の特徴を記録する（test/fixtures/generator-features-0.30.3/ の作り方。
- * test/tools/generator-features.test.ts がこの記録との包含を確かめる）。
+ * Records the features of the options the generators actually produced (how test/fixtures/generator-features-0.30.3/
+ * is made; test/tools/generator-features.test.ts checks inclusion against this record).
  *
- * 記録の作り方: 指定したバージョン（--ref。既定 v0.30.3）の 3 つの生成器の呼び出し側を、そのバージョンのファイルのまま
- * （種と試行の数を変えずに）作業用ディレクトリで動かし、作成・診断の関数に渡された設定の特徴（test/support/features.ts の
- * featuresOf）と、作ったカレンダー・スケジュールに問い合わせた日付の範囲（scanFeatures）を集める。
+ * How a record is made: the three callers of the generators at a given version (--ref; default v0.30.3) run in a
+ * work directory as the files of that version (same seeds and numbers of trials), and the features of the options
+ * passed to the creating and diagnosing functions (featuresOf of test/support/features.ts) and the date ranges
+ * asked of the created calendars and schedules (scanFeatures) are collected.
  *
- * - properties      … test/properties.test.ts を node で実行する
- * - diagnose-properties … test/diagnose-properties.test.ts を node で実行する
- * - result-compare  … scripts/result-compare.ts を、そのバージョンの公開時の比べ方（前のバージョンとの比較と、0.22.2 との旧名の比較）で
- *   2 回実行する（比べるバージョンのパッケージは作業用ディレクトリの仮のもので、バージョンの番号だけを持つ）
+ * - properties      ... runs test/properties.test.ts with node
+ * - diagnose-properties ... runs test/diagnose-properties.test.ts with node
+ * - result-compare  ... runs scripts/result-compare.ts twice, the way that version was compared at publication
+ *   (with the previous version, and the old-name comparison with 0.22.2) (the compared packages are stand-ins in
+ *   the work directory that have only a version number)
  *
- * 呼び出し側が読み込む src/・dist/ は、読み込みのフック（module.registerHooks）で、このリポジトリの今の src/ を包んだ部品に
- * 差し替える（設定を記録してから本物に渡す）。判定の結果は使わないので、テストの合否は記録に影響しない。
+ * The src/ and dist/ the callers load are replaced, with a load hook (module.registerHooks), by parts wrapping the
+ * current src/ of this repository (they record the options and pass them on to the real thing). Results of
+ * judgements are not used, so passing or failing tests do not affect the record.
  *
- * 使い方:
- *   node scripts/record-generator-features.ts --update --ref v0.30.3  # 0.30.3 を記録して test/fixtures/generator-features-0.30.3/ に書く
- *   node scripts/record-generator-features.ts --ref v0.30.4 --check   # v0.30.4 の呼び出し側が記録の特徴を作るかを確かめる
- *   node scripts/record-generator-features.ts --worktree --check      # 作業ツリーの呼び出し側で同じことを確かめる（CI の generator-features ジョブ）
- * --check は、記録との差を test/tools/generator-features.test.ts と同じ関数（test/support/features-compare.ts の missingFeatures）で比べ、
- * 落ちた特徴があれば終了コード 1。呼び出し側ごとに拾えた特徴が記録の半分に満たなければ、比べる前に失敗にする
- * （呼び出し側が関数の呼び方を変えて、差し替えた部品が何も拾わないまま合格するのを防ぐ）。--worktree は作業ツリーのファイル（コミットしていない変更を含む）を使う。--ref HEAD は使い方の誤り（git の HEAD はコミットを指すため）。
- * 記録はコミットしておき、作り直す（--update）のは比べ方（特徴の取り出し方。test/support/features.ts）を変えたときだけにする
- * （RELEASING.md の「品質の確認」）。
- * --update は --ref v0.30.3 でだけ動く（今のバージョンから作ると、包含の検査が自分自身との比較になるため）。
- * 呼び出し側は strict-warnings を読み込んで動かし、Node.js の警告が出たら失敗にする（フックの警告を見落とさないため）。
- * --update では呼び出し側の終了コード 0 を必須にする（途中で止まった呼び出し側の特徴で基準が小さくなるのを防ぐ）。
- * --check では終了コードを見ない（途中で止まれば、拾えない特徴が落ちた特徴として出て、比べた結果が失敗になる）。
+ * Usage:
+ *   node scripts/record-generator-features.ts --update --ref v0.30.3  # record 0.30.3 into the fixture directory
+ *   node scripts/record-generator-features.ts --ref v0.30.4 --check   # do the callers of v0.30.4 produce the
+ *                                                                     # recorded features?
+ *   node scripts/record-generator-features.ts --worktree --check      # the same with the callers of the work tree
+ *                                                                     # (the generator-features job of CI)
+ * --check compares with the record using the same function as test/tools/generator-features.test.ts
+ * (missingFeatures of test/support/features-compare.ts) and exits with 1 when a feature was lost. When a caller
+ * yields fewer than half of the recorded features, it fails before comparing (so that a caller that changed how
+ * it calls the functions does not pass with the replaced parts catching nothing). --worktree uses the files of
+ * the work tree (including uncommitted changes). --ref HEAD is a usage error (HEAD of git points at a commit).
+ * The record is committed and is rebuilt (--update) only when the way of comparing (how features are extracted;
+ * test/support/features.ts) changes (the quality checks of RELEASING.md).
+ * --update works only with --ref v0.30.3 (made from the current version, the inclusion check would compare the
+ * generators with themselves).
+ * The callers run with strict-warnings loaded and a Node.js warning fails (so that a warning of the hook is not
+ * missed).
+ * --update requires exit code 0 of the callers (so that the features of a caller that stopped half-way do not
+ * shrink the baseline).
+ * --check does not look at the exit code (a caller that stops half-way loses features, which shows as lost
+ * features and fails the comparison).
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
@@ -63,7 +74,8 @@ const check = args.includes("--check");
 const update = args.includes("--update");
 const usage =
   "usage: node scripts/record-generator-features.ts (--update --ref v0.30.3 | --check (--ref <git ref> | --worktree)) [--out <dir>]";
-// HEAD は git ではコミットを指すので、作業ツリーを指す名前には使わない（取り違えを防ぐため、黙って読み替えずに案内する）
+// HEAD points at a commit in git, so it is not used as a name for the work tree (to prevent a mix-up it is not
+// silently reinterpreted; a hint is printed)
 if (argValue("--ref") === "HEAD") {
   console.error(
     "--ref HEAD is not accepted: use --worktree to check the working tree (uncommitted files included)",
@@ -76,7 +88,8 @@ if (check === update || (givenRef === undefined) === !worktree || (update && wor
   console.error(usage);
   process.exit(2);
 }
-// 参照は最初に確かめる（存在しない参照で git show などのエラーのまま止まらず、何を指せばよいかを案内する）
+// The ref is checked first (instead of stopping with an error of git show or the like for a ref that does not
+// exist, a hint says what to point at)
 if (givenRef !== undefined) {
   const found = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${givenRef}^{commit}`], {
     cwd: resolve("."),
@@ -90,11 +103,15 @@ if (givenRef !== undefined) {
     process.exit(2);
   }
 }
-/** 呼び出し側を読む git の参照（作業ツリーのときは使わない。作業ツリーは真偽値 worktree で持ち、"worktree" という名前の参照と取り違えない） */
+/**
+ * The git ref from which the callers are read (unused for the work tree; the work tree is the boolean `worktree`,
+ * so it cannot be confused with a ref named "worktree")
+ */
 const ref = givenRef ?? "";
-/** 報告に出す名前 */
+/** The name shown in the report */
 const label = worktree ? "作業ツリー" : ref;
-// 記録は基準のバージョン（0.30.3）からだけ作る。今のバージョンから作ると、包含の検査が今の生成器と自分自身の比較になって意味を失う
+// A record is made only from the baseline version (0.30.3). Made from the current version, the inclusion check
+// would compare the current generators with themselves and lose its meaning
 if (update && ref !== RECORD_REF) {
   console.error(`--update records only from ${RECORD_REF} (the baseline), not from ${ref}`);
   process.exit(2);
@@ -104,7 +121,7 @@ const out = resolve(argValue("--out") ?? RECORD_DIR);
 const repo = resolve(".");
 const git = (...a: string[]): string => execFileSync("git", a, { encoding: "utf8", cwd: repo });
 
-/** バージョンの番号（"a.b.c"）を比べる */
+/** Compares version numbers ("a.b.c") */
 const cmp = (a: string, b: string): number => {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
@@ -112,12 +129,12 @@ const cmp = (a: string, b: string): number => {
   return 0;
 };
 
-// 実際のパスにそろえる（Windows の短い名前・macOS の /tmp のリンクのままだと、Node.js が実際のパスで読む入口の
-// ファイルの URL と、差し替えの判定に使う作業用ディレクトリの URL が食い違う）
+// Use the real path (with a Windows short name or the /tmp link of macOS, the URL of the entry file, which
+// Node.js reads by its real path, would differ from the URL of the work directory used to decide the replacement)
 const work = realpathSync.native(mkdtempSync(join(tmpdir(), "generator-features-")));
 try {
   // ------------------------------------------------------------
-  // 1. 呼び出し側のファイルを作業用ディレクトリに写す
+  // 1. Copy the callers' files into the work directory
   // ------------------------------------------------------------
   const files = [
     "package.json",
@@ -130,7 +147,7 @@ try {
   const support = worktree
     ? ["test/support"]
     : git("ls-tree", "-r", "--name-only", ref, "test/support").split("\n").filter(Boolean);
-  // 呼び出し側が読み込む、バージョンによってはないファイル（result-compare の予期しない例外の登録は 0.30.7 から）
+  // Files the callers load that some versions lack (result-compare registers unexpected errors from 0.30.7)
   const optional = ["scripts/exit-on-unexpected.ts"].filter((file) =>
     worktree
       ? existsSync(join(repo, file))
@@ -145,7 +162,7 @@ try {
   const version = (
     JSON.parse(readFileSync(join(work, "package.json"), "utf8")) as { version: string }
   ).version;
-  // そのバージョンを公開したときの「前のバージョン」（CI の result-compare が比べた npm の latest）
+  // The "previous version" when that version was published (the npm latest that result-compare of CI compared)
   const previous = git("tag", "--list", "v*")
     .split("\n")
     .map((t) => t.replace(/^v/, ""))
@@ -154,7 +171,8 @@ try {
     .at(-1)!;
 
   // ------------------------------------------------------------
-  // 2. 読み込みのフック（作業用ディレクトリの src/・仮のパッケージの dist/ を、今の src/ を包んだ部品に差し替える）
+  // 2. The load hook (replaces src/ of the work directory and dist/ of the stand-in packages by parts wrapping
+  //    the current src/)
   // ------------------------------------------------------------
   const src = (p: string): string => pathToFileURL(join(repo, "src", p)).href;
   const features = pathToFileURL(join(repo, "test/support/features.ts")).href;
@@ -172,7 +190,8 @@ try {
       `    appendFileSync(process.env.FEATURES_FILE, JSON.stringify([...g.__features]) + "\\n");`,
       `  });`,
       `}`,
-      // 基準のカレンダー（test/support/result-cases.ts の BASIS_MARK の印）は、定休日の特徴を「basis.」を付けて別にも数える
+      // For a basis calendar (the mark BASIS_MARK of test/support/result-cases.ts), the closed-weekday features
+      // are also counted separately with the prefix "basis."
       `const BASIS = Symbol.for("bizdays-toolkit.result-compare.basis");`,
       `const record = (o, kind) => { try { const fs = featuresOf(o, kind); for (const f of fs) g.__features.add(f); if (o && o[BASIS]) for (const f of fs) if (f.startsWith("closedWeekdays")) g.__features.add("basis." + f); } catch (e) { g.__features.add("record-error=" + e.message); } };`,
       `const DATE = /^\\d{4}-\\d{2}-\\d{2}/;`,
@@ -202,14 +221,14 @@ try {
   for (const [name, text] of Object.entries(shims))
     writeFileSync(join(work, "__shim__", name), text);
   const workUrl = pathToFileURL(work).href;
-  // 読み込みのフック（module.registerHooks。同じスレッドで同期に動く）
+  // The load hook (module.registerHooks; runs synchronously in the same thread)
   writeFileSync(
     join(work, "register.mjs"),
     `import { registerHooks } from "node:module";
 const work = ${JSON.stringify(workUrl)};
 const repoSrc = ${JSON.stringify(pathToFileURL(join(repo, "src")).href)};
 const dist = new RegExp("^" + work.replace(/[.*+?^\${}()|[\\]\\\\]/g, "\\\\$&") + "/pkg-[^/]+/dist/(.+)\\\\.js$");
-/** 作業用ディレクトリの src/<p> と、仮のパッケージの dist/<p>.js を、差し替え先の URL にする */
+/** Turns src/<p> of the work directory and dist/<p>.js of a stand-in package into the URL of the replacement */
 function target(url) {
   let m = url.startsWith(work + "/src/") ? url.slice((work + "/src/").length) : undefined;
   if (m === undefined) {
@@ -232,7 +251,7 @@ registerHooks({
 `,
   );
 
-  // 仮のパッケージ（result-compare がバージョンの番号を読む。dist はフックで差し替える）
+  // The stand-in packages (result-compare reads the version number; dist is replaced by the hook)
   const pkg = (name: string, v: string): string => {
     const dir = join(work, `pkg-${name}`);
     mkdirSync(join(dir, "etc"), { recursive: true });
@@ -242,19 +261,21 @@ registerHooks({
   const head = pkg("head", version);
   const base = pkg("base", previous);
   const legacy = pkg("legacy", "0.22.2");
-  // 意図した差分の一覧は使わない（差分の合否は記録に関係しない）
+  // The list of intended differences is not used (passing or failing differences do not matter for the record)
   writeFileSync(join(work, "no-changes.json"), JSON.stringify({ changes: [] }));
 
   // ------------------------------------------------------------
-  // 3. 呼び出し側を動かして特徴を集める
+  // 3. Run the callers and collect the features
   // ------------------------------------------------------------
   const record: FeatureRecord = {};
   const runSite = (site: string, argv: string[]): void => {
     const file = join(work, `${site}.jsonl`);
     writeFileSync(file, "");
     const started = Date.now();
-    // 種と試行の数はそのバージョンの既定のまま（種を変える PROPERTY_SEED と、TZ を変えた実行の印は渡さない）。
-    // 特徴はカレンダーを作るときに集めるので、抜き出し（pnpm check）ではなく全件を動かす（DIAGNOSE_PROPERTY_FULL）
+    // Seeds and numbers of trials stay at that version's defaults (PROPERTY_SEED, which changes the seed, and
+    // the mark of a run with another TZ are not passed).
+    // Features are collected when calendars are created, so the full set runs, not the sample of pnpm check
+    // (DIAGNOSE_PROPERTY_FULL)
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       FEATURES_FILE: file,
@@ -275,9 +296,10 @@ registerHooks({
         maxBuffer: 1 << 28,
       },
     );
-    // 記録を作るときは、呼び出し側が最後まで動いたこと（終了コード 0）を必須にする（途中で止まった呼び出し側の特徴で、
-    // 基準が黙って小さくなるのを防ぐ）。比べるとき（--check）は終了コードを見ない（今の呼び出し側のテストの合否は
-    // pnpm check が見る。途中で止まれば拾えない特徴が落ちた特徴として出るので、比べた結果も失敗になる）
+    // Making a record requires that the callers ran to the end (exit code 0) (so that the features of a caller
+    // that stopped half-way do not silently shrink the baseline). Comparing (--check) does not look at the exit
+    // code (pnpm check sees whether the current callers' tests pass; a caller that stops half-way loses
+    // features, which show as lost features, so the comparison fails too)
     if (update && r.status !== 0) {
       console.error(r.stdout.slice(-2000), r.stderr.slice(-2000));
       throw new Error(
@@ -317,11 +339,11 @@ registerHooks({
   runSite("result-compare", compare(legacy, "0.22.2"));
 
   // ------------------------------------------------------------
-  // 4. 書き出す、または記録と比べる
+  // 4. Write the record, or compare with it
   // ------------------------------------------------------------
   if (check) {
     const recorded = readRecord(repo);
-    // 空振りの検査: 拾えた特徴が記録の半分に満たない呼び出し側があれば失敗
+    // The check against an empty run: a caller that yields fewer than half of the recorded features fails
     const thin = Object.entries(recorded).filter(
       ([site, list]) => (record[site]?.length ?? 0) < list.length / 2,
     );

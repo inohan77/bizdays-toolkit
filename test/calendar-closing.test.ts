@@ -14,7 +14,7 @@ import { jp } from "../src/jp/index.ts";
 const office = createCalendar({ holidayProvider: jp, closedWeekdays: [0, 6] });
 
 test("営業日を考慮した締め日: 締め日が休業日なら convention で調整した日が締め日", () => {
-  // 2026-09-20 は日曜。preceding なら 9/18（金）締め、following なら 9/21（月）締め
+  // 2026-09-20 is a Sunday. "preceding" closes on 9/18 (Fri), "following" on 9/21 (Mon)
   assert.equal(office.closingMonth("2026-09-18", 20, { convention: "preceding" }), "2026-09");
   assert.equal(
     office.closingMonth("2026-09-19", 20, { convention: "preceding" }),
@@ -40,7 +40,8 @@ test("営業日を考慮した締め日: 締め日が休業日なら convention 
     from: "2026-09-25",
     to: "2026-10-20",
   });
-  // 暦日・日時の文字列・Date・Temporal の値を渡すと、その日（カレンダーのタイムゾーンでの暦日）が属する期間。月は "YYYY-MM" だけ
+  // A date, a date-time string, a Date or a Temporal value gives the period that day (the calendar date in the
+  // calendar's time zone) belongs to. A month is "YYYY-MM" only
   for (const input of [
     "2026-09-19",
     "2026-09-19T10:00",
@@ -54,24 +55,25 @@ test("営業日を考慮した締め日: 締め日が休業日なら convention 
       String(input),
     );
   }
-  // ハイフンが 1 つの崩れた文字列は、月の誤り（ルートの closingPeriod と同じ読み分け。decisions.md の 8 番）
+  // A broken string with one hyphen is a wrong month (read like the root closingPeriod. decisions.md #8)
   assert.throws(
     () => office.closingPeriod("2026-9", 20, { convention: "preceding" }),
     (e: unknown) => isBizdaysError(e) && e.code === "invalid-month",
   );
-  // 暦日を渡すとその日が属する期間
+  // A date gives the period that day belongs to
   assert.deepEqual(office.closingPeriod("2026-09-19", 20, { convention: "preceding" }), {
     from: "2026-09-19",
     to: "2026-10-20",
   });
-  // 末日締め・読み替え（2 月の 31 日締め）も暦日の関数と同じ 1 か所で行う
+  // Closing on the last day and the reading of a missing day (closing on the 31st in February) happen in the
+  // same one place as for the calendar-date functions
   assert.deepEqual(
     office.closingPeriod("2026-03", 31, { convention: "preceding" }),
     { from: "2026-02-28", to: "2026-03-31" },
     "2 月の締めは 2/28（土）→ 2/27（金）。3/31 は火曜",
   );
   assert.ok(Object.isFrozen(office.closingPeriod("2026-10", 20, { convention: "preceding" })));
-  // 入力の誤り
+  // Wrong inputs
   for (const fn of [
     () => office.closingMonth("2026-09-21", 0, { convention: "preceding" }),
     () => office.closingPeriod("2026-09", 32, { convention: "preceding" }),
@@ -87,7 +89,7 @@ test("営業日を考慮した締め日: 締め日が休業日なら convention 
 });
 
 test("営業日を考慮した締め日: 長期休業で固有の期間がない月は no-business-day、その日は次の月に属する", () => {
-  // 2026-12-15〜2027-02-10 休業（改装）。20 日締め・preceding
+  // Closed from 2026-12-15 to 2027-02-10 (renovation). Closing on the 20th, "preceding"
   const reno = createCalendar({
     holidayProvider: jp,
     closedWeekdays: [0, 6],
@@ -121,7 +123,7 @@ test("営業日を考慮した締め日: 長期休業で固有の期間がない
     from: "2026-12-15",
     to: "2027-02-19",
   });
-  // following では 12 月の締め日が休業を越えて 2/12 に来る（2/11 は建国記念の日）
+  // With "following" the closing day of December moves past the closure to 2/12 (2/11 is National Foundation Day)
   const fol = { convention: "following" } as const;
   assert.deepEqual(reno.closingPeriod("2026-12", 20, fol), {
     from: "2026-11-21",
@@ -213,7 +215,7 @@ test("closingPeriod の月と暦日の読み分け: 形の崩れた文字列の 
       return e.code;
     }
   };
-  // 月の形の崩れ（ハイフンが 2 つ未満）・暦日の形の崩れ（3 つ以上）・正しい月と暦日
+  // Broken month forms (fewer than 2 hyphens), broken date forms (3 or more), and correct months and dates
   const cases: [string, string][] = [
     ["2026-1", "invalid-month"],
     ["2026-001", "invalid-month"],
@@ -242,7 +244,7 @@ test("closingPeriod の月と暦日の読み分け: 形の崩れた文字列の 
       `メソッド ${input}`,
     );
   }
-  // 日時の文字列は、メソッドでは暦日として読む（ルートの関数は暦日の文字列だけを受ける）
+  // A date-time string is read as a calendar date by the methods (the root functions accept date strings only)
   assert.equal(
     codeOf(() => calendar.closingPeriod("2026-11-05T10:00-05:00", 20, { convention: "following" })),
     '{"from":"2026-10-21","to":"2026-11-20"}',

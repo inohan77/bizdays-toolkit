@@ -1,17 +1,19 @@
 import "./strict-warnings.ts";
 /**
- * 公開する dist をブラウザーで確かめる（CI の browsers・safari ジョブから実行。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+ * Checks the published dist in browsers (run by the browsers and safari jobs of CI; RELEASING.md, reasons for
+ * the quality mechanisms, "runtimes that are checked").
  *
- *   node scripts/test-browsers.ts <chrome|firefox|edge|safari> <ドライバーのパス>
+ *   node scripts/test-browsers.ts <chrome|firefox|edge|safari> <path of the driver>
  *
- * pnpm build の後に実行する。Node.js の標準機能だけで小さな Web サーバーを立てて dist と test/compat を配り、
- * ランナーに入っているドライバー（chromedriver・geckodriver・msedgedriver・safaridriver）を WebDriver（HTTP）で操作して、
- * ページの中で ES モジュールとして読み込んだ smoke.mjs の結果を受け取る。npm の依存は使わない。
+ * Run after pnpm build. A small web server built with the standard features of Node.js serves dist and
+ * test/compat; the driver installed on the runner (chromedriver, geckodriver, msedgedriver, safaridriver) is
+ * operated over WebDriver (HTTP), and the result of smoke.mjs, loaded in the page as an ES module, is received.
+ * No npm dependency is used.
  *
- * ブラウザーの側が一時的に止まることがある（ランナー上の Edge がページの読み込みで応答しなくなった例がある）ため、
- * 時間制限を短くし、結果を受け取る前の段階（ドライバーの起動・セッションの作成・ページの読み込み・結果の待ち）で
- * 止まったときだけ、ドライバーを起動し直して 1 回だけやり直す。確認の結果が FAIL のときはやり直さない
- * （本物の失敗を隠さないため）。やり直したときは、その理由をログに出す。
+ * The browser side sometimes stalls (Edge on a runner stopped responding while loading the page), so the time
+ * limits are short, and only when a stage before the result is received stalls (starting the driver, creating
+ * the session, loading the page, waiting for the result) the driver is restarted and the run is retried once.
+ * A result of FAIL is not retried (a real failure must not be hidden). A retry logs its reason.
  */
 
 import { spawn } from "node:child_process";
@@ -29,9 +31,9 @@ const capabilities: Record<string, Record<string, unknown>> = {
   firefox: { browserName: "firefox", "moz:firefoxOptions": { args: ["-headless"] } },
   edge: {
     browserName: "MicrosoftEdge",
-    // CI のランナーで、Edge のページの読み込みが止まる（レンダラーが応答しない）ことが続いたため、
-    // 共有メモリ（/dev/shm）の代わりに一時ファイルを使い、GPU の処理を止める（CI のコンテナでレンダラーが応答しなくなる
-    // 原因としてよく知られる 2 つへの対策。効いたかはログの RETRY の有無で見る）
+    // Page loads of Edge kept stalling on CI runners (the renderer not responding), so temporary files are used
+    // instead of shared memory (/dev/shm) and GPU processing is turned off (the two well-known causes of an
+    // unresponsive renderer in CI containers; whether it helped shows in the presence of RETRY in the log)
     "ms:edgeOptions": {
       args: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     },
@@ -49,7 +51,7 @@ const page = `<!doctype html>
 <meta charset="utf-8">
 <title>bizdays-toolkit compat</title>
 <script>
-  // モジュールの読み込みに失敗した場合も、結果として返す
+  // A failure to load the module is returned as a result too
   window.__fail = (message) => {
     window.__results = { results: [{ name: "load", ok: false, error: String(message) }], temporal: "absent" };
   };
@@ -68,7 +70,7 @@ const page = `<!doctype html>
 </script>
 `;
 
-// dist と test/compat だけを配る（それ以外のパスは 404）
+// Only dist and test/compat are served (any other path is 404)
 const server = createServer((req, res) => {
   const path = decodeURIComponent(new URL(req.url ?? "/", "http://localhost").pathname);
   if (path === "/compat.html") {
@@ -95,7 +97,7 @@ await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 const address = server.address();
 const sitePort = typeof address === "object" && address ? address.port : 0;
 
-/** 結果を受け取る前の段階での失敗（やり直しの対象） */
+/** A failure at a stage before the result is received (retried) */
 class TransientError extends Error {}
 
 interface Outcome {
@@ -104,13 +106,13 @@ interface Outcome {
   timeZones?: string[];
 }
 
-/** ページの読み込み・スクリプトの実行の時間制限（WebDriver の timeouts）と、各 HTTP 呼び出しの時間制限 */
+/** Time limits for loading the page and running the script (WebDriver timeouts), and for each HTTP call */
 const PAGE_LOAD_MS = 30_000;
 const REQUEST_MS = 60_000;
 
 async function runOnce(): Promise<Outcome> {
   const driverPort = 4444 + Math.floor(Math.random() * 1000);
-  // chromedriver・msedgedriver は --port=N、geckodriver・safaridriver は --port N
+  // chromedriver and msedgedriver take --port=N; geckodriver and safaridriver take --port N
   const args =
     browser === "firefox" || browser === "safari"
       ? ["--port", String(driverPort)]
@@ -138,7 +140,7 @@ async function runOnce(): Promise<Outcome> {
         try {
           if ((await call<{ ready?: boolean }>("GET", "/status")).ready !== false) break;
         } catch {
-          // ドライバーの起動待ち
+          // waiting for the driver to start
         }
         if (i > 50) throw new Error("the driver did not start");
         await new Promise((r) => setTimeout(r, 200));
@@ -195,8 +197,8 @@ try {
   console.log(
     `Temporal: ${outcome.temporal === "native" ? "checked with the native Temporal" : `skipped (${skipWhen("temporal-unavailable-browser", true)})`}`,
   );
-  // タイムゾーンの名前の扱いの記録（中身は合否にしない）。1 行も出なければ、黙って飛ばさずに失敗にする
-  // （ページの読み込みに失敗したときは、結果に timeZones がない）
+  // The record of how time zone names are handled (its content does not decide pass or fail). Without a single
+  // line it fails instead of silently skipping (when the page failed to load, the result has no timeZones)
   const timeZones = outcome.timeZones ?? [];
   for (const line of timeZones) console.log(`TimeZone: ${line}`);
   if (timeZones.length === 0) console.log("FAIL no time zone report");

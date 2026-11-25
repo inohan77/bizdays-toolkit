@@ -1,7 +1,11 @@
-// 日本の提供元とほかの提供元の和集合での、kinds の旧名 "national"（docs/decisions.md の 10 番）。
-// 主の検査は、日本の提供元を包んで種別を付け替えた設定との関係（祝日データに依存しないので、データの反映で壊れない）。
-// 錨は公開済みの 0.22.2 で作ったフィクスチャ（0.22.x の意味を正とする。確定した年だけ）。データのパッチバージョンが錨の範囲の
-// 過去の祝日を変えたとき（法改正・臨時の祝日）は、0.22.2 では作り直せないので、影響する日付を錨から外し、開発の記録（docs/development-log.md）に記録する
+// The old name "national" of kinds in a union of the Japanese provider with other providers (docs/decisions.md
+// #10).
+// The main check is the relation to options that wrap the Japanese provider and replace its kinds (independent
+// of holiday data, so reflecting new data does not break it).
+// The anchor is a fixture made with the published 0.22.2 (the meaning of 0.22.x is the authority; confirmed
+// years only). When a data patch version changes past holidays in the anchor's range (a change in the law, a
+// special holiday), it cannot be rebuilt with 0.22.2, so the affected dates are taken out of the anchor and
+// recorded in the development log (docs/development-log.md)
 import assert from "node:assert/strict";
 import { daysOf } from "./support/compare.ts";
 import { readFileSync } from "node:fs";
@@ -39,7 +43,10 @@ const other: HolidayProvider = {
     { date: `${y}-08-11`, name: "Y", nameEn: "Y regular", kind: "regular", confirmed: true },
   ],
 };
-/** 1.0.0 以降の書き方: 日本の提供元を包み、毎年の祝日の種別を付け替える（ID は "JP" のまま） */
+/**
+ * The way to write it from 1.0.0: wrap the Japanese provider and give the annual holidays another kind (the ID
+ * stays "JP")
+ */
 const jpOnly: HolidayProvider<string> = {
   ...jp,
   holidaysInYear: (year) =>
@@ -52,7 +59,7 @@ const closedDays = (options: object, days: readonly string[]): string[] => {
   return days.filter((d) => !calendar.isBusinessDay(d));
 };
 
-// --- 錨: 0.22.2 の結果と同じ ---
+// --- Anchor: the same as the results of 0.22.2 ---
 
 const anchorDays = daysOf(fixture.from, fixture.to);
 for (const c of fixture.cases) {
@@ -74,7 +81,7 @@ for (const c of fixture.cases) {
   });
 }
 
-// --- 主の検査: 包んだ提供元の ["jp-regular", "national"] と同じ（日本の対応年のすべて） ---
+// --- Main check: the same as ["jp-regular", "national"] of the wrapped provider (all of Japan's supported years) ---
 
 const allDays = daysOf(`${jp.supportedYears.from}-01-01`, `${jp.supportedYears.to}-12-31`);
 const patterns: readonly [string, Record<string, unknown>][] = [
@@ -147,7 +154,7 @@ test('"national" は、日本の毎年の祝日でない日（国民の休日・
   for (const h of others) assert.equal(calendar.isBusinessDay(h.date), true, h.date);
 });
 
-// --- 診断と移行 ---
+// --- Diagnostics and migration ---
 
 test('和集合の "national" の deprecated-option は、当てている祝日と 1.0.0 での扱いを添える', () => {
   const message = (holidayProvider: readonly HolidayProvider[]): string =>
@@ -195,7 +202,7 @@ test('日本の提供元だけの設定では、"regular" と旧名の "national
     ["shadowed", "closedRecurringRules[1]", "closedRecurringRules[0]"],
     ["redundant", "closedRecurringRules[0]", undefined],
   ]);
-  // 祝日の翌日・祝前日の規則も同じ（種別の集合の包含として比べる）
+  // The same for day-after and day-before-holiday rules (compared as containment of the sets of kinds)
   assert.deepEqual(
     codes([
       { dayAfterHoliday: true, kinds: ["national" as "regular", "substitute"] },
@@ -268,7 +275,7 @@ test('ID "JP" の提供元がない設定の "national" の never-matches は、
     assert.match(found[0]!.message, /"national"/);
     assert.match(found[0]!.message, /"regular"/);
   }
-  // 提供元のない設定では添えない（原因は提供元の付け忘れのほうが多い）
+  // Not added for options without a provider (the cause is more often a forgotten provider)
   const none = diagnoseCalendar({
     closedRecurringRules: [{ holiday: true, kinds: ["national"] }],
   }).find((d) => d.code === "never-matches")!;

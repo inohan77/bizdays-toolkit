@@ -1,6 +1,8 @@
-// result-compare（scripts/result-compare.ts）が比べる設定の集まり。種で決まる設定と、過去の退行を書き留めた固定の設定。
-// 生成範囲の包含の検査（test/tools/generator-features.test.ts）も、同じ関数で同じ設定を作って特徴を数える。
-// 提供元は名前のまま持ち、比べるときに読み込んだバージョンの提供元に置き換える。
+// The set of options result-compare (scripts/result-compare.ts) compares: options decided by a seed and fixed
+// options that record past regressions.
+// The inclusion check of the generated range (test/tools/generator-features.test.ts) builds the same options
+// with the same functions and counts their features.
+// Providers are kept by name and replaced, when comparing, by the providers of the loaded version.
 
 import {
   CALENDAR_REF,
@@ -15,7 +17,7 @@ import {
   type Obj,
 } from "./catalog.ts";
 
-/** 提供元の名前（読み込んだバージョンの提供元に置き換える前の形） */
+/** A provider's name (the form before it is replaced by the provider of the loaded version) */
 export type ProviderName = "jp" | "england" | "scotland" | "metropole" | "sg";
 export const PROVIDERS: readonly ProviderName[] = ["jp", "england", "scotland", "metropole", "sg"];
 export const TIME_ZONES: Record<ProviderName, string> = {
@@ -37,18 +39,18 @@ export interface Case {
   readonly id: string;
   readonly kind: "calendar" | "schedule";
   readonly providers: readonly ProviderName[];
-  /** 提供元は名前のまま。比べるときに読み込んだバージョンの提供元に置き換える */
+  /** Providers stay names. When comparing they are replaced by the providers of the loaded version */
   readonly options: Obj;
   readonly from: string;
   readonly to: string;
-  /** このバージョンより前のバージョンとは比べない（そのバージョンで入った形を使う固定の設定） */
+  /** Not compared with versions before this one (fixed options that use a shape introduced in that version) */
   readonly minBase?: string;
-  /** 合成するときのもう 1 つのカレンダー */
+  /** The other calendar of a combination */
   readonly partner?: Case;
   readonly combine?: "all" | "any";
 }
 
-/** 種で決まる乱数（result-compare の既定の種は 20261030） */
+/** Random numbers decided by a seed (the default seed of result-compare is 20261030) */
 export class Gen {
   readonly next: () => number;
   constructor(start: number) {
@@ -75,7 +77,10 @@ export class Gen {
 const pad = (n: number): string => String(n).padStart(2, "0");
 const iso = (y: number, m: number, d: number): string => `${y}-${pad(m)}-${pad(d)}`;
 
-/** 比べる期間: 提供元の対応年が重なる範囲の内側（隣の日を見る規則が対応年の端に触れない）を、最大 6 年 */
+/**
+ * The period compared: the inside of the years all providers support (so that rules looking at a neighbouring day
+ * do not touch an end of the supported years), at most 6 years
+ */
 export function rangeOf(providers: readonly ProviderName[]): [string, string] {
   let from = 2021;
   let to = 2026;
@@ -86,7 +91,10 @@ export function rangeOf(providers: readonly ProviderName[]): [string, string] {
   return [iso(from, 1, 1), iso(to, 12, 31)];
 }
 
-/** 文脈（提供元があるか・改名の前のバージョンと比べるか）。名前は生成器の到達性のテストの名前に出る */
+/**
+ * The context (with providers or not; comparing with a version from before the rename or not). The name shows
+ * in the names of the reachability tests of the generator
+ */
 export function contextOf(
   withHolidays: boolean,
   newShapes: boolean,
@@ -131,7 +139,10 @@ export function scheduleCase(g: Gen, id: string, newShapes: boolean): Case {
   return { id, kind: "schedule", providers, options, from, to };
 }
 
-/** 種で決まる設定の集まり（カレンダー 240 件・スケジュール 100 件に倍率を掛ける。合成の組は 4 件に 1 件） */
+/**
+ * The set of options decided by a seed (240 calendars and 100 schedules, times the scale; one in four is a pair
+ * for a combination)
+ */
 export function generateCases(seed: number, scale: number, newShapes: boolean): Case[] {
   const g = new Gen(seed);
   const cases: Case[] = [];
@@ -152,8 +163,8 @@ export function generateCases(seed: number, scale: number, newShapes: boolean): 
 }
 
 /**
- * 過去の退行を書き留めた固定の設定（乱数では当たりにくい形）。新しい退行を見つけたら、その最小の設定を足す
- * （直したバージョンを出した後も残す。同じ退行が戻ったら止めるため）
+ * Fixed options that record past regressions (shapes random numbers rarely hit). A newly found regression adds
+ * its minimal options (they stay after the fixing version is out, to stop the same regression if it returns)
  */
 export function fixedCases(): Case[] {
   const holiday = (kinds: string[]): Obj => ({ holiday: true, kinds });
@@ -179,7 +190,7 @@ export function fixedCases(): Case[] {
       to,
     };
   };
-  /** 提供元のないカレンダー */
+  /** A calendar without a provider */
   const cal0 = (id: string, options: Obj): Case => ({
     id,
     kind: "calendar",
@@ -189,24 +200,28 @@ export function fixedCases(): Case[] {
     to: "2026-12-31",
   });
   return [
-    // 和集合の旧名 "national" は、日本の提供元の毎年の祝日だけに当たる（ほかの提供元の "regular" には当たらない）
+    // The old name "national" in a union matches only the annual holidays of the Japanese provider (not "regular"
+    // of other providers)
     cal("fixed-union-national", ["jp", "england"], {
       holidayPolicy: "open",
       closedRecurringRules: [holiday(["national"])],
     }),
-    // 日本を含む和集合の "regular" は、日本の国民の祝日にも当たる（改名で意味が広がった。etc/result-changes.json で許す）
+    // "regular" in a union with Japan also matches Japan's national holidays (the rename widened its meaning;
+    // allowed in etc/result-changes.json)
     cal("fixed-union-regular", ["jp", "england"], {
       holidayPolicy: "open",
       closedRecurringRules: [holiday(["regular"])],
     }),
-    // 日本の提供元だけの設定の "regular" と旧名の "national" の同じ規則は、後の規則が shadowed になる
+    // With only the Japanese provider, the same rule with "regular" and with the old name "national" makes the
+    // later rule shadowed
     cal("fixed-jp-regular-national", ["jp"], {
       closedRecurringRules: [holiday(["regular"]), holiday(["national"])],
     }),
     cal("fixed-jp-national-regular", ["jp"], {
       closedRecurringRules: [holiday(["national"]), holiday(["regular"])],
     }),
-    // 第 n 営業日を数える規則があると、数え方を変える個別の日付・毎年の月日は redundant にならない
+    // With a rule counting nth business days, specific dates and annual dates that change the count are not
+    // redundant
     cal0("fixed-counting-date", {
       closedDates: ["2026-05-01"],
       closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
@@ -215,8 +230,10 @@ export function fixedCases(): Case[] {
       closedAnnualDates: ["05-01"],
       closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: 1 }],
     }),
-    // 基準のカレンダーを持つ月の規則だけの設定は、窓の外の月で基準を求めず、判定できない月を作らない（0.31.0-B の作り直しの
-    // 途中で、窓の外の月を数えて never-matches・redundant を消した退行の形。規則 1 つの診断の消失はどの特徴でも許されない）
+    // Options with only a month rule that has a basis calendar do not evaluate the basis in months outside the
+    // window and create no unjudgeable month (the form of the regression during the rebuild of 0.31.0-B, which
+    // counted months outside the window and lost never-matches / redundant; the loss of the diagnostics of a
+    // single rule is allowed by no feature)
     sch("fixed-unjudgeable-month-rule-day25", ["jp"], {
       weekdayValues: ["a", "a", "a", "a", "a", "a", "a"],
       recurringRules: [{ businessDayOfMonth: 25, calendar: CALENDAR_REF, value: "x" }],
@@ -228,9 +245,11 @@ export function fixedCases(): Case[] {
         { businessDayOfMonth: 1, calendar: CALENDAR_REF, value: "x" },
       ],
     }),
-    // スケジュールの第 n 営業日の規則の基準のカレンダーは、スケジュールの outOfRangePolicy を受け継ぐ（basisOutOfRangePolicy）。
-    // "ignore" の基準は対応年の外で投げないので、診断は判定できない月を作らない。旧名の比較では outOfRange として渡る。
-    // 比べる期間はシンガポールの対応年（2020〜2027 年）の外まで広げる（対応年の内側では "ignore" と "throw" の結果が同じため）
+    // The basis calendar of an nth-business-day rule of a schedule inherits the schedule's outOfRangePolicy
+    // (basisOutOfRangePolicy). An "ignore" basis does not throw outside the supported years, so the diagnostics
+    // create no unjudgeable month. In the old-name comparison it is passed as outOfRange.
+    // The compared period extends outside Singapore's supported years (2020-2027) (inside them "ignore" and
+    // "throw" give the same results)
     {
       ...sch("fixed-schedule-basis-ignore", ["sg"], {
         outOfRangePolicy: "ignore",
@@ -250,7 +269,8 @@ export function fixedCases(): Case[] {
       }),
       minBase: "0.30.0",
     },
-    // 第 n 営業日の規則と有効期間が重ならない曜日の規則には counting-basis を出さない（0.30.7 までは出していた）
+    // No counting-basis for a weekday rule whose effective period does not overlap the nth-business-day rule's
+    // (reported up to 0.30.7)
     cal("fixed-counting-basis-no-overlap", ["jp"], {
       closedWeekdays: [0, 6],
       closedRecurringRules: [
@@ -258,29 +278,33 @@ export function fixedCases(): Case[] {
         { businessDayOfMonth: 1, effectiveFrom: "2027-01-01" },
       ],
     }),
-    // 曜日の規則が 2 つなら counting-basis を 2 件出す（0.30.7 までは最初の 1 つだけ）
+    // Two weekday rules give two counting-basis items (up to 0.30.7 only the first)
     cal("fixed-counting-basis-two-weekly", ["jp"], {
       closedWeekdays: [0],
       closedRecurringRules: [{ weekday: 3 }, { weekday: 6 }, { businessDayOfMonth: 1 }],
     }),
-    // 開く規則と閉じる規則に曜日の規則が 1 つずつなら counting-basis を 2 件出す（0.30.7 までは開く規則の 1 件だけ）
+    // One weekday rule each among the opening and the closing rules gives two counting-basis items (up to 0.30.7
+    // only the one of the opening rules)
     cal("fixed-counting-basis-open-closed-weekly", ["jp"], {
       closedWeekdays: [0, 6],
       openRecurringRules: [{ weekday: 6 }],
       closedRecurringRules: [{ weekday: 3 }, { businessDayOfMonth: 1 }],
     }),
-    // 第 n 営業日の規則より後ろの曜日の規則が shadowed なら、使われている規則だけを数える（unused が確定する前に判定すると、使われない規則の分も数えて 2 件になる）
+    // When a weekday rule after the nth-business-day rule is shadowed, only used rules are counted (judging before
+    // `unused` is settled would count the unused rule too and give 2 items)
     cal("fixed-counting-basis-shadowed-weekly", ["jp"], {
       closedWeekdays: [0, 6],
       closedRecurringRules: [{ businessDayOfMonth: 1 }, { weekday: 3 }, { weekday: 3 }],
     }),
-    // カレンダーの個別の日付に書いた value は unknown-option（0.30.7 までは黙って通っていた）
+    // `value` written in a specific date of a calendar is unknown-option (passed silently up to 0.30.7)
     cal("fixed-calendar-date-with-value", ["jp"], {
       closedDates: [{ date: "2026-12-01", value: true }],
     }),
-    // 0.32.8: 自分の設定を基準に数える規則と個別の日付のある設定の診断（test/diagnose-counting-dates.test.ts と同じ設定）。
-    // 臨時休業日が数え方を変えて営業日が残る設定に no-business-day を出さない（P7）。0.30.3 より前とは比べない（0.30.3 で直した
-    // 個別の日付の誤った redundant も同じ設定で消え、1 つの許可に収まらない）
+    // 0.32.8: the diagnostics of options with a rule counting on the own options and specific dates (the same
+    // options as test/diagnose-counting-dates.test.ts).
+    // No no-business-day for options in which extra closed days change the count and business days remain (P7).
+    // Not compared with versions before 0.30.3 (the wrong redundant of specific dates fixed in 0.30.3 disappears
+    // with the same options too, which does not fit into one allowance)
     {
       ...cal0("fixed-counting-closed-date-business-day", {
         closedRecurringRules: [
@@ -291,7 +315,8 @@ export function fixedCases(): Case[] {
       }),
       minBase: "0.30.3",
     },
-    // 走査の範囲（2001〜2028 年）の外の臨時営業日・臨時休業日の月・週で決める規則に、never-matches・redundant を出さない（P8・P9）
+    // No never-matches / redundant for rules decided in the months and weeks of extra business days and extra
+    // closed days outside the scan range (2001-2028) (P8, P9)
     cal0("fixed-counting-open-dates-2050", {
       closedWeekdays: [0, 6],
       openDates: ["2050-01-01", "2050-01-08", "2050-01-15", "2050-01-22", "2050-01-29"],
@@ -310,13 +335,15 @@ export function fixedCases(): Case[] {
       closedRecurringRules: [{ dayOfMonth: 2 }, { businessDayOfMonth: 2 }],
       closedDates: [{ from: "2042-03-10", to: "2042-05-01" }],
     }),
-    // 走査の範囲を覆う長い臨時休業日の外の年で決める規則を、使われないと出さない（P11）
+    // A rule decided in the years outside a long extra closed date covering the scan range is not reported as
+    // unused (P11)
     cal0("fixed-counting-long-closed-date", {
       closedWeekdays: [0, 6],
       closedRecurringRules: [{ dayOfMonth: 1 }, { businessDayOfMonth: -1 }],
       closedDates: [{ from: "1000-01-01", to: "2029-03-31" }],
     }),
-    // unconfirmedHolidayPolicy: "throw" で、取り除くと未確定の祝日で例外になる日ができる規則を redundant にしない（P10）
+    // With unconfirmedHolidayPolicy: "throw", a rule whose removal would make a day throw for an unconfirmed
+    // holiday is not redundant (P10)
     cal("fixed-unconfirmed-throw-after-holiday", ["jp"], {
       unconfirmedHolidayPolicy: "throw",
       closedWeekdays: [0, 6],
@@ -330,7 +357,7 @@ export function fixedCases(): Case[] {
         { weekday: 1, holidayOverlapPolicy: "after-holiday", value: "b" },
       ],
     }),
-    // 定休日の扱いを変えない毎週の曜日の規則に counting-basis を出さない（K6）
+    // No counting-basis for a weekly weekday rule that does not change how the closed weekday is treated (K6)
     cal("fixed-counting-basis-weekday-as-closed-weekday", ["jp"], {
       closedWeekdays: [1],
       closedRecurringRules: [{ weekday: 1 }, { businessDayOfMonth: 3 }],
@@ -338,7 +365,7 @@ export function fixedCases(): Case[] {
   ];
 }
 
-/** 個別の日付の始まりと終わり（"YYYY-MM-DD" と { date }・{ from, to }） */
+/** The starts and ends of the specific dates ("YYYY-MM-DD", { date } and { from, to }) */
 const dateEndsOf = (options: Obj): { from: string; to: string }[] =>
   ["closedDates", "openDates"].flatMap((k) =>
     Array.isArray(options[k])
@@ -354,11 +381,11 @@ const dateEndsOf = (options: Obj): { from: string; to: string }[] =>
   );
 const dayCount = (from: string, to: string): number =>
   (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000;
-/** 毎週の曜日の規則（第 n 曜日・隔週・月の絞り込みのない曜日の規則） */
+/** A weekly weekday rule (a weekday rule without nth occurrence, every-other-week or month filter) */
 const isWeeklyRule = (r: Obj): boolean =>
   "weekday" in r && !("nth" in r) && !("interval" in r) && !("months" in r);
 
-/** 祝日に従属する規則の形（同じ形の規則どうしを比べるため） */
+/** The shape of a rule that depends on holidays (to compare rules of the same shape) */
 const holidayShape = (r: Obj): string | undefined =>
   r["holiday"] === true
     ? "holiday"
@@ -369,20 +396,22 @@ const holidayShape = (r: Obj): string | undefined =>
         : undefined;
 
 /**
- * スケジュールの第 n 営業日の規則が数える基準のカレンダー（CALENDAR_REF を置き換えたもの）の outOfRangePolicy。
- * スケジュールの設定のものを受け継ぐ（省略なら既定の "throw"）。result-compare の基準のカレンダーの作り方と、特徴の付け方が使う
+ * The outOfRangePolicy of the basis calendar (which replaces CALENDAR_REF) of an nth-business-day rule of a
+ * schedule. It inherits the one of the schedule's options (the default "throw" when omitted). Used by how
+ * result-compare builds basis calendars and by how features are assigned
  */
 export const basisOutOfRangePolicy = (c: Case): unknown => c.options["outOfRangePolicy"];
 
 /**
- * 1 つの設定の特徴（意図した差分を許す単位。etc/result-changes.json の trait）。合成の組の特徴は、呼び出し側が
- * 両方の設定の特徴を合わせる
+ * The features of one set of options (the unit by which intended differences are allowed; `trait` of
+ * etc/result-changes.json). For a pair of a combination the caller joins the features of both
  */
 export function traitsOfCase(one: Case): string[] {
   const traits = new Set<string>();
   const hasJp = one.providers.includes("jp");
   const jpOnly = hasJp && one.providers.every((p) => p === "jp");
-  // 自分の設定を基準に第 n 営業日を数える規則と、数え方を変える個別の日付・毎年の月日を持つカレンダー
+  // A calendar with a rule counting nth business days on its own options, and specific dates or annual dates
+  // that change the count
   const counts = ["closedRecurringRules", "openRecurringRules"].some(
     (key) =>
       Array.isArray(one.options[key]) &&
@@ -398,9 +427,11 @@ export function traitsOfCase(one: Case): string[] {
     )
   )
     traits.add("counting-rules-with-dates");
-  // 上の設定のうち、個別の日付のどれかが、走査の範囲（提供元なしでは 2001〜2028 年）の端の月か外にかかるか、28 日を超える
-  // もの。診断は走査の範囲を個別の日付を除いて調べ、個別の日付の両端の月・週を範囲の外でも日付を残して調べるので
-  // （0.32.8）、範囲の中の短い日付だけの設定とは違い、規則の never-matches・redundant が変わりうる
+  // Of the options above, those in which a specific date touches an edge month of the scan range (2001-2028
+  // without a provider) or lies outside it, or is longer than 28 days. The diagnostics examine the scan range
+  // without specific dates, and the months and weeks at both ends of each specific date with the dates, also
+  // outside the range (0.32.8), so never-matches / redundant of rules can change, unlike for options with only
+  // short dates inside the range
   if (
     one.kind === "calendar" &&
     counts &&
@@ -409,10 +440,12 @@ export function traitsOfCase(one: Case): string[] {
     )
   )
     traits.add("counting-rules-with-long-or-outside-dates");
-  // unconfirmedHolidayPolicy: "throw" の設定。取り除くと未確定の祝日で例外になる日ができる規則を redundant にしない（0.32.8）
+  // Options with unconfirmedHolidayPolicy: "throw". A rule whose removal would make a day throw for an
+  // unconfirmed holiday is not redundant (0.32.8)
   if (one.options["unconfirmedHolidayPolicy"] === "throw") traits.add("unconfirmed-holidays-throw");
-  // 規則・日付を 2 つ以上持つ設定。redundant を逐次除去で判定し（後の規則を取り除いた後の判定）、代わりに決める規則を
-  // relatedPath に付けるので、redundant の結果が変わりうる（0.31.0。1 つだけなら、ほかの規則に依存しない）
+  // Options with two or more rules and dates. redundant is judged by sequential removal (the judgement after
+  // later rules were removed) and the rule that decides instead goes into relatedPath, so the redundant results
+  // can change (0.31.0; a single one does not depend on other rules)
   const RULE_LISTS = [
     "closedDates",
     "openDates",
@@ -428,9 +461,11 @@ export function traitsOfCase(one: Case): string[] {
     0,
   );
   if (ruleCount >= 2) traits.add("redundant-sequential");
-  // スケジュールの第 n 営業日の規則の基準のカレンダー（同じ提供元）の対応年が、診断の規則の形を調べる代表の 28 年間
-  // （2001〜2028 年）を覆わず、基準のカレンダーが対応年の外で投げる（outOfRangePolicy が "ignore" でない）。
-  // 診断が基準のカレンダーの投げた月を判定できない月として扱い、error の out-of-range を出さなくなった差分を許す
+  // The supported years of the basis calendar (same providers) of an nth-business-day rule of a schedule do not
+  // cover the representative 28 years (2001-2028) in which the diagnostics examine the shapes of rules, and the
+  // basis calendar throws outside its supported years (outOfRangePolicy is not "ignore").
+  // Allows the difference that the diagnostics treat a month in which the basis calendar threw as unjudgeable
+  // and no longer report an out-of-range error
   if (
     one.kind === "schedule" &&
     basisOutOfRangePolicy(one) !== "ignore" &&
@@ -439,9 +474,10 @@ export function traitsOfCase(one: Case): string[] {
     one.providers.some((p) => YEARS[p][0] > 2001 || YEARS[p][1] < 2028)
   )
     traits.add("schedule-counting-basis-narrower-than-scan");
-  // 上の設定のうち、基準のカレンダーで週の第 n 営業日を数える規則があるもの。診断は、基準のカレンダーが投げた月の前後の月も
-  // 判定できない月にする（月をまたぐ週は隣の月の基準で決まるため。0.30.7）。0.30.6 が出していた誤った never-matches・
-  // redundant を出さなくなった差分を許す
+  // Of the options above, those with a rule counting nth business days of a week on the basis calendar. The
+  // diagnostics also make the months around a month in which the basis calendar threw unjudgeable (a week
+  // across months is decided by the basis of the neighbouring month. 0.30.7). Allows the difference that the
+  // wrong never-matches / redundant of 0.30.6 are no longer reported
   if (
     traits.has("schedule-counting-basis-narrower-than-scan") &&
     (one.options["recurringRules"] as Obj[]).some(
@@ -449,8 +485,10 @@ export function traitsOfCase(one: Case): string[] {
     )
   )
     traits.add("schedule-week-counting-basis-narrower-than-scan");
-  // 基準のカレンダーを持たない第 n 営業日の規則があり、有効期間を持つ毎週の曜日の規則か、毎週の曜日の規則が 2 つ以上ある。
-  // counting-basis を、有効期間が重なり使われている曜日の規則ごとに出すようにした差分を許す（0.30.8）
+  // There is an nth-business-day rule without a basis calendar, and a weekly weekday rule with an effective
+  // period or two or more weekly weekday rules.
+  // Allows the difference that counting-basis is reported per used weekday rule whose effective period overlaps
+  // (0.30.8)
   const ownRules = ["closedRecurringRules", "openRecurringRules"].flatMap((key) =>
     Array.isArray(one.options[key]) ? (one.options[key] as Obj[]) : [],
   );
@@ -464,8 +502,9 @@ export function traitsOfCase(one: Case): string[] {
     (weeklyRules.some((r) => "effectiveFrom" in r || "effectiveTo" in r) || weeklyRules.length >= 2)
   )
     traits.add("counting-rule-with-period-weekly-rule");
-  // 基準のカレンダーを持たない第 n 営業日の規則があり、その曜日の定休日の扱いを変えない毎週の曜日の規則（定休日の曜日を
-  // 閉じる規則、定休日でない曜日を開く規則）がある。その規則には counting-basis を出さない（0.32.8）
+  // There is an nth-business-day rule without a basis calendar, and a weekly weekday rule that does not change
+  // how that closed weekday is treated (a rule closing a closed weekday, a rule opening a weekday that is not
+  // closed). No counting-basis for that rule (0.32.8)
   const closedWeekdays = Array.isArray(one.options["closedWeekdays"])
     ? (one.options["closedWeekdays"] as number[])
     : [0, 6];
@@ -483,7 +522,8 @@ export function traitsOfCase(one: Case): string[] {
     )
   )
     traits.add("counting-rule-with-weekly-rule-as-closed-weekdays");
-  // カレンダーの個別の日付・毎年の月日の要素に value（スケジュールの書き方）がある。診断の unknown-option が増える（0.30.8）
+  // An element of the specific dates or annual dates of a calendar has `value` (the way schedules write it). The
+  // diagnostics gain an unknown-option (0.30.8)
   if (
     one.kind === "calendar" &&
     ["closedDates", "openDates", "closedAnnualDates"].some(
@@ -504,7 +544,7 @@ export function traitsOfCase(one: Case): string[] {
       if (hasJp && kindsOf(r).includes("regular")) traits.add("kinds-regular-with-jp");
       if (hasJp && !jpOnly && kindsOf(r).includes("national"))
         traits.add("kinds-national-in-union-with-jp");
-      // 同じ配列に、同じ形で "regular" を含む規則もあるときだけ（覆う関係を比べる組）
+      // Only when the same array also has a rule of the same shape with "regular" (a pair compared for covering)
       const shape = holidayShape(r);
       if (
         jpOnly &&
@@ -520,16 +560,18 @@ export function traitsOfCase(one: Case): string[] {
   return [...traits];
 }
 
-/** 基準のカレンダーを作るのに要る、バージョンの部品（作る関数と、提供元の名前 → 提供元） */
+/** The parts of a version needed to build basis calendars (the creating function, and provider name → provider) */
 export interface BasisLib {
   readonly createCalendar: (options: Obj) => unknown;
   readonly providers: ReadonlyMap<string, unknown>;
 }
 
 /**
- * 基準のカレンダーの定休日（closedWeekdays。undefined は書かない）。設定の id から決める別の乱数で選ぶ（生成器の乱数の流れを
- * 変えないため）。目録の生成器が作る形（書かない・曜日の部分集合）にそろえ、実際の利用で多い土日休みを多めにする:
- * 書かない 3 割、土日 4 割、曜日ごとに 4 分の 1 で選んだ部分集合 3 割（0.30.7 までは、いつも書かなかった）
+ * The closed weekdays of the basis calendar (closedWeekdays; undefined means not written). Chosen by a separate
+ * random generator decided by the id of the options (so that the generator's random sequence does not change).
+ * In the forms the catalog generator makes (not written, a subset of the weekdays), with more closed weekends,
+ * the common real case: not written 30%, weekends 40%, a subset chosen with 1/4 per weekday 30% (up to 0.30.7
+ * never written)
  */
 export function basisClosedWeekdays(c: Case): number[] | undefined {
   let seed = 0;
@@ -539,18 +581,23 @@ export function basisClosedWeekdays(c: Case): number[] | undefined {
   if (pick < 0.3) return undefined;
   if (pick < 0.7) return [0, 6];
   const days = [0, 1, 2, 3, 4, 5, 6].filter(() => r() < 0.25);
-  return days.length === 7 ? [0, 6] : days; // 全曜日の定休日のカレンダーは作れないので、土日にする
+  return days.length === 7 ? [0, 6] : days; // a calendar with every weekday closed cannot be created: weekends
 }
 
-/** 基準のカレンダーの設定に付ける印（生成範囲の検査が、基準のカレンダーの特徴を分けて数えるため。ライブラリは無視する） */
+/**
+ * The mark put on the options of a basis calendar (so that the check of the generated range counts the features
+ * of basis calendars separately; the library ignores it)
+ */
 export const BASIS_MARK = Symbol.for("bizdays-toolkit.result-compare.basis");
 
 /**
- * スケジュールの第 n 営業日の規則が数える基準のカレンダーの印（CALENDAR_REF）を、そのバージョンで作った同じ提供元の
- * カレンダーに置き換える（バージョンごとに作る。別のバージョンのカレンダーは受け付けないため）。定休日は basisClosedWeekdays。基準のカレンダーの
- * outOfRangePolicy は、スケジュールの設定のものを受け継ぐ（basisOutOfRangePolicy。特徴の付け方と同じ関数）。
- * result-compare（scripts/result-compare.ts）が前のバージョンと今回のバージョンの両方に使う。両方を同じ作り方で比べるので、この処理が壊れても
- * 差分にならない。そのため、ここに置いて test/tools/result-traits.test.ts で直接確かめる
+ * Replaces the mark (CALENDAR_REF) for the basis calendar of an nth-business-day rule of a schedule by a
+ * calendar with the same providers created with that version (per version: a calendar of another version is not
+ * accepted). The closed weekdays are basisClosedWeekdays. The outOfRangePolicy of the basis calendar inherits
+ * the one of the schedule's options (basisOutOfRangePolicy, the same function as for the features).
+ * result-compare (scripts/result-compare.ts) uses it for both the previous and the current version. Both are
+ * compared built the same way, so a break here would be no difference; therefore it is here and checked directly
+ * by test/tools/result-traits.test.ts
  */
 export function withCalendars(lib: BasisLib, c: Case, naming: "new" | "old", options: Obj): Obj {
   const key = naming === "old" ? "recurring" : "recurringRules";

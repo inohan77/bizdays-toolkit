@@ -1,17 +1,24 @@
 import "./strict-warnings.ts";
 /**
- * src/core の catch 節が、テストで 1 回以上通ることを確かめる（テスト拡充案の T3。CI の catch-coverage ジョブ）。
+ * Checks that every catch clause of src/core is taken at least once by the tests (T3 of the test expansion
+ * plan; the catch-coverage job of CI).
  *
- * 1. Node.js の組み込みのカバレッジでテストを動かし、lcov を作る（--lcov <file> を渡せば、その lcov を使う）
- * 2. TypeScript のコンパイラーの API で src/core/*.ts の catch 節を見つけ、節の中の文の行が lcov で 1 回以上通ったかを見る
- * 3. 通らない catch 節は、理由付きの除外の一覧（EXCLUDED。「ファイル・関数・節の中の最初の文」で引く。行がずれても壊れない）に
- *    載せない限り失敗にする。除外の一覧にあるのに見つからない・通っている項目も、古い除外として失敗にする
+ * 1. Runs the tests with the built-in coverage of Node.js and produces an lcov (with --lcov <file>, that lcov
+ *    is used)
+ * 2. Finds the catch clauses of src/core/*.ts with the TypeScript compiler API and checks in the lcov whether
+ *    the lines of the statements in each clause were executed at least once
+ * 3. A catch clause that is not taken fails unless it is in the list of exclusions with a reason (EXCLUDED,
+ *    keyed by "file, function, first statement of the clause", which survives shifted lines). An exclusion that
+ *    is not found, or whose clause is taken, also fails as a stale exclusion
  *
- * 4. 除外の一覧の名前（ファイル・関数・節の中の最初の文）が 2 つ以上の catch 節で重なれば失敗にする（片方だけを除外しようとして
- *    両方が外れるのを防ぐ）。catch 節の文が try と同じ行にあれば、lcov は行で数えるので到達を判定できず、失敗にする
+ * 4. Fails when a key of the exclusion list (file, function, first statement) matches two or more catch clauses
+ *    (so that excluding one does not drop both). When a statement of a catch clause is on the same line as the
+ *    try, lcov counts by line and cannot tell whether it was reached, so that fails too
  *
- * 全体のカバレッジの率は目標にしないので出さない。結果は標準出力（CI では Job Summary）に表で出す。
- * --lcov <file> は検査そのものを試すための引数で（作った lcov を渡して、テストを動かさずに判定だけを試す）、CI は使わない。
+ * The overall coverage rate is not a goal and is not printed. The result is a table on standard output (the Job
+ * Summary in CI).
+ * --lcov <file> is for testing the check itself (pass a made-up lcov to test the judgement without running the
+ * tests); CI does not use it.
  */
 
 import { spawnSync } from "node:child_process";
@@ -20,14 +27,17 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 
-/** 通らなくてよい catch 節と、その理由（"ファイル|関数|節の中の最初の文" → 理由）。足すときは判断を仰ぐ */
+/**
+ * Catch clauses that need not be taken, with the reason ("file|function|first statement of the clause" →
+ * reason). Ask for a decision before adding one
+ */
 export const EXCLUDED: Readonly<Record<string, string>> = {};
 
 const root = resolve(".");
 const args = process.argv.slice(2);
 const lcovArg = args.indexOf("--lcov") >= 0 ? args[args.indexOf("--lcov") + 1] : undefined;
 
-/** lcov の行ごとの通過回数（ファイルの相対パス → 行 → 回数） */
+/** Execution counts per line of an lcov (relative file path → line → count) */
 function readLcov(text: string): Map<string, Map<number, number>> {
   const out = new Map<string, Map<number, number>>();
   let current: Map<number, number> | undefined;
@@ -48,13 +58,16 @@ interface CatchClause {
   readonly fn: string;
   readonly first: string;
   readonly line: number;
-  /** 節の中の文の行（1 始まり） */
+  /** Lines of the statements in the clause (1-based) */
   readonly lines: readonly number[];
-  /** catch 節の文が try の行（try の文・try の中の文）と同じ行にあるか（行で数える lcov では判定できない） */
+  /**
+   * Whether a statement of the catch clause is on a line of the try (the try statement or a statement inside
+   * it); lcov, which counts by line, cannot judge this
+   */
   readonly sameLineAsTry: boolean;
 }
 
-/** 節を囲む関数の名前（関数の宣言・メソッド・変数に入れた関数。なければ "(top)"） */
+/** Name of the function around a clause (declaration, method, function in a variable; "(top)" when none) */
 function enclosingName(node: ts.Node): string {
   for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
     if ((ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) && n.name)

@@ -29,7 +29,8 @@ test("シンガポール: 振替は日曜日に当たった祝日だけ（土曜
     assert.equal(new Set(list.map((h) => h.date)).size, list.length, "同じ日付は 1 件");
     const originals = list.filter((h) => h.kind !== "substitute");
     const substitutes = list.filter((h) => h.kind === "substitute");
-    // 振替は、日曜日に当たった祝日と 1 対 1 に対応し、その日以降で祝日でない最初の日
+    // Substitutes correspond one to one to the holidays on a Sunday: the first day on or after it that is not a
+    // holiday
     const sundays = originals.filter((h) => weekdayOf(h.date) === 0);
     assert.equal(substitutes.length, sundays.length, `${year} 振替の数`);
     for (const h of sundays) {
@@ -42,7 +43,7 @@ test("シンガポール: 振替は日曜日に当たった祝日だけ（土曜
         );
       }
     }
-    // 土曜日に当たった祝日は振り替えない
+    // A holiday on a Saturday is not substituted
     for (const h of originals.filter((h) => weekdayOf(h.date) === 6)) {
       assert.ok(
         !sundays.some((x) => x.name === h.name)
@@ -52,7 +53,8 @@ test("シンガポール: 振替は日曜日に当たった祝日だけ（土曜
       );
     }
   }
-  // 2022-05-01（日）Labour Day の翌日 5/2 が振替。5/3 の Hari Raya Puasa が重ならないのは、告示が 5/3 と定めたため
+  // The day after Labour Day on 2022-05-01 (Sun), 5/2, is the substitute. Hari Raya Puasa on 5/3 does not
+  // collide because the gazette set it on 5/3
   const may = sg.holidaysInYear(2022).filter((h) => h.date.startsWith("2022-05-0"));
   assert.deepEqual(
     may.map((h) => [h.date, h.kind]),
@@ -62,7 +64,7 @@ test("シンガポール: 振替は日曜日に当たった祝日だけ（土曜
       ["2022-05-03", "regular"],
     ],
   );
-  // 2020 年の旧正月: 1/25（土）は振り替えず、1/26（日）が 1/27（月）に振り替わる
+  // Chinese New Year 2020: 1/25 (Sat) is not substituted, and 1/26 (Sun) is substituted by 1/27 (Mon)
   const cny = sg.holidaysInYear(2020).filter((h) => h.name === "Chinese New Year");
   assert.deepEqual(
     cny.map((h) => [h.date, h.kind]),

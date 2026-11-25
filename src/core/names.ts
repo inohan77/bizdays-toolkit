@@ -1,13 +1,20 @@
 /**
- * 祝日のほかの言語の名称（Holiday.names）の検証。提供元のデータの検証（schedule.ts）と、振替日の計算（bizdays-toolkit/provider の
- * withSubstituteDays）が同じ検証を使う（国の提供元は使わないので、errors.ts とは分ける）。
+ * Validation of a holiday's names in other languages (Holiday.names). Shared by the validation of provider data
+ * (schedule.ts) and the substitute-day calculation (withSubstituteDays of bizdays-toolkit/provider). Kept apart
+ * from errors.ts because the country providers do not use it.
  */
 
 import { describeValue } from "./errors.ts";
 
-/** @internal 祝日のほかの言語の名称を検証する（誤りがあれば理由を返す） */
+/**
+ * Validates `Holiday.names` (names in other languages).
+ * @param names - Expected: a plain object whose keys are BCP 47 language tags in canonical form and whose values are
+ *   non-empty strings.
+ * @returns undefined when valid; otherwise the reason, as the end of an error message.
+ * @internal
+ */
 export function checkNames(names: unknown): string | undefined {
-  // 普通のオブジェクト（別の実行環境で作られたものも可）。継承した項目を持つものは受け付けない
+  // A plain object (one from another realm is accepted). An object with inherited entries is rejected
   const isObject = typeof names === "object" && names !== null && !Array.isArray(names);
   const proto: unknown = isObject ? Object.getPrototypeOf(names) : undefined;
   if (!isObject || (proto !== null && Object.getPrototypeOf(proto) !== null)) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { holidayOn, holidaysBetween, holidaysInYear, isHoliday, jp } from "../src/jp/index.ts";
-// 近似式は公開しない内部の関数なので、モジュールから直接読み込んで確かめる
+// The approximation is an internal function that is not published, so it is loaded directly from the module
 import { autumnalEquinoxDay, vernalEquinoxDay } from "../src/jp/rules.ts";
 
 const pick = (date: string) => {

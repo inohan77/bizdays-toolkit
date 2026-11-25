@@ -1,11 +1,12 @@
 /**
- * 0.30.0 で改名した設定のキーと値の表（docs/decisions.md の 10 番、docs/migration.md の 0.30.0）。
- * 検証の入口での読み替え・診断の deprecated-option・migrate… 関数が、この表だけを使う。
+ * Table of the option keys and values renamed in 0.30.0 (docs/decisions.md #10, 0.30.0 in docs/migration.md).
+ * The reading at the entry of validation, the deprecated-option diagnostic and the migrate... functions use
+ * only this table.
  */
 
 import { rangeError, type IssueCollector } from "./errors.ts";
 
-/** @internal 改名したキーがある設定の場所 */
+/** @internal Places in the options that have renamed keys */
 export type RenamedPlace =
   | "source"
   | "calendar"
@@ -16,14 +17,14 @@ export type RenamedPlace =
   | "dueDate"
   | "substitute";
 
-/** @internal 改名したキー */
+/** @internal A renamed key */
 export interface RenamedKey {
   readonly place: RenamedPlace;
   readonly from: string;
   readonly to: string;
 }
 
-/** @internal 改名したキーの表（0.30.0） */
+/** @internal Table of renamed keys (0.30.0) */
 export const RENAMED_KEYS: readonly RenamedKey[] = [
   { place: "source", from: "holidays", to: "holidayProvider" },
   { place: "source", from: "outOfRange", to: "outOfRangePolicy" },
@@ -47,40 +48,65 @@ export const RENAMED_KEYS: readonly RenamedKey[] = [
   { place: "substitute", from: "original", to: "originalPolicy" },
 ];
 
-/** @internal 改名した値 */
+/** @internal A renamed value */
 export interface RenamedValue {
   readonly place: RenamedPlace;
-  /** 新しいキーの名前 */
+  /** Name of the new key */
   readonly key: string;
   readonly from: string;
   readonly to: string;
 }
 
 /**
- * @internal 改名した値の表（0.30.0）。kinds の "national" は、ID が "JP" の祝日の提供元を使う設定でだけ扱いを変える。
- * 作成と診断は値を読み替えずに知らせ（schedule.ts の reportNational）、migrate… は日本の提供元だけの設定で書き換える（docs/decisions.md の 10 番）
+ * @internal Table of renamed values (0.30.0). "national" in kinds is treated differently only in options that
+ * use a holiday provider whose ID is "JP". Creation and the diagnostics report it without reading it as the new
+ * value (reportNational in schedule.ts); migrate... rewrites it in options with only the Japanese provider
+ * (docs/decisions.md #10)
  */
 export const RENAMED_VALUES: readonly RenamedValue[] = [
   { place: "schedule", key: "holidayPolicy", from: "weekday", to: "ignore" },
   { place: "rule", key: "kinds", from: "national", to: "regular" },
 ];
 
-/** @internal 改名を見つけたときの扱い（作成・診断は記録して読み替える。合成などの記録先がない設定は読み替えるだけ） */
+/**
+ * @internal What to do when a rename is found (creation and the diagnostics record it and read the new name;
+ * options with nowhere to record, such as combined ones, are only read as the new name)
+ */
 export type RenameReport = IssueCollector | "throw";
 
 const VERSION = "0.30.0";
-const join = (path: string, key: string): string => (path ? `${path}.${key}` : key);
+/**
+ * Joins a path and a key with a dot (just the key when the path is empty).
+ * @internal
+ */
+export const join = (path: string, key: string): string => (path ? `${path}.${key}` : key);
 
-function conflict(report: RenameReport, path: string, from: string, to: string): void {
+/**
+ * Reports that an old key and its new name are both written.
+ * @param report - A collector (records an `invalid-option` error at `path`) or "throw" (throws it as a RangeError).
+ * @param path - Position of the old key.
+ * @param from - Old key.
+ * @param to - New key.
+ * @internal
+ */
+export function conflict(report: RenameReport, path: string, from: string, to: string): void {
   const message = `use only ${JSON.stringify(to)} (${JSON.stringify(from)} was renamed in ${VERSION})`;
   if (report === "throw") throw rangeError("invalid-option", `${path}: ${message}`);
   report.error("invalid-option", path, message);
 }
 
 /**
- * @internal 設定のオブジェクト 1 つの旧名のキーを新しい名前に読み替えた複製を返す（利用者のオブジェクトは変えない）。
- * writtenPath は利用者が書いた位置（旧名を含む）で、deprecated-option と invalid-option の位置に使う。
- * 旧名と新しい名前の両方があれば invalid-option（どちらを使うか読み取れないため）
+ * Reads the keys renamed in 0.30.0: returns a copy of one options object with old keys replaced by the new names.
+ * @param report - A collector, which receives a `deprecated-option` warning per old key, or "throw" to record
+ *   nothing.
+ * @param places - Which rename tables apply to this object.
+ * @param writtenPath - Position of the object as the user wrote it; used for the warnings and errors.
+ * @param value - The object; not changed.
+ * @returns A new object. An old key whose value is undefined is dropped. When an old key and its new name both have a
+ *   value other than undefined, that is an `invalid-option` (recorded, or thrown with "throw") and the old key is
+ *   dropped.
+ * @internal
+ * @see decisions.md #6, #10
  */
 export function renameKeys(
   report: RenameReport,
@@ -92,7 +118,7 @@ export function renameKeys(
   for (const r of RENAMED_KEYS) {
     if (!places.includes(r.place) || !Object.hasOwn(value, r.from)) continue;
     const at = join(writtenPath, r.from);
-    // 明示的な undefined は省略と同じ（decisions.md の 6 番）。どちらかが undefined なら衝突にしない
+    // An explicit undefined equals omission (decisions.md #6). No conflict when either one is undefined
     const old = value[r.from];
     if (old !== undefined && value[r.to] !== undefined) {
       conflict(report, at, r.from, r.to);
@@ -111,7 +137,14 @@ export function renameKeys(
   return out;
 }
 
-/** @internal 読み替えたオブジェクトのキーについて、利用者が書いた名前（旧名ならその名前） */
+/**
+ * The key name the user wrote for a key of a renamed object.
+ * @param places - Rename tables that apply.
+ * @param value - The object as written by the user.
+ * @param key - A new key name.
+ * @returns The old name when the user wrote the old name with a value other than undefined; otherwise `key`.
+ * @internal
+ */
 export function writtenKey(
   places: readonly RenamedPlace[],
   value: Record<string, unknown>,
@@ -124,8 +157,16 @@ export function writtenKey(
 }
 
 /**
- * @internal 改名した値を読み替える（読み替えたら deprecated-option を記録する）。
- * 文字列ならその値、配列なら要素ごとに読み替えた複製を返す
+ * Reads the values renamed in 0.30.0.
+ * @param report - A collector, which receives a `deprecated-option` warning per replaced value, or "throw" to record
+ *   nothing.
+ * @param place - Rename table of the object.
+ * @param key - New name of the key holding the value.
+ * @param writtenPath - Position of the value as written.
+ * @param value - A string, an array, or anything else.
+ * @returns The new name for a renamed string; a new array with each element replaced for an array; any other value
+ *   unchanged. Unchanged when no rename applies to `place` and `key`.
+ * @internal
  */
 export function renameValue(
   report: RenameReport,

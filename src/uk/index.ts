@@ -1,8 +1,9 @@
 /**
- * 英国の bank holidays（England・Wales・Scotland・Northern Ireland）。
+ * UK bank holidays (England, Wales, Scotland, Northern Ireland).
  *
- * 地域ごとに提供元が分かれている。GOV.UK では England と Wales が 1 つの区分（England and Wales）だが、
- * このライブラリでは別の提供元にしている（日付は現在同じ。将来分かれても利用者のコードを変えずに済むように）。
+ * There is one provider per region. GOV.UK has England and Wales as one division (England and Wales), but this
+ * library has separate providers (the dates are currently the same; users' code need not change if they ever
+ * diverge).
  *
  * @example
  * import { createCalendar } from "bizdays-toolkit";
@@ -14,111 +15,65 @@ import type { Holiday, HolidayProvider } from "../core/types.ts";
 import {
   CONFIRMED_THROUGH,
   DATA_VERSION,
-  SUPPORTED_YEARS,
-  computeUkHolidays,
-  type UkDivision,
+  createUkProvider,
+  withWelsh,
   type UkHolidayKind,
 } from "./rules.ts";
 
 export type { KnownUkHolidayKey, KnownUkHolidayKind, UkHolidayKind } from "./rules.ts";
 
 /**
- * 英国の祝日。
+ * A UK holiday.
  * @public
  */
 export type UkHoliday = Holiday<UkHolidayKind>;
 
-/** Wales の祝日のウェールズ語の名称（GOV.UK のウェールズ語版の表記） */
-const WELSH_NAMES: Readonly<Record<string, string>> = {
-  "New Year’s Day": "Dydd Calan",
-  "Good Friday": "Gwener y Groglith",
-  "Easter Monday": "Llun y Pasg",
-  "Early May bank holiday": "Gŵyl banc dechrau Mai",
-  "Early May bank holiday (VE day)": "Gŵyl banc dechrau Mai (diwrnod VE)",
-  "Spring bank holiday": "Gŵyl banc y gwanwyn",
-  "Summer bank holiday": "Gŵyl banc yr haf",
-  "Christmas Day": "Dydd Nadolig",
-  "Boxing Day": "Dydd San Steffan",
-  "Queen’s Diamond Jubilee": "Jiwbilî Ddiemwnt y Frenhines",
-  "Platinum Jubilee bank holiday": "Gŵyl banc Jiwbilî Blatinwm",
-  "Bank Holiday for the State Funeral of Queen Elizabeth II":
-    "Gŵyl y Banc ar gyfer Angladd Gwladol y Frenhines Elizabeth II",
-  "Bank holiday for the coronation of King Charles III":
-    "Gŵyl y banc ar gyfer coroni Brenin Siarl III",
-};
-
-function withWelsh(list: readonly UkHoliday[]): UkHoliday[] {
-  return list.map((h) => {
-    const cy = WELSH_NAMES[h.name];
-    return Object.freeze(cy === undefined ? h : { ...h, names: Object.freeze({ cy }) });
-  });
-}
-
-function provider(
-  id: string,
-  division: UkDivision,
-  transform?: (list: readonly UkHoliday[]) => UkHoliday[],
-): HolidayProvider<UkHolidayKind> {
-  const cache = new Map<number, readonly UkHoliday[]>();
-  return Object.freeze({
-    id,
-    timeZone: "Europe/London",
-    supportedYears: SUPPORTED_YEARS,
-    dataVersion: DATA_VERSION,
-    confirmedThrough: CONFIRMED_THROUGH,
-    holidaysInYear(year: number): readonly UkHoliday[] {
-      let list = cache.get(year);
-      if (!list) {
-        const computed = computeUkHolidays(division, year);
-        list = Object.freeze(transform ? transform(computed) : computed);
-        cache.set(year, list);
-      }
-      return list;
-    },
-  });
-}
-
 /**
- * England の bank holidays の提供元（GOV.UK の England and Wales）。
+ * Provider of the bank holidays of England (England and Wales of GOV.UK).
  * @public
  */
-export const england: HolidayProvider<UkHolidayKind> = provider("GB-ENG", "england-and-wales");
+export const england: HolidayProvider<UkHolidayKind> = createUkProvider(
+  "GB-ENG",
+  "england-and-wales",
+);
 
 /**
- * Wales の bank holidays の提供元（GOV.UK の England and Wales）。GOV.UK のウェールズ語版に名称がある祝日には、
- * ウェールズ語の名称（names.cy）が付く（公式の名称がない臨時の祝日には付かない）。
+ * Provider of the bank holidays of Wales (England and Wales of GOV.UK). Holidays that have a name in the Welsh
+ * version of GOV.UK get the Welsh name (names.cy); special holidays without an official name do not.
  * @public
  */
-export const wales: HolidayProvider<UkHolidayKind> = provider(
+export const wales: HolidayProvider<UkHolidayKind> = createUkProvider(
   "GB-WLS",
   "england-and-wales",
   withWelsh,
 );
 
 /**
- * Scotland の bank holidays の提供元。
+ * Provider of the bank holidays of Scotland.
  * @public
  */
-export const scotland: HolidayProvider<UkHolidayKind> = provider("GB-SCT", "scotland");
+export const scotland: HolidayProvider<UkHolidayKind> = createUkProvider("GB-SCT", "scotland");
 
 /**
- * Northern Ireland の bank holidays の提供元。
+ * Provider of the bank holidays of Northern Ireland.
  * @public
  */
-export const northernIreland: HolidayProvider<UkHolidayKind> = provider(
+export const northernIreland: HolidayProvider<UkHolidayKind> = createUkProvider(
   "GB-NIR",
   "northern-ireland",
 );
 
 /**
- * 反映済みの GOV.UK のデータの年月。
- * @deprecated 0.12.0 で非推奨。提供元の項目（england.dataVersion など。4 つの提供元で同じ値）に移行する（docs/migration.md）。1.0.0 で削除する
+ * Year and month of the reflected GOV.UK data.
+ * @deprecated Deprecated in 0.12.0. Use the provider's property (england.dataVersion, ...; the same value for
+ *   the four providers; docs/migration.md). Removed in 1.0.0
  * @public
  */
 export const dataVersion: string = DATA_VERSION;
 /**
- * GOV.UK が日付を公表している最後の年（それより後は規則による予測で confirmed: false）。
- * @deprecated 0.12.0 で非推奨。提供元の項目（england.confirmedThrough など。4 つの提供元で同じ値）に移行する（docs/migration.md）。1.0.0 で削除する
+ * The last year for which GOV.UK publishes dates (later years are predicted by rule, confirmed: false).
+ * @deprecated Deprecated in 0.12.0. Use the provider's property (england.confirmedThrough, ...; the same value
+ *   for the four providers; docs/migration.md). Removed in 1.0.0
  * @public
  */
 export const confirmedThrough: number = CONFIRMED_THROUGH;

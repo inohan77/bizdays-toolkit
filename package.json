@@ -1,6 +1,6 @@
 {
   "name": "bizdays-toolkit",
-  "version": "0.32.8",
+  "version": "0.32.9",
   "description": "Holidays, business-day calendar and day-by-day schedules (e.g. store hours) with time zone support. Japanese holidays verified against the Cabinet Office data; UK bank holidays (England, Wales, Scotland, Northern Ireland) verified against GOV.UK and The Gazette; French public holidays (metropole, Alsace-Moselle) verified against data.gouv.fr; Singapore public holidays verified against data.gov.sg. / 祝日と営業日のカレンダー（タイムゾーン対応・日本の祝日は内閣府、英国の bank holidays は GOV.UK と The Gazette、フランスの祝日は data.gouv.fr、シンガポールの祝日は data.gov.sg のデータで全日照合）",
   "keywords": [
     "bank-holidays",
@@ -74,6 +74,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint --deny-warnings src scripts test",
     "test": "node --import ./scripts/strict-warnings.ts --test \"test/*.test.ts\"",
+    "test:unit": "node --import ./scripts/strict-warnings.ts --test \"test/unit/**/*.test.ts\"",
+    "check:unit": "node scripts/check-unit-tests.ts",
+    "check:promise": "node scripts/promise-inventory.ts --dimensions && node scripts/promise-inventory.ts --every 100 && node scripts/check-unverified.ts --allow-open",
     "test:tools": "node --import ./scripts/strict-warnings.ts --test \"test/tools/*.test.ts\"",
     "test:oracle": "node --import ./scripts/strict-warnings.ts --test test/diagnose-oracle.test.ts",
     "test:tz": "node scripts/test-tz.ts",
@@ -81,7 +84,7 @@
     "bench": "node scripts/bench.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "node scripts/check-toolchain.ts && pnpm typecheck && pnpm lint && pnpm test && pnpm test:tools && pnpm test:tz && pnpm build && pnpm test:compat && node scripts/check-readme-examples.ts && node scripts/check-consumer-types.ts && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/check-names.ts && node scripts/check-claims.ts && node scripts/api-report.ts",
+    "check": "node scripts/check-toolchain.ts && pnpm typecheck && pnpm lint && pnpm test && pnpm check:unit && pnpm check:promise && pnpm test:tools && pnpm test:tz && pnpm build && pnpm test:compat && node scripts/check-readme-examples.ts && node scripts/check-consumer-types.ts && pnpm fmt:check && node scripts/check-package.ts && node scripts/check-size.ts && node scripts/check-names.ts && node scripts/check-claims.ts && node scripts/api-report.ts",
     "verify:cao": "node scripts/verify-cao.ts",
     "verify:govuk": "node scripts/verify-govuk.ts",
     "verify:datagovsg": "node scripts/verify-datagovsg.ts",

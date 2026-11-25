@@ -1,4 +1,4 @@
-// null・配列の穴・単日と期間の併記の種類のテスト（decisions.md の 6 番・8 番）
+// Tests of null, holes in arrays, and a single day written together with a period (decisions.md #6, #8)
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -17,7 +17,7 @@ import { COMMON_RULE_KEYS, CONTEXTS, picker, random, SHAPES } from "./support/ca
 
 type Obj = Record<string, unknown>;
 
-/** 作成の例外の code（作成できれば undefined） */
+/** The code of the error at creation (undefined when creation works) */
 const codeOf = (f: () => unknown): string | undefined => {
   try {
     f();
@@ -30,12 +30,16 @@ const codeOf = (f: () => unknown): string | undefined => {
 const errorCodes = (diagnostics: readonly { severity: string; code: string }[]): string[] =>
   diagnostics.filter((d) => d.severity === "error").map((d) => d.code);
 
-/** etc/api.md の公開の型のキー（突き合わせのため。改名した旧名は 10 番どおり読み替えるので、同じく確かめる） */
+/**
+ * The keys of a public type of etc/api.md (for the comparison; renamed old names are read as decision #10 says,
+ * so they are checked in the same way)
+ */
 function apiKeys(name: string): string[] {
   const api = readFileSync(new URL("../etc/api.md", import.meta.url), "utf8");
   const body = new RegExp(`export interface ${name}\\b[^{]*\\{([\\s\\S]*?)\\n\\}`).exec(api)?.[1];
   assert.ok(body, name);
-  // 形を分けるための ?: never の項目は、書けない項目なので除く（実行時は知らないキー。decisions.md の 8 番・9 番）
+  // ?: never properties that only separate shapes cannot be written and are left out (unknown keys at run time.
+  // decisions.md #8, #9)
   return [...body.matchAll(/readonly (\w+)\??:(?! never;)/g)].map((m) => m[1]!);
 }
 
@@ -53,7 +57,8 @@ test("null は省略ではなく値の誤り: 設定・規則・メソッドの�
       () => createCalendar({ [key]: null } as never),
       () => diagnoseCalendar({ [key]: null } as never),
     ]);
-  // スケジュールの weekdayValues の要素と value は値（null も値）なので、キーそのものの null だけを確かめる
+  // The elements of weekdayValues and `value` of a schedule are values (null is a value too), so only null for
+  // the keys themselves is checked
   for (const key of [...apiKeys("HolidaySourceOptions"), ...apiKeys("ScheduleOptions")]) {
     const options = { weekdayValues: [1, 1, 1, 1, 1, 1, 1], [key]: null };
     cases.push([
@@ -78,7 +83,8 @@ test("null は省略ではなく値の誤り: 設定・規則・メソッドの�
       () => createCalendarFromSchedule(schedule, (v) => v === 1, { [key]: null } as never),
       () => [],
     ]);
-  // 規則の形ごとのキー（目録の形の一覧は、etc/api.md の型と test/tools/catalog.test.ts で突き合わせている）
+  // The keys per rule shape (the list of shapes of the catalog is compared with the types of etc/api.md in
+  // test/tools/catalog.test.ts)
   const p = picker(random(20261112));
   for (const shape of SHAPES)
     for (const key of [...shape.keys, ...COMMON_RULE_KEYS]) {
@@ -98,14 +104,15 @@ test("null は省略ではなく値の誤り: 設定・規則・メソッドの�
     if (errors.length > 0)
       assert.ok(errors.includes(code), `${label}: 作成は ${code}、診断は ${errors.join(", ")}`);
   }
-  // 時刻の分の null も値の誤り（省略と同じなのは undefined だけ）
+  // null for the minute of a time is a wrong value too (only undefined equals omission)
   assert.equal(
     codeOf(() =>
       createCalendar().civilOf({ year: 2026, month: 1, day: 1, hour: 1, minute: null } as never),
     ),
     "invalid-time",
   );
-  // 文字列にできない分の値も、code 付きの invalid-time（メッセージの組み立てで落ちない。decisions.md の 3 番）
+  // A minute value that cannot become a string is also invalid-time with a code (building the message does not
+  // fail. decisions.md #3)
   assert.equal(
     codeOf(() =>
       createCalendar().civilOf({
@@ -168,7 +175,7 @@ test("単日と期間の併記: 個別の日付・毎年の月日の 5 つの配
 test("配列の穴は undefined の要素と同じ: 設定の配列・holidayProvider・combineCalendars の引数で、穴と明示的な undefined の要素は同じ code（decisions.md の 6 番）。weekdayValues の穴は値 undefined", () => {
   const hole = (before: unknown[], after: unknown[]): unknown[] => {
     const list: unknown[] = [...before];
-    list.length = before.length + 1; // 穴を 1 つ空ける
+    list.length = before.length + 1; // leaves one hole
     list.push(...after);
     return list;
   };
@@ -211,7 +218,7 @@ test("配列の穴は undefined の要素と同じ: 設定の配列・holidayPro
   const values: unknown[] = [1];
   values.length = 7;
   values.fill(1, 2);
-  assert.equal(createSchedule({ weekdayValues: values as never }).valueOn("2026-11-09"), undefined); // 月曜日
+  assert.equal(createSchedule({ weekdayValues: values as never }).valueOn("2026-11-09"), undefined); // a Monday
 });
 
 test("monthOf の月と暦日の読み分けは closingPeriod と同じ（ハイフンで区切った部分が 3 つ以上なら暦日。decisions.md の 8 番）", () => {

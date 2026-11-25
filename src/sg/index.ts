@@ -1,5 +1,5 @@
 /**
- * シンガポールの祝日（public holidays。MOM が年ごとに告示する日付を data.gov.sg のデータで全日照合）。
+ * Public holidays of Singapore (the dates gazetted by MOM per year, all verified against the data.gov.sg data).
  *
  * @example
  * import { createCalendar } from "bizdays-toolkit";
@@ -19,7 +19,7 @@ import {
 export type { KnownSgHolidayKey, KnownSgHolidayKind, SgHolidayKind } from "./rules.ts";
 
 /**
- * シンガポールの祝日。
+ * A holiday of Singapore.
  * @public
  */
 export type SgHoliday = Holiday<SgHolidayKind>;
@@ -27,9 +27,10 @@ export type SgHoliday = Holiday<SgHolidayKind>;
 const cache = new Map<number, readonly SgHoliday[]>();
 
 /**
- * シンガポールの祝日の提供元。対応年は MOM が告示した年（2020 年〜）だけで、それより後の年は予測せず out-of-range
- * （旧正月・Hari Raya・Vesak Day・Deepavali は規則で計算できないため）。日曜日に当たる祝日の振替（kind: "substitute"）は
- * Holidays Act の規則で計算する。
+ * The holiday provider of Singapore. The supported years are only those gazetted by MOM (from 2020); later years
+ * are not predicted and are out-of-range (Chinese New Year, Hari Raya, Vesak Day and Deepavali cannot be
+ * computed by rule). Substitutes for holidays on a Sunday (kind: "substitute") are computed by the rule of the
+ * Holidays Act.
  * @public
  */
 export const sg: HolidayProvider<SgHolidayKind> = Object.freeze({
@@ -38,6 +39,13 @@ export const sg: HolidayProvider<SgHolidayKind> = Object.freeze({
   supportedYears: SUPPORTED_YEARS,
   dataVersion: DATA_VERSION,
   confirmedThrough: CONFIRMED_THROUGH,
+  /**
+   * The holidays of a year, computed once and cached.
+   * @param year - A supported year.
+   * @returns A frozen array of frozen holidays sorted by date.
+   * @throws RangeError `invalid-argument` when the year is not an integer; `out-of-range` outside the supported
+   *   years.
+   */
   holidaysInYear(year: number): readonly SgHoliday[] {
     let list = cache.get(year);
     if (!list) {

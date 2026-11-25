@@ -1,0 +1,158 @@
+{
+  "blocks": [
+    {
+      "function": "editDistance",
+      "first": "export function editDistance(a: string, b: string): number {",
+      "lines": 16,
+      "kind": "option-error",
+      "reason": "Computes the edit distance for the suggestion of an unknown-option (a misspelled option name); the promise checks build no misspelled names. The unit tests run every line (pnpm check:unit)"
+    },
+    {
+      "function": "closestKey",
+      "first": "export function closestKey(key: string, known: readonly string[]): string | undefined {",
+      "lines": 5,
+      "kind": "option-error",
+      "reason": "Finds the known key suggested for an unknown-option (a misspelled option name); the promise checks build no misspelled names. The unit tests run every line (pnpm check:unit)"
+    },
+    {
+      "function": "closestOf",
+      "first": "export function closestOf(key: string, known: readonly string[]): string | undefined {",
+      "lines": 20,
+      "kind": "option-error",
+      "reason": "Finds the known key suggested for an unknown-option (a misspelled option name); the promise checks build no misspelled names. The unit tests run every line (pnpm check:unit)"
+    },
+    {
+      "function": "canCover",
+      "first": "default: {",
+      "lines": 4,
+      "kind": "unreachable",
+      "reason": "holidayOverlapPolicy of a compiled rule is one of the three values of the cases (overlapPolicyOf rejects any other value at compilation); the default branch exists for the exhaustiveness check of the compiler"
+    },
+    {
+      "function": "providerPath",
+      "first": ": `holidayProvider[${source.providerIndexes?.[i] ?? i}]`;",
+      "lines": 1,
+      "kind": "unreachable",
+      "reason": "compileHolidaySource always sets providerIndexes with one position per provider, so with two or more providers the right side of ?? is never used; it exists because the type allows undefined"
+    },
+    {
+      "function": "checkProviderData",
+      "first": "} catch (error) {",
+      "lines": 8,
+      "kind": "option-error",
+      "reason": "Reports invalid-provider-data when a holiday provider returns wrong data in a supported year of the diagnostic range; the promise checks use providers whose data are valid (test/faulty-provider.test.ts covers such providers)"
+    },
+    {
+      "function": "unsureOf",
+      "first": "if (item === undefined) return true;",
+      "lines": 1,
+      "kind": "unreachable",
+      "reason": "never-matches and redundant inside the rule diagnostics are reported only for specific dates, annual dates and recurring rules, or for an option property of one of them (a path that starts with the path of the item), so an item is always found"
+    },
+    {
+      "function": "checkLostShifts",
+      "first": "if (!atEdge(n, error, window)) throw error;",
+      "lines": 1,
+      "kind": "option-error",
+      "reason": "Passes on an error of a judgement that is not out-of-range at an end of the window. With the options made by this library the only such error is out-of-range from a neighbouring day at an end of the window (the lookup accepts unconfirmed holidays, moves out of reach are recorded, and a basis never throws: guardBases takes every exception of a basis as a month that cannot be judged), so it is reached only with a mistake in the options: a holiday provider that throws after its data were checked (for example on the first read of the year before the diagnostic range, which a rule moved from the last day of that year looks at); run then reports invalid-provider-data"
+    },
+    {
+      "function": "dropUnsure",
+      "first": "throw internalError(`a basis threw in a month that was not found beforehand: ${m}`);",
+      "lines": 1,
+      "kind": "unreachable",
+      "reason": "Throws an internal error when a basis threw in a month that unjudgeableDays did not find. guardBases evaluates every month of a basis at most once during a diagnosis and keeps the outcome, and unjudgeableDays reads the same outcomes, so a basis cannot answer differently later (also an object shaped like a calendar that changes how it answers between calls); the months the rules evaluate are months of days unjudgeableDays examined (the window and the periods of the specific dates, within the effective period and the selected months of the rule, and the months of the 7 days of a week rule). No input reaches it; it watches for a defect of the code"
+    },
+    {
+      "function": "dropUnsure",
+      "first": "throw internalError(",
+      "lines": 3,
+      "kind": "unreachable",
+      "reason": "Throws an internal error when a diagnostic about an unjudgeable month was left. Every place in the rule diagnostics that reports never-matches or redundant asks unsure first (or reports a path that unsure always lets through), and unsure depends only on data fixed before the analysis (the compiled options and the result of unjudgeableDays), so no input reaches it; it watches for a defect of the code"
+    },
+    {
+      "function": "createRuleContext",
+      "first": "unsure: (code: string, path: string) => boolean = () => false,",
+      "lines": 1,
+      "kind": "unreachable",
+      "reason": "The default value of the parameter unsure; the only caller (analyzeRules) always passes it"
+    },
+    {
+      "function": "reportNoBusinessDay",
+      "first": "if (!atEdge(n, error, window) && !isLostShift(error)) throw error;",
+      "lines": 1,
+      "kind": "option-error",
+      "reason": "Passes on an error of a judgement that is neither out-of-range at an end of the window nor holiday-run-too-long. With the options made by this library no other error is left (the lookup accepts unconfirmed holidays, and a calendar has no basis calendar), so it is reached only with a mistake in the options: a holiday provider that throws after its data were checked (for example from a later call on); run then reports invalid-provider-data"
+    },
+    {
+      "function": "reportRedundant",
+      "first": "return decided?.get(rule) ?? new Set();",
+      "lines": 1,
+      "kind": "unreachable",
+      "reason": "Annual dates and recurring rules are candidates only when the window exists, and the days a rule decides are computed for every candidate on first use; the guard exists because the type of the window and of Map.get allows undefined"
+    },
+    {
+      "function": "reportRedundant",
+      "first": "if (!window) return false;",
+      "lines": 1,
+      "kind": "unreachable",
+      "reason": "Annual dates and recurring rules are candidates only when the window exists, and the days a rule decides are computed for every candidate on first use; the guard exists because the type of the window and of Map.get allows undefined"
+    },
+    {
+      "function": "reportRedundant",
+      "first": "throw internalError(\"redundant: the sequential removal did not converge\");",
+      "lines": 1,
+      "kind": "unreachable",
+      "reason": "A pass continues only when the pass before removed a rule, and each rule is removed at most once, so the number of passes is at most the number of rules plus one; the throw guards against a defect"
+    },
+    {
+      "function": "analyzeRules",
+      "first": "unsure: (code: string, path: string) => boolean = () => false,",
+      "lines": 1,
+      "kind": "unreachable",
+      "reason": "The default value of the parameter unsure; the only caller (analyze) always passes it"
+    },
+    {
+      "function": "analyzeRules",
+      "first": "if (!checkProviderData(c, compiled.source as HolidaySource<string>)) return;",
+      "lines": 1,
+      "kind": "option-error",
+      "reason": "Stops the rule diagnostics after invalid-provider-data was reported (the line above); the promise checks use providers whose data are valid"
+    },
+    {
+      "function": "compileDiagnoseOptions",
+      "first": "if (!isOptionsObject(options)) {",
+      "lines": 6,
+      "kind": "option-error",
+      "reason": "Throws invalid-argument when the second argument of the diagnostics is not an object; the promise checks pass undefined, an object without asOf, or an object with a valid asOf"
+    },
+    {
+      "function": "compileDiagnoseOptions",
+      "first": "if (!isValidDate(asOf)) {",
+      "lines": 6,
+      "kind": "option-error",
+      "reason": "Throws invalid-date when asOf is not a date string; the promise checks pass valid dates"
+    },
+    {
+      "function": "run",
+      "first": "} catch (error) {",
+      "lines": 10,
+      "kind": "option-error",
+      "reason": "Reports a holiday provider that throws during the rule diagnostics as invalid-provider-data and discards their results; the promise checks use providers that do not throw (test/faulty-provider.test.ts covers such providers)"
+    },
+    {
+      "function": "run",
+      "first": "unknownKey === undefined || knownKeys === undefined",
+      "lines": 1,
+      "kind": "option-error",
+      "reason": "Adds the suggestion of a known key to an unknown-option (a misspelled option name); the promise checks build no misspelled names"
+    },
+    {
+      "function": "run",
+      "first": ": closestKey(unknownKey, knownKeys);",
+      "lines": 4,
+      "kind": "option-error",
+      "reason": "Adds the suggestion of a known key to an unknown-option (a misspelled option name); the promise checks build no misspelled names"
+    }
+  ]
+}

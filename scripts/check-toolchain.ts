@@ -1,12 +1,15 @@
 import "./strict-warnings.ts";
 /**
- * 開発用のツール（Node.js・npm・pnpm）のバージョンを確かめる（pnpm check の最初に実行。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）。
+ * Checks the versions of the development tools (Node.js, npm, pnpm) (run first by pnpm check; RELEASING.md,
+ * reasons for the quality mechanisms, "runtimes that are checked").
  *
- * - ワークフローどうしで、同じ系列の Node.js のバージョンがそろっていること（ci.yml の check の行列が基準）
- * - ci.yml の compat の行列に、engines の下限（package.json）が入っていること
- * - 実行している Node.js・npm・pnpm が、CI の固定バージョン（check の行列と setup-toolchain）と同じであること。
- *   CI ではエラー、手元では注意の表示だけにする（熟成ゲートの都合などで、手元を先に変えることがあるため。
- *   RELEASING.md の「開発環境のバージョン」に戻すまでの間も作業を止めない）
+ * - The workflows agree on the Node.js version of each release line (the matrix of `check` in ci.yml is the
+ *   reference)
+ * - The matrix of `compat` in ci.yml contains the lower bound of `engines` (package.json)
+ * - The running Node.js, npm and pnpm equal the pinned versions of CI (the matrix of `check` and
+ *   setup-toolchain). An error in CI, only a notice locally (the local tools are sometimes changed first, e.g.
+ *   because of the maturity gate; work does not stop until RELEASING.md's development-environment versions
+ *   catch up)
  */
 
 import { execSync } from "node:child_process";
@@ -26,7 +29,7 @@ const errors: string[] = [];
 const notices: string[] = [];
 const inCi = process.env["CI"] === "true";
 
-/** ワークフローのジョブ（2 字下げの見出し）ごとに本文を切り出す */
+/** Cuts out the body of each job of a workflow (headings indented by two spaces) */
 function jobs(text: string): Map<string, string> {
   const body = text.slice(text.indexOf("\njobs:\n"));
   const map = new Map<string, string>();
@@ -48,9 +51,9 @@ const checkNodes = matrixOf(ciJobs.get("check"));
 const compatNodes = matrixOf(ciJobs.get("compat"));
 if (checkNodes.length === 0) errors.push("ci.yml: the check job has no node matrix");
 
-// 1. ワークフローどうしの Node.js のバージョン
+// 1. Node.js versions across the workflows
 const places: [string, string][] = [
-  // ci.yml の check 以外のジョブ（compat のビルド・browsers・safari・workerd など）が固定するバージョン
+  // Versions pinned by the jobs of ci.yml other than check (the build of compat, browsers, safari, workerd, ...)
   ...[...ciJobs]
     .filter(([name]) => name !== "check")
     .flatMap(([name, text]) =>
@@ -69,7 +72,7 @@ for (const [where, version] of places) {
   }
 }
 
-// 2. engines の下限が compat で確かめられていること
+// 2. The lower bound of engines is checked by compat
 const floor = /^>=\s*(\d+)\.(\d+)(?:\.(\d+))?$/.exec(pkg.engines.node);
 if (!floor) {
   errors.push(`package.json: unexpected engines.node ${pkg.engines.node}`);
@@ -80,7 +83,7 @@ if (!floor) {
   }
 }
 
-// 3. 実行しているバージョンと固定バージョン
+// 3. The running versions and the pinned versions
 const npmPin = /NPM_VERSION: "([^"]+)"/.exec(action)?.[1];
 const pnpmPin = /PNPM_VERSION: "([^"]+)"/.exec(action)?.[1];
 const local: string[] = [];

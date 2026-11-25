@@ -1,11 +1,15 @@
-// 例外の code だけを見る繰り返しの間、実行環境のスタックの記録を止める（テストの時間のため）。
-// 取り除いて比べるテストは、広い期間の全日について公開の関数を 1 日ずつ呼び、対応年の外の日などで例外を受ける。例外を作るたびに
-// スタックを記録する時間がかかるので、その繰り返しの間だけ記録を止める。ライブラリは今までどおり例外を投げ、テストは今までどおり
-// 受ける。全体で止める形（--stack-trace-limit=0）は、テストが失敗したときのスタックが出なくなるので取らない
+// Turns off the runtime's recording of stacks during a loop that looks only at error codes (for the time of the
+// tests).
+// The tests that remove and compare call the public functions day by day over all days of a wide period and
+// catch errors on days outside the supported years and the like. Recording a stack takes time for every error
+// created, so the recording is off only during that loop. The library throws as before and the tests catch as
+// before. Turning it off globally (--stack-trace-limit=0) is not used: a failing test would have no stack
 
 /**
- * fn の間だけ Error.stackTraceLimit を 0 にし、抜けるとき（例外で抜けたときも）元の値に戻す。
- * 例外のメッセージと code だけを見る同期の繰り返しにだけ使う（同期なので、ほかのテストの例外が止めている間に作られることはない）
+ * Sets Error.stackTraceLimit to 0 only during `fn` and restores the value on leaving (also when leaving by an
+ * error).
+ * Only for synchronous loops that look at the message and code of errors (being synchronous, no error of
+ * another test is created while it is off)
  */
 export function withoutStackTraces<T>(fn: () => T): T {
   const saved = Error.stackTraceLimit;

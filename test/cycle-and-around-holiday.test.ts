@@ -10,7 +10,7 @@ const codes = (options: Parameters<typeof diagnoseCalendar>[0]) =>
   diagnoseCalendar(options).map((d) => [d.code, d.path, d.relatedPath ?? null]);
 
 // ---------------------------------------------------------------------------
-// 日単位の周期の規則 { cycle, anchor, positions }
+// The day-cycle rule { cycle, anchor, positions }
 // ---------------------------------------------------------------------------
 
 const shift = {
@@ -28,7 +28,7 @@ test("cycle: 起点を 1 日目として、周期の中の何日目かに当て�
   const open = ["2026-01-05", "2026-01-08", "2026-01-11", "2026-01-14", "2026-01-17"];
   for (const d of closed) assert.equal(a.isBusinessDay(d), false, d);
   for (const d of open) assert.equal(a.isBusinessDay(d), true, d);
-  // 起点より前の日にも当てはまる
+  // Days before the anchor match too
   assert.equal(a.isBusinessDay("2026-01-04"), false);
   assert.equal(a.isBusinessDay("2026-01-03"), false);
   assert.equal(a.isBusinessDay("2026-01-02"), true);
@@ -73,9 +73,9 @@ test("cycle: 月・有効期間・祝日の扱い・スケジュール", () => {
   });
   assert.equal(c.isBusinessDay("2026-04-01"), false);
   assert.equal(c.isBusinessDay("2026-04-11"), false);
-  assert.equal(c.isBusinessDay("2026-03-22"), true); // 有効期間の前
-  assert.equal(c.isBusinessDay("2026-06-10"), true); // 月の外（位置は 1）
-  // 祝日の下（既定）では祝日が先、"over-holiday" なら祝日でも当てはまる
+  assert.equal(c.isBusinessDay("2026-03-22"), true); // before the effective period
+  assert.equal(c.isBusinessDay("2026-06-10"), true); // outside the months (position 1)
+  // Under the holiday (default) the holiday comes first; with "over-holiday" the rule applies on a holiday too
   const under = createCalendar({
     holidayProvider: jp,
     openRecurringRules: [{ cycle: 7, anchor: "2026-01-01", positions: [1] }],
@@ -154,7 +154,7 @@ test("cycle: 入力の誤り", () => {
 });
 
 test("cycle: 診断（覆われている・当てはまる日がない）", () => {
-  // 周期 12 の規則は、同じ起点の周期 6 の規則に覆われる。起点がずれると覆われない
+  // A rule with cycle 12 is covered by a rule with cycle 6 and the same anchor. With a shifted anchor it is not
   assert.deepEqual(
     codes({
       closedWeekdays: [],
@@ -166,7 +166,7 @@ test("cycle: 診断（覆われている・当てはまる日がない）", () =
     }).filter(([code]) => code === "shadowed"),
     [["shadowed", "closedRecurringRules[1]", "closedRecurringRules[0]"]],
   );
-  // 有効期間の中に当てはまる日がない
+  // No matching day within the effective period
   assert.deepEqual(
     codes({
       closedRecurringRules: [
@@ -184,36 +184,37 @@ test("cycle: 診断（覆われている・当てはまる日がない）", () =
 });
 
 // ---------------------------------------------------------------------------
-// 祝日の翌日・祝前日の kinds・keys（隣の祝日で絞る）
+// kinds and keys of day-after and day-before-holiday rules (filtering by the neighbouring holiday)
 // ---------------------------------------------------------------------------
 
 test("祝前日・祝日の翌日: keys・kinds は隣の祝日で絞る", () => {
-  // シンガポールの旧正月（2026 年は 2/17・2/18）の前日
+  // The day before Chinese New Year in Singapore (2/17 and 2/18 in 2026)
   const cny = createCalendar({
     holidayProvider: sg,
     closedRecurringRules: [{ dayBeforeHoliday: true, keys: ["chinese-new-year"] }],
   });
   assert.equal(cny.isBusinessDay("2026-02-16"), false);
   assert.equal(cny.isBusinessDay("2026-02-13"), true);
-  // Hari Raya Puasa（2026-03-21）の前日は当てはまらない
+  // The day before Hari Raya Puasa (2026-03-21) does not match
   assert.equal(cny.isBusinessDay("2026-03-20"), true);
-  // 振替休日（2026-05-06）の翌日だけ
+  // Only the day after the substitute holiday (2026-05-06)
   const afterSubstitute = createCalendar({
     holidayProvider: jp,
     closedRecurringRules: [{ dayAfterHoliday: true, kinds: ["substitute"] }],
   });
   assert.equal(afterSubstitute.isBusinessDay("2026-05-07"), false);
-  assert.equal(afterSubstitute.isBusinessDay("2026-01-02"), true); // 元日の翌日
-  // key を持たない祝日（国民の休日）は keys に当てはまらない。連休の前日は、隣の祝日（連休の初日）で絞る
+  assert.equal(afterSubstitute.isBusinessDay("2026-01-02"), true); // the day after New Year's Day
+  // A holiday without a key (citizens' holiday) does not match keys. The day before a run of holidays is
+  // filtered by the neighbouring holiday (the first day of the run)
   const beforeChildrens = createCalendar({
     holidayProvider: jp,
     closedRecurringRules: [{ dayBeforeHoliday: true, keys: ["childrens"] }],
   });
-  assert.equal(beforeChildrens.isBusinessDay("2026-05-02"), true); // 翌日は憲法記念日
+  assert.equal(beforeChildrens.isBusinessDay("2026-05-02"), true); // the next day is Constitution Memorial Day
 });
 
 // ---------------------------------------------------------------------------
-// 祝日の翌日・祝前日の skipWeekdays（祝日と書いた曜日の塊の前後）
+// skipWeekdays of day-after and day-before-holiday rules (around a block of holidays and the listed weekdays)
 // ---------------------------------------------------------------------------
 
 test("祝前日・祝日の翌日: skipWeekdays で塊の前後の日になる", () => {
@@ -222,22 +223,22 @@ test("祝前日・祝日の翌日: skipWeekdays で塊の前後の日になる",
     closedWeekdays: [],
     closedRecurringRules: [{ dayBeforeHoliday: true, skipWeekdays: [0, 6] }],
   });
-  // Spring bank holiday（2026-05-25 月）の前の最終平日は 5/22（金）
+  // The last weekday before the Spring bank holiday (2026-05-25, Mon) is 5/22 (Fri)
   assert.equal(before.isBusinessDay("2026-05-22"), false);
-  assert.equal(before.isBusinessDay("2026-05-23"), true); // 飛ばす曜日には当てはまらない
+  assert.equal(before.isBusinessDay("2026-05-23"), true); // does not match a skipped weekday
   assert.equal(before.isBusinessDay("2026-05-24"), true);
-  assert.equal(before.isBusinessDay("2026-05-15"), true); // 普通の週末の前は当てはまらない
-  // 祝日の翌日: Good Friday（4/3）から Easter Monday（4/6）までの塊が明けた 4/7（火）
+  assert.equal(before.isBusinessDay("2026-05-15"), true); // does not match before an ordinary weekend
+  // Day after a holiday: 4/7 (Tue), the day after the block from Good Friday (4/3) to Easter Monday (4/6)
   const after = createCalendar({
     holidayProvider: england,
     closedRecurringRules: [{ dayAfterHoliday: true, skipWeekdays: [0, 6] }],
   });
   assert.equal(after.isBusinessDay("2026-04-07"), false);
-  assert.equal(after.dayInfoOn("2026-04-04").optionPath, undefined); // 飛ばす曜日には当てはまらない
+  assert.equal(after.dayInfoOn("2026-04-04").optionPath, undefined); // does not match a skipped weekday
 });
 
 test("祝前日・祝日の翌日: skipWeekdays と keys は、塊の中で最も近い祝日で絞る", () => {
-  // 2027 年のクリスマス（土）と Boxing Day（日）は、振替の 12/27（christmas）・12/28（boxing-day）になる
+  // Christmas (Sat) and Boxing Day (Sun) of 2027 become the substitutes 12/27 (christmas) and 12/28 (boxing-day)
   const lastPosting = createCalendar({
     holidayProvider: england,
     closedRecurringRules: [{ dayBeforeHoliday: true, keys: ["christmas"], skipWeekdays: [0, 6] }],

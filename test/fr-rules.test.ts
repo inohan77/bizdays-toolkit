@@ -12,7 +12,7 @@ test("フランス: 本土は 11 日、Alsace-Moselle は 13 日。振替はな�
   for (let y = 2000; y <= 2099; y++) {
     const m = metropole.holidaysInYear(y);
     const a = alsaceMoselle.holidaysInYear(y);
-    // 復活祭が 3 月 23 日なら Ascension が 5 月 1 日に、3 月 30 日なら 5 月 8 日に重なる
+    // With Easter on March 23, Ascension falls on May 1; on March 30, on May 8
     const coincide = /-03-(23|30)$/.test(easterSunday(y)) ? 1 : 0;
     assert.equal(m.length, 11 - coincide, `metropole ${y}`);
     assert.equal(a.length, 13 - coincide, `alsace-moselle ${y}`);
@@ -21,7 +21,7 @@ test("フランス: 本土は 11 日、Alsace-Moselle は 13 日。振替はな�
       assert.equal(h.confirmed, true);
       assert.ok(h.key !== undefined);
     }
-    // Alsace-Moselle は本土の祝日をすべて含む
+    // Alsace-Moselle contains every holiday of the mainland
     const mDates = new Set(m.map((h) => h.date));
     assert.ok(
       m.every((h) => a.some((x) => x.date === h.date && x.name === h.name)),
@@ -38,7 +38,7 @@ test("フランス: 2 つの祝日が同じ日に当たる年は復活祭から�
     may.map((h) => [h.name, h.key]),
     [["Ascension", "ascension"]],
   );
-  // keys: ["labour-day"] は 2008 年には当てはまらない（key は 1 つだけ）
+  // keys: ["labour-day"] does not match in 2008 (there is only one key)
   const c = createCalendar({
     holidayProvider: metropole,
     openRecurringRules: [{ holiday: true, keys: ["labour-day"] }],
@@ -97,7 +97,7 @@ test("フランス: 連帯の日（Lundi de Pentecôte を出勤日にする企�
     "法律上は祝日のまま",
   );
   assert.equal(company.isBusinessDay("2026-05-14"), false, "Ascension は休業のまま");
-  // Date は Europe/Paris で判定する（夏時間: 5 月 24 日 22:30Z は 25 日 00:30）
+  // A Date is judged in Europe/Paris (daylight saving time: May 24 22:30Z is the 25th 00:30)
   assert.equal(company.isHoliday(new Date("2026-05-24T22:30:00Z")), true);
 });
 
@@ -113,7 +113,8 @@ test("フランス: 対応年の外は out-of-range", () => {
 });
 
 test("フランス: 対応年（2000〜2099 年）で 2 つの祝日が同じ日に当たるのは、2008 年の 5 月 1 日と、2059・2070・2081・2092 年の 5 月 8 日だけ（ガイドの記述）", () => {
-  // 復活祭から決まる祝日（Alsace-Moselle の Vendredi saint を含む）と固定日の祝日が重なる日を、規則から数える
+  // Counts from the rules the days on which a holiday tied to Easter (including Vendredi saint of
+  // Alsace-Moselle) falls on a fixed-date holiday
   const fixed = ["01-01", "05-01", "05-08", "07-14", "08-15", "11-01", "11-11", "12-25", "12-26"];
   const found: string[] = [];
   for (let y = 2000; y <= 2099; y++) {
@@ -124,7 +125,7 @@ test("フランス: 対応年（2000〜2099 年）で 2 つの祝日が同じ日
     }
   }
   assert.deepEqual(found, ["2008-05-01", "2059-05-08", "2070-05-08", "2081-05-08", "2092-05-08"]);
-  // 提供元は、その日を 1 件（Ascension）で返す
+  // The provider returns that day as one entry (Ascension)
   for (const date of found) {
     const same = metropole.holidaysInYear(Number(date.slice(0, 4))).filter((h) => h.date === date);
     assert.deepEqual(

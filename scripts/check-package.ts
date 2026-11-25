@@ -1,15 +1,20 @@
 /**
- * ビルド後の公開パッケージを検査する（pnpm check から実行）。
+ * Checks the built package to be published (run by pnpm check).
  *
- * - 公開されるファイルが dist・README・CHANGELOG・LICENSE・package.json だけであること
- * - exports のすべてのエントリーが存在し、読み込めること
- * - ランタイムの依存（dependencies）がないこと
- * - CHANGELOG.md のバージョンの節とリンク定義がそろっていること（checkChangelog）
- * - 英語と日本語のドキュメントの対（README・guide・providers）の構成がそろい、見出しへのリンクが実在すること（checkDocPair・checkDocAnchors）
- * - ライブラリのソース（src）が Node.js 固有の機能と、実行環境のタイムゾーンに依存する API を使っていないこと（checkPortableSource。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）
- * - ドキュメントの数値・一覧（対応年・タイムゾーン・confirmedThrough・key の表・コードの一覧・サイズを測ったバージョン）が
- *   dist とソースの型に一致し、英日の対で節ごとの数値がそろうこと（checkDocFacts・checkPairNumbers。RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）
- * - コメントと文書のファイルのパス・決定の番号の参照が実在すること（checkReferences。RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）
+ * - Only dist, README, CHANGELOG, LICENSE and package.json are published
+ * - Every entry of `exports` exists and loads
+ * - There are no runtime dependencies (`dependencies`)
+ * - The version sections and link definitions of CHANGELOG.md are consistent (checkChangelog)
+ * - The English and Japanese document pairs (README, guide, providers) have the same structure and their links
+ *   to headings exist (checkDocPair, checkDocAnchors)
+ * - The library source (src) uses no feature specific to Node.js and no API that depends on the runtime's time
+ *   zone (checkPortableSource; RELEASING.md, reasons for the quality mechanisms, "runtimes that are checked")
+ * - The figures and lists of the documents (supported years, time zones, confirmedThrough, key tables, code
+ *   lists, the version the sizes were measured for) equal dist and the source types, and the figures of each
+ *   section agree within an English-Japanese pair (checkDocFacts, checkPairNumbers; RELEASING.md, reasons for
+ *   the quality mechanisms, "check documents against the implementation")
+ * - The file paths and decision references in comments and documents exist (checkReferences; RELEASING.md,
+ *   reasons for the quality mechanisms, "write a rule in one place")
  */
 
 import "./strict-warnings.ts";
@@ -38,7 +43,7 @@ interface Pkg {
 const pkg = JSON.parse(readFileSync("package.json", "utf8")) as Pkg;
 const errors: string[] = [];
 
-/** "1.2.3" を比べる（a が新しければ正）。プレリリースの "-rc.1" などは数えない */
+/** Compares "1.2.3" versions (positive when a is newer). A prerelease suffix such as "-rc.1" is not counted */
 function compareVersions(a: string, b: string): number {
   const pa = a.split(/[.-]/).slice(0, 3).map(Number);
   const pb = b.split(/[.-]/).slice(0, 3).map(Number);
@@ -46,21 +51,22 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-/** "YYYY-MM-DD" が実在する日付か（2026-02-30 などを除く） */
+/** Whether "YYYY-MM-DD" is a real date (2026-02-30 and the like are not) */
 function isCalendarDate(date: string): boolean {
   const time = Date.parse(`${date}T00:00:00Z`);
   return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === date;
 }
 
 /**
- * CHANGELOG.md のバージョンの節とリンク定義を確かめる。
+ * Checks the version sections and link definitions of CHANGELOG.md.
  *
- * - 先頭が [Unreleased] の節で、その次の節が package.json のバージョンであること
- * - バージョンの節が新しい順に並び、日付が "YYYY-MM-DD" で新しい順（同じ日は可）であること。
- *   日付が決まっていない現在のバージョンだけは "YYYY-MM-DD" のままでもよい（タグの前に当日の日付にする。
- *   リリースのワークフローが日付の範囲を確かめ、YYYY-MM-DD のままなら止まる）
- * - リンク定義が節とちょうど対応すること（[Unreleased] は最新のバージョンから HEAD、各バージョンは 1 つ前のバージョンとの比較、
- *   最初のバージョンはタグのページ）。足りない・余分・URL の誤りをすべて報告する
+ * - The first section is [Unreleased] and the next one is the version of package.json
+ * - Version sections are in descending order, with "YYYY-MM-DD" dates in descending order (equal dates allowed).
+ *   Only the current version, whose date is not decided yet, may keep "YYYY-MM-DD" (it becomes the day's date
+ *   before tagging; the release workflow checks the date range and stops when it is still YYYY-MM-DD)
+ * - The link definitions correspond exactly to the sections ([Unreleased] from the latest version to HEAD, each
+ *   version compared with the one before, the first version the tag page). Every missing, extra or wrong URL is
+ *   reported
  */
 function checkChangelog(text: string): string[] {
   const problems: string[] = [];
@@ -141,13 +147,15 @@ if (pkg.dependencies && Object.keys(pkg.dependencies).length > 0) {
 }
 
 /**
- * 英語と日本語のドキュメントの対（README.md と docs/README.ja.md、docs/guide.md と docs/guide.ja.md、
- * docs/providers.md と docs/providers.ja.md）の構成を比べる（RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）。
- * 日本語版をルートに置かないのは、npm がルートの README* を files の指定にかかわらず必ず含めるため。
+ * Compares the structure of the English and Japanese document pairs (README.md and docs/README.ja.md,
+ * docs/guide.md and docs/guide.ja.md, docs/providers.md and docs/providers.ja.md) (RELEASING.md, reasons for
+ * the quality mechanisms, "check documents against the implementation").
+ * The Japanese README is not in the root because npm always includes README* of the root, whatever `files` says.
  *
- * - 見出しの数が段ごとに一致し、コードブロックの数が一致すること（節や例の足し忘れを見つける。文章の中身は比べない）
- * - 互いへの切り替えのリンクがあること。README.md からのリンクは、npm のページからも辿れるよう GitHub の絶対 URL
- * - docs のファイルへのリンクの見出しのアンカー（#…）が、そのファイルの見出しに実在すること
+ * - The number of headings per level and the number of code blocks agree (finds a forgotten section or example;
+ *   the prose is not compared)
+ * - Each links to the other. The link from README.md is an absolute GitHub URL so that it works from the npm page
+ * - The heading anchors (#...) of links to files in docs exist among that file's headings
  */
 const DOC_PAIRS: readonly (readonly [string, string])[] = [
   ["README.md", "docs/README.ja.md"],
@@ -155,7 +163,10 @@ const DOC_PAIRS: readonly (readonly [string, string])[] = [
   ["docs/providers.md", "docs/providers.ja.md"],
 ];
 
-/** GitHub が見出しに付けるアンカー（英数字・空白・ハイフン以外を除き、小文字にして空白をハイフンに） */
+/**
+ * The anchor GitHub gives a heading (everything but letters, digits, spaces and hyphens removed; lower case;
+ * spaces to hyphens)
+ */
 const anchorOf = (heading: string): string =>
   heading
     .toLowerCase()
@@ -210,7 +221,7 @@ function checkDocPair(enPath: string, jaPath: string): string[] {
   return problems;
 }
 
-/** ドキュメントの中の docs/*.md へのリンクのアンカーが、そのファイルの見出しに実在するか */
+/** Whether the anchors of links to docs/*.md in the documents exist among that file's headings */
 function checkDocAnchors(): string[] {
   const problems: string[] = [];
   const headings = new Map<string, Set<string>>();
@@ -227,7 +238,7 @@ function checkDocAnchors(): string[] {
       const set =
         headings.get(name) ??
         (target.endsWith("README.md") ? headings.get("README.md") : undefined);
-      if (!set) continue; // このリポジトリのドキュメント以外へのリンク
+      if (!set) continue; // a link to something other than this repository's documents
       const anchor = decodeURIComponent(m[2]!);
       if (!set.has(anchor)) problems.push(`${file}: link to ${target}#${m[2]} has no such heading`);
     }
@@ -236,8 +247,9 @@ function checkDocAnchors(): string[] {
 }
 
 /**
- * ライブラリのソースが Node.js 固有の機能（node: のモジュール・require・process・Buffer・__dirname など）を使っていないことを確かめる。
- * ブラウザーや Cloudflare Workers でも動くことの前提で、実際の動作は CI の browsers・safari・workerd ジョブで確かめる
+ * Checks that the library source uses no feature specific to Node.js (node: modules, require, process, Buffer,
+ * __dirname, ...). This is the premise for running in browsers and Cloudflare Workers; the actual behaviour is
+ * checked by the browsers, safari and workerd jobs of CI
  */
 function checkPortableSource(dir: string): string[] {
   const problems: string[] = [];
@@ -253,32 +265,36 @@ function checkPortableSource(dir: string): string[] {
     [/\bBuffer\b/, "Buffer"],
     [/\b__(dirname|filename)\b/, "__dirname / __filename"],
     [/\bglobal\s*\./, "global (use globalThis)"],
-    // 実行環境のタイムゾーンに依存する API（どのタイムゾーンでも結果が同じ、という約束を静的に守る。RELEASING.md の「品質の仕組みの理由」の「確かめる実行環境」）
+    // APIs that depend on the runtime's time zone (keeps statically the promise that results are the same in any
+    // time zone; RELEASING.md, reasons for the quality mechanisms, "runtimes that are checked")
     [
       /\.(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)\s*\(/,
       "a local-time Date method (use getUTC…/setUTC…/Date.UTC)",
     ],
     [/\.getTimezoneOffset\s*\(/, "getTimezoneOffset"],
     [/\.toLocale(Date|Time)?String\s*\(/, "toLocale…String (local time and locale)"],
-    // 引数の中の括弧は 1 段まで読む（new Date(Number(y), m) の形も捕まえる）
+    // Parentheses inside the arguments are read one level deep (also catches new Date(Number(y), m))
     [
       /\bnew Date\s*\((?:[^()]|\([^()]*\))*,/,
       "new Date(year, month, …) (local time; use Date.UTC)",
     ],
-    // オフセットのない文字列は実行環境のタイムゾーンで読まれ、ECMAScript が定めない形（小文字・9 桁の小数秒）は実行環境で
-    // 結果が違う。文字列から瞬間を作るときは、正規表現で取り出して Date.UTC で計算する（0.31.1 から Date.parse も使わない）
+    // A string without an offset is read in the runtime's time zone, and forms ECMAScript does not define (lower
+    // case, 9 fraction digits) differ by runtime. An instant from a string is computed with Date.UTC from the
+    // parts extracted by a regular expression (from 0.31.1 Date.parse is not used either)
     [
       /\bnew Date\s*\(\s*["'`]/,
       "new Date(string) (local time for strings without an offset; extract the fields and use Date.UTC)",
     ],
   ];
-  // Date.parse を許すファイルと、その中の回数。回数が変わったら（別のファイルに足しても、許した場所から消しても）失敗する。
-  // src では Date.parse をどこにも許さない（Firefox・Safari が小文字の t・z を読めないため。経緯は開発の記録の 0.31.1）
+  // Files in which Date.parse is allowed, with the count. A changed count (added in another file, or removed
+  // from an allowed place) fails. src allows Date.parse nowhere (Firefox and Safari cannot read lower-case t and
+  // z; the history is in the development log of 0.31.1)
   const DATE_PARSE_ALLOWED: ReadonlyMap<string, number> = new Map();
   for (const file of walk(dir).filter((f) => f.endsWith(".ts"))) {
     const shown = file.replaceAll("\\", "/");
-    // コメントと文字列の中の言及は数えない。先に文字列の中身を空にしてから（" //" を含む文字列で行末のコメントと
-    // 誤認して、その行の残りが検査から外れないように）、/* */ と行末の // を除く。正規表現のリテラルは残す
+    // Mentions in comments and strings are not counted. String contents are emptied first (so that a string with
+    // " //" is not taken for a trailing comment that hides the rest of the line from the check), then /* */ and
+    // trailing // are removed. Regular-expression literals stay
     const code = readFileSync(file, "utf8")
       .replace(
         /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g,
@@ -296,8 +312,9 @@ function checkPortableSource(dir: string): string[] {
         `${shown}: uses Date.parse ${parses} time(s) (allowed ${allowedParses}; the result depends on the runtime: extract the fields and use Date.UTC)`,
       );
     }
-    // Intl.DateTimeFormat は timeZone を渡さないと実行環境のタイムゾーンになる（new の有無を問わず、引数の括弧の中に
-    // timeZone があること。timeZone: undefined は渡していないのと同じ）。引数の中の括弧は 1 段まで読む
+    // Intl.DateTimeFormat without timeZone uses the runtime's time zone (with or without `new`, the parentheses
+    // of the arguments must contain timeZone; timeZone: undefined equals not passing it). Parentheses inside the
+    // arguments are read one level deep
     for (const m of code.matchAll(/\bIntl\.DateTimeFormat\s*\(((?:[^()]|\([^()]*\))*)\)/g)) {
       if (!/\btimeZone\b(?!\s*:\s*undefined\b)/.test(m[1]!))
         problems.push(`${shown}: uses Intl.DateTimeFormat without timeZone`);
@@ -316,8 +333,9 @@ for (const [en, ja] of DOC_PAIRS) {
 errors.push(...checkDocAnchors());
 
 /**
- * 出典の記録（docs/sources/*.md）は、README.md と docs/README.ja.md の両方からリンクされていること。
- * 「出典の食い違いまで記録する」という README の説明の裏づけなので、記録を足したら README に足す（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）
+ * Every record of sources (docs/sources/*.md) is linked from both README.md and docs/README.ja.md.
+ * The records back the README's statement that even discrepancies between sources are recorded, so a new record
+ * is added to the README (RELEASING.md, reasons for the quality mechanisms, "write a rule in one place")
  */
 function checkSourceRecordsLinked(): string[] {
   const problems: string[] = [];
@@ -336,7 +354,7 @@ function checkSourceRecordsLinked(): string[] {
 }
 errors.push(...checkSourceRecordsLinked());
 
-/** テスト用フィクスチャの record（出典の記録の節へのパス#アンカー）が実在すること */
+/** The `record` of each test fixture (path#anchor of a section in the records of sources) exists */
 function checkFixtureRecords(): string[] {
   const problems: string[] = [];
   for (const file of readdirSync("test/fixtures").filter((f) => f.endsWith(".json"))) {
@@ -359,10 +377,14 @@ function checkFixtureRecords(): string[] {
 errors.push(...checkFixtureRecords());
 
 // ---------------------------------------------------------------------------------------------
-// ドキュメントの数値・一覧を、ビルド済みの dist とソースの型と照合する（RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）。
+// Checks the figures and lists of the documents against the built dist and the source types (RELEASING.md,
+// reasons for the quality mechanisms, "check documents against the implementation").
 // ---------------------------------------------------------------------------------------------
 
-/** 国のサブパスごとの国名（英語・日本語）。文の中の「for Japan」「日本は」から提供元を決めるのに使う。国を足したらここに足す */
+/**
+ * Country names (English, Japanese) per country subpath. Used to find the provider from a sentence such as "for
+ * Japan" or its Japanese form. Add a new country here
+ */
 const COUNTRY_NAMES: Readonly<Record<string, { en: readonly string[]; ja: string }>> = {
   "./jp": { en: ["Japan", "Japanese"], ja: "日本" },
   "./uk": { en: ["the UK", "UK"], ja: "英国" },
@@ -408,7 +430,10 @@ async function subpathFacts(): Promise<Map<string, SubpathFacts>> {
   return map;
 }
 
-/** 見出し（# 〜 ###）で区切った節。その節のコード例が import する国のサブパスが 1 つなら、その国の節とみなす */
+/**
+ * Sections delimited by headings (# to ###). A section whose code examples import exactly one country subpath is
+ * taken as that country's section
+ */
 function sectionsOf(
   text: string,
 ): { heading: string; body: string; subpath: string | undefined }[] {
@@ -429,15 +454,20 @@ function sectionsOf(
   return out;
 }
 
-/** ソースの型 `export type <name> = | "a" | "b" …;` の文字列リテラルを集める（別の型を含む場合はその値を含めない） */
+/**
+ * Collects the string literals of a source type `export type <name> = | "a" | "b" ...;` (the values of another
+ * type it includes are not included)
+ */
 function literalsOf(file: string, typeName: string): string[] {
-  const text = readFileSync(file, "utf8");
+  // Comments are removed before looking for the ";" that ends the type (a ";" inside a comment must not cut the
+  // type short)
+  const text = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   const m = new RegExp(`export type ${typeName} =([\\s\\S]*?);`).exec(text);
   if (!m) {
     errors.push(`${file}: type ${typeName} not found`);
     return [];
   }
-  return [...m[1]!.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/"([a-z-]+)"/g)].map((x) => x[1]!);
+  return [...m[1]!.matchAll(/"([a-z-]+)"/g)].map((x) => x[1]!);
 }
 
 async function checkDocFacts(): Promise<string[]> {
@@ -464,7 +494,7 @@ async function checkDocFacts(): Promise<string[]> {
     }
   };
 
-  // README の提供元の表: サブパスの行の対応年とタイムゾーン
+  // The provider table of the README: supported years and time zone of each subpath row
   for (const file of ["README.md", "docs/README.ja.md"]) {
     const rows = new Set<string>();
     for (const line of readFileSync(file, "utf8").split("\n")) {
@@ -495,7 +525,8 @@ async function checkDocFacts(): Promise<string[]> {
     }
   }
 
-  // ガイド: 国の節の対応年・confirmedThrough、国名を伴う対応年（「Outside the supported years」など）
+  // Guide: supported years and confirmedThrough of the country sections, and supported years with a country
+  // name ("Outside the supported years", ...)
   for (const [file, lang] of [
     ["docs/guide.md", "en"],
     ["docs/guide.ja.md", "ja"],
@@ -521,7 +552,8 @@ async function checkDocFacts(): Promise<string[]> {
         }
       }
     }
-    // 国の節の対応年の文は、日本以外の国について必須（日本は README の表と「対応年の外」の節で示す）
+    // The supported-years sentence of a country section is required for every country but Japan (Japan is
+    // shown in the README table and in the section on the outside of the supported years)
     for (const subpath of facts.keys()) {
       if (subpath !== "./jp" && !seenSections.has(subpath)) {
         problems.push(
@@ -571,7 +603,7 @@ async function checkDocFacts(): Promise<string[]> {
         checkRange(file, subpath, from, to, `"${m[0]}"`);
       }
     });
-    // 「対応年の外」の節の括弧書きは、すべての国を挙げる
+    // The parenthesis in the section on the outside of the supported years names every country
     for (const subpath of facts.keys()) {
       if (!mentioned.has(subpath))
         problems.push(
@@ -579,7 +611,7 @@ async function checkDocFacts(): Promise<string[]> {
         );
     }
 
-    // 祝日の識別子の表: 行の key の集合が、そのサブパスの提供元が返す key の集合と一致すること
+    // The table of holiday keys: the keys of the rows equal the keys returned by the providers of the subpath
     const keyRows = new Set<string>();
     for (const line of text.split("\n")) {
       if (!line.startsWith("| `")) continue;
@@ -609,7 +641,8 @@ async function checkDocFacts(): Promise<string[]> {
       if (!keyRows.has(subpath)) problems.push(`${file}: the key table has no row for ${subpath}`);
     }
 
-    // エラーコードの一覧と診断の表: 型（KnownErrorCode・KnownDiagnosticCode）の値をすべて挙げること
+    // The list of error codes and the table of diagnostics: every value of the types (KnownErrorCode,
+    // KnownDiagnosticCode) is listed
     const errorCodes = literalsOf("src/core/errors.ts", "KnownErrorCode");
     const diagnosticOnly = literalsOf("src/core/diagnose.ts", "KnownDiagnosticCode").filter(
       (c) => !errorCodes.includes(c),
@@ -636,7 +669,8 @@ async function checkDocFacts(): Promise<string[]> {
       problems.push(`${file}: the diagnostics table lacks ${missingDiag.join(", ")}`);
   }
 
-  // README のサイズの値: 測定したバージョンが今のマイナー系列であること（RELEASING.md の「README のサイズの値」）
+  // The sizes in the README: the version they were measured for is in the current minor series (RELEASING.md,
+  // the section on the sizes in the README)
   const minor = pkg.version.split(".").slice(0, 2).join(".");
   for (const [file, pattern] of [
     ["README.md", /measured for (\d+\.\d+)\.\d+/],
@@ -655,9 +689,11 @@ async function checkDocFacts(): Promise<string[]> {
 }
 
 /**
- * 英日の対の文書で、節ごと（見出しで区切る）の数値の集合が一致すること。年・バージョン・サイズのような数値（32 以上の整数、
- * 小数点を含む数）だけを比べる（月日の数字は英語では月名になるので比べない）。コードブロックとリンクの URL は除き、
- * インラインのコードは含める。片方だけ直した数値を見つける（両方が同じ誤りなら checkDocFacts の側で見つける）
+ * In an English-Japanese document pair, the set of figures of each section (delimited by headings) agrees. Only
+ * figures like years, versions and sizes are compared (integers of 32 or more, numbers with a decimal point);
+ * the digits of month-days are not (they are month names in English). Code blocks and link URLs are left out,
+ * inline code is included. Finds a figure corrected on one side only (the same mistake on both sides is found
+ * by checkDocFacts)
  */
 function checkPairNumbers(enPath: string, jaPath: string): string[] {
   const numbersBySection = (path: string): string[][] => {
@@ -688,11 +724,14 @@ function checkPairNumbers(enPath: string, jaPath: string): string[] {
 }
 
 /**
- * コメントと文書の参照が実在すること（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。
- * - ファイルのパス（scripts/…・src/…・test/…・docs/…・etc/…・.github/…）が実在すること
- * - 「decisions.md の N 番」（decisions.md の中では「N 番」）の N が、決定の文書にある番号であること
- * 対象は今の状態を書いたファイル（ソース・スクリプト・テスト・ワークフロー・README・ガイド・RELEASING.md など）。
- * 履歴を書いたファイル（CHANGELOG・decisions.md・migration.md・development-log.md）は改名・削除の前の名前を正しく含むので、パスは見ない
+ * The references in comments and documents exist (RELEASING.md, reasons for the quality mechanisms, "write a
+ * rule in one place").
+ * - File paths (scripts/..., src/..., test/..., docs/..., etc/..., .github/...) exist
+ * - The number of a decision reference (the forms of scripts/decision-references.ts; inside decisions.md, the
+ *   bare number form) is a number of the decisions document
+ * Examined: the files that describe the current state (source, scripts, tests, workflows, README, guide,
+ * RELEASING.md, ...). Files that record history (CHANGELOG, decisions.md, migration.md, development-log.md)
+ * correctly contain names from before renames and removals, so their paths are not examined
  */
 function checkReferences(): string[] {
   const problems: string[] = [];
@@ -706,8 +745,9 @@ function checkReferences(): string[] {
   }
   const decisions = readFileSync("docs/decisions.md", "utf8");
   const numbers = new Set([...decisions.matchAll(/^### (\d+)\. /gm)].map((m) => Number(m[1])));
-  // 0.30.2 の後に番号を振り直した。CHANGELOG の 0.30.2 までの節は旧番号で書かれているので、
-  // 決定の文書の末尾の対応表の旧番号で確かめる（対応表は残し続ける。decisions.md の冒頭）
+  // The numbers were reassigned after 0.30.2. The CHANGELOG sections up to 0.30.2 use the old numbers, so they
+  // are checked against the old numbers of the correspondence table at the end of the decisions document (the
+  // table is kept; see the beginning of decisions.md)
   const oldTable =
     /^## 旧番号との対応[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(decisions)?.[1] ?? "";
   const oldNumbers = new Set(
@@ -734,7 +774,8 @@ function checkReferences(): string[] {
   for (const file of decisionReferenceFiles()) {
     const text = readFileSync(file, "utf8");
     for (const m of text.matchAll(DECISION_REFERENCE)) checkNumbers(file, m[1]!, numbers);
-    // 「番」を書き忘れた参照は上の検査にかからないので、形の誤りとして止める
+    // A Japanese-form reference that lacks its counter word is not caught by the check above, so it is stopped
+    // as a wrong form
     for (const m of text.matchAll(/decisions\.md`? の ([\d・、, ]*\d)(?![\d・、, ]*番)/g))
       problems.push(`${file}: write the decision reference as "decisions.md の ${m[1]} 番"`);
   }
@@ -749,8 +790,10 @@ function checkReferences(): string[] {
 }
 
 /**
- * 決定の文書の目次が、本文の章と決定の見出しと一致すること（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。
- * 目次は「- **章**」と「  - N 番: 題名」、本文は「## 章」と「### N. 題名」。番号の重複も見る（欠番は許す）
+ * The table of contents of the decisions document equals the chapters and decision headings of the body
+ * (RELEASING.md, reasons for the quality mechanisms, "write a rule in one place").
+ * The contents list chapters in bold and numbered titles below them; the body has "## chapter" and
+ * "### N. title". Duplicate numbers are detected too (gaps are allowed)
  */
 function checkDecisionsToc(decisions: string): string[] {
   const problems: string[] = [];
@@ -783,7 +826,8 @@ function checkDecisionsToc(decisions: string): string[] {
       break;
     }
   }
-  // 章の見出しと最初の決定の見出しの間に本文を置かない（番号のない本文は、目次にも番号の参照にも出ず、読まれない）
+  // No body text between a chapter heading and its first decision heading (text without a number appears
+  // neither in the contents nor in a numbered reference, and is not read)
   const lines = decisions.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const chapter = /^## (.+)$/.exec(lines[i]!)?.[1];
@@ -814,20 +858,20 @@ errors.push(...checkReferences());
 for (const [en, ja] of DOC_PAIRS)
   if (existsSync(en) && existsSync(ja)) errors.push(...checkPairNumbers(en, ja));
 
-// 公開されるファイルは、npm が実際に詰めるもの（npm pack --dry-run）で確かめる。
-// files の指定から推定すると、npm が指定にかかわらず含めるファイル（ルートの README* など）を見落とすため
+// The published files are checked by what npm actually packs (npm pack --dry-run). Inferring them from `files`
+// would miss the files npm includes whatever is specified (README* of the root, ...)
 for (const entry of pkg.files) {
   if (!existsSync(entry)) errors.push(`"files" entry not found: ${entry}`);
 }
-// Windows の npm は npm.cmd で、シェルなしでは起動できない（Node.js が .cmd の直接の実行を拒む）。
-// シェルに引数の配列を渡すと DEP0190 の警告が出るため、Windows では固定のコマンド文字列で実行する
+// npm on Windows is npm.cmd, which cannot start without a shell (Node.js refuses to run .cmd directly).
+// Passing an array of arguments to a shell gives the DEP0190 warning, so Windows runs a fixed command string
 const npmPack = ["pack", "--dry-run", "--json", "--ignore-scripts"];
 const packed = JSON.parse(
   process.platform === "win32"
     ? execSync(`npm ${npmPack.join(" ")}`, { encoding: "utf8" })
     : execFileSync("npm", npmPack, { encoding: "utf8" }),
 ) as unknown;
-// npm 10 は配列、npm 12 はパッケージ名をキーにしたオブジェクトで返す（どちらも読む）
+// npm 10 returns an array, npm 12 an object keyed by package name (both are read)
 const packEntry = (
   Array.isArray(packed) ? packed[0] : Object.values(packed as Record<string, unknown>)[0]
 ) as { files?: { path: string }[] } | undefined;

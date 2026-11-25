@@ -1,14 +1,15 @@
 /**
- * 性能の計測（pnpm bench）。依存は使わず、Node.js の標準機能だけで測る。
+ * Performance measurement (pnpm bench). Uses only the standard features of Node.js, no dependency.
  *
- * 結果は実行する機械の性能で変わるので、pnpm check には含めない。
- * 内部の処理を変えるときに、変更の前と後を同じ機械で測って比べるために使う。
- * 既定ではソースを直接読み込んで測る（Node.js が型を取り除いて実行するので、処理は dist と同じ）。
+ * Results depend on the machine, so this is not part of pnpm check.
+ * It is for comparing, on the same machine, before and after a change to internal processing.
+ * By default the source is loaded directly (Node.js strips the types, so the processing equals dist).
  *
- * 引数:
- *   --package <dir>  そのディレクトリのパッケージ（<dir>/dist/index.js と <dir>/dist/jp/index.js）を測る。
- *                    CI で公開済みの前のバージョンと今回の dist を同じ機械で比べるために使う（scripts/bench-compare.ts）
- *   --json <file>    結果（計測名と 1 回あたりのミリ秒）を JSON で書き出す
+ * Arguments:
+ *   --package <dir>  Measure the package in that directory (<dir>/dist/index.js and <dir>/dist/jp/index.js).
+ *                    CI uses it to compare the previous published version with this dist on the same machine
+ *                    (scripts/bench-compare.ts)
+ *   --json <file>    Write the results (measurement name and milliseconds per run) as JSON
  */
 
 import "./strict-warnings.ts";
@@ -44,8 +45,9 @@ const { sg }: Sg = packageDir
   ? await import(pathToFileURL(resolve(packageDir, "dist/sg/index.js")).href)
   : await import("../src/sg/index.ts");
 
-// 前のバージョンの dist が 0.30.0 より前（新しい名前を知らない）なら、設定の新しい名前を旧名に戻して渡す。
-// CI の bench は同じ場面を前のバージョンと比べるため（新しい名前のままだと、前のバージョンは知らないキーとして黙って無視する）
+// When the previous version's dist is older than 0.30.0 (it does not know the new names), the new option names
+// are turned back into the old ones. The bench of CI compares the same scenes with the previous version (with
+// the new names, the previous version would silently ignore them as unknown keys)
 const legacy =
   typeof (root.createCalendar({}) as { diffBusinessDays?: unknown }).diffBusinessDays !==
   "function";
@@ -85,16 +87,16 @@ function addDaysSimple(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// 典型的な店舗の設定（日曜定休・祝日休業・年末年始）
+// Options of a typical shop (closed on Sundays, on holidays and over the New Year)
 const store = createCalendar({
   holidayProvider: jp,
   closedWeekdays: [0],
   closedAnnualDates: [{ from: "12-31", to: "01-03", name: "年末年始" }],
 });
 
-// 個別の日付の規則が多い設定（臨時休業日 500 件）
-// 臨時休業日 500 件は、種を固定した乱数の順に並べ替えて渡す（始まりの順に書いた日付では、判定のための並べ替えの手間が
-// ほとんどかからず、その退行を拾えない。0.32.7）
+// Options with many specific dates (500 extra closed days).
+// The 500 days are passed in the order of a seeded random shuffle (dates written in order of start cost almost
+// nothing to sort for the judgement, so a regression there would not be caught. 0.32.7)
 const closed500 = Array.from({ length: 500 }, (_, i) => addDaysSimple("2020-01-01", i * 7 + 3));
 for (let i = closed500.length - 1, seed = 7; i > 0; i--) {
   seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -107,14 +109,17 @@ const manyDatesOptions = {
   closedDates: closed500,
 };
 const manyDates = createCalendar(manyDatesOptions);
-// 同じ 500 件を始まりの順に書いた設定と、判定する 20 日（2020〜2023 年に散らす）。始まりの順に書いた日付は、最初の判定でそれを
-// 確かめて並べずに引くので、その確かめが外れる退行を拾う（0.32.7）。20 回は、確かめを外した形との差がいちばん大きく出た回数
+// The same 500 days written in order of start, and the 20 days judged (spread over 2020-2023). Dates written in
+// order of start are checked at the first judgement and looked up without sorting, so this catches a regression
+// in which that check fails (0.32.7). 20 is the count at which the difference from the failing form was largest
 const sortedDatesOptions = { ...manyDatesOptions, closedDates: [...closed500].sort() };
 const probe20 = Array.from({ length: 20 }, (_, i) => addDaysSimple("2020-01-02", i * 59));
-// 走査の範囲（2001〜2028 年）の外の臨時休業日 30 件（2029 年から 1 年おき。診断の計測に使う。0.32.8）
+// 30 extra closed days outside the scan range (2001-2028): every year from 2029 (for the diagnostics
+// measurement. 0.32.8)
 const outsideDates = Array.from({ length: 30 }, (_, i) => addDaysSimple("2029-01-05", i * 365));
 
-// 繰り返しの規則と振替を使う設定（博物館: 月曜休館・祝日の場合は次の祝日でない日、第 3 水曜休館、月末棚卸）
+// Options with recurring rules and moves (a museum: closed on Mondays, or on the next day that is not a holiday
+// when Monday is a holiday; closed on the third Wednesday; stocktaking at the end of the month)
 const museum = createCalendar({
   holidayProvider: jp,
   holidayPolicy: "open",
@@ -132,12 +137,15 @@ const hours = createSchedule({
   annualDates: [{ date: "01-01", value: "closed" }],
 });
 
-// 第 n 営業日の規則の基準が、対応年の短い提供元（シンガポール。"throw"）を持つカレンダーのスケジュール。診断の走査が
-// 基準の対応年の外にかかり、基準が投げる月を診断が何度も評価する経路（0.32.7 で、投げた月を覚えるようにした）の退行を拾う
+// A schedule whose nth-business-day rule has a basis calendar with a provider of few supported years
+// (Singapore, "throw"). The scan of the diagnostics reaches outside the basis's supported years; this catches a
+// regression on the path where the diagnostics evaluate a throwing month again and again (0.32.7 remembers the
+// months that threw)
 const sgBasis = createCalendar({ holidayProvider: sg, closedWeekdays: [0, 6] });
 
-// 10 年分の暦日を、種を固定した乱数の順に並べたもの。1 日だけの判定の計測は同じ日を繰り返すので、直前の 1 組を覚える
-// 変換（0.32.7）が毎回当たり、実際の使い方より速く出る。毎回違う日で呼ぶ計測で、その当たり外れに関わる退行を拾う
+// Ten years of dates in the order of a seeded random shuffle. The measurement of a single day repeats the same
+// day, so the conversion that remembers the last pair (0.32.7) always hits and looks faster than real use. The
+// measurement with a different day each time catches regressions that depend on hit or miss
 const shuffledDays = Array.from({ length: 3653 }, (_, i) => addDaysSimple("2020-01-01", i));
 for (let i = shuffledDays.length - 1, seed = 1; i > 0; i--) {
   seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -173,14 +181,16 @@ const cases: Case[] = [
     run: () => createCalendar({ holidayProvider: jp, closedWeekdays: [0] }),
   },
   {
-    // 個別の日付を始まりの順に並べるのは、順に調べた回数が日付の数の対数の 2 倍を超えてから（0.32.7）。作って 1 回だけ判定する
-    // 使い方で、並べる手間がかかる退行を拾う
+    // Specific dates are sorted by start only after the number of sequential lookups exceeds twice the logarithm
+    // of the number of dates (0.32.7). Catches a regression in which a use that creates and judges once pays
+    // for the sort
     name: "createCalendar と 1 回の判定（臨時休業日 500 件）",
     run: () => createCalendar(manyDatesOptions).isBusinessDay("2026-11-24"),
   },
   {
-    // 始まりの順に書いた個別の日付を、最初の判定で確かめて並べずに引く経路（0.32.7）。CI の bench-compare が失敗にするのは 2 倍
-    // からで、この確かめが外れたときの遅れ（1 割ほど）は Job Summary の表で見る
+    // The path that checks, at the first judgement, that specific dates are written in order of start and looks
+    // them up without sorting (0.32.7). bench-compare of CI fails from 2x; the delay when this check fails
+    // (about 10%) is read from the table in the Job Summary
     name: "createCalendar と 20 回の判定（臨時休業日 500 件・始まりの順）",
     run: () => {
       const calendar = createCalendar(sortedDatesOptions);
@@ -190,8 +200,9 @@ const cases: Case[] = [
     },
   },
   {
-    // 診断の走査（1 日ごとの日付の変換）と、規則どうしの比較（代表の 28 年間の当てはまり）の退行を拾う。提供元のない設定で、
-    // 1 回を 20 ミリ秒ほどに収める（温める 50 回と測る回を合わせて 1〜3 秒ほどで、CI の bench の時間を大きく延ばさない）
+    // Catches regressions of the scan of the diagnostics (date conversion per day) and of the comparison between
+    // rules (matching in the representative 28 years). Options without a provider, about 20 ms per run (1-3
+    // seconds with the 50 warm-up runs, so the bench of CI does not get much longer)
     name: "diagnoseCalendar（提供元なし・規則 2 つ）",
     run: () =>
       diagnoseModule.diagnoseCalendar(
@@ -208,8 +219,9 @@ const cases: Case[] = [
       ),
   },
   {
-    // 自分の設定を基準に数える規則と、走査の範囲（2001〜2028 年）の外の個別の日付の設定（0.32.8）。個別の日付の両端の月・週を
-    // 足して調べるので、範囲の外の日付が多いほど延びる。その退行を見張る。1 回は 10 ミリ秒ほど（実装者の機械）
+    // Options with a rule counting on the own options and specific dates outside the scan range (2001-2028)
+    // (0.32.8). The months and weeks at both ends of each specific date are examined in addition, so more dates
+    // outside the range take longer. Watches for that regression. About 10 ms per run (the implementer's machine)
     name: "diagnoseCalendar（提供元なし・数える規則と走査の範囲の外の臨時休業日 30 件）",
     run: () =>
       diagnoseModule.diagnoseCalendar(
@@ -224,7 +236,8 @@ const cases: Case[] = [
       ),
   },
   {
-    // 0.32.6 で 1 回が 100 ミリ秒ほど、0.32.7 で 20 ミリ秒ほど（実装者の機械）。温める 50 回を合わせても数秒に収まる
+    // About 100 ms per run in 0.32.6 and about 20 ms in 0.32.7 (the implementer's machine). A few seconds
+    // including the 50 warm-up runs
     name: "diagnoseSchedule（基準: シンガポールの提供元）",
     run: () =>
       diagnoseModule.diagnoseSchedule(
@@ -240,7 +253,7 @@ const cases: Case[] = [
   },
 ];
 
-/** 1 回あたりの時間を、合計がおよそ 300 ミリ秒になる回数で測る（最初に温める） */
+/** Measures the time per run with a number of runs that totals about 300 ms (after warming up) */
 function measure(run: () => unknown): { perOp: number; ops: number } {
   for (let i = 0; i < 50; i++) run();
   let ops = 1;

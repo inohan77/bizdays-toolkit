@@ -1,19 +1,19 @@
 /**
- * 日時入力を「指定タイムゾーンでの暦日＋時刻」に変換する。
+ * Converts a date-time input to a calendar date and time in a given time zone.
  *
- * 受け付ける入力:
- * - "YYYY-MM-DD"                     … 暦日（時刻なし）
- * - "YYYY-MM-DDTHH:mm[:ss[.sss]]"    … カレンダーのタイムゾーンでの壁時計の日時
- * - "YYYY-MM-DDTHH:mm…Z" / "+09:00"   … 瞬間（オフセット付き）。タイムゾーンで暦日に変換する
- * - Date                             … 瞬間
- * - Temporal.PlainDate / PlainDateTime / ZonedDateTime / Instant（ダックタイピング。依存は持たない）
+ * Accepted inputs:
+ * - "YYYY-MM-DD"                     ... a calendar date (no time)
+ * - "YYYY-MM-DDTHH:mm[:ss[.sss]]"    ... a wall-clock date-time in the calendar's time zone
+ * - "YYYY-MM-DDTHH:mm...Z" / "+09:00" ... an instant (with an offset), converted to a date in the time zone
+ * - Date                             ... an instant
+ * - Temporal.PlainDate / PlainDateTime / ZonedDateTime / Instant (duck typing; no dependency)
  */
 
 import { formatDate, parseDate, type DateString } from "./date.ts";
 import { describeValue, rangeError, typeError } from "./errors.ts";
 
 /**
- * Temporal.PlainDate / PlainDateTime として受け付ける最小限の形。
+ * The minimal shape accepted as Temporal.PlainDate / PlainDateTime.
  * @namingSource temporal
  * @public
  */
@@ -27,7 +27,7 @@ export interface TemporalDateLike {
 }
 
 /**
- * Temporal.Instant / ZonedDateTime として受け付ける最小限の形。
+ * The minimal shape accepted as Temporal.Instant / ZonedDateTime.
  * @namingSource temporal
  * @public
  */
@@ -36,13 +36,13 @@ export interface TemporalInstantLike {
 }
 
 /**
- * 日付・日時として受け付ける入力。
+ * Inputs accepted as a date or date-time.
  * @public
  */
 export type DateInput = string | Date | TemporalDateLike | TemporalInstantLike;
 
 /**
- * Temporal.PlainDateTime として受け付ける最小限の形（時刻を持つ TemporalDateLike）。
+ * The minimal shape accepted as Temporal.PlainDateTime (a TemporalDateLike with a time).
  * @namingSource temporal
  * @public
  */
@@ -52,8 +52,8 @@ export interface TemporalDateTimeLike extends TemporalDateLike {
 }
 
 /**
- * 時刻を必ず持つ入力（瞬間、Temporal.PlainDateTime、"YYYY-MM-DDTHH:mm…" の文字列）。
- * これを渡すと、civilOf・toDateTimeParts の time の型が string になる。
+ * Inputs that always have a time (an instant, Temporal.PlainDateTime, a "YYYY-MM-DDTHH:mm..." string).
+ * With these, the type of `time` of civilOf and toDateTimeParts is string.
  * @public
  */
 export type DateTimeInput =
@@ -63,37 +63,47 @@ export type DateTimeInput =
   | `${number}-${number}-${number}T${string}`;
 
 /**
- * タイムゾーンでの暦日と時刻。Time は時刻の型で、時刻を必ず持つ入力（DateTimeInput）では string になる。
+ * Calendar date and time in a time zone. `Time` is the type of the time; it is string for inputs that always
+ * have a time (DateTimeInput).
  * @public
  */
 export interface CivilDateTimeParts<Time extends string | null = string | null> {
-  /** 暦日 "YYYY-MM-DD" */
+  /** Calendar date "YYYY-MM-DD" */
   readonly date: DateString;
-  /** 時刻 "HH:mm"。暦日だけの入力では null */
+  /** Time "HH:mm"; null for a date-only input */
   readonly time: Time;
 }
 
-/** @internal 暦日と、分かる場合は 0 時からの経過分 */
+/** @internal A calendar date and, when known, the minutes since midnight */
 export interface CivilDateTime {
   readonly date: DateString;
-  /** 0 時からの経過分。暦日だけの入力では null */
+  /** Minutes since midnight; null for a date-only input */
   readonly minutes: number | null;
 }
 
-// 日付と時刻の区切りは "T"（型 DateTimeInput は大文字だけ。実行時は小文字の t・z も受ける。decisions.md の 6 番）。
-// 空白で区切った文字列は invalid-time
+// Date and time are separated by "T" (the type DateTimeInput has upper case only; at run time lower-case t and z
+// are accepted too. decisions.md #6). A string separated by a space is invalid-time
 const DATETIME_RE =
   /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?$/i;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
-// 綴りから、実行環境の Intl が返す名前への対応（キーは ASCII の英大文字だけを小文字にした綴り。Intl が返した名前かを見分けるため、
-// 名前から名前への対応も入れる）。外から来た綴りで際限なく増えないように、1,000 件に達したら全消去する（実在の名前の数（別名を
-// 含めて 600 前後）では、ほとんど消えない。消えても、次に引くときに Intl で求め直すだけで、結果は変わらない。decisions.md の 16 番）
+// From a spelling to the name returned by the runtime's Intl (the key is the spelling with only ASCII capitals
+// lowered; name-to-name entries are stored too, to recognise a name returned by Intl). To keep spellings from
+// outside from growing it without limit, it is cleared at 1,000 entries (the real names, about 600 with aliases,
+// hardly ever clear it; after clearing, the next lookup asks Intl again and the result is the same.
+// decisions.md #16)
 const zoneNames = new Map<string, string>();
-// 時差の形の名前（Intl が返す "+09:00" の形）。書式は作らずに UTC の書式で読む（wallParts）
+// Names in offset form (the "+09:00" form returned by Intl). Read with the UTC formatter, without a formatter of
+// their own (wallParts)
 const OFFSET_ZONE_RE = /^([+-])(\d\d):(\d\d)$/;
 
-function formatterFor(timeZone: string): Intl.DateTimeFormat {
+/**
+ * Cached Intl.DateTimeFormat (en-US, numeric year to minute, 24-hour) for a time zone.
+ * @param timeZone - A zone name as returned by Intl (callers pass only names from {@link zoneNameOf}).
+ * @returns The formatter; one is created per name and kept.
+ * @internal
+ */
+export function formatterFor(timeZone: string): Intl.DateTimeFormat {
   let f = formatters.get(timeZone);
   if (!f) {
     f = new Intl.DateTimeFormat("en-US", {
@@ -110,13 +120,22 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
-// 綴りから、実行環境の Intl が返す名前を求める（覚えていれば作らない）。使えない綴りは、Intl の例外をそのまま投げる。
-// 書式は Intl が返す名前ごとに 1 つだけ作る（formatterFor に渡るのは、Intl が返した名前だけ）
-function zoneNameOf(timeZone: string): string {
-  // Intl が返した名前そのもの（作成のたびに渡る提供元の名前、瞬間を暦日に直すときに渡る検証済みの名前など）は、キーを
-  // 作らずに返す（0.32.7。0.32.6 までは、瞬間を暦日に直す処理（wallParts）だけが同じ確かめをしていた）
+/**
+ * The time zone name the runtime's Intl returns for a spelling (canonical casing; aliases resolved where the runtime
+ * does so).
+ * @param timeZone - Any spelling.
+ * @returns The Intl name. Results are cached by the spelling with ASCII letters lowercased; the cache is cleared when
+ *   it reaches 1,000 entries.
+ * @throws The RangeError of Intl for a spelling it does not accept.
+ * @internal
+ * @see decisions.md #16
+ */
+export function zoneNameOf(timeZone: string): string {
+  // A name returned by Intl itself (a provider's name passed at every creation, a validated name passed when an
+  // instant is converted to a date, ...) is returned without building a key (0.32.7; up to 0.32.6 only the
+  // conversion of an instant to a date, wallParts, made this check)
   if (zoneNames.get(timeZone) === timeZone) return timeZone;
-  // ケルビン記号（U+212A）などが k にならないように、文字列全体には toLowerCase を掛けない
+  // toLowerCase is not applied to the whole string, so that the Kelvin sign (U+212A) and the like do not become k
   const key = timeZone.replace(/[A-Z]+/g, (s) => s.toLowerCase());
   let name = zoneNames.get(key);
   if (name === undefined) {
@@ -127,7 +146,13 @@ function zoneNameOf(timeZone: string): string {
   return name;
 }
 
-/** @internal IANA タイムゾーン名として使えるか確かめ、正規化した名前を返す（不正なら RangeError） */
+/**
+ * Validates a time zone name and returns its normalized name.
+ * @param timeZone - Expected: a non-empty string accepted by Intl (IANA name or offset form).
+ * @returns The name the runtime's Intl returns.
+ * @throws RangeError `invalid-time-zone` otherwise.
+ * @internal
+ */
 export function validateTimeZone(timeZone: string): string {
   if (typeof timeZone !== "string" || timeZone === "") {
     throw rangeError("invalid-time-zone", `Invalid time zone: ${describeValue(timeZone)}`);
@@ -140,10 +165,13 @@ export function validateTimeZone(timeZone: string): string {
 }
 
 /**
- * @internal 2 つのタイムゾーン名（validateTimeZone が返した名前）が同じタイムゾーンか（decisions.md の 18 番）。名前が同じなら同じ。
- * 名前が違えば、Temporal のある実行環境では Temporal の比較で決める（別名を Intl が正規化しない実行環境でも、Temporal のある
- * 実行環境どうしで結果がそろう）。Temporal がなければ名前で決める。Temporal が投げたときは同じとしない（黙って同じにすると、
- * 暦日がずれても気付けない）
+ * Whether two normalized time zone names (results of {@link validateTimeZone}) denote the same time zone.
+ * @param a - Normalized name.
+ * @param b - Normalized name.
+ * @returns true when the names are equal. Otherwise, with Temporal available, the result of Temporal's zone
+ *   comparison (false if Temporal throws); without Temporal, false.
+ * @internal
+ * @see decisions.md #18
  */
 export function sameTimeZone(a: string, b: string): boolean {
   if (a === b) return true;
@@ -167,7 +195,12 @@ export function sameTimeZone(a: string, b: string): boolean {
   }
 }
 
-/** @internal 同じタイムゾーン（sameTimeZone）を 1 つにまとめた一覧（先に現れた名前を残す） */
+/**
+ * Removes time zones that are the same ({@link sameTimeZone}) as an earlier entry.
+ * @param zones - Normalized names.
+ * @returns A new array keeping the first name of each zone, in order.
+ * @internal
+ */
 export function distinctTimeZones(zones: readonly string[]): string[] {
   const out: string[] = [];
   for (const z of zones) if (!out.some((o) => sameTimeZone(o, z))) out.push(z);
@@ -175,16 +208,22 @@ export function distinctTimeZones(zones: readonly string[]): string[] {
 }
 
 /**
- * 瞬間（エポックミリ秒）の、タイムゾーンでの年・月・日・時・分。年は紀元を付けずに読む（Intl は紀元前の年を紀元なしの
- * 正の数で返す）ので、紀元前に当たらない瞬間だけに使う
+ * Wall-clock year, month, day, hour and minute of an instant in a time zone.
+ * @param epochMilliseconds - The instant. Must not fall before year 1 (the year is read without an era).
+ * @param timeZone - Any spelling Intl accepts; an offset-form zone is computed without creating a formatter.
+ * @returns The parts as numbers.
+ * @throws The RangeError of Intl for an unusable zone; RangeError `invalid-time-zone` when Intl returns no such part.
+ * @internal
  */
-function wallParts(
+export function wallParts(
   epochMilliseconds: number,
   timeZone: string,
 ): { year: number; month: number; day: number; hour: number; minute: number } {
-  // 時差の形（"+09:00"）は、UTC の書式に時差を足した瞬間を渡して読む（時差ごとに書式を作らない。時差は固定なので結果は同じ）
-  // 検証を通っていない綴り（createCalendar で作っていないカレンダーの形のオブジェクトを合成したとき）も、Intl が返す名前に
-  // 直してから読む（綴りごとに書式を作らない。結果と、使えない綴りで Intl が投げる例外は同じ）
+  // The offset form ("+09:00") is read by passing the instant plus the offset to the UTC formatter (no formatter
+  // per offset; the offset is fixed, so the result is the same). A spelling that was not validated (when objects
+  // shaped like calendars, not created by createCalendar, are combined) is also turned into the name returned by
+  // Intl before reading (no formatter per spelling; the result, and the error Intl throws for an unusable
+  // spelling, are the same)
   const zone = zoneNameOf(timeZone);
   const offset = OFFSET_ZONE_RE.exec(zone);
   const parts = formatterFor(offset ? "UTC" : zone).formatToParts(
@@ -209,17 +248,28 @@ function wallParts(
   };
 }
 
-/** @internal 瞬間（エポックミリ秒）を、タイムゾーンでの暦日と時刻に変換する（1000〜9999 年の外は out-of-range） */
+/**
+ * Converts an instant to the calendar date and time of day in a time zone.
+ * @param epochMilliseconds - The instant.
+ * @param timeZone - A valid time zone.
+ * @returns `{ date, minutes }` with minutes since midnight (seconds are dropped).
+ * @throws RangeError `invalid-time` when not finite; `out-of-range` when the local date is outside the years
+ *   1000-9999.
+ * @internal
+ * @see decisions.md #1
+ */
 export function instantToCivil(epochMilliseconds: number, timeZone: string): CivilDateTime {
   if (!Number.isFinite(epochMilliseconds)) throw rangeError("invalid-time", "Invalid instant");
-  // Date が表せる範囲（±8.64e15 ミリ秒）の外は、年を読めないので整形の前に止める
+  // Outside the range a Date can represent (±8.64e15 ms) the year cannot be read: stop before formatting
   if (Math.abs(epochMilliseconds) > 8.64e15) {
     throw rangeError("out-of-range", "Instant out of range (1000-9999)");
   }
-  // Intl は紀元前の年を紀元なしの正の数で返すので、整形の前に UTC の年で範囲を確かめる（decisions.md の 1 番）。時差は
-  // 1 日を超えないので、UTC の年が 999 より前ならタイムゾーンでも 1000 年より前。999 年は東のゾーンで 1000 年になりうるので通す。
-  // 上側も同じ: UTC の年が 10000 より後ならタイムゾーンでも 9999 年より後。10000 年は西のゾーンで 9999 年になりうるので通す
-  // （時差の形のゾーンは時差を足した瞬間を整形するので、Date の上限の近くで足した値が Date の範囲を超えないように、先に止める）
+  // Intl returns a year BC as a positive number without an era, so the range is checked with the UTC year before
+  // formatting (decisions.md #1). An offset is less than a day: a UTC year before 999 is before 1000 in the time
+  // zone too. Year 999 passes because it can be year 1000 in an eastern zone. The upper side likewise: a UTC year
+  // after 10000 is after 9999 in the time zone too, and 10000 passes because it can be 9999 in a western zone
+  // (an offset-form zone formats the instant plus the offset, so this stops first, before the sum can leave the
+  // range of Date near its upper limit)
   const utcYear = new Date(epochMilliseconds).getUTCFullYear();
   if (utcYear < 999 || utcYear > 10000) {
     throw rangeError("out-of-range", "Instant out of range (1000-9999)");
@@ -228,7 +278,15 @@ export function instantToCivil(epochMilliseconds: number, timeZone: string): Civ
   return { date: formatDate(year, month, day), minutes: hour * 60 + minute };
 }
 
-function wallTime(hour: number, minute: number): number {
+/**
+ * Validates an hour and a minute.
+ * @param hour - Expected: integer 0-23.
+ * @param minute - Expected: integer 0-59.
+ * @returns Minutes since midnight.
+ * @throws RangeError `invalid-time` otherwise.
+ * @internal
+ */
+export function wallTime(hour: number, minute: number): number {
   if (
     !Number.isInteger(hour) ||
     hour < 0 ||
@@ -237,8 +295,9 @@ function wallTime(hour: number, minute: number): number {
     minute < 0 ||
     minute > 59
   ) {
-    // 入力どおり 2 桁で表す（"24:00" を "24:0" と表示しない）。数でない値（Temporal の形の minute など）は
-    // describeValue で表す（文字列にできない値でメッセージの組み立てが落ちないように。decisions.md の 3 番）
+    // Shown with two digits as written ("24:00", not "24:0"). A value that is not a number (a Temporal-shaped
+    // minute, ...) is shown with describeValue (so that building the message does not fail for a value that
+    // cannot become a string. decisions.md #3)
     const two = (v: unknown): string =>
       typeof v === "number" ? String(v).padStart(2, "0") : describeValue(v);
     throw rangeError("invalid-time", `Invalid time: ${two(hour)}:${two(minute)}`);
@@ -246,7 +305,20 @@ function wallTime(hour: number, minute: number): number {
   return hour * 60 + minute;
 }
 
-function parseString(value: string, timeZone: string): CivilDateTime {
+/**
+ * Parses a date or date-time string.
+ * @param value - "YYYY-MM-DD" (exactly 10 characters), or "YYYY-MM-DDTHH:mm[:ss[.fraction]]" with an optional offset
+ *   ("Z", "+09:00", "+0900"); "T" and "Z" may be lower case.
+ * @param timeZone - A valid time zone, used only for a string with an offset.
+ * @returns A date without time: `minutes` null. A date-time without offset: that wall-clock date and time. With an
+ *   offset: the instant converted to `timeZone`.
+ * @throws RangeError `invalid-date` for a malformed or non-existent date; `invalid-time` for a malformed or
+ *   out-of-range time or offset (including a space instead of "T"); `out-of-range` when an instant falls outside the
+ *   years 1000-9999.
+ * @internal
+ * @see decisions.md #6
+ */
+export function parseString(value: string, timeZone: string): CivilDateTime {
   if (value.length === 10) {
     parseDate(value);
     return { date: value, minutes: null };
@@ -266,9 +338,11 @@ function parseString(value: string, timeZone: string): CivilDateTime {
   }
   const offset = m[6];
   if (offset === undefined) return { date, minutes };
-  // オフセット付きは瞬間として扱う。瞬間は取り出した値から計算し、Date.parse に渡さない（ECMAScript が解釈を定めるのは
-  // 大文字の T・Z と 3 桁の小数秒だけで、小文字や 9 桁の小数秒は実行環境で結果が違う。Firefox・Safari は小文字を読めない）
-  // 時差（Z は 0）。時は 23・分は 59 まで（前のバージョンの Date.parse と同じ。外は invalid-time）
+  // With an offset it is an instant. The instant is computed from the extracted values, not with Date.parse
+  // (ECMAScript defines the reading only for upper-case T and Z and 3 fraction digits; lower case and 9 fraction
+  // digits differ by runtime, and Firefox and Safari cannot read lower case).
+  // The offset (0 for Z): hours up to 23 and minutes up to 59 (as Date.parse in earlier versions; otherwise
+  // invalid-time)
   const [, hh = "0", mm = "0"] = /(\d\d):?(\d\d)$/.exec(offset) ?? [];
   if (+hh > 23 || +mm > 59)
     throw rangeError("invalid-time", `Invalid date/time string: ${describeValue(value)}`);
@@ -286,24 +360,44 @@ function parseString(value: string, timeZone: string): CivilDateTime {
   return instantToCivil(ms, timeZone);
 }
 
-function isInstantLike(value: object): value is TemporalInstantLike {
+/**
+ * Whether an object has a numeric `epochMilliseconds` (Temporal.Instant or ZonedDateTime shape).
+ * @internal
+ */
+export function isInstantLike(value: object): value is TemporalInstantLike {
   return typeof (value as { epochMilliseconds?: unknown }).epochMilliseconds === "number";
 }
 
-function isDateLike(value: object): value is TemporalDateLike {
+/**
+ * Whether an object has numeric `year`, `month` and `day` (Temporal.PlainDate or PlainDateTime shape).
+ * @internal
+ */
+export function isDateLike(value: object): value is TemporalDateLike {
   const v = value as Partial<Record<"year" | "month" | "day", unknown>>;
   return typeof v.year === "number" && typeof v.month === "number" && typeof v.day === "number";
 }
 
 /**
- * Date か（iframe や vm など、別の実行環境で作られた Date も含む）。
- * instanceof は実行環境ごとに Date が別物になるため使わない
+ * Whether a value is a Date, including one created in another realm (checked by its Object.prototype.toString tag,
+ * not instanceof).
  */
 export function isDate(value: unknown): value is Date {
   return Object.prototype.toString.call(value) === "[object Date]";
 }
 
-/** @internal 入力をタイムゾーンでの暦日と時刻に変換する */
+/**
+ * Converts any accepted date input to a calendar date and, when the input has one, a time of day in a time zone.
+ * @param input - A string ({@link parseString}), a Date, an object with `epochMilliseconds`, or an object with
+ *   `year`, `month`, `day` and optionally `hour`, `minute`. Checked in this order.
+ * @param timeZone - A valid time zone.
+ * @returns `{ date, minutes }`; `minutes` is null for a date-only input (a date-like object without `hour`, even if
+ *   it has `minute`).
+ * @throws TypeError `invalid-input` for any other value or a `calendarId` other than "iso8601"; RangeError
+ *   `invalid-date` (including a year outside 1000-9999 in a date-like object), `invalid-time` or `out-of-range` as
+ *   for the input kind.
+ * @internal
+ * @see decisions.md #1, #3, #6
+ */
 export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
   if (typeof input === "string") return parseString(input, timeZone);
   if (isDate(input)) return instantToCivil(Date.prototype.getTime.call(input), timeZone);
@@ -311,13 +405,14 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
     if (isInstantLike(input)) return instantToCivil(input.epochMilliseconds, timeZone);
     if (isDateLike(input)) {
       if (input.calendarId !== undefined && input.calendarId !== "iso8601") {
-        // invalid-input はほかの経路と同じ TypeError（decisions.md の 3 番）
+        // invalid-input is a TypeError as on the other paths (decisions.md #3)
         throw typeError(
           "invalid-input",
           `Unsupported calendar: ${describeValue(input.calendarId)} (only iso8601)`,
         );
       }
-      // 渡された年の誤りは、文字列の暦日と同じ invalid-date（範囲の外に出た計算の out-of-range ではない。decisions.md の 1 番）
+      // A wrong year that was passed is invalid-date, as for a date string (not the out-of-range of a
+      // calculation that left the range. decisions.md #1)
       if (!Number.isInteger(input.year) || input.year < 1000 || input.year > 9999) {
         throw rangeError(
           "invalid-date",
@@ -325,8 +420,9 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
         );
       }
       const date = formatDate(input.year, input.month, input.day);
-      // 時を書いた形は時刻付き。null・文字列などの時は、分と同じく invalid-time（null は省略ではなく値の誤り。
-      // decisions.md の 6 番）。時を書かずに分だけを書いた形は、暦日として読む（型が許す形で、本物の PlainDate には両方ない）
+      // A shape with an hour has a time. An hour that is null, a string, ... is invalid-time like the minute
+      // (null is a wrong value, not omission. decisions.md #6). A shape with a minute but no hour is read as a
+      // calendar date (the type allows it; a real PlainDate has neither)
       if (input.hour !== undefined) {
         return {
           date,
@@ -343,7 +439,11 @@ export function toCivil(input: DateInput, timeZone: string): CivilDateTime {
 }
 
 /**
- * 入力を、タイムゾーンでの暦日 "YYYY-MM-DD" に変換する。
+ * Converts a date input to the calendar date "YYYY-MM-DD" in a time zone.
+ * @param input - A date string, a date-time string, a Date, or a Temporal-like object.
+ * @param timeZone - IANA time zone name.
+ * @returns "YYYY-MM-DD".
+ * @throws RangeError `invalid-time-zone`, `invalid-date`, `invalid-time`, `out-of-range`; TypeError `invalid-input`.
  * @public
  */
 export function toDateString(input: DateInput, timeZone: string): DateString {
@@ -351,8 +451,11 @@ export function toDateString(input: DateInput, timeZone: string): DateString {
 }
 
 /**
- * 入力を、タイムゾーンでの暦日と時刻（"HH:mm"。暦日だけの入力では null）に変換する。
- * 時刻を必ず持つ入力（DateTimeInput）では、time の型が string になる。
+ * Converts a date input to the calendar date and time "HH:mm" in a time zone.
+ * @param input - A date string, a date-time string, a Date, or a Temporal-like object.
+ * @param timeZone - IANA time zone name.
+ * @returns A frozen `{ date, time }`; `time` is null for a date-only input (typed as string for a DateTimeInput).
+ * @throws RangeError `invalid-time-zone`, `invalid-date`, `invalid-time`, `out-of-range`; TypeError `invalid-input`.
  * @public
  */
 export function toDateTimeParts(input: DateTimeInput, timeZone: string): CivilDateTimeParts<string>;
@@ -368,16 +471,20 @@ export function toDateTimeParts(input: DateInput, timeZone: string): CivilDateTi
 }
 
 /**
- * @internal 暦日と時刻（0 時からの経過分）から、タイムゾーンでの瞬間（エポックミリ秒）を求める。
- * 夏時間の扱いは Temporal の disambiguation: "compatible" と同じ。存在しない時刻（飛び）は切り替え前のオフセットで解釈して
- * 飛んだ分だけ後ろの瞬間に、2 回ある時刻（重複）は先のほう（切り替え前のオフセット）にする。
- * Intl 以外に依存しないよう、前後 1 日のオフセットを候補にして、暦日に戻して一致するものを選ぶ。
- * 前後 1 日の時差は暦日の文字列にせずに求める（1000-01-01 の前日・9999-12-31 の翌日は 1000〜9999 年の外だが、時差は求まる）
+ * The instant (epoch milliseconds) of a calendar date and time of day in a time zone.
+ * @param date - "YYYY-MM-DD".
+ * @param minutes - Minutes since midnight, 0-1439.
+ * @param timeZone - A valid time zone.
+ * @returns The instant. A time skipped by a DST change is read with the offset before the change (so it lands later
+ *   by the gap); a time that occurs twice gives the earlier instant (Temporal's "compatible"). Offsets are handled to
+ *   the minute.
+ * @internal
  */
 export function civilToInstant(date: DateString, minutes: number, timeZone: string): number {
   const { year, month, day } = parseDate(date);
   const wall = Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
-  // 前後 1 日は紀元前に戻らない（999 年の末より前にならない）ので、wallParts の年をそのまま使える
+  // One day before or after does not go back to BC (not before the end of year 999), so the year of wallParts
+  // can be used as it is
   const offsetAt = (ms: number): number => {
     const w = wallParts(ms, timeZone);
     return Date.UTC(w.year, w.month - 1, w.day, w.hour, w.minute) - ms;
@@ -390,11 +497,18 @@ export function civilToInstant(date: DateString, minutes: number, timeZone: stri
   };
   const candidates = before === after ? [wall - before] : [wall - before, wall - after];
   const found = candidates.filter(valid);
-  // 重複なら先のほう（小さいミリ秒）、飛びなら切り替え前のオフセット（before）で解釈した瞬間
+  // In an overlap the earlier instant (smaller milliseconds); in a gap the instant read with the offset before
+  // the transition (before)
   return found.length > 0 ? Math.min(...found) : wall - before;
 }
 
-/** @internal "HH:mm" または "HH:mm:ss" を 0 時からの経過秒に変換する（00:00:00〜23:59:59） */
+/**
+ * Parses a time of day.
+ * @param value - Expected: "HH:mm" or "HH:mm:ss", 00:00:00 to 23:59:59.
+ * @returns Seconds since midnight.
+ * @throws RangeError `invalid-time` otherwise, including non-strings.
+ * @internal
+ */
 export function parseTimeOfDaySeconds(value: unknown): number {
   const m = typeof value === "string" ? /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value) : null;
   const seconds = m ? Number(m[3] ?? "0") : NaN;
@@ -408,10 +522,14 @@ export function parseTimeOfDaySeconds(value: unknown): number {
 }
 
 /**
- * 暦日と時刻（"HH:mm" または "HH:mm:ss"）から、タイムゾーンでのその瞬間を Date で返す（civilOf・toDateTimeParts の逆向き）。
- * 夏時間の切り替えで存在しない時刻は、飛んだ分だけ後ろの瞬間（英国の 3 月の 01:30 は 02:30 BST）、2 回ある時刻は先のほう
- * （Temporal の disambiguation: "compatible" と同じ）。時差は分の精度で扱う（時差が分の倍数でない時期、たとえば標準時の
- * 制定より前の地方平均時やリベリアの 1972 年までは、結果が最大 59 秒ずれ、秒を付けた時刻は civilOf で同じ分に戻らないことがある）。
+ * The instant of a calendar date and a time of day in a time zone, as a Date. Inverse of civilOf / toDateTimeParts.
+ * @param date - "YYYY-MM-DD".
+ * @param time - "HH:mm" or "HH:mm:ss".
+ * @param timeZone - IANA time zone name.
+ * @returns A Date. A time skipped by a DST change maps to the instant later by the gap (01:30 in March in the UK is
+ *   02:30 BST); a time that occurs twice maps to the earlier instant (Temporal's "compatible"). Offsets are handled
+ *   to the minute: where the offset is not a whole number of minutes the result can be off by up to 59 seconds.
+ * @throws RangeError `invalid-time-zone`, `invalid-date`, `invalid-time`.
  * @public
  */
 export function toInstant(date: DateString, time: string, timeZone: string): Date {

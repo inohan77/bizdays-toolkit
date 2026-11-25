@@ -34,14 +34,14 @@ test("有効期間: 定休日の曜日の変更を 1 つのカレンダーで表
     optionPath: "closedRecurringRules[1]",
     rulePath: "closedRecurringRules[1]",
   });
-  // 切り替え日をまたぐ計算も 1 つのカレンダーで正しい（3/31 水・4/1 木・4/2 金）
+  // A calculation across the switch date is right with one calendar (3/31 Wed, 4/1 Thu, 4/2 Fri)
   assert.equal(shop.addBusinessDays("2027-03-30", 3), "2027-04-02");
   assert.equal(
     shop.diffBusinessDays("2027-03-29", "2027-04-12"),
     12,
     "14 日のうち月曜 1 日と火曜 1 日が休み",
   );
-  // 期間の両端を含む
+  // Both ends of the period are included
   assert.equal(shop.isBusinessDay("2027-03-29"), false, "2027-03-31 までの月曜");
   assert.equal(shop.isBusinessDay("2027-04-06"), false, "2027-04-01 からの火曜");
 });
@@ -76,7 +76,8 @@ test("有効期間: 毎年の月日（月日・期間）にも付けられる", 
 });
 
 test("有効期間: 振替（after-holiday）は振替元の日で判定する", () => {
-  // 毎月 1 日休業（祝日なら翌日）。2027-01-01（金・元日）の振替先は 01-02（土）
+  // Closed on the 1st of every month (the next day when it is a holiday). 2027-01-01 (Fri, New Year's Day) moves
+  // to 01-02 (Sat)
   const cal = closedOn([
     { dayOfMonth: 1, holidayOverlapPolicy: "after-holiday", effectiveTo: "2027-01-01" },
   ]);
@@ -103,7 +104,7 @@ test("有効期間: 期間の外では書かれていないのと同じで、優
 });
 
 test("周期: 隔週水曜定休は「第 1・3 水曜」とは別物", () => {
-  // 祝日（4/29）でも休業として数えられるよう "over-holiday" にする
+  // "over-holiday", so that it counts as closed on a holiday (4/29) too
   const biweekly = closedOn([
     {
       weekday: 3,
@@ -156,12 +157,14 @@ test("周期: 起点から始めるには effectiveFrom を併せて指定する
   assert.equal(cal.isBusinessDay("2026-11-02"), false);
   assert.equal(cal.isBusinessDay("2026-11-09"), true);
   assert.equal(cal.isBusinessDay("2026-11-16"), false);
-  // 2026-11-23（月・勤労感謝の日）は起点から 3 週なので周期の上では当てはまらず、振替も起きない
+  // 2026-11-23 (Mon, Labor Thanksgiving Day) is 3 weeks from the anchor, so the cycle does not match and nothing
+  // moves
   assert.equal(cal.isBusinessDay("2026-11-23"), true, "祝日は営業（holidayPolicy: open）");
   assert.equal(cal.dayInfoOn("2026-11-24").reason, "default");
   assert.equal(cal.isBusinessDay("2026-11-30"), false);
   assert.equal(cal.isBusinessDay("2027-03-01"), true, "3 月は月の絞り込みの外");
-  // 2027-01-11（月・成人の日）は起点から 10 週で当てはまる祝日。翌日 01-12 に振替
+  // 2027-01-11 (Mon, Coming of Age Day) is 10 weeks from the anchor, a matching holiday. It moves to the next
+  // day, 01-12
   assert.equal(cal.dayInfoOn("2027-01-12").shiftedFrom, "2027-01-11");
 });
 
@@ -182,7 +185,7 @@ test("周期: スケジュールの値にも使える", () => {
 });
 
 test("周期: 起点と同じ曜日で、起点との日数の差が 7 × interval の倍数の日だけ", () => {
-  // 2026-11-02 を起点にした隔週月曜は 11-02・11-16・11-30。11-23 は当てはまらない
+  // Every other Monday anchored at 2026-11-02 is 11-02, 11-16, 11-30. 11-23 does not match
   const cal = closedOn([{ weekday: 1, interval: 2, anchor: "2026-11-02" }]);
   assert.deepEqual(
     ["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"].map(
@@ -275,7 +278,7 @@ test("入力の誤り: 有効期間・周期", () => {
       e.code === "invalid-date" &&
       /annualDates\[0\]\.effectiveTo/.test(e.message),
   );
-  // 個別の日付には有効期間を付けない（知らないキーとして無視される）
+  // A specific date gets no effective period (ignored as an unknown key)
   const cal = createCalendar({
     closedDates: [{ date: "2026-10-19", effectiveTo: "2020-01-01" } as never],
   });

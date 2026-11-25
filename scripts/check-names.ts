@@ -1,14 +1,16 @@
 import "./strict-warnings.ts";
 /**
- * 公開する名前の規則の検査（etc/naming.md の N1〜N9。検査の項目 C1〜C12 は同じ文書にある）。
+ * Checks the rules for published names (N1-N9 of etc/naming.md; the check items C1-C12 are in the same document).
  *
- * ビルド済みの型定義（dist/*.d.ts）から、package.json の exports の各エントリーが公開する名前
- * （export・型の項目とメソッド・引数・型引数・文字列のリテラル型の値）を集め、etc/naming.md の
- * 用語集・外部の名前の出典と、docs/migration.md の「1.0.0 で削除する予定の API」の表で照合する。
- * 違反が 1 つでもあれば失敗する。名前を許す一覧はこのスクリプトに持たない。
+ * From the built type definitions (dist/*.d.ts), collects the names published by each entry of `exports` in
+ * package.json (exports, properties and methods of types, parameters, type parameters, values of string
+ * literal types) and checks them against the glossary and the sources of external names in etc/naming.md and
+ * against the table of the API to be removed in 1.0.0 in docs/migration.md.
+ * One violation fails. This script holds no list of allowed names.
  *
- *   node scripts/check-names.ts           … 照合する
- *   node scripts/check-names.ts --words   … 集めた語を名前とともに一覧にする（用語集を書くときの補助）
+ *   node scripts/check-names.ts           ... check
+ *   node scripts/check-names.ts --words   ... list the collected words with their names (a help for writing the
+ *                                             glossary)
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -17,7 +19,7 @@ import ts from "typescript";
 import { RENAMED_KEYS } from "../src/core/renamed.ts";
 
 // ---------------------------------------------------------------------------
-// 入力
+// Input
 // ---------------------------------------------------------------------------
 
 interface Pkg {
@@ -55,17 +57,23 @@ interface Word {
   readonly noun?: NounKind;
   readonly plural?: string;
   readonly forms: readonly string[];
-  /** 項目・引数の名前の最後の語に使ったときに許す型（C12）。undefined は制約なし、空は使わない */
+  /**
+   * Types allowed when the word is the last word of a property or parameter name (C12). undefined: no
+   * constraint; empty: never used there
+   */
   readonly itemTypes?: readonly string[];
-  /** 型の名前の最後の語に使ったときの制約（C12） */
+  /** Constraint when the word is the last word of a type name (C12) */
   readonly typeName?: string;
-  /** この語を含む文字列の値を置ける型（名前の末尾。C12） */
+  /** Types that may hold a string value containing this word (the end of the name. C12) */
   readonly valueOwners?: readonly string[];
 }
 
 const naming = readFileSync("etc/naming.md", "utf8");
 
-/** 見出し（## … か ### …）の下にある表を、行ごとのセルの配列で返す（同じか上の階層の次の見出しまで） */
+/**
+ * The table under a heading (## ... or ### ...) as arrays of cells per row (up to the next heading of the same
+ * or a higher level)
+ */
 function tableUnder(text: string, heading: string): string[][] {
   const found = new RegExp(`\\n(#{2,3}) ${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n`).exec(
     text,
@@ -83,7 +91,7 @@ function tableUnder(text: string, heading: string): string[][] {
         .split("|")
         .map((c) => c.trim()),
     );
-  return rows.slice(2); // 見出しの行と区切りの行
+  return rows.slice(2); // the header row and the separator row
 }
 const code = (cell: string): string[] => [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
 
@@ -160,7 +168,7 @@ const scheduledRemovals = new Set(
 );
 
 // ---------------------------------------------------------------------------
-// 名前を集める
+// Collecting names
 // ---------------------------------------------------------------------------
 
 const program = ts.createProgram(
@@ -188,7 +196,7 @@ const names: Name[] = [];
 const seenNodes = new Set<ts.Node>();
 const deprecatedSeen = new Set<string>();
 
-/** 宣言（または VariableStatement）に付いた TSDoc のタグ */
+/** The TSDoc tags of a declaration (or VariableStatement) */
 function tagsOf(node: ts.Node): readonly ts.JSDocTag[] {
   const target = ts.isVariableDeclaration(node) ? node.parent.parent : node;
   return ts.getJSDocTags(target);
@@ -206,7 +214,7 @@ const report = (rule: string, where: string, reason: string): void => {
   violations.push(`${rule.padEnd(7)} ${where.replaceAll("\\", "/")}  ${reason}`);
 };
 
-/** 型の宣言の名前。外部の名前の型（@namingSource）は項目と値を見ない（C9） */
+/** Names of type declarations. For a type with external names (@namingSource), properties and values are not examined (C9) */
 const externalTypes = new Set<string>();
 
 interface Decl {
@@ -222,13 +230,13 @@ function collectInside(node: ts.Node, owner: string, external: boolean): void {
   if (seenNodes.has(node)) return;
   seenNodes.add(node);
   if ((ts.isPropertySignature(node) || ts.isMethodSignature(node)) && ts.isIdentifier(node.name)) {
-    // 削除予定の項目・メソッドは、型の名前と組にした修飾名で照合する（C10）
+    // A property or method to be removed is checked by its name qualified with the type name (C10)
     const qualified = `${owner}.${node.name.text}`;
     const deprecated = ts.getJSDocTags(node).some((t) => t.tagName.text === "deprecated");
     if (scheduledRemovals.has(qualified)) {
       deprecatedSeen.add(qualified);
       if (!deprecated) report("C10", qualified, "削除予定の表にあるが @deprecated でない");
-      return; // 削除予定の名前と、その中の名前は C1〜C8・C11・C12 で見ない
+      return; // a name to be removed, and the names inside it, are not examined by C1-C8, C11 and C12
     }
     if (deprecated) report("C10", qualified, "@deprecated だが削除予定の表にない");
   }
@@ -291,12 +299,12 @@ for (const entry of entries) {
       deprecatedSeen.add(name);
       if (!deprecated)
         report("C10", `${name} (${entry.subpath})`, "削除予定の表にあるが @deprecated でない");
-      continue; // 削除予定の名前は C1〜C8 で見ない
+      continue; // a name to be removed is not examined by C1-C8
     }
     if (deprecated)
       report("C10", `${name} (${entry.subpath})`, "@deprecated だが削除予定の表にない");
     const key = `${name}@${first.getSourceFile().fileName}:${first.pos}`;
-    if (seenNodes.has(first)) continue; // 同じ宣言を別のエントリーから再 export している
+    if (seenNodes.has(first)) continue; // the same declaration re-exported from another entry
     const decl: Decl = { name, subpath: entry.subpath, node: first };
     void key;
     if (ts.isFunctionDeclaration(first)) {
@@ -316,7 +324,7 @@ for (const entry of entries) {
     }
     for (const d of declarations) {
       seenNodes.delete(d);
-      // 関数の宣言は本体の型（引数・戻り値）も同じ規則で集める
+      // For a function declaration the types of its body (parameters, return value) are collected by the same rules
       collectInside(d, name, source !== undefined);
       seenNodes.add(d);
     }
@@ -328,10 +336,10 @@ for (const name of scheduledRemovals) {
 }
 
 // ---------------------------------------------------------------------------
-// 語に分ける
+// Splitting into words
 // ---------------------------------------------------------------------------
 
-/** camelCase・PascalCase・ケバブケースを語に分ける（連続する大文字は 1 語） */
+/** Splits camelCase, PascalCase and kebab-case into words (consecutive capitals are one word) */
 function splitWords(name: string): string[] {
   return name
     .split("-")
@@ -345,13 +353,13 @@ function splitWords(name: string): string[] {
     .filter((w) => w.length > 0);
 }
 
-/** 用語集の語句（空白を含む行）。長いものから照合する */
+/** Phrases of the glossary (rows with a space). Longer ones are matched first */
 const phrases = [...formOf.keys()]
   .filter((k) => k.includes(" "))
   .map((k) => k.split(" "))
   .sort((a, b) => b.length - a.length);
 
-/** 名前を、用語集の語句を 1 つにまとめた語の列にする（語句は長い順に先に照合する） */
+/** Turns a name into words, with each glossary phrase as one word (phrases are matched first, longest first) */
 function split(name: string): string[] {
   const words = splitWords(name);
   const out: string[] = [];
@@ -383,7 +391,7 @@ if (process.argv.includes("--words")) {
 }
 
 // ---------------------------------------------------------------------------
-// 型の形
+// Shapes of types
 // ---------------------------------------------------------------------------
 
 function strip(node: ts.TypeNode): ts.TypeNode {
@@ -413,7 +421,7 @@ function isCollection(node: ts.TypeNode): boolean {
     const keys = n.members
       .map((m) => (m.name && ts.isIdentifier(m.name) ? m.name.text : ""))
       .sort();
-    return keys.join(",") === "from,to"; // 範囲 { from, to }
+    return keys.join(",") === "from,to"; // a range { from, to }
   }
   return false;
 }
@@ -424,7 +432,7 @@ function shapeOf(node: ts.TypeNode): Shape {
   if (c === 0) return "single";
   return c === ms.length ? "collection" : "one-or-many";
 }
-/** 型の主な名前（配列は要素、型引数は除く）。C12 で使う */
+/** The main names of a type (the element for an array; type arguments left out). Used by C12 */
 function baseNames(node: ts.TypeNode): string[] {
   const n = strip(node);
   if (ts.isUnionTypeNode(n)) return n.types.flatMap(baseNames);
@@ -466,7 +474,7 @@ const isFunctionType = (node: ts.TypeNode): boolean =>
   members(node).some((m) => ts.isFunctionTypeNode(m));
 
 // ---------------------------------------------------------------------------
-// C1: すべての語が用語集にある
+// C1: every word is in the glossary
 // ---------------------------------------------------------------------------
 
 const usedWords = new Set<string>();
@@ -478,13 +486,13 @@ for (const n of names) {
   }
 }
 
-// C2: 用語集のすべての語が使われている
+// C2: every word of the glossary is used
 for (const word of glossary.keys()) {
   if (!usedWords.has(word)) report("N1/C2", word, "用語集の語がどの名前でも使われていない");
 }
 
 // ---------------------------------------------------------------------------
-// 項目と引数（C4〜C7・C12）
+// Properties and parameters (C4-C7, C12)
 // ---------------------------------------------------------------------------
 
 function itemType(n: Name): ts.TypeNode | undefined {
@@ -497,14 +505,15 @@ for (const n of names) {
   if (n.kind !== "property" && n.kind !== "parameter") continue;
   const type = itemType(n);
   if (type && isNever(type) && ts.getJSDocCommentsAndTags(n.node).length > 0) {
-    // 書けない項目に説明は要らない。説明が付いているのは、別の項目の説明が型の分割でずれたとき（C13）
+    // A property that cannot be written needs no description. One with a description means that the
+    // description of another property slipped when a type was split (C13)
     report(
       "C13",
       n.where,
       "?: never の項目に TSDoc が付いている（別の項目の説明がずれていないか）",
     );
   }
-  if (!type || isNever(type)) continue; // 形を分けるための ?: never は項目ではない
+  if (!type || isNever(type)) continue; // a ?: never that only separates shapes is not a property
   const words = split(n.name);
   const last = words[words.length - 1]!;
   const lastWord = lookup(last);
@@ -513,13 +522,13 @@ for (const n of names) {
     (ts.isPropertySignature(n.node) || ts.isParameter(n.node)) &&
     n.node.questionToken !== undefined;
 
-  // C4（N3）: 型が boolean の項目の最後の語は形容詞か過去分詞
+  // C4 (N3): the last word of a boolean property is an adjective or a past participle
   if (n.kind === "property" && isBooleanType(type) && lastWord) {
     if (lastWord.pos !== "形容詞" && lastWord.pos !== "過去分詞")
       report("N3/C4", n.where, `型が boolean なのに最後の語 "${last}" が${lastWord.pos}`);
   }
 
-  // C5（N4）: 型の形と最後の語の単数・複数
+  // C5 (N4): the shape of the type and singular / plural of the last word
   if (lastWord) {
     const shape = shapeOf(type);
     const plural = isPluralForm(last);
@@ -537,7 +546,8 @@ for (const n of names) {
       report("N4/C5", n.where, `1 つの値なのに、最後の語 "${last}" が複数形`);
   }
 
-  // C6（N5）: 省略可能で文字列のリテラル型を含む項目は Policy で終わり、Policy で終わる項目はその型
+  // C6 (N5): an optional property with a string literal type ends with Policy, and a property ending with Policy
+  // has such a type
   if (n.kind === "property") {
     const literal = hasStringLiteral(type);
     if (optional && literal && last !== "policy")
@@ -546,11 +556,11 @@ for (const n of names) {
       report("N5/C6", n.where, "Policy で終わるのに、型が文字列のリテラル型を含まない");
   }
 
-  // C7（N6）: 関数を受ける項目の最初の語は動詞
+  // C7 (N6): the first word of a property that takes a function is a verb
   if (isFunctionType(type) && firstWord && firstWord.pos !== "動詞")
     report("N6/C7", n.where, `関数を受けるのに、最初の語 "${words[0]}" が${firstWord.pos}`);
 
-  // C12（N1）: 最後の語に許す型
+  // C12 (N1): the types allowed for the last word
   if (lastWord?.itemTypes) {
     const allowed = lastWord.itemTypes;
     const actual = baseNames(type);
@@ -566,7 +576,7 @@ for (const n of names) {
   }
 }
 
-// C12（N1）: 型の名前の最後の語の制約
+// C12 (N1): the constraint on the last word of a type name
 for (const [name, decl] of exportedTypes) {
   const words = split(name);
   const last = lookup(words[words.length - 1]!);
@@ -581,7 +591,7 @@ for (const [name, decl] of exportedTypes) {
   }
 }
 
-// C12（N1）: 値を置ける型
+// C12 (N1): the types that may hold the value
 for (const n of names) {
   if (n.kind !== "value") continue;
   const owner = n.where.split(/[ .]/)[0]!;
@@ -596,8 +606,8 @@ for (const n of names) {
   }
 }
 
-// C6（N5）の続き: 設定の値を写して返す項目と、同じ名前の Policy の項目どうし
-/** 型が含む文字列のリテラルの値（型の別名をたどる。オブジェクトの選択肢は含めない） */
+// C6 (N5) continued: properties that return an option's value as it is, and Policy properties of the same name
+/** The string literal values a type contains (type aliases are followed; object alternatives are not included) */
 function literalText(node: ts.TypeNode): string {
   const type = checker.getTypeFromTypeNode(node);
   const parts = type.isUnion() ? type.types : [type];
@@ -643,8 +653,9 @@ for (const p of properties) {
   });
 }
 for (const [name, list] of policyByName) {
-  // 項目の名前を PascalCase にした型（holidayOverlapPolicy なら HolidayOverlapPolicy）があれば、その型の値の部分集合であること
-  // （規則の形ごとに選択肢を絞った項目も同じ扱いの選択）。型がなければ、どれか 2 つの一方が他方を含むこと
+  // When a type named like the property in PascalCase exists (HolidayOverlapPolicy for holidayOverlapPolicy),
+  // the values must be a subset of that type's values (a property whose alternatives are narrowed per rule shape
+  // is the same kind of choice). Without such a type, of any two, one must contain the other
   const typeDecl = exportedTypes.get(name.charAt(0).toUpperCase() + name.slice(1));
   if (typeDecl && ts.isTypeAliasDeclaration(typeDecl.node)) {
     const allowed = new Set(
@@ -679,7 +690,7 @@ for (const [name, list] of policyByName) {
 }
 
 // ---------------------------------------------------------------------------
-// C3（N2）: 関数・メソッドの名前の形
+// C3 (N2): the form of function and method names
 // ---------------------------------------------------------------------------
 
 const ACTION_VERBS = new Set(["create", "combine", "diagnose", "migrate", "adjust"]);
@@ -774,7 +785,7 @@ for (const s of sigs) {
     isWith ||
     isAction;
 
-  // 形ごとの約束
+  // Promises per form
   if (isIs && !retBoolean(s)) bad("is… なのに真偽値を返さない");
   if (isTo && ps[ps.length - 1] !== "timeZone") bad("to… なのに最後の引数が timeZone でない");
   if (isOf && ps.includes("timeZone")) bad("…Of なのにタイムゾーンを引数に取る");
@@ -807,7 +818,7 @@ for (const s of sigs) {
       `"${first}" で始まるが、N2 の形（create・combine・diagnose・migrate・adjust・add・diff・is・to・with）でない`,
     );
   if (!patterned && firstWord) {
-    // 単数の名詞: 主要部（最初の前置詞の前の最後の語、なければ最後の語）が単数の名詞
+    // A singular noun: the head (the last word before the first preposition, or the last word) is a singular noun
     const prep = w.findIndex((x) => lookup(x)?.pos === "前置詞");
     const head = prep > 0 ? w[prep - 1]! : last;
     const hw = lookup(head);
@@ -815,7 +826,7 @@ for (const s of sigs) {
       bad(`N2 のどの形にも当たらず、主要部 "${head}" が単数の名詞でない`);
   }
 
-  // 逆向きの約束（戻り値・引数の形から名前の形が決まる）
+  // Promises in the other direction (the shapes of the return value and parameters decide the form of the name)
   if (retBoolean(s) && !isIs) bad("真偽値を返すのに is… でない");
   if (retNumber(s) && !isDiff && !isLength) bad("数を返すのに diff…・length… でない");
   if (retArray(s) && !(isBetween || isInYear || isWith || isAction))
@@ -843,12 +854,12 @@ for (const s of sigs) {
 }
 
 // ---------------------------------------------------------------------------
-// C8（N7）: 国の型の頭・提供元の定数・設定の型
+// C8 (N7): the prefix of country types, the provider constants, the option types
 // ---------------------------------------------------------------------------
 
 const pascal = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 for (const entry of entries) {
-  if (!/^[a-z]{2}$/.test(entry.short)) continue; // 国・地域のサブパス（2 文字の略号）
+  if (!/^[a-z]{2}$/.test(entry.short)) continue; // subpaths of countries and regions (two-letter codes)
   const prefix = pascal(entry.short);
   for (const [name, decl] of exportedTypes) {
     if (decl.subpath !== entry.subpath) continue;
@@ -904,7 +915,7 @@ for (const s of sigs) {
 }
 
 // ---------------------------------------------------------------------------
-// C11（N9）: スケジュールの側の型
+// C11 (N9): the types on the schedule side
 // ---------------------------------------------------------------------------
 
 function reachable(roots: readonly string[]): Set<string> {
@@ -942,31 +953,37 @@ for (const name of exportedTypes.keys()) {
 }
 
 // ---------------------------------------------------------------------------
-// 旧名の残り（C14）
+// Old names left behind (C14)
 // ---------------------------------------------------------------------------
 
 /**
- * 今の状態を書いたファイルと、型定義の TSDoc（@deprecated の付いていないもの）に、0.30.0 で改名した旧名が残っていないか。
- * 旧名は 1.0.0 まで動くので、コード例の実行（RELEASING.md の「品質の仕組みの理由」の「文書を実装と照合する」）では見つからない。履歴を書いたファイル（CHANGELOG・decisions.md・
- * migration.md）と、文書のバージョンの番号を見出しに持つ節（移行の説明）は見ない（RELEASING.md の「品質の仕組みの理由」の「規則を 1 か所に書く」）。旧名の出どころは改名の表
- * （src/core/renamed.ts のキー）・削除予定の表・migration.md の「引数の名前」の表で、今の公開名と同じ綴りのものは除く。
- * 値（"national" など）は英語の語としても現れるので、人の確認で見る（RELEASING.md の「品質の確認」）
+ * Whether an old name renamed in 0.30.0 is left in the files that describe the current state or in the TSDoc of
+ * the type definitions (without @deprecated).
+ * Old names work until 1.0.0, so running the code examples (RELEASING.md, reasons for the quality mechanisms,
+ * "check documents against the implementation") does not find them. Files that record history (CHANGELOG,
+ * decisions.md, migration.md) and sections whose heading is a version number (migration notes) are not examined
+ * (RELEASING.md, reasons for the quality mechanisms, "write a rule in one place"). The old names come from the
+ * rename table (the keys of src/core/renamed.ts), the table of the API to be removed and the parameter-name
+ * table of migration.md; those spelled like a current public name are left out.
+ * Values ("national", ...) also occur as English words, so a person checks them (the quality checks of
+ * RELEASING.md)
  */
 const currentNames = new Set(names.map((n) => n.name));
 const currentProperties = new Set(names.filter((n) => n.kind === "property").map((n) => n.name));
 /**
- * 設定のキーの旧名。今の項目と同じ綴り（規則の目印の holiday など）は除く（引数と同じ綴りの holidays は除かない）。
- * 「{ 名前:」「, 名前:」「`名前:」の形と、コードの行頭の「名前:」で探す（英文の「federal holidays:」は拾わない）
+ * Old names of option keys. Those spelled like a current property (the rule marker `holiday`, ...) are left out
+ * (`holidays`, spelled like a parameter, is not). Searched as "{ name:", ", name:", "`name:" and "name:" at the
+ * start of a code line (the English "federal holidays:" is not caught)
  */
 const oldKeys = [...new Set(RENAMED_KEYS.map((r) => r.from))].filter(
   (k) => !currentProperties.has(k),
 );
-/** 関数・メソッド・型・返す項目の旧名。語の境界で探す */
+/** Old names of functions, methods, types and returned properties. Searched at word boundaries */
 const oldWords = [...scheduledRemovals]
   .map((q) => q.split(".").pop()!)
   .filter((w, i, all) => all.indexOf(w) === i)
   .filter((w) => !currentNames.has(w) && !RENAMED_KEYS.some((r) => r.from === w));
-/** 引数の旧名。「関数(… 旧名」の形で探す */
+/** Old names of parameters. Searched in the form "function(... old name" */
 const oldParams = tableUnder(migration, "引数の名前").flatMap((r) => {
   const [fns, old] = [code(r[0] ?? ""), code(r[1] ?? "")[0]];
   return old ? fns.map((fn) => ({ fn, old })) : [];
@@ -983,9 +1000,11 @@ const patterns: { name: string; re: RegExp; codeOnly?: RegExp }[] = [
     re: new RegExp(`(?:[{,]\\s*|\`)${escape(k)}\\s*:`),
     codeOnly: new RegExp(`^\\s*(?:\\*\\s*)?${escape(k)}\\s*:`),
   })),
-  // holidays は普通の語（holidaysInYear など）としても現れるので、キーの形のほかに、日本語の TSDoc で引数名として書く形
-  // （「の」「に」で挟む形）だけを足す。このファイルも検査の対象なので、その形をここに直接書かない。
-  // 旧名の表から holidays が外れたら（RELEASING.md の「1.0.0 で行う作業」）、この形も一緒に消す（下の確かめで止まる）
+  // `holidays` also occurs as an ordinary word (holidaysInYear, ...), so besides the key form only the form in
+  // which a Japanese TSDoc writes it as a parameter name (between two particles) is added. This file is examined
+  // too, so that form is not written here directly.
+  // Once `holidays` leaves the table of old names (RELEASING.md, work for 1.0.0), this form goes with it (the
+  // check below stops)
   { name: "holidays（日本語の TSDoc の引数名）", re: new RegExp(`の ${"holidays"} に`) },
   ...oldWords.map((w) => ({ name: w, re: new RegExp(`\\b${escape(w)}\\b`) })),
   ...oldParams.map((p) => ({
@@ -1004,12 +1023,13 @@ const CURRENT_DOCS = [
   "SECURITY.md",
 ];
 /**
- * 見ないスクリプト: 前のバージョンを動かすもの（bench.ts・result-compare.ts。前のバージョンの名前で呼ぶのが正しい）と、公式データを照合するもの
- * （verify-*。オブジェクトは外部のデータの形で、data.gov.sg の day などを持つ）
+ * Scripts that are not examined: those that run a previous version (bench.ts, result-compare.ts; calling it by
+ * the previous version's names is correct) and those that verify official data (verify-*; their objects have
+ * the shape of external data, such as `day` of data.gov.sg)
  */
 const skipScript = (name: string): boolean =>
   name === "bench.ts" || name === "result-compare.ts" || name.startsWith("verify-");
-/** 非推奨であることを説明する行（旧名を書くのが正しい） */
+/** A line explaining that something is deprecated (writing the old name is correct there) */
 const DEPRECATION_NOTE = /deprecated|非推奨/i;
 const scanText = (
   file: string,
@@ -1027,7 +1047,7 @@ const scanText = (
 };
 for (const file of CURRENT_DOCS) {
   const lines = readFileSync(file, "utf8").split("\n");
-  // バージョンの番号（0.30.0 など）を見出しに持つ節は移行の説明なので見ない
+  // A section whose heading is a version number (0.30.0, ...) is a migration note and is not examined
   let inVersionSection = false;
   let level = 0;
   const skipped = lines.map((line) => {
@@ -1065,7 +1085,7 @@ for (const name of readdirSync("scripts")) {
     () => true,
   );
 }
-/** dist の型定義の TSDoc（@deprecated の付いたものを除く） */
+/** The TSDoc of the type definitions in dist (without those that have @deprecated) */
 const dtsFiles = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory()
@@ -1092,7 +1112,7 @@ for (const file of dtsFiles("dist")) {
 const scanned = `${CURRENT_DOCS.length} documents, scripts and dist type definitions for ${patterns.length} old names`;
 
 // ---------------------------------------------------------------------------
-// 出力
+// Output
 // ---------------------------------------------------------------------------
 
 for (const e of glossaryErrors) console.error(e);
