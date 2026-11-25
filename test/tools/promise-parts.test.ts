@@ -5,10 +5,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  COVERAGE_PARTS,
+  COVERAGE_RUN_NAMES,
+  INVENTORY_GROUPS,
   allCells,
   cellKey,
   checkCoverageTable,
   checkConditions,
+  checkCoverageParts,
   checkDimensions,
   checkUnverified,
   hasCountingRule,
@@ -131,6 +135,32 @@ test("仕様の条件の一覧: 一覧の条件が 0 件なら失敗し、一覧
     "value: a proxy whose reading throws",
   ])
     assert.ok(listed.includes(name), name);
+});
+
+test("被覆の実行の分け方: どの実行もちょうど 1 つの分に入っていなければ失敗する（リポジトリの分け方は、性質のテストの 2 つと棚卸しのグループのすべてを 1 回ずつ含む）", () => {
+  const names = ["a", "b", "c"];
+  assert.deepEqual(checkCoverageParts([["a", "b"], ["c"]], names), []);
+  assert.deepEqual(checkCoverageParts([["a"], ["c"]], names), ["run b is in no part"]);
+  assert.deepEqual(
+    checkCoverageParts(
+      [
+        ["a", "b"],
+        ["b", "c"],
+      ],
+      names,
+    ),
+    ["run b is in two parts"],
+  );
+  assert.deepEqual(checkCoverageParts([["a", "b", "c"], []], names), ["part 2 has no run"]);
+  assert.deepEqual(checkCoverageParts([["a", "b", "c", "d"]], names), ["part 1: unknown run d"]);
+  // The parts of the repository
+  assert.deepEqual(checkCoverageParts(COVERAGE_PARTS, COVERAGE_RUN_NAMES), []);
+  assert.deepEqual(COVERAGE_RUN_NAMES, [
+    "properties-longest",
+    "properties-others",
+    ...INVENTORY_GROUPS.map((g) => `inventory-${g.name}`),
+  ]);
+  assert.equal(INVENTORY_GROUPS.length, 14);
 });
 
 const block = (first: string, lines = 1): CoverageBlock => ({

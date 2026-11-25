@@ -131,13 +131,24 @@ export interface CoverageRun {
   readonly args: readonly string[];
   /** Environment variables added to those of this process */
   readonly env?: Readonly<Record<string, string>>;
+  /**
+   * The name of the directory of its coverage files under the root (by default its position in the list). Runs of
+   * different processes (jobs of CI) that are read together need names of their own
+   */
+  readonly dir?: string;
+  /**
+   * A condition on the output besides the exit code (for example that a test run with a name pattern ran a test:
+   * a pattern that matches nothing passes with no test)
+   */
+  readonly passes?: (stdout: string) => boolean;
 }
 
 /**
  * Runs processes with NODE_V8_COVERAGE, which makes Node.js write the block coverage of V8 (offsets and counts),
  * and returns which offsets of the modules of src were executed (offsetsIn).
  * @param runs - The processes, run one after another; each writes into a directory of its own under `root`.
- * @param onFailure - Called when a process ends with an exit code other than 0 (it may end this process).
+ * @param onFailure - Called when a process ends with an exit code other than 0 or its output does not pass (it may
+ *   end this process).
  * @param root - The directory for the coverage files (a new temporary directory by default).
  * @returns Per file of src, one byte per offset: 1 when executed.
  */
@@ -147,13 +158,14 @@ export function executedOffsets(
   root: string = mkdtempSync(join(tmpdir(), "unit-coverage-")),
 ): Map<string, Uint8Array> {
   const dirs = runs.map((run, i) => {
-    const dir = join(root, String(i));
+    const dir = join(root, run.dir ?? String(i));
     const r = spawnSync(process.execPath, [...run.args], {
       encoding: "utf8",
       maxBuffer: 1 << 28,
       env: { ...process.env, ...run.env, NODE_V8_COVERAGE: dir },
     });
-    if (r.status !== 0) onFailure(run, r.status, r.stdout, r.stderr);
+    if (r.status !== 0 || run.passes?.(r.stdout) === false)
+      onFailure(run, r.status, r.stdout, r.stderr);
     return dir;
   });
   return offsetsIn(dirs);
@@ -162,7 +174,7 @@ export function executedOffsets(
 /**
  * The same as executedOffsets, with the processes run at the same time (for long runs such as the promise checks).
  * @param runs - The processes; each writes into a directory of its own under `root`.
- * @param onFailure - Called when a process ends with an exit code other than 0.
+ * @param onFailure - Called when a process ends with an exit code other than 0 or its output does not pass.
  * @param root - The directory for the coverage files (a new temporary directory by default).
  * @returns Per file of src, one byte per offset: 1 when executed.
  */
@@ -175,7 +187,7 @@ export async function executedOffsetsTogether(
     runs.map(
       (run, i) =>
         new Promise<string>((done, fail) => {
-          const dir = join(root, String(i));
+          const dir = join(root, run.dir ?? String(i));
           const child = spawn(process.execPath, [...run.args], {
             env: { ...process.env, ...run.env, NODE_V8_COVERAGE: dir },
           });
@@ -185,7 +197,8 @@ export async function executedOffsetsTogether(
           child.stderr.setEncoding("utf8").on("data", (t: string) => (stderr += t));
           child.on("error", fail);
           child.on("close", (status) => {
-            if (status !== 0) onFailure(run, status, stdout, stderr);
+            if (status !== 0 || run.passes?.(stdout) === false)
+              onFailure(run, status, stdout, stderr);
             done(dir);
           });
         }),

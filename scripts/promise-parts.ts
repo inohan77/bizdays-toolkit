@@ -1,7 +1,8 @@
 /**
  * The parts of the checks that keep the promises of the diagnostics that need no run of the library: the
  * dimensions of the options the promise inventory makes, and the table of dimensions (etc/promise-dimensions.json).
- * Used by scripts/promise-inventory.ts and checked by test/tools/promise-parts.test.ts.
+ * Used by scripts/promise-inventory.ts and scripts/check-promise-coverage.ts, and checked by
+ * test/tools/promise-parts.test.ts.
  *
  * A cell is one combination of the dimensions:
  *   kind      ... "calendar" or "schedule"
@@ -26,6 +27,112 @@ export const PROVIDER_CLASSES = ["none", "inside", "same", "straddle", "cover", 
 export const POLICIES = ["-", "throw", "ignore"] as const;
 export const COUNTING = ["counting rule", "no counting rule"] as const;
 export const YEAR_CLASSES = ["no items", "inside", "straddle", "outside"] as const;
+
+/**
+ * One group of the full set of the promise inventory (scripts/promise-inventory.ts): the kind of options, the seed,
+ * the number of options, and whether asOf is passed
+ */
+export interface InventoryGroup {
+  readonly name: string;
+  readonly kind: "calendar" | "schedule";
+  readonly seed: number;
+  readonly runs: number;
+  readonly asOf: boolean;
+}
+
+/**
+ * The full set of the promise inventory. The numbers were chosen so that every cell of etc/promise-dimensions.json that is not excluded is
+ * made (the --dimensions check) and each shard runs within 6 minutes on CI (6 in 10 of the time limit of a job)
+ */
+export const INVENTORY_GROUPS: readonly InventoryGroup[] = [
+  ...[1, 2, 3, 4, 5].map((seed): InventoryGroup => ({
+    name: `cal-${seed}`,
+    kind: "calendar",
+    seed,
+    runs: 200,
+    asOf: false,
+  })),
+  ...[1, 2, 3, 4, 5].map((seed): InventoryGroup => ({
+    name: `sch-${seed}`,
+    kind: "schedule",
+    seed,
+    runs: 200,
+    asOf: false,
+  })),
+  ...[5, 6].map((seed): InventoryGroup => ({
+    name: `cal-asof-${seed}`,
+    kind: "calendar",
+    seed,
+    runs: 120,
+    asOf: true,
+  })),
+  ...[4, 7].map((seed): InventoryGroup => ({
+    name: `sch-asof-${seed}`,
+    kind: "schedule",
+    seed,
+    runs: 120,
+    asOf: true,
+  })),
+];
+
+/**
+ * The longest property test of the full set (test/diagnose-properties.test.ts), by the start of its name. The
+ * coverage of the promises runs it apart from the other property tests, so that no run is longer than a job of CI
+ * may take
+ */
+export const LONGEST_PROPERTY = "性質（0.32.8）: 数える規則と";
+
+/**
+ * The runs of the coverage of the promises (scripts/check-promise-coverage.ts): the property tests of the full set in
+ * two runs (the longest test, and the others) and one run per group of the promise inventory. The name is also the
+ * name of the directory of the coverage files of the run
+ */
+export const COVERAGE_RUN_NAMES: readonly string[] = [
+  "properties-longest",
+  "properties-others",
+  ...INVENTORY_GROUPS.map((g) => `inventory-${g.name}`),
+];
+
+/**
+ * The runs of each part of the promise-coverage-part job of CI (--part i/n). The runs of a part start at the same
+ * time; at most three in a part, so that they do not wait for one another on the 4 processors of a runner of CI.
+ * Chosen from the time of each run with coverage so that a part ends within about 6 minutes on CI (6 in 10 of the
+ * time limit of a job; the times are in docs/development-log.md)
+ */
+export const COVERAGE_PARTS: readonly (readonly string[])[] = [
+  ["properties-others", "inventory-sch-asof-4", "inventory-cal-asof-5"],
+  ["properties-longest", "inventory-sch-asof-7", "inventory-cal-asof-6"],
+  ["inventory-cal-1", "inventory-cal-2"],
+  ["inventory-cal-3", "inventory-cal-4"],
+  ["inventory-cal-5", "inventory-sch-1"],
+  ["inventory-sch-2", "inventory-sch-3"],
+  ["inventory-sch-4", "inventory-sch-5"],
+];
+
+/**
+ * Checks that every run of the coverage of the promises is in exactly one part.
+ * @param parts - The runs of each part.
+ * @param names - The names of all runs.
+ * @returns The problems (empty when the check passes).
+ */
+export function checkCoverageParts(
+  parts: readonly (readonly string[])[],
+  names: readonly string[],
+): string[] {
+  const problems: string[] = [];
+  const known = new Set(names);
+  const seen = new Set<string>();
+  for (const [i, part] of parts.entries()) {
+    if (part.length === 0) problems.push(`part ${i + 1} has no run`);
+    for (const name of part) {
+      if (!known.has(name)) problems.push(`part ${i + 1}: unknown run ${name}`);
+      else if (seen.has(name)) problems.push(`run ${name} is in two parts`);
+      seen.add(name);
+    }
+  }
+  for (const name of names) if (!seen.has(name)) problems.push(`run ${name} is in no part`);
+  return problems;
+}
 
 /**
  * The class of the supported years of the providers against the diagnostic range.

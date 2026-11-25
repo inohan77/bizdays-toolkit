@@ -37,8 +37,9 @@ const calendarDateEnds = (o: Obj): { from: string; to: string }[] =>
       : [],
   );
 /**
- * The scan range in which the diagnostics examine rules against each other (no provider, or an "ignore"
- * provider. decisions.md #31)
+ * The representative 28 years (2001-2028): without a provider, the scan of the diagnostics starts from one cycle from
+ * 2001 (decisions.md #31). Up to 0.32.8 it was also the scan range with an "ignore" provider, and the bugs P8, P9 and
+ * P11 of 0.32.8 below were in the specific dates outside it or covering it
  */
 const SCAN = { from: "2001-01-01", to: "2028-12-31" } as const;
 

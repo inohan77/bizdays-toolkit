@@ -9,8 +9,9 @@
  *
  * Every property compares all days of the diagnostic range (test/support/promise-days.ts decides the days and
  * the days outside the promise; they do not depend on the scan ranges of the diagnostics). The options use the
- * home-made provider with few supported years (2025-2027), no provider, or the Japanese provider. The conditions
- * of the judgement follow the diagnostics (outOfRangePolicy: "ignore". decisions.md #31).
+ * home-made provider with few supported years (2025-2027), no provider, or the Japanese provider. The options
+ * use outOfRangePolicy: "ignore", so that every day of the diagnostic range can be judged and the diagnostics
+ * examine all of it (with "throw" they examine the supported years only. decisions.md #31).
  * pnpm check runs only the properties of the short provider and of no provider, as a sample; options with an
  * nth-business-day rule and the whole range of Japan run with DIAGNOSE_PROPERTY_FULL=1 (the diagnose-consistency
  * job of CI).

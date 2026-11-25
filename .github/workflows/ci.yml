@@ -431,11 +431,46 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+  promise-coverage-part:
+    # 約束を確かめるテスト（診断の性質のテストの全件と、棚卸しの全件）だけを V8 のブロックの被覆で動かす。被覆を取ると約 2 倍
+    # かかるので、実行（性質のテストの 2 つと、棚卸しのグループごとの 14）を 7 つの分に分ける（分け方は scripts/promise-parts.ts
+    # の COVERAGE_PARTS。1 ジョブの時間を RELEASING.md の決まり（10 分以内）に収める）。被覆のファイルは、次の promise-coverage が
+    # 集めて表と照らす。表は Node.js 22.23.5 で作ったので、同じバージョンで動かす。最後に、ジョブの時間を同じ分の直近 3 回の main
+    # の実行と比べる（scripts/job-time.ts。actions: read はそのため）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
+        with:
+          node-version: "22.23.5"
+      - name: Run the promise checks of one part with coverage
+        run: node scripts/check-promise-coverage.ts --part "${{ matrix.part }}/7" --keep "${RUNNER_TEMP}/promise-coverage"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: promise-coverage-${{ matrix.part }}
+          path: ${{ runner.temp }}/promise-coverage
+          if-no-files-found: error
+          retention-days: 1
+      - name: Compare the job time with recent main runs
+        run: node scripts/job-time.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   promise-coverage:
-    # 約束を確かめるテスト（診断の性質のテストの全件と、棚卸しの全件）だけを V8 のブロックの被覆で動かし、src/core/diagnose.ts の
-    # 通らなかった行のかたまりが、etc/promise-coverage.json に理由つきで載っていることを確かめる（scripts/check-promise-coverage.ts）。
-    # 表は Node.js 22.23.5 で作ったので、同じバージョンで動かす。5 つの実行（性質のテストと棚卸しの 4 つの分）を同時に動かす。
-    # 最後に、ジョブの時間を直近 3 回の main の実行と比べる（scripts/job-time.ts。actions: read はそのため）
+    # promise-coverage-part の 7 つの分の被覆のファイルを集め、src/core/diagnose.ts の通らなかった行のかたまりが、
+    # etc/promise-coverage.json に理由つきで載っていることを確かめる（scripts/check-promise-coverage.ts --reuse。どれかの実行の
+    # ファイルがなければ失敗する）。最後に、ジョブの時間を直近 3 回の main の実行と比べる（scripts/job-time.ts）
+    needs: promise-coverage-part
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -448,9 +483,14 @@ jobs:
       - uses: ./.github/actions/setup-toolchain
         with:
           node-version: "22.23.5"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: promise-coverage-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/promise-coverage
       - name: Check that every line the promise checks do not reach is listed
         run: |
-          node scripts/check-promise-coverage.ts 2>&1 | tee -a "${GITHUB_STEP_SUMMARY}"
+          node scripts/check-promise-coverage.ts --reuse "${RUNNER_TEMP}/promise-coverage" 2>&1 | tee -a "${GITHUB_STEP_SUMMARY}"
           test "${PIPESTATUS[0]}" -eq 0
       - name: Compare the job time with recent main runs
         run: node scripts/job-time.ts

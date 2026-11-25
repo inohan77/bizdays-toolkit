@@ -146,9 +146,9 @@ const sameOnJudgeable = (before: Map<string, string>, after: Map<string, string>
  * rules on the options without specific dates (decisions.md #31), so a rule that changes a result once the
  * specific dates are left out is not reported as removable. Here it is recognised by "on the options without
  * specific dates, removing it changes a result".
- * In options with an nth-business-day rule the diagnostics keep the specific dates when judging (the same #31),
- * so this kind does not occur. Every item left in such options is unknown (a miss unrelated to specific dates
- * must not slip into known)
+ * In options with an nth-business-day rule the specific dates change how the days are counted (decisions.md #16),
+ * so leaving them out does not tell this kind. Every item left in such options is counted as unknown (a miss
+ * unrelated to specific dates must not slip into known)
  *
  * wide (0.32.6): an item that looks removable within the supported years is also checked over a wider period
  * (independentWindow), and an item that changes a result there is not counted as removable (an annual date that

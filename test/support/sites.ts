@@ -252,8 +252,9 @@ const DIAGNOSE_CONTEXT: Record<DiagnoseSource, Context> = {
 };
 
 /**
- * Builds options for the diagnostics property tests from the catalog. The conditions of the judgement follow
- * the diagnostics (outOfRangePolicy: "ignore". decisions.md #31).
+ * Builds options for the diagnostics property tests from the catalog. The options use outOfRangePolicy:
+ * "ignore", so that every day of the diagnostic range can be judged and the diagnostics examine all of it (with
+ * "throw" they examine the supported years only. decisions.md #31).
  * Array keys are written even when empty (to try both an empty array and omission, those not overwritten by the
  * catalog options stay empty)
  */

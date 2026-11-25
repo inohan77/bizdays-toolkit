@@ -7,7 +7,8 @@
  * dates), and every combination of up to two of them is tried (no luck of a random seed, and changing the catalog
  * does not change the items).
  *
- * - The conditions of the judgement follow the diagnostics (outOfRangePolicy: "ignore". docs/decisions.md #31)
+ * - The options use outOfRangePolicy: "ignore", so that every day of the diagnostic range can be judged and the
+ *   diagnostics examine all of it (with "throw" they examine the supported years only. docs/decisions.md #31)
  * - pnpm check tries a fixed sample only. All combinations run with ORACLE_FULL=1 (the oracle job of CI; the time
  *   rule and the split of the matrix are in the quality checks of RELEASING.md)
  * - Checks that the reported items can be removed together (the definition of the sequential removal) and that no

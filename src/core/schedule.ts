@@ -3017,7 +3017,7 @@ export const throwLostShift: LostShiftHandler<unknown> = (rule, date, origin) =>
 /**
  * Lost-shift handler that does nothing (the judgement continues as "not shifted").
  * @internal
- * @see decisions.md #17
+ * @see decisions.md #24
  */
 export const ignoreLostShift: LostShiftHandler<unknown> = () => {};
 

@@ -61,6 +61,7 @@ import {
   resultsOf,
 } from "../test/support/promise-days.ts";
 import {
+  INVENTORY_GROUPS,
   PROVIDER_CLASSES,
   YEAR_CLASSES,
   cellKey,
@@ -72,52 +73,15 @@ import {
   providerClass,
   yearClass,
   type DimensionTable,
+  type InventoryGroup,
   type Years,
 } from "./promise-parts.ts";
 
-/** One group of the full set: the kind of options, the seed, the number of options, and whether asOf is passed */
-interface Group {
-  readonly name: string;
-  readonly kind: "calendar" | "schedule";
-  readonly seed: number;
-  readonly runs: number;
-  readonly asOf: boolean;
-}
+/** One group of the full set (the groups are in scripts/promise-parts.ts, shared with the coverage of the promises) */
+type Group = InventoryGroup;
 
-/**
- * The full set. The numbers were chosen so that every cell of etc/promise-dimensions.json that is not excluded is
- * made (the --dimensions check) and each shard runs within 6 minutes on CI (6 in 10 of the time limit of a job)
- */
-export const GROUPS: readonly Group[] = [
-  ...[1, 2, 3, 4, 5].map((seed): Group => ({
-    name: `cal-${seed}`,
-    kind: "calendar",
-    seed,
-    runs: 200,
-    asOf: false,
-  })),
-  ...[1, 2, 3, 4, 5].map((seed): Group => ({
-    name: `sch-${seed}`,
-    kind: "schedule",
-    seed,
-    runs: 200,
-    asOf: false,
-  })),
-  ...[5, 6].map((seed): Group => ({
-    name: `cal-asof-${seed}`,
-    kind: "calendar",
-    seed,
-    runs: 120,
-    asOf: true,
-  })),
-  ...[4, 7].map((seed): Group => ({
-    name: `sch-asof-${seed}`,
-    kind: "schedule",
-    seed,
-    runs: 120,
-    asOf: true,
-  })),
-];
+/** The full set: the groups of {@link INVENTORY_GROUPS} */
+export const GROUPS: readonly Group[] = INVENTORY_GROUPS;
 /** The number of shards of CI (--shard i/4): the groups are dealt out in order */
 const SHARDS = 4;
 
@@ -901,7 +865,12 @@ function conditionsOf(
 }
 /** The kinds of values {@link toObjectValue} made for the options being completed */
 const valueLetters = new Set<string>();
-/** The values the specification of comparing values names (decisions.md #31): letter → name of the condition */
+/**
+ * The values of the comparison of schedule values (decisions.md #31 names plain objects and arrays, objects without
+ * a prototype, other objects such as a Date, values nested too deeply and values whose reading throws; the
+ * comparison of contents must also handle an object that refers to itself and the same object twice): letter →
+ * name of the condition
+ */
 const VALUE_KINDS: Readonly<Record<string, string>> = {
   A: "a plain object or an array",
   B: "a plain object or an array",

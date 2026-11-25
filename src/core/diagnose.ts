@@ -9,9 +9,11 @@
  * codes and severities is the table of diagnostics in the guide ("Option diagnostics" in docs/guide.md); the
  * sequential removal of `redundant` and relatedPath: decisions.md #31
  *
- * The diagnostics always evaluate unconfirmed holidays (unconfirmedHolidayPolicy) as "accept". They examine the
- * shape of the options, for which it does not matter whether a holiday is confirmed, and evaluating with
- * "throw" would swallow the error and wrongly conclude "does not match"
+ * The diagnostics evaluate unconfirmed holidays (unconfirmedHolidayPolicy) as "accept". They examine the shape of
+ * the options, for which it does not matter whether a holiday is confirmed, and evaluating with "throw" would
+ * swallow the error and wrongly conclude "does not match". The one exception is the judgement of `redundant` in
+ * options with unconfirmedHolidayPolicy "throw", which also compares whether a day throws unconfirmed-holiday before
+ * and after the removal (decisions.md #17, #31)
  *
  * The order of the judgement is fixed (decisions.md #11), so `shadowed` is examined only among rules of the
  * same kind. A rule unused across kinds is found as `redundant` (removing it changes no result).
